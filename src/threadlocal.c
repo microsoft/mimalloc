@@ -37,30 +37,30 @@ static mi_thread_locals_t mi_thread_locals_empty = { 0, {{0,NULL}} };
   We have 2 thread local variable which we implement with either
   a C thread local declaration or using pthread keys.
   - mi_thread_locals: points to an array of thread locals for most keys
-  - mi_thread_local_fast: a single dedicated thread local for slightly faster access. (used for the main heap's theap)
+  - mi_slot_fast: a single dedicated thread local for slightly faster access. (used for the main heap's theap)
 ----------------------------------------------------------- */
 
 #if MI_TLS_MODEL_DYNAMIC_PTHREADS || defined(__APPLE__)   // macOS has fast pthreads
 // use pthread api
 #define mi_define_thread_local(tp,name,initval) \
   static mi_decl_hidden pthread_key_t __##name##_key; \
-  static mi_decl_noinline tp __##name##_init(tp init) { return (tp)mi_pthread_create(&__##name##_key,init); } \
-  static inline tp   name##_get(void)     { if mi_likely(__##name##_key!=0) return pthread_getspecific(__##name##_key); else return __##name##_init(initval); } \
+  static mi_decl_noinline bool __##name##_init(tp init) { return mi_pthread_create(&__##name##_key,init); } \
+  static inline tp   name##_get(void)     { if mi_likely(__##name##_key!=0) return pthread_getspecific(__##name##_key); else return initval; } \
   static inline tp   name##_peek(void)    { if mi_likely(__##name##_key!=0) return pthread_getspecific(__##name##_key); else return NULL; } \
-  static inline void name##_set(tp val)   { if mi_likely(__##name##_key!=0) { pthread_setspecific(__##name##_key,val); } else if (val!=NULL) { __##name##_init(val); } } \
+  static inline bool name##_set(tp val)   { if mi_likely(__##name##_key!=0) { pthread_setspecific(__##name##_key,val); return true; } else if (val!=initval) { return __##name##_init(val); } else { return true; } } \
   static inline void name##_delete(void)  { if mi_likely(__##name##_key!=0) { pthread_key_delete(__##name##_key); __##name##_key = 0; } }
 
-static void* mi_pthread_create(pthread_key_t* pkey, void* init) {
+static bool mi_pthread_create(pthread_key_t* pkey, void* init) {
   int err = pthread_key_create(pkey,NULL); 
   if mi_unlikely(err!=0) {
     *pkey = 0;
-    _mi_error_message(EFAULT,"unable to allocate a thread local variable (error %d)\n", err);
-    return init;
+    _mi_error_message(ENOMEM,"unable to allocate a thread local variable (error %d)\n", err);
+    return false;
   }
   if (init!=NULL) { 
     pthread_setspecific(*pkey,init); 
   }; 
-  return init;
+  return true;
 }
 #else
 // Direct thread locals
@@ -68,13 +68,12 @@ static void* mi_pthread_create(pthread_key_t* pkey, void* init) {
   static mi_decl_hidden mi_decl_thread tp __##name = initval; \
   static inline tp   name##_get(void)     { return __##name; } \
   static inline tp   name##_peek(void)    { return __##name; } \
-  static inline void name##_set(tp val)   { __##name = val; } \
+  static inline bool name##_set(tp val)   { __##name = val; return true; } \
   static inline void name##_delete(void)  {  } 
 #endif
 
 mi_define_thread_local(mi_thread_locals_t*, mi_thread_locals, &mi_thread_locals_empty)
-
-mi_define_thread_local(void*, mi_thread_local_fast, NULL)
+mi_define_thread_local(void*, mi_slot_fast, NULL)
 
 
 /* -----------------------------------------------------------
@@ -137,23 +136,24 @@ static mi_thread_locals_t* mi_thread_locals_expand(size_t least_idx) {
   return tls;
 }
 
-static mi_decl_noinline void mi_thread_local_set_expand( mi_thread_local_t key, void* val ) {
-  if (val==NULL) return;
+static mi_decl_noinline bool mi_thread_local_set_expand( mi_thread_local_t key, void* val ) {
+  if (val==NULL) return true;
   const size_t idx = mi_key_index(key);  
   mi_thread_locals_t* tls = mi_thread_locals_expand(idx);
   if (tls==NULL) {
     _mi_error_message(EFAULT,"unable to allocate thread local variables\n");
-    return;
+    return false;
   }
   mi_assert_internal(tls == mi_thread_locals_get());
   mi_assert_internal(idx < tls->count);
   tls->slots[idx].value = val;
   tls->slots[idx].version = mi_key_version(key);
+  return true;
 }
 
 // set a tls slot; returns `true` if successful.
 // Can return `false` if we could not reallocate the slots array.
-static mi_decl_noinline void mi_thread_local_set_regular( mi_thread_local_t key, void* val ) {
+static mi_decl_noinline bool mi_thread_local_set_regular( mi_thread_local_t key, void* val ) {
   mi_thread_locals_t* tls = mi_thread_locals_get();
   mi_assert_internal(tls!=NULL);
   mi_assert_internal(key!=0);
@@ -161,19 +161,20 @@ static mi_decl_noinline void mi_thread_local_set_regular( mi_thread_local_t key,
   if mi_likely(idx < tls->count) {
     tls->slots[idx].value = val;
     tls->slots[idx].version = mi_key_version(key);
+    return true;
   }
   else {
-    mi_thread_local_set_expand( key, val );  // tailcall
+    return mi_thread_local_set_expand( key, val );  // tailcall
   }
 }
 
-void _mi_thread_local_set( mi_thread_local_t key, void* val ) {
+bool _mi_thread_local_set( mi_thread_local_t key, void* val ) {
   mi_assert_internal(key!=0);
   if (key == mi_thread_local_key_fast) {
-    mi_thread_local_fast_set(val);
+    return mi_slot_fast_set(val);
   }
   else {
-    mi_thread_local_set_regular(key,val);
+    return mi_thread_local_set_regular(key,val);
   }
 }
 
@@ -195,7 +196,7 @@ static mi_decl_noinline void* mi_thread_local_get_regular( mi_thread_local_t key
 void* _mi_thread_local_get( mi_thread_local_t key ) {
   mi_assert_internal(key!=0);
   if mi_likely(key == mi_thread_local_key_fast) {
-    return mi_thread_local_fast_get();
+    return mi_slot_fast_get();
   }
   else {
     return mi_thread_local_get_regular(key);
@@ -208,8 +209,8 @@ void _mi_thread_locals_thread_done(void) {
     mi_free(tls);
     mi_thread_locals_set(NULL);
   }
-  if (mi_thread_local_fast_peek() != NULL) {
-    mi_thread_local_fast_set(NULL);
+  if (mi_slot_fast_peek() != NULL) {
+    mi_slot_fast_set(NULL);
   }
 }
 
@@ -238,7 +239,7 @@ void _mi_thread_locals_done(void) {
   }
   mi_lock_done(&mi_thread_locals_lock);
   mi_thread_locals_delete();
-  mi_thread_local_fast_delete();
+  mi_slot_fast_delete();
 }
 
 // strange signature but allows us to reuse the arena code for claiming free pages

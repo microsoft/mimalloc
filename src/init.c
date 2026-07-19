@@ -333,11 +333,11 @@ static void mi_theap_main_init(void) {
   }
 }
 
-static void mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap) {
+static bool mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap) {
   mi_assert_internal((uintptr_t)theap == 1 || _mi_theap_heap(theap)==heap);
   mi_assert_internal(!_mi_is_empty_theap(theap));
   mi_assert_internal(heap->theap != 0);
-  _mi_thread_local_set(heap->theap,theap);
+  return _mi_thread_local_set(heap->theap,theap);
 }
 
 // Initialize main heap
@@ -350,7 +350,7 @@ static void mi_heap_main_init(void) {
     mi_theap_main_init();
     mi_subproc_main_init();
     mi_tld_main_init();
-    mi_heap_theap_set(&mi_process_heap_main,&mi_theap_main); // initialize __mi_theap_main
+    // mi_heap_theap_set(&mi_process_heap_main,&mi_theap_main); // set in `mi_thread_init(_theap_default)`
 
     mi_lock_init(&mi_process_heap_main.theaps_lock);
     mi_lock_init(&mi_process_heap_main.os_abandoned_pages_lock);
@@ -647,8 +647,8 @@ static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
   if (mi_theap_is_initialized(theap)) return theap;
   if (_mi_is_main_thread() && heap_main==NULL) {
     heap_main = &mi_process_heap_main;
-    mi_heap_main_init();
     theap = &mi_theap_main;
+    mi_heap_main_init();    
     mi_subproc_stat_increase(_mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?  
   }
   else {
@@ -677,7 +677,7 @@ static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
   _mi_theap_default_set(theap);
 
   // and only then set the heap_theap field as that accesses thread locals
-  mi_heap_theap_set(heap_main, theap);  // todo: can fail?    
+  mi_heap_theap_set(heap_main, theap);  // todo: can fail!    
 
   mi_assert_internal(mi_theap_is_initialized(theap));
   mi_theap_t* const heap_theap = (heap_main==NULL ? NULL : _mi_heap_theap_peek(heap_main));
@@ -1238,8 +1238,8 @@ static void mi_process_done_once(void) {
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
     mi_subprocs_unsafe_destroy_all(); // destroys all subprocs, arenas, and the page_map!    
   }
-  else {
-    mi_heap_stats_merge_to_subproc(mi_heap_main());
+  else if (subproc_main.heap_main != NULL) {
+    mi_heap_stats_merge_to_subproc(subproc_main.heap_main);
   }
   
   // careful now to no longer access any allocator functionality 

@@ -270,18 +270,12 @@ mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
     theap = (mi_theap_t*)_mi_arenas_alloc(heap, size, true, true, heap->exclusive_arena, tld->thread_seq, tld->numa_node, &memid);    
   }
   if (theap==NULL) {
-    // _mi_heap_theap_set(heap, NULL);
     _mi_error_message(ENOMEM, "unable to allocate theap meta-data\n");
     return NULL;
   }
 
   theap->memid = memid;
-  _mi_theap_init(theap, heap, tld);
-  // bool ok = _mi_heap_theap_set(heap, theap);  // cannot fail now as it was set before. Always set so the local is valid or NULL (and not 1)
-  // mi_assert_internal(ok); MI_UNUSED_RELEASE(ok);
-  // mi_theap_t* const heap_theap = _mi_heap_theap_peek(heap);
-  // mi_assert_internal(heap_theap==theap); MI_UNUSED_RELEASE(heap_theap);
-  
+  _mi_theap_init(theap, heap, tld);  
   return theap;
 }
 

@@ -199,7 +199,7 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t 
 // Atomically clear a bit but only if it is set. Will block otherwise until the bit is set.
 // This is used to delay free-ing a page that it at the same time being considered to be
 // allocated from `mi_arena_try_abandoned` (and is in the `claim` function of `mi_bitmap_try_find_and_claim`).
-void mi_bitmap_clear_once_set(mi_bitmap_t* bitmap, size_t idx);
+void mi_bitmap_clear_once_set(mi_subproc_t* subproc, mi_bitmap_t* bitmap, size_t idx);
 
 
 // If a bit is set in the bitmap, return `true` and set `idx` to the index of the highest bit.

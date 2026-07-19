@@ -1273,7 +1273,7 @@ void _mi_arenas_page_unabandon(mi_page_t* page, mi_theap_t* current_theapx) {
     mi_assert_internal(page->slice_committed > 0 || mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
 
     // this busy waits until a concurrent reader (from alloc_abandoned) is done
-    mi_bitmap_clear_once_set(arena_pages->pages_abandoned[bin], slice_index);
+    mi_bitmap_clear_once_set(arena->subproc, arena_pages->pages_abandoned[bin], slice_index);
     mi_page_clear_abandoned_mapped(page);
     mi_atomic_decrement_relaxed(&heap->abandoned_count[bin]);
   }
@@ -1423,7 +1423,7 @@ static void mi_arenas_unsafe_destroy(mi_subproc_t* subproc) {
       // mi_lock_done(&arena->abandoned_visit_lock);
       mi_atomic_store_ptr_release(mi_arena_t, &subproc->arenas[i], NULL);
       if (mi_memkind_is_os(arena->memid.memkind)) {
-        _mi_os_free_ex(subproc, mi_arena_start(arena), mi_arena_size(arena), true, arena->memid); // pass `subproc` to avoid accessing the theap pointer (in `_mi_subproc()`)
+        _mi_os_free_ex(subproc, mi_arena_start(arena), mi_arena_size(arena), true, arena->memid);
       }
     }
   }
@@ -1533,7 +1533,7 @@ static mi_arena_pages_t* mi_arena_pages_alloc(mi_arena_t* arena) {
   const size_t slice_count = arena->slice_count;
   size_t bitmap_base = 0;
   const size_t size = mi_arena_pages_size(slice_count, &bitmap_base);
-  mi_arena_pages_t* arena_pages = (mi_arena_pages_t*)mi_heap_zalloc_aligned(mi_heap_main(), size, MI_BCHUNK_SIZE);
+  mi_arena_pages_t* arena_pages = (mi_arena_pages_t*)mi_heap_zalloc_aligned(arena->subproc->heap_main, size, MI_BCHUNK_SIZE);
   if (arena_pages==NULL) return NULL;
   uint8_t* base = (uint8_t*)arena_pages + bitmap_base;
   mi_assert_internal(_mi_is_aligned(base, MI_BCHUNK_SIZE));
@@ -1855,7 +1855,7 @@ static size_t mi_debug_show_page_bfield(char* buf, size_t* k, mi_arena_t* arena,
     else {
       c = '?';
       if (bit_of_page > 0) { c = '-'; }
-      else if (_mi_meta_is_meta_page(_mi_subproc(),start)) { c = 'm'; color = MI_GRAY; }
+      else if (_mi_meta_is_meta_page(arena->subproc,start)) { c = 'm'; color = MI_GRAY; }
       else if (slice_index + bit < arena->info_slices) { c = 'i'; color = MI_GRAY; }
       // else if (mi_bitmap_is_setN(arena->pages_purge, slice_index + bit, NULL)) { c = '*'; }
       else if (mi_bbitmap_is_setN(arena->slices_free, slice_index+bit,1)) {
@@ -2426,8 +2426,8 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
     mi_arena_pages_t* arena_pages_target = mi_heap_ensure_arena_pages(heap_target, arena);
     if mi_unlikely(arena_pages_target==NULL) {
       // if we cannot allocate this, we move it to the main heap instead (which does not require allocation)
-      heap_target = mi_heap_main();
-      theap_target = mi_heap_theap(heap_target);
+      heap_target = mi_arena_heap_main(arena);
+      theap_target = mi_heap_theap(heap_target);  // todo: find through theap_target tld?
       arena_pages_target = mi_heap_ensure_arena_pages(heap_target, arena);
       mi_assert_internal(arena_pages_target!=NULL);
     }
@@ -2470,7 +2470,7 @@ static void mi_heap_delete_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
 
 void _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to) {
   if (_mi_is_heap_main(heap_from)) return;
-  if (heap_to==NULL) { heap_to = mi_heap_main(); }
+  if (heap_to==NULL) { heap_to = heap_from->subproc->heap_main; }
   mi_heap_delete_pages(heap_from, heap_to);
 }
 

@@ -237,7 +237,7 @@ void*         _mi_os_alloc_huge_os_pages(mi_subproc_t* subproc, size_t pages, in
 
 mi_thread_local_t _mi_thread_local_create(void);
 void          _mi_thread_local_free( mi_thread_local_t key );
-void          _mi_thread_local_set(  mi_thread_local_t key, void* val );
+bool          _mi_thread_local_set(  mi_thread_local_t key, void* val );
 void*         _mi_thread_local_get(  mi_thread_local_t key );
 void          _mi_thread_locals_init(void);
 void          _mi_thread_locals_done(void);
@@ -316,7 +316,6 @@ void          _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to);  //
 void          _mi_heap_destroy_pages(mi_heap_t* heap_from);                   // in "arena.c"
 void          _mi_heap_force_destroy(mi_heap_t* heap);                        // allow destroying the main heap
 mi_heap_t*    _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool is_heap_main);
-
 mi_theap_t*   _mi_heap_theap_get_peek(const mi_heap_t* heap);
 
 
@@ -401,10 +400,6 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define mi_subproc_stat_decrease(subproc,stat,amount)           __mi_stat_decrease_mt( &(subproc)->stats.stat, amount)
 #define mi_subproc_stat_adjust_increase(subproc,stat,amount)    __mi_stat_adjust_increase_mt( &(subproc)->stats.stat, amount)
 #define mi_subproc_stat_adjust_decrease(subproc,stat,amount)    __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amount)
-
-// #define mi_os_stat_counter_increase(stat,amount)                mi_subproc_stat_counter_increase(_mi_subproc(),stat,amount)
-// #define mi_os_stat_increase(stat,amount)                        mi_subproc_stat_increase(_mi_subproc(),stat,amount)
-// #define mi_os_stat_decrease(stat,amount)                        mi_subproc_stat_decrease(_mi_subproc(),stat,amount)
 
 #define mi_theap_stat_counter_increase(theap,stat,amount)       __mi_stat_counter_increase( &(theap)->stats.stat, amount)
 #define mi_theap_stat_increase(theap,stat,amount)               __mi_stat_increase( &(theap)->stats.stat, amount)
@@ -949,6 +944,13 @@ static inline mi_subproc_t* mi_page_subproc(const mi_page_t* page) {
   mi_heap_t* const heap = mi_page_heap(page);
   return heap->subproc;
 }
+
+static inline mi_heap_t* mi_arena_heap_main(const mi_arena_t* arena) {
+  mi_subproc_t* subproc = arena->subproc;
+  mi_assert_internal(subproc->heap_main!=NULL);
+  return subproc->heap_main;
+}
+
 
 //-----------------------------------------------------------
 // Thread free list and ownership

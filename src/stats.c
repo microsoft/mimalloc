@@ -455,8 +455,9 @@ static const mi_stats_t* mi_heap_get_stats(mi_heap_t* heap) {
 // deprecated
 void mi_stats_reset(void) mi_attr_noexcept {
   if (!mi_theap_is_initialized(_mi_theap_default())) return;
-  mi_heap_get_stats(mi_heap_main());
-  mi_heap_stats_merge_to_subproc(mi_heap_main());
+  mi_heap_t* heap_main = mi_heap_main();
+  mi_heap_get_stats(heap_main);
+  mi_heap_stats_merge_to_subproc(heap_main);
 }
 
 

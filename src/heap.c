@@ -109,7 +109,7 @@ static void mi_heap_initialize(mi_heap_t* heap, mi_thread_local_t theap_slot, mi
 
 mi_heap_t* _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool is_main_heap) {
   // heap data is allocated in the current subproc 
-  mi_heap_t* const heap_main = mi_heap_main();
+  mi_heap_t* const heap_main = subproc->heap_main;
   // todo: allocate heap data in the exclusive arena ?
   mi_heap_t* const heap = (mi_heap_t*)mi_heap_zalloc( heap_main, sizeof(mi_heap_t) );
   if (heap==NULL) return NULL;
@@ -201,12 +201,13 @@ static void mi_heap_free(mi_heap_t* heap) {
 
 void mi_heap_delete(mi_heap_t* heap) {
   if (heap==NULL) return;
-  if (_mi_is_heap_main(heap)) {
+  mi_heap_t* heap_main = heap->subproc->heap_main;
+  if (heap == heap_main) {
     _mi_warning_message("cannot delete the main heap\n");
     return;
   }
   mi_heap_free_theaps(heap);
-  _mi_heap_move_pages(heap, mi_heap_main());
+  _mi_heap_move_pages(heap, heap_main);
   mi_heap_free(heap);
 }
 

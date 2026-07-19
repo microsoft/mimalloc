@@ -109,7 +109,7 @@ static inline bool mi_bfield_atomic_clear(_Atomic(mi_bfield_t)*b, size_t idx, bo
 // Clear a bit but only when/once it is set. This is used by concurrent free's while
 // the page is abandoned and mapped. This can incure a busy wait :-( but it should
 // happen almost never (and is accounted for in the stats)
-static inline void mi_bfield_atomic_clear_once_set(_Atomic(mi_bfield_t)*b, size_t idx) {
+static inline void mi_bfield_atomic_clear_once_set(mi_subproc_t* subproc, _Atomic(mi_bfield_t)*b, size_t idx) {
   mi_assert_internal(idx < MI_BFIELD_BITS);
   const mi_bfield_t mask = mi_bfield_mask(1, idx);;
   mi_bfield_t old = mi_atomic_load_relaxed(b);
@@ -117,7 +117,7 @@ static inline void mi_bfield_atomic_clear_once_set(_Atomic(mi_bfield_t)*b, size_
     if mi_unlikely((old&mask) == 0) {
       old = mi_atomic_load_acquire(b);
       if ((old&mask)==0) {
-        mi_subproc_stat_counter_increase(_mi_subproc(), pages_unabandon_busy_wait, 1);
+        mi_subproc_stat_counter_increase(subproc, pages_unabandon_busy_wait, 1);
       }
       while ((old&mask)==0) { // busy wait
         _mi_prim_thread_yield(); 
@@ -888,11 +888,11 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clearNC(mi_bchunk_t* chunk, 
 
 // ------- mi_bchunk_clear_once_set ---------------------------------------
 
-static inline void mi_bchunk_clear_once_set(mi_bchunk_t* chunk, size_t cidx) {
+static inline void mi_bchunk_clear_once_set(mi_subproc_t* subproc, mi_bchunk_t* chunk, size_t cidx) {
   mi_assert_internal(cidx < MI_BCHUNK_BITS);
   const size_t i = cidx / MI_BFIELD_BITS;
   const size_t idx = cidx % MI_BFIELD_BITS;
-  mi_bfield_atomic_clear_once_set(&chunk->bfields[i], idx);
+  mi_bfield_atomic_clear_once_set(subproc, &chunk->bfields[i], idx);
 }
 
 
@@ -1391,12 +1391,12 @@ size_t mi_bitmap_popcount(mi_bitmap_t* bitmap) {
 
 
 // Clear a bit once it is set.
-void mi_bitmap_clear_once_set(mi_bitmap_t* bitmap, size_t idx) {
+void mi_bitmap_clear_once_set(mi_subproc_t* subproc, mi_bitmap_t* bitmap, size_t idx) {
   mi_assert_internal(idx < mi_bitmap_max_bits(bitmap));
   const size_t chunk_idx = idx / MI_BCHUNK_BITS;
   const size_t cidx = idx % MI_BCHUNK_BITS;
   mi_assert_internal(chunk_idx < mi_bitmap_chunk_count(bitmap));
-  mi_bchunk_clear_once_set(&bitmap->chunks[chunk_idx], cidx);
+  mi_bchunk_clear_once_set(subproc, &bitmap->chunks[chunk_idx], cidx);
 }
 
 
