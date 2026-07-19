@@ -48,7 +48,7 @@ static int SCALE   = 25;
 static int ITER    = 20;
 #elif defined(MI_GUARDED)     // with debug guard pages reduce parameters to stay within the azure pipeline limits
 static int THREADS = 8;
-static int SCALE   = 10;
+static int SCALE   = 50;
 static int ITER    = 10;
 #elif 0
 static int THREADS = 32;

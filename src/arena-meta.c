@@ -85,8 +85,8 @@ static mi_meta_page_t* mi_meta_page_zalloc(mi_subproc_t* subproc) {
 
   // guard pages
   #if MI_SECURE >= 1
-  _mi_os_secure_guard_page_set_at(base, memid);
-  _mi_os_secure_guard_page_set_before(base + MI_META_PAGE_SIZE, memid);
+  _mi_os_secure_guard_page_set_at(subproc, base, memid);
+  _mi_os_secure_guard_page_set_before(subproc, base + MI_META_PAGE_SIZE, memid);
   #endif
 
   // initialize the page and free block bitmap

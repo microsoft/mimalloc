@@ -215,10 +215,10 @@ bool          _mi_os_purge(mi_subproc_t* subproc, void* p, size_t size);
 bool          _mi_os_purge_ex(mi_subproc_t* subproc, void* p, size_t size, bool allow_reset, size_t stats_size, mi_commit_fun_t* commit_fun, void* commit_fun_arg);
 
 size_t        _mi_os_secure_guard_page_size(void);
-bool          _mi_os_secure_guard_page_set_at(void* addr, mi_memid_t memid);
-bool          _mi_os_secure_guard_page_set_before(void* addr, mi_memid_t memid);
-bool          _mi_os_secure_guard_page_reset_at(void* addr, mi_memid_t memid);
-bool          _mi_os_secure_guard_page_reset_before(void* addr, mi_memid_t memid);
+bool          _mi_os_secure_guard_page_set_at(mi_subproc_t* subproc, void* addr, mi_memid_t memid);
+bool          _mi_os_secure_guard_page_set_before(mi_subproc_t* subproc, void* addr, mi_memid_t memid);
+bool          _mi_os_secure_guard_page_reset_at(mi_subproc_t* subproc, void* addr, mi_memid_t memid);
+bool          _mi_os_secure_guard_page_reset_before(mi_subproc_t* subproc, void* addr, mi_memid_t memid);
 
 int           _mi_os_numa_node(void);
 int           _mi_os_numa_node_count(void);
@@ -574,7 +574,7 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
   Heap functions
 ------------------------------------------------------------------------------------------- */
 
-extern mi_decl_hidden const mi_theap_t _mi_theap_empty;       // read-only empty theap, initial value of the thread local default theap (in the MI_TLS_MODEL_THREAD_LOCAL)
+extern mi_decl_hidden const mi_theap_t _mi_theap_empty;       // read-only empty theap, initial value of the thread local default theap (in the MI_TLS_MODEL_LOCAL)
 extern mi_decl_hidden const mi_theap_t _mi_theap_empty_wrong; // read-only empty theap used to signal that a theap for a heap could not be allocated
 
 

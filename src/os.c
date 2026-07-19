@@ -175,7 +175,7 @@ size_t _mi_os_secure_guard_page_size(void) {
 }
 
 // In secure mode, try to decommit an area and output a warning if this fails.
-bool _mi_os_secure_guard_page_set_at(void* addr, mi_memid_t memid) {
+bool _mi_os_secure_guard_page_set_at(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
   if (addr == NULL) return true;
   #if MI_SECURE > 0
   bool ok = false;
@@ -185,7 +185,7 @@ bool _mi_os_secure_guard_page_set_at(void* addr, mi_memid_t memid) {
       ok = (*(arena->commit_fun))(false /* decommit */, addr, _mi_os_secure_guard_page_size(), NULL, arena->commit_fun_arg);
     }
     else {
-      ok = _mi_os_decommit(addr, _mi_os_secure_guard_page_size());
+      ok = _mi_os_decommit(subproc, addr, _mi_os_secure_guard_page_size());
     }
   }
   if (!ok) {
@@ -193,18 +193,18 @@ bool _mi_os_secure_guard_page_set_at(void* addr, mi_memid_t memid) {
   }
   return ok;
   #else
-  MI_UNUSED(memid);
+  MI_UNUSED(subproc); MI_UNUSED(memid);
   return true;
   #endif
 }
 
 // In secure mode, try to decommit an area and output a warning if this fails.
-bool _mi_os_secure_guard_page_set_before(void* addr, mi_memid_t memid) {
-  return _mi_os_secure_guard_page_set_at((uint8_t*)addr - _mi_os_secure_guard_page_size(), memid);
+bool _mi_os_secure_guard_page_set_before(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
+  return _mi_os_secure_guard_page_set_at(subproc, (uint8_t*)addr - _mi_os_secure_guard_page_size(), memid);
 }
 
 // In secure mode, try to recommit an area
-bool _mi_os_secure_guard_page_reset_at(void* addr, mi_memid_t memid) {
+bool _mi_os_secure_guard_page_reset_at(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
   if (addr == NULL) return true;
   #if MI_SECURE > 0
   if (!memid.is_pinned) {
@@ -213,18 +213,18 @@ bool _mi_os_secure_guard_page_reset_at(void* addr, mi_memid_t memid) {
       return (*(arena->commit_fun))(true, addr, _mi_os_secure_guard_page_size(), NULL, arena->commit_fun_arg);
     }
     else {
-      return _mi_os_commit(addr, _mi_os_secure_guard_page_size(), NULL);
+      return _mi_os_commit(subproc, addr, _mi_os_secure_guard_page_size(), NULL);
     }
   }
   #else
-  MI_UNUSED(memid);
+  MI_UNUSED(subproc); MI_UNUSED(memid);
   #endif
   return true;
 }
 
 // In secure mode, try to recommit an area
-bool _mi_os_secure_guard_page_reset_before(void* addr, mi_memid_t memid) {
-  return _mi_os_secure_guard_page_reset_at((uint8_t*)addr - _mi_os_secure_guard_page_size(), memid);
+bool _mi_os_secure_guard_page_reset_before(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
+  return _mi_os_secure_guard_page_reset_at(subproc, (uint8_t*)addr - _mi_os_secure_guard_page_size(), memid);
 }
 
 

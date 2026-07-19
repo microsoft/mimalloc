@@ -1591,7 +1591,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
   else if (!memid.is_pinned) {
     // if MI_SECURE, set a guard page at the end of the arena info
     // todo: this does not respect the commit_fun as the memid is of external memory
-    _mi_os_secure_guard_page_set_before((uint8_t*)arena + mi_size_of_slices(info_slices), memid);
+    _mi_os_secure_guard_page_set_before(subproc, (uint8_t*)arena + mi_size_of_slices(info_slices), memid);
   }
   if (!memid.initially_zero) {
     _mi_memzero(arena, mi_size_of_slices(info_slices) - _mi_os_secure_guard_page_size());

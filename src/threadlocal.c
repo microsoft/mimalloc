@@ -40,7 +40,7 @@ static mi_thread_locals_t mi_thread_locals_empty = { 0, {{0,NULL}} };
   - mi_slot_fast: a single dedicated thread local for slightly faster access. (used for the main heap's theap)
 ----------------------------------------------------------- */
 
-#if MI_TLS_MODEL_DYNAMIC_PTHREADS || defined(__APPLE__)   // macOS has fast pthreads
+#if MI_TLS_MODEL_PTHREADS || defined(__APPLE__)   // macOS has fast pthreads
 // use pthread api
 static mi_decl_noinline bool mi_pthread_key_create(pthread_key_t* pkey, void* init) {
   int err = pthread_key_create(pkey,NULL); 
