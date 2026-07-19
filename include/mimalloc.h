@@ -187,7 +187,7 @@ typedef void (mi_cdecl mi_error_fun)(int err, void* arg);
 mi_decl_export void mi_register_error(mi_error_fun* fun, void* arg);
 
 mi_decl_export void mi_collect(bool force)      mi_attr_noexcept;
-mi_decl_export int  mi_version(void)            mi_attr_noexcept;
+mi_decl_export int  mi_version(void);
 mi_decl_export void mi_options_print(void)      mi_attr_noexcept;
 mi_decl_export void mi_process_info_print(void) mi_attr_noexcept;
 mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg)      mi_attr_noexcept;

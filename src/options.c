@@ -17,7 +17,7 @@ static long mi_max_warning_count = 16; // stop outputting warnings after this (u
 
 static void mi_add_stderr_output(void);
 
-int mi_version(void) mi_attr_noexcept {
+int mi_version(void) {
   return MI_MALLOC_VERSION;
 }
 
