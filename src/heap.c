@@ -15,7 +15,7 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 
 mi_theap_t* mi_heap_theap(mi_heap_t* heap) {
-  return _mi_heap_theap(heap);
+  return _mi_heap_theap(heap);  // in prim.h
 }
 
 void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node) {
@@ -32,6 +32,28 @@ void mi_heap_stats_merge_to_main(mi_heap_t* heap) {
   if (heap==NULL) return;
   _mi_stats_merge_into(&mi_heap_main()->stats, &heap->stats);
 }
+
+bool _mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap) {
+  mi_assert_internal((uintptr_t)theap == 1 || _mi_theap_heap(theap)==heap);
+  mi_assert_internal(!_mi_is_empty_theap(theap));
+  mi_assert_internal(heap->theap != 0);
+  return _mi_thread_local_set(heap->theap,theap);
+}
+
+mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap) {
+  mi_theap_t* theap;
+  mi_assert_internal(heap->theap != 0);
+  if mi_likely(heap->theap!=0) {  // paranoia
+    theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
+  } 
+  else {
+    _mi_error_message(EFAULT, "no thread-local reserved for heap (%p)\n", heap);
+    return NULL;
+  }
+  mi_assert_internal(!_mi_is_empty_theap(theap));
+  return theap;
+}
+
 
 static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_heap)
 {
@@ -63,6 +85,7 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
       _mi_error_message(EFAULT, "unable to allocate memory for a thread local heap\n");
       return NULL;
     }
+    _mi_heap_theap_set(heap, theap);
     mi_assert_internal(theap == _mi_heap_theap_get_peek(heap));
   }
   return theap;
@@ -202,7 +225,7 @@ static void mi_heap_free(mi_heap_t* heap) {
 
 void mi_heap_delete(mi_heap_t* heap) {
   if (heap==NULL) return;
-  mi_heap_t* heap_main = heap->subproc->heap_main;
+  mi_heap_t* heap_main = mi_heap_get_heap_main(heap);
   if (heap == heap_main) {
     _mi_warning_message("cannot delete the main heap\n");
     return;

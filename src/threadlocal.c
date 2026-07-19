@@ -42,15 +42,7 @@ static mi_thread_locals_t mi_thread_locals_empty = { 0, {{0,NULL}} };
 
 #if MI_TLS_MODEL_DYNAMIC_PTHREADS || defined(__APPLE__)   // macOS has fast pthreads
 // use pthread api
-#define mi_define_thread_local(tp,name,initval) \
-  static mi_decl_hidden pthread_key_t __##name##_key; \
-  static mi_decl_noinline bool __##name##_init(tp init) { return mi_pthread_create(&__##name##_key,init); } \
-  static inline tp   name##_get(void)     { if mi_likely(__##name##_key!=0) return pthread_getspecific(__##name##_key); else return initval; } \
-  static inline tp   name##_peek(void)    { if mi_likely(__##name##_key!=0) return pthread_getspecific(__##name##_key); else return NULL; } \
-  static inline bool name##_set(tp val)   { if mi_likely(__##name##_key!=0) { pthread_setspecific(__##name##_key,val); return true; } else if (val!=initval) { return __##name##_init(val); } else { return true; } } \
-  static inline void name##_delete(void)  { if mi_likely(__##name##_key!=0) { pthread_key_delete(__##name##_key); __##name##_key = 0; } }
-
-static bool mi_pthread_create(pthread_key_t* pkey, void* init) {
+static mi_decl_noinline bool mi_pthread_key_create(pthread_key_t* pkey, void* init) {
   int err = pthread_key_create(pkey,NULL); 
   if mi_unlikely(err!=0) {
     *pkey = 0;
@@ -59,9 +51,45 @@ static bool mi_pthread_create(pthread_key_t* pkey, void* init) {
   }
   if (init!=NULL) { 
     pthread_setspecific(*pkey,init); 
-  }; 
+  };
+  mi_assert_internal(pthread_getspecific(*pkey)==init);
   return true;
 }
+static void* mi_pthread_key_peek(pthread_key_t key) {
+  if mi_likely(key!=0) return pthread_getspecific(key);
+                  else return NULL;
+}
+static void* mi_pthread_key_get(pthread_key_t key, void* defaultval) {
+  void* result = mi_pthread_key_peek(key);
+  return (result!=NULL ? result : defaultval);
+}
+
+static bool mi_pthread_key_set(pthread_key_t* pkey, void* val) {
+  const pthread_key_t key = *pkey;
+  if mi_likely(key!=0) { 
+    pthread_setspecific(key,val);
+    return true;
+  } 
+  else {
+    return mi_pthread_key_create(pkey,val);
+  }
+}
+
+static void mi_pthread_key_delete(pthread_key_t* pkey) {
+  const pthread_key_t key = *pkey;
+  *pkey = 0;
+  if (key!=0) { 
+    pthread_key_delete(key);
+  }
+}
+
+#define mi_define_thread_local(tp,name,initval) \
+  static mi_decl_hidden pthread_key_t __##name##_key; \
+  static inline tp   name##_get(void)     { return (tp)mi_pthread_key_get(__##name##_key,initval); } \
+  static inline tp   name##_peek(void)    { return (tp)mi_pthread_key_peek(__##name##_key); } \
+  static inline bool name##_set(tp val)   { return mi_pthread_key_set(&__##name##_key,val); } \
+  static inline void name##_delete(void)  { mi_pthread_key_delete(&__##name##_key); }
+
 #else
 // Direct thread locals
 #define mi_define_thread_local(tp,name,initval) \

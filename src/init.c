@@ -333,13 +333,6 @@ static void mi_theap_main_init(void) {
   }
 }
 
-static bool mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap) {
-  mi_assert_internal((uintptr_t)theap == 1 || _mi_theap_heap(theap)==heap);
-  mi_assert_internal(!_mi_is_empty_theap(theap));
-  mi_assert_internal(heap->theap != 0);
-  return _mi_thread_local_set(heap->theap,theap);
-}
-
 // Initialize main heap
 static void mi_heap_main_init(void) {
   if mi_unlikely(mi_process_heap_main.subproc == NULL) {
@@ -429,10 +422,14 @@ mi_heap_t* _mi_subproc_heap_main(mi_subproc_t* subproc) {
   if mi_likely(heap!=NULL) {
     return heap;
   }
-  else {
+  else if (subproc==_mi_subproc_main()) {
     mi_heap_main_init();
     mi_assert_internal(mi_atomic_load_ptr_acquire(mi_heap_t,&subproc->heap_main) != NULL);
     return mi_atomic_load_ptr_acquire(mi_heap_t,&subproc->heap_main);
+  }
+  else {
+    mi_assert_internal(false);
+    return &mi_process_heap_main;
   }
 }
 
@@ -444,28 +441,10 @@ bool _mi_is_process_heap_main(const mi_heap_t* heap) {
   return (heap == NULL || heap == &mi_process_heap_main);
 }
 
-bool _mi_is_heap_main(const mi_heap_t* heap) {
-  mi_assert_internal(heap!=NULL);
-  return (_mi_subproc_heap_main(heap->subproc) == heap);
-}
-
 bool _mi_is_theap_main(const mi_theap_t* theap) {
   return (mi_theap_is_initialized(theap) && _mi_is_heap_main(_mi_theap_heap(theap)));
 }
 
-mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap) {
-  mi_theap_t* theap;
-  mi_assert_internal(heap->theap != 0);
-  if mi_likely(heap->theap!=0) {  // paranoia
-    theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
-  } 
-  else {
-    _mi_error_message(EFAULT, "no thread-local reserved for heap (%p)\n", heap);
-    return NULL;
-  }
-  mi_assert_internal(!_mi_is_empty_theap(theap));
-  return theap;
-}
 
 
 /* -----------------------------------------------------------
@@ -648,8 +627,7 @@ static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
   if (_mi_is_main_thread() && heap_main==NULL) {
     heap_main = &mi_process_heap_main;
     theap = &mi_theap_main;
-    mi_heap_main_init();    
-    mi_subproc_stat_increase(_mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?  
+    mi_heap_main_init();     
   }
   else {
     // allocates tld data
@@ -669,15 +647,14 @@ static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
       
       // allocate and initialize the theap for the main heap
       theap = _mi_theap_create( heap_main, tld);
-      if (theap==NULL) return NULL;  // out-of-memory on theap allocation
-      mi_subproc_stat_increase(_mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?  
+      if (theap==NULL) return NULL;  // out-of-memory on theap allocation      
     }
   }
   // now initialize the thread
   _mi_theap_default_set(theap);
 
   // and only then set the heap_theap field as that accesses thread locals
-  mi_heap_theap_set(heap_main, theap);  // todo: can fail!    
+  _mi_heap_theap_set(heap_main, theap);  // todo: can fail!    
 
   mi_assert_internal(mi_theap_is_initialized(theap));
   mi_theap_t* const heap_theap = (heap_main==NULL ? NULL : _mi_heap_theap_peek(heap_main));
@@ -782,6 +759,7 @@ static void mi_thread_init_ex(mi_heap_t* heap_main) mi_attr_noexcept
   mi_theap_t* const theap = _mi_thread_init_theap_default(heap_main);
   if (theap == NULL) return; // out-of-memory on tld/theap allocation
 
+  mi_subproc_stat_increase(_mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?  
   // _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
 }
 
@@ -938,29 +916,11 @@ static void mi_win_tls_slot_set(size_t slot, size_t extended_slot, void* value) 
 mi_decl_hidden pthread_key_t _mi_theap_default_key = 0;
 mi_decl_hidden pthread_key_t _mi_theap_cached_key = 0;
 
-// create a non-zero pthread key
-static int mi_pthread_key_create( pthread_key_t* pkey ) {
-  pthread_key_t key;
-  int err = pthread_key_create(&key, NULL);
-  if (err!=0) return err;
-  if (key==0) {
-    // if we get a zero key, create another one as we use 0 for an invalid key
-    pthread_key_t key2;
-    err = pthread_key_create(&key2, NULL);
-    pthread_key_delete(key);  // delete the old key
-    if (err!=0) return err;
-    key = key2;
-  }
-  mi_assert_internal(key!=0);    
-  *pkey = key;
-  return 0;
-}
-
 static void mi_tls_slots_init(void) {
   mi_atomic_do_once {
-    int err = mi_pthread_key_create(&_mi_theap_default_key);
+    int err = pthread_key_create(&_mi_theap_default_key,NULL);
     if (err==0) {
-      err = mi_pthread_key_create(&_mi_theap_cached_key);
+      err = pthread_key_create(&_mi_theap_cached_key,NULL);
     }
     if (err!=0) {
       _mi_error_message(EFAULT, "unable to allocate pthread keys (error %d)\n", err);

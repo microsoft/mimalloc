@@ -185,7 +185,6 @@ mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
 
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
-bool          _mi_is_heap_main(const mi_heap_t* heap);
 bool          _mi_is_theap_main(const mi_theap_t* theap);
 void          _mi_theap_guarded_init(mi_theap_t* theap);
 void          _mi_theap_options_init(mi_theap_t* theap);
@@ -317,7 +316,7 @@ void          _mi_heap_destroy_pages(mi_heap_t* heap_from);                   //
 void          _mi_heap_force_destroy(mi_heap_t* heap);                        // allow destroying the main heap
 mi_heap_t*    _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool is_heap_main);
 mi_theap_t*   _mi_heap_theap_get_peek(const mi_heap_t* heap);
-
+bool          _mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap);
 
 // "stats.c"
 void          _mi_stats_init(void);
@@ -946,10 +945,18 @@ static inline mi_subproc_t* mi_page_subproc(const mi_page_t* page) {
 }
 
 static inline mi_heap_t* mi_arena_heap_main(const mi_arena_t* arena) {
-  mi_subproc_t* subproc = arena->subproc;
-  mi_assert_internal(subproc->heap_main!=NULL);
-  return subproc->heap_main;
+  return _mi_subproc_heap_main(arena->subproc);
 }
+
+static inline mi_heap_t* mi_heap_get_heap_main(const mi_heap_t* heap) {
+  return _mi_subproc_heap_main(heap->subproc);
+}
+
+static inline bool _mi_is_heap_main(const mi_heap_t* heap) {
+  mi_assert_internal(heap!=NULL);
+  return (mi_heap_get_heap_main(heap) == heap);
+}
+
 
 
 //-----------------------------------------------------------
