@@ -325,7 +325,7 @@ static void mi_theap_main_init(void) {
     #if defined(__APPLE__) || defined(_WIN32) && !defined(MI_SHARED_LIB)
       _mi_random_init_weak(&mi_theap_main.random);    // prevent allocation failure during bcrypt dll initialization with static linking (issue #1185)
     #else
-      _mi_random_init(&theap_main.random);
+      _mi_random_init(&mi_theap_main.random);
     #endif
     mi_theap_main.cookie  = _mi_theap_random_next(&mi_theap_main);
     _mi_theap_options_init(&mi_theap_main);
