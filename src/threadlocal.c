@@ -84,7 +84,7 @@ static void mi_pthread_key_delete(pthread_key_t* pkey) {
 }
 
 #define mi_define_thread_local(tp,name,initval) \
-  static mi_decl_hidden pthread_key_t __##name##_key; \
+  static pthread_key_t __##name##_key; \
   static inline tp   name##_get(void)     { return (tp)mi_pthread_key_get(__##name##_key,initval); } \
   static inline tp   name##_peek(void)    { return (tp)mi_pthread_key_peek(__##name##_key); } \
   static inline bool name##_set(tp val)   { return mi_pthread_key_set(&__##name##_key,val); } \
@@ -93,7 +93,7 @@ static void mi_pthread_key_delete(pthread_key_t* pkey) {
 #else
 // Direct thread locals
 #define mi_define_thread_local(tp,name,initval) \
-  static mi_decl_hidden mi_decl_thread tp __##name = initval; \
+  static mi_decl_thread tp __##name = initval; \
   static inline tp   name##_get(void)     { return __##name; } \
   static inline tp   name##_peek(void)    { return __##name; } \
   static inline bool name##_set(tp val)   { __##name = val; return true; } \
