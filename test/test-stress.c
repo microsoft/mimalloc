@@ -494,8 +494,7 @@ static DWORD WINAPI win_thread_entry(LPVOID param) {
   return 0;
 }
 
-static void run_os_threads(size_t nthreads, void (*fun)(intptr_t)) {
-  thread_entry_fun = fun;
+static void run_os_threads(mi_subproc_id_t subproc, size_t nthreads, thread_entry_fun_t* fun, void* arg) {
   DWORD* tids = (DWORD*)custom_calloc(nthreads,sizeof(DWORD));
   HANDLE* thandles = (HANDLE*)custom_calloc(nthreads,sizeof(HANDLE));
   callback_t* callbacks = (callback_t*)custom_calloc(nthreads,sizeof(callback_t));
