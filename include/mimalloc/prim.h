@@ -443,7 +443,7 @@ static inline mi_theap_t* _mi_theap_default(void) {
   #if defined(__APPLE__) && defined(__aarch64__) && MI_HAS_TLS_SLOT
   // on apple arm64, the pthread specific slots are direct slots; inline it to avoid stack frames in mi_malloc
   if (_mi_theap_default_key == MI_PTHREAD_KEY_INVALID) return NULL;
-  return mi_prim_tls_slot(_mi_theap_default_key);
+  return (mi_theap_t*)mi_prim_tls_slot(_mi_theap_default_key);
   #else
   return (mi_theap_t*)mi_pthread_key_get(_mi_theap_default_key);  
   #endif
@@ -452,7 +452,7 @@ static inline mi_theap_t* _mi_theap_default(void) {
 static inline mi_theap_t* _mi_theap_cached(void) {
   #if defined(__APPLE__) && defined(__aarch64__) && MI_HAS_TLS_SLOT
   if (_mi_theap_cached_key == MI_PTHREAD_KEY_INVALID) return NULL;
-  return mi_prim_tls_slot(_mi_theap_cached_key);
+  return (mi_theap_t*)mi_prim_tls_slot(_mi_theap_cached_key);
   #else
   return (mi_theap_t*)mi_pthread_key_get(_mi_theap_cached_key);
   #endif
