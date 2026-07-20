@@ -65,7 +65,7 @@ jobs:
           cmake --build out/release-cxx --parallel 8 --config Release
           ctest --test-dir out/release-cxx --verbose --timeout 240 -C Release
 
-      # Extra, Windows x86
+      # Extra, Windows x86 
       - name: Debug, Win32
         if: matrix.tests == 'extra' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
         run: |
@@ -94,6 +94,7 @@ jobs:
           cmake --build out/release-clang --parallel 4 --config Release
           ctest --test-dir out/release-clang --verbose --timeout 240 -C Release          
 
+      # Extra, macOS fixed TLS
       - name: Debug, TLS fixed
         if: matrix.tests == 'extra' && runner.os == 'macOS'
         run: |
@@ -107,6 +108,21 @@ jobs:
           cmake . -B out/release-tls-fixed -DCMAKE_BUILD_TYPE=Release -DMI_TLS_MODEL_FIXED=ON
           cmake --build out/release-tls-fixed --parallel 4 --config Release
           ctest --test-dir out/release-tls-fixed --verbose --timeout 240 -C Release
+
+      # Extra, Linux pthread TLS
+      - name: Debug, TLS pthreads
+        if: matrix.tests == 'extra' && runner.os == 'linux'
+        run: |
+          cmake . -B out/debug-tls-pthreads -DCMAKE_BUILD_TYPE=Debug -DMI_TLS_MODEL_PTHREADS=ON
+          cmake --build out/debug-tls-pthreads --parallel 4 --config Debug
+          ctest --test-dir out/debug-tls-pthreads --verbose --timeout 240 -C Debug
+
+      - name: Release, TLS pthreads
+        if: matrix.tests == 'extra' && runner.os == 'linux'
+        run: |
+          cmake . -B out/release-tls-pthreads -DCMAKE_BUILD_TYPE=Release -DMI_TLS_MODEL_PTHREADS=ON
+          cmake --build out/release-tls-pthreads --parallel 4 --config Release
+          ctest --test-dir out/release-tls-pthreads --verbose --timeout 240 -C Release
 
       # Extra
       - name: Release, SIMD
