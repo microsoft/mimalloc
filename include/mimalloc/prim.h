@@ -549,7 +549,7 @@ static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
   #else
   if mi_likely(_mi_theap_heap_peek(theap)==heap) return theap;
   #endif
-  theap = _mi_thread_local_get(heap->theap);  // don't update the cache on a query
+  theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);  // don't update the cache on a query
   mi_assert_internal(theap==NULL || (!_mi_is_empty_theap(theap) && theap->heap==heap));
   return theap;
 }
@@ -558,7 +558,7 @@ static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
 // Should be fast as it is called in `free.c:mi_free_try_collect`.
 static inline mi_theap_t* _mi_page_associated_theap_peek(mi_page_t* page) {
   mi_heap_t* const heap = mi_page_heap(page);
-  mi_theap_t* const theap = _mi_thread_local_get(heap->theap);
+  mi_theap_t* const theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
   if (theap==NULL) return NULL;
   if (theap->heap != heap) return NULL; // should never happen, but can happen for a free across subprocesses, which can happen during pthread tls storage deallocation
   mi_assert_internal(!_mi_is_empty_theap(theap) && _mi_thread_id()==theap->tld->thread_id);

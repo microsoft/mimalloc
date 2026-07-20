@@ -657,7 +657,7 @@ static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
   _mi_heap_theap_set(heap_main, theap);  // todo: can fail!
 
   mi_assert_internal(mi_theap_is_initialized(theap));
-  mi_theap_t* const heap_theap = (heap_main==NULL ? NULL : _mi_thread_local_get(heap_main->theap));
+  mi_theap_t* const heap_theap = (heap_main==NULL ? NULL : (mi_theap_t*)_mi_thread_local_get(heap_main->theap));
   mi_assert_internal(heap_main==NULL || heap_theap == theap); MI_UNUSED_RELEASE(heap_theap);
   return theap;
 }

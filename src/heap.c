@@ -76,7 +76,7 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
   }
 
   // get the thread local theap
-  mi_theap_t* theap = _mi_thread_local_get(heap->theap);
+  mi_theap_t* theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
 
   // create a fresh theap?
   if (theap==NULL) {
@@ -87,7 +87,7 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
       return NULL;
     }
     _mi_heap_theap_set(heap, theap);
-    mi_assert_internal(theap == _mi_thread_local_get(heap->theap));
+    mi_assert_internal(theap == (mi_theap_t*)_mi_thread_local_get(heap->theap));
   }
   return theap;
 }
@@ -97,7 +97,7 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
 mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
 {
   mi_assert_internal(heap->theap != 0);
-  mi_theap_t* theap = _mi_thread_local_get(heap->theap);
+  mi_theap_t* theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
   if mi_unlikely(theap==NULL) {
     theap = mi_heap_init_theap(heap);
     if (theap==NULL) { return (mi_theap_t*)&_mi_theap_empty_wrong; }  // this will return NULL from page.c:_mi_malloc_generic
