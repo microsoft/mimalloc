@@ -410,7 +410,12 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 ----------------------------------------------------------- */
 
 #if MI_USE_PTHREADS
+
+#if defined(__APPLE__) && defined(__aarch64__)
+#define MI_PTHREAD_KEY_INVALID ((pthread_key_t)(0))   // nicer codegen
+#else
 #define MI_PTHREAD_KEY_INVALID ((pthread_key_t)(-1))
+#endif
 
 #if defined(__linux__) || defined(__GLIBC__)
 // pthread_getspecific returns NULL for invalid keys. <https://man7.org/linux/man-pages/man3/pthread_getspecific.3p.html>
@@ -424,7 +429,7 @@ static inline void* mi_pthread_key_get(pthread_key_t key) {
   #if !MI_PTHREADS_GET_INVALID_KEY_IS_NULL
   if mi_unlikely(key==MI_PTHREAD_KEY_INVALID) return NULL;
   #endif
-  return pthread_getspecific(key);
+  return pthread_getspecific(key);  
 }
 
 static inline bool mi_pthread_key_set(pthread_key_t* pkey, void* val) {
