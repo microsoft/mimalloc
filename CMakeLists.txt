@@ -386,7 +386,7 @@ endif()
 if(MI_FREE_IS_CHECKED)
   message(STATUS "Check validity of pointers passed to 'mi_free' (MI_FREE_IS_CHECKED=ON)")
   list(APPEND mi_defines MI_FREE_IS_CHECKED=1)
-elseif(MI_OVERRIDE)  
+elseif(MI_OVERRIDE)
   message(STATUS "Check validity of pointers passed to 'mi_free' only in the dynamic link library (MI_OVERRIDE=ON, MI_FREE_IS_CHECKED=OFF)")
   list(APPEND mi_cflags_dynamic -DMI_FREE_IS_CHECKED=1)
 endif()
@@ -791,7 +791,7 @@ if (MI_BUILD_OBJECT)
   set(mimalloc-obj-out "${CMAKE_CURRENT_BINARY_DIR}/${mi_libname}${CMAKE_C_OUTPUT_EXTENSION}")
   add_custom_command(OUTPUT ${mimalloc-obj-out} DEPENDS mimalloc-obj mimalloc-static COMMAND "${CMAKE_COMMAND}" -E copy "${mimalloc-obj-static}" "${mimalloc-obj-out}")
   add_custom_target(mimalloc-obj-target ALL DEPENDS ${mimalloc-obj-out})
-  
+
 
   # the following seems to lead to cmake warnings/errors on some systems, disable for now :-(
   # install(TARGETS mimalloc-obj EXPORT mimalloc DESTINATION ${mi_install_objdir})
@@ -832,7 +832,7 @@ if (MI_BUILD_TESTS)
   enable_testing()
 
   # static link tests
-  foreach(TEST_NAME api api-fill stress-heaps stress)
+  foreach(TEST_NAME api api-fill stress-heaps stress-subprocs stress)
     add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
     target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
     target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})

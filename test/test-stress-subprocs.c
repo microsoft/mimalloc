@@ -6,5 +6,5 @@ terms of the MIT license.
 
 #define TEST_STRESS_SUBPROCS 1
 #define NSUBPROCS            2
-
+#define NTHREADS             16
 #include "test-stress.c"

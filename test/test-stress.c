@@ -30,35 +30,39 @@ terms of the MIT license.
 
 // #define MI_USE_HEAPS        1
 // #define ALLOW_LARGE         1
-// #define TEST_STRESS_SUBPROCS   1 
+// #define TEST_STRESS_SUBPROCS   1
 // #define TEST_LEAK              1
 
-#define TEST_STRESS            1    
+#define TEST_STRESS            1
+
+#ifndef NTHREADS
+#define NTHREADS               32
+#endif
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
 // argument defaults
 #if defined(MI_TSAN)          // with thread-sanitizer reduce the threads to test within the azure pipeline limits
-static int THREADS = 8;
+static int THREADS = NTHREADS/4;
 static int SCALE   = 25;
 static int ITER    = 400;
 #elif defined(MI_UBSAN)       // with undefined behavious sanitizer reduce parameters to stay within the azure pipeline limits
-static int THREADS = 8;
+static int THREADS = NTHREADS/4;
 static int SCALE   = 25;
 static int ITER    = 20;
 #elif defined(MI_GUARDED)     // with debug guard pages reduce parameters to stay within the azure pipeline limits
-static int THREADS = 8;
+static int THREADS = NTHREADS/4;
 static int SCALE   = 50;
 static int ITER    = 10;
 #elif 0
-static int THREADS = 32;
+static int THREADS = NTHREADS;
 static int SCALE   = 25;
 static int ITER    = 50;
 #define ALLOW_LARGE true
 #else
-static int THREADS = 32;      // more repeatable if THREADS <= #processors
-static int SCALE   = 50;      // scaling factor
-static int ITER    = 50;      // N full iterations destructing and re-creating all threads
+static int THREADS = NTHREADS;      // more repeatable if THREADS <= #processors
+static int SCALE   = 50;            // scaling factor
+static int ITER    = 50;            // N full iterations destructing and re-creating all threads
 #endif
 
 #ifndef ALLOW_LARGE
@@ -148,7 +152,7 @@ static void* alloc_items(size_t items, random_t r) {
   }
   if (items>=32 && items<=40) items*=2;              // pthreads uses 320b allocations (this shows that more clearly in the stats)
   if (use_one_size > 0) items = (use_one_size / sizeof(uintptr_t));
-  if (items==0) items = 1;  
+  if (items==0) items = 1;
   uintptr_t* p = (uintptr_t*)custom_calloc(items,sizeof(uintptr_t));
   if (p != NULL) {
     for (uintptr_t i = 0; i < items; i++) {
@@ -266,7 +270,7 @@ static void test_stress(mi_subproc_id_t subproc) {
   #endif
   uintptr_t r = rand();
   for (int n = 0; n < ITER; n++) {
-    
+
     #ifdef MI_USE_HEAPS
     // new heap for each iteration
     if (prev_heaps[MI_USE_HEAPS-1] != NULL) {
@@ -275,9 +279,9 @@ static void test_stress(mi_subproc_id_t subproc) {
     for(int i = MI_USE_HEAPS-1; i > 0; i--) {
       prev_heaps[i] = prev_heaps[i-1];
     }
-    prev_heaps[0] = current_heap; 
+    prev_heaps[0] = current_heap;
     current_heap = mi_heap_new();
-    #endif  
+    #endif
 
     run_os_threads(subproc, THREADS, &stress, transfers);
 
@@ -297,23 +301,23 @@ static void test_stress(mi_subproc_id_t subproc) {
         free_items(p);
       }
     }
-    
+
     #if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) {
       printf("- iterations left: %3d\n", ITER - (n + 1));
       #ifndef USE_STD_MALLOC
-      mi_debug_show_arenas();
+      // mi_debug_show_arenas();
       #endif
       //mi_collect(true);
       //mi_debug_show_arenas();
     }
     #endif
   }
-  
+
   #ifndef USE_STD_MALLOC
   mi_stats_print(NULL);
   #endif
-  
+
   // clean up  (a bit too early to test the final free_items still works correctly)
   #ifdef MI_USE_HEAPS
   for (int i = 0; i < MI_USE_HEAPS; i++) {
@@ -331,9 +335,6 @@ static void test_stress(mi_subproc_id_t subproc) {
 }
 
 #if TEST_STRESS_SUBPROCS && !defined(USE_STD_MALLOC)
-#ifndef NSUBPROCS
-#define NSUBPROCS (2)
-#endif
 static mi_subproc_id_t subprocs[NSUBPROCS];
 
 static void test_stress_subproc( intptr_t i, void* arg ) {
@@ -345,7 +346,7 @@ static void test_stress_subproc( intptr_t i, void* arg ) {
 
 static void test_stress_subprocs(void) {
   printf(" (for %d subprocesses)\n", NSUBPROCS);
-  
+
   for(int i = 0; i < NSUBPROCS; i++) {
     subprocs[i] = mi_subproc_new();
   }
@@ -394,7 +395,7 @@ int main(int argc, char** argv) {
   #endif
   #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
     mi_option_set(mi_option_arena_reserve, mi_arena_min_size()/1024 /* in KiB ! */);
-    mi_option_set(mi_option_purge_delay,1);    
+    mi_option_set(mi_option_purge_delay,1);
   #endif
   #if defined(NDEBUG) && !defined(USE_STD_MALLOC)
     // mi_option_set(mi_option_purge_delay,-1);
@@ -440,7 +441,7 @@ int main(int argc, char** argv) {
   srand(0x7feb352d);
   // mi_stats_reset();
 #if TEST_STRESS_SUBPROCS && !defined(USE_STD_MALLOC)
-    test_stress_subprocs();  
+    test_stress_subprocs();
 #elif TEST_STRESS
     test_stress(subproc_null);
 #elif TEST_LEAK
@@ -457,7 +458,7 @@ int main(int argc, char** argv) {
   //  fputs(json,stderr);
   //  mi_free(json);
   //}
-  #endif  
+  #endif
   mi_collect(true);
   mi_stats_print(NULL);
 #endif

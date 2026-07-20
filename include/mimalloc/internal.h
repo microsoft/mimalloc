@@ -40,7 +40,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
-#define mi_decl_unused        
+#define mi_decl_unused
 #elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
 #if !MI_TRACK_ASAN
 #define mi_decl_forceinline     __attribute__((always_inline)) inline
@@ -69,7 +69,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #if __cplusplus >= 201703L    // c++17
 #define mi_decl_unused          [[maybe_unused]]
 #else
-#define mi_decl_unused        
+#define mi_decl_unused
 #endif
 #else
 #define mi_decl_forceinline     inline
@@ -79,7 +79,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
-#define mi_decl_unused        
+#define mi_decl_unused
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -310,12 +310,10 @@ bool          _mi_page_visit_blocks( mi_page_t* page, mi_block_visit_fun* visito
 // "heap.c"
 void          _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
 mi_decl_cold  mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap);  // get (and possible create) the theap belonging to a heap
-// mi_decl_cold  mi_theap_t* _mi_heap_theap_get_peek(const mi_heap_t* heap);     // get the theap for a heap without initializing (and return NULL in that case)
 void          _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to);  // in "arena.c"
 void          _mi_heap_destroy_pages(mi_heap_t* heap_from);                   // in "arena.c"
 void          _mi_heap_force_destroy(mi_heap_t* heap);                        // allow destroying the main heap
 mi_heap_t*    _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool is_heap_main);
-mi_theap_t*   _mi_heap_theap_get_peek(const mi_heap_t* heap);
 bool          _mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap);
 
 // "stats.c"
@@ -406,6 +404,37 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define mi_theap_stat_adjust_increase(theap,stat,amnt)          __mi_stat_adjust_increase( &(theap)->stats.stat, amnt)
 #define mi_theap_stat_adjust_decrease(theap,stat,amnt)          __mi_stat_adjust_decrease( &(theap)->stats.stat, amnt)
 
+
+/* -----------------------------------------------------------
+  pthread thread locals
+----------------------------------------------------------- */
+
+#if MI_USE_PTHREADS
+#define MI_PTHREAD_KEY_INVALID ((pthread_key_t)(-1))
+
+mi_decl_noinline bool _mi_pthread_key_create(pthread_key_t* pkey, void* init);
+
+static inline void* mi_pthread_key_get(pthread_key_t key) {
+  #if MI_PTHREADS_GET_INVALID_KEY_IS_NOT_NULL
+  if mi_unlikely(key==MI_PTHREAD_KEY_INVALID) return NULL;
+  #endif
+  return pthread_getspecific(key);
+}
+
+static inline bool mi_pthread_key_set(pthread_key_t* pkey, void* val) {
+  if mi_likely(*pkey!=MI_PTHREAD_KEY_INVALID) { pthread_setspecific(*pkey,val); return true; }
+  else if (val!=NULL) { return _mi_pthread_key_create(pkey,val); }
+  else return true;
+}
+
+static inline void mi_pthread_key_delete(pthread_key_t* pkey) {
+  const pthread_key_t key = *pkey;
+  if (key!=MI_PTHREAD_KEY_INVALID) {
+    *pkey = MI_PTHREAD_KEY_INVALID;
+    pthread_key_delete(key);
+  }
+}
+#endif
 
 /* -----------------------------------------------------------
   Options (exposed for the debugger)
@@ -582,14 +611,9 @@ static inline mi_heap_t* _mi_theap_heap_peek(const mi_theap_t* theap) {
   return mi_atomic_load_ptr_relaxed(mi_heap_t,&theap->heap);
 }
 
-mi_theap_t* _mi_heap_theap_peek_ex(const mi_heap_t* heap);
-
 static inline mi_heap_t* _mi_theap_heap(const mi_theap_t* theap) {
-  mi_heap_t* const heap = _mi_theap_heap_peek(theap);  
+  mi_heap_t* const heap = _mi_theap_heap_peek(theap);
   mi_assert_internal(heap!=NULL);
-  // note: don't access heap_theap as that might read a thread-local which can cause allocation during thread initialization
-  // mi_theap_t* const heap_theap = _mi_heap_theap_peek_ex(heap);
-  // mi_assert_internal(heap_theap==NULL || heap_theap == theap); MI_UNUSED_RELEASE(heap_theap);
   return heap;
 }
 

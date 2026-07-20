@@ -76,7 +76,7 @@ char* _mi_strnstr(char* s, size_t max_len, const char* pat) {
   if (s==NULL) return NULL;
   if (pat==NULL) return s;
   const size_t m = _mi_strnlen(s, max_len);
-  const size_t n = _mi_strlen(pat);  
+  const size_t n = _mi_strlen(pat);
   for (size_t start = 0; start + n <= m; start++) {
     size_t i = 0;
     while (i<n && pat[i]==s[start+i]) {
@@ -138,6 +138,23 @@ void _mi_atomic_once_release(mi_atomic_once_t* once) {
     mi_lock_release(&once->lock);
   }
 }
+
+#if MI_USE_PTHREADS
+mi_decl_noinline bool _mi_pthread_key_create(pthread_key_t* pkey, void* init) {
+  int err = pthread_key_create(pkey,NULL);
+  if mi_unlikely(err!=0) {
+    *pkey = MI_PTHREAD_KEY_INVALID;
+    _mi_error_message(ENOMEM,"unable to allocate a thread local variable (error %d)\n", err);
+    return false;
+  }
+  mi_assert_internal(*pkey != MI_PTHREAD_KEY_INVALID);
+  if (init!=NULL) {
+    pthread_setspecific(*pkey,init);
+  };
+  mi_assert_internal(pthread_getspecific(*pkey)==init);
+  return true;
+}
+#endif
 
 
 // --------------------------------------------------------
