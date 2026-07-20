@@ -252,7 +252,7 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_malloc(mi_theap_
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_malloc(size_t size) mi_attr_noexcept {
-   return mi_theap_malloc(_mi_theap_default(), size);
+  return mi_theap_malloc(_mi_theap_default(), size);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
