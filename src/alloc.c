@@ -305,7 +305,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_calloc(mi_heap_t* heap, size_t 
 // Return usable size
 mi_decl_nodiscard mi_decl_restrict void* mi_umalloc_small(size_t size, size_t* usable) mi_attr_noexcept {
   return mi_theap_malloc_small_zero(_mi_theap_default(), size, false, usable);
-}
+} 
 
 mi_decl_nodiscard mi_decl_restrict void* mi_theap_umalloc(mi_theap_t* theap, size_t size, size_t* usable) mi_attr_noexcept {
   return _mi_theap_malloc_zero_ex(theap, size, false, 0, usable);
