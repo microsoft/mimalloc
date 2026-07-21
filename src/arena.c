@@ -2444,7 +2444,7 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
 }
 
 static void mi_heap_delete_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
-  mi_theap_t* const theap_target = (heap_target != NULL ? _mi_heap_theap(heap_target) : NULL);
+  mi_theap_t* const theap_target = (heap_target != NULL ? _mi_heap_theap_peek(heap_target) : NULL);
   // mi_theap_t* const theap = _mi_heap_theap(heap);
   mi_heap_delete_visit_info_t info = { heap_target, theap_target, NULL };
   _mi_heap_visit_blocks(heap, false, false, &mi_heap_delete_page, &info);

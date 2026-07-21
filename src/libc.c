@@ -140,8 +140,8 @@ void _mi_atomic_once_release(mi_atomic_once_t* once) {
 }
 
 #if MI_USE_PTHREADS
-mi_decl_noinline bool _mi_pthread_key_create(pthread_key_t* pkey, void* init) {
-  int err = pthread_key_create(pkey,NULL);
+mi_decl_noinline bool _mi_pthread_key_create(pthread_key_t* pkey, void (*destruct)(void*), void* init) {
+  int err = pthread_key_create(pkey,destruct);
   if mi_unlikely(err!=0) {
     *pkey = MI_PTHREAD_KEY_INVALID;
     _mi_error_message(ENOMEM,"unable to allocate a thread local variable (error %d)\n", err);

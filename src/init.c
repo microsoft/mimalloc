@@ -916,10 +916,17 @@ static void mi_win_tls_slot_set(size_t slot, size_t extended_slot, void* value) 
 mi_decl_hidden pthread_key_t _mi_theap_default_key = MI_PTHREAD_KEY_INVALID;
 mi_decl_hidden pthread_key_t _mi_theap_cached_key = MI_PTHREAD_KEY_INVALID;
 
+static void mi_theap_cached_key_destroy(void* theapv) {
+  mi_theap_t* theap = (mi_theap_t*)theapv;
+  if (theap!=NULL) {
+    _mi_theap_decref(theap);
+  }
+}
+
 static void mi_tls_slots_init(void) {
   mi_atomic_do_once {
-    _mi_pthread_key_create(&_mi_theap_default_key,NULL);
-    _mi_pthread_key_create(&_mi_theap_cached_key,NULL);
+    _mi_pthread_key_create(&_mi_theap_default_key,NULL,NULL);
+    _mi_pthread_key_create(&_mi_theap_cached_key,&mi_theap_cached_key_destroy,NULL);
   }
 }
 
@@ -1013,6 +1020,7 @@ void _mi_auto_process_init(void) {
   mi_assert_internal(_mi_is_main_thread());
 
   mi_process_init();
+  mi_tls_slots_init();
   mi_process_setup_auto_thread_done();
   _mi_thread_locals_init();
 
