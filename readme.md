@@ -15,7 +15,7 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.4.1`  (2026-07-14) recommended.  
+Latest release   : `v3.4.3`  (2026-07-20) recommended.  
 Latest v2 release: `v2.4.1`  (2026-07-14) stable.  
 Latest v1 release: `v1.9.11` (2026-07-14) legacy.
 
@@ -88,6 +88,7 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 - __v1__: legacy version: initial design of mimalloc (release tags: `v1.9.x`, development branch `dev`). Send PR's against this version if possible.
 
 ### Releases
+* 2026-07-20, `v3.4.3`: revert TLS slots on macOS to 108/109 (issue #1333).
 * 2026-07-14, `v1.9.11`, `v2.4.1`, `v3.4.1`: various bug and security fixes through LLM audit (by @Zoxc). 
   Fix issue with using OS memory instead of arenas for > 4GiB memory usage (v3), fix concurrency bug in concurrent
   heap destroy (v3), detect riscV virtual address bits at runtime, add riscV TLS support, reduce spinlock waits (v2),
