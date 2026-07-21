@@ -40,7 +40,12 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   // actual free: push on the local free list
   mi_block_set_next(page, block, page->local_free);
   page->local_free = block;
-  if mi_unlikely(page->used-- == 1) {  // note: better code on arm than using `--page->used == 0`
+  #if defined(__clang__) && defined(__aarch64__)
+  if mi_unlikely(page->used-- == 1)   // better code on arm64 than using `--page->used == 0`
+  #else
+  if mi_unlikely(--page->used == 0)
+  #endif
+  {  
     if (page->retire_expire==0) { // no need to re-retire retired pages (happens when we alloc/free one block repeatedly in an empty page)
       _mi_page_retire(page); 
     }
