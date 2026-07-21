@@ -417,7 +417,7 @@ void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
 #define MI_PTHREAD_KEY_INVALID ((pthread_key_t)(-1))
 #endif
 
-#if defined(__linux__) || defined(__GLIBC__)
+#if defined(__linux__) && defined(__GLIBC__)
 // pthread_getspecific returns NULL for invalid keys. <https://man7.org/linux/man-pages/man3/pthread_getspecific.3p.html>
 // see also: <https://github.com/lattera/glibc/blob/master/nptl/pthread_getspecific.c>
 #define MI_PTHREADS_GET_INVALID_KEY_IS_NULL  1
