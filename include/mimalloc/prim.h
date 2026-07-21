@@ -387,8 +387,8 @@ static inline mi_theap_t* _mi_theap_cached(void);
     #define MI_TLS_MODEL_FIXED_SLOT           1
     // we use the last 2 7-bit slots which seem unused. 
     // @apple: it would be great to get 2 official slots for custom allocators :-)
-    #define MI_TLS_MODEL_FIXED_SLOT_DEFAULT   126  
-    #define MI_TLS_MODEL_FIXED_SLOT_CACHED    127
+    #define MI_TLS_MODEL_FIXED_SLOT_DEFAULT   108  
+    #define MI_TLS_MODEL_FIXED_SLOT_CACHED    109
     // see <https://github.com/apple/darwin-libpthread/blob/main/private/pthread/tsd_private.h#L99> for assigned slots
   #elif defined(__APPLE__) || defined(__OpenBSD__) || defined(__ANDROID__)
     #define MI_TLS_MODEL_DYNAMIC_PTHREADS     1
