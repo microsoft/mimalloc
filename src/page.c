@@ -977,8 +977,7 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
     }
     // otherwise we initialize the thread and its default theap
     theap = _mi_thread_init();
-    if mi_unlikely(!mi_theap_is_initialized(theap)) { return NULL; }
-    mi_assert_internal(_mi_theap_default()==theap);
+    if mi_unlikely(!mi_theap_is_initialized(theap)) { return NULL; }    
   }
   mi_assert_internal(mi_theap_is_initialized(theap));
 
