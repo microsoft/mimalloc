@@ -8,7 +8,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc-stats.h"
 #include "mimalloc/internal.h"
 #include "mimalloc/atomic.h"
-#include "mimalloc/prim.h"
+#include "mimalloc/prim.h"       // _mi_prim_clock_now, mi_process_info_t
+#include "mimalloc/prim-tls.h"
 
 #include <string.h> // memset
 

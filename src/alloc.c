@@ -12,7 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
 #include "mimalloc/atomic.h"
-#include "mimalloc/prim.h"   // _mi_prim_thread_id()
+#include "mimalloc/prim-tls.h"   // _mi_prim_thread_id()
 
 #include <string.h>      // memset, strlen (for mi_strdup)
 #include <stdlib.h>      // malloc, abort

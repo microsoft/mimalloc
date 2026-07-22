@@ -7,6 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
 #include "mimalloc/prim.h"
+#include "mimalloc/prim-tls.h"
 
 #include <string.h>  // memcpy, memset
 #include <stdlib.h>  // atexit
@@ -568,7 +569,7 @@ static void mi_subprocs_unsafe_destroy_all(void) {
   mi_subproc_unsafe_destroy(&subproc_main, true /* take subprocs lock */);
 }
 
-static void mi_thread_init_ex(mi_heap_t* heap_main) mi_attr_noexcept;
+static mi_theap_t* mi_thread_init_ex(mi_heap_t* heap_main) mi_attr_noexcept;
 
 void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
@@ -747,24 +748,30 @@ bool _mi_is_main_thread(void) {
 }
 
 // Initialize thread
-static void mi_thread_init_ex(mi_heap_t* heap_main) mi_attr_noexcept
+static mi_theap_t* mi_thread_init_ex(mi_heap_t* heap_main) mi_attr_noexcept
 {
   // ensure our process has started already
   mi_process_init();
 
   // if the theap_default is already set we have already initialized
-  if (_mi_thread_is_initialized()) return;
+  mi_theap_t* theap = _mi_theap_default();
+  if (mi_theap_is_initialized(theap)) return theap;
 
-  // initialize the default theap
-  mi_theap_t* const theap = _mi_thread_init_theap_default(heap_main);
-  if (theap == NULL) return; // out-of-memory on tld/theap allocation
+  // otherwise initialize the default theap
+  theap = _mi_thread_init_theap_default(heap_main);
+  if (theap == NULL) return NULL; // out-of-memory on tld/theap allocation
 
   mi_subproc_stat_increase(_mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?
   // _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
+  return theap;
+}
+
+mi_theap_t* _mi_thread_init(void) {
+  return mi_thread_init_ex(NULL);
 }
 
 void mi_decl_noinline mi_thread_init(void) mi_attr_noexcept {
-  mi_thread_init_ex(NULL);
+  _mi_thread_init();
 }
 
 void mi_thread_done(void) mi_attr_noexcept {

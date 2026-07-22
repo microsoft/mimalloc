@@ -176,6 +176,7 @@ bool          _mi_is_main_thread(void);
 bool          _mi_is_process_heap_main(const mi_heap_t* heap);
 bool          _mi_preloading(void);           // true while the C runtime is not initialized yet
 void          _mi_thread_done(mi_theap_t* theap);
+mi_theap_t*   _mi_thread_init(void);
 bool          _mi_is_empty_theap(const mi_theap_t* theap);
 
 mi_subproc_t* _mi_subproc(void);

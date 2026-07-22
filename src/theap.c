@@ -7,7 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
-#include "mimalloc/prim.h"  // _mi_theap_default
+#include "mimalloc/prim-tls.h"  // _mi_theap_default
 
 #if defined(_MSC_VER) && (_MSC_VER < 1920)
 #pragma warning(disable:4204)  // non-constant aggregate initializer

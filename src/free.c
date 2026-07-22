@@ -9,7 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // add includes help an IDE
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
-#include "mimalloc/prim.h"   // _mi_prim_thread_id()
+#include "mimalloc/prim-tls.h"   // _mi_prim_thread_id()
 #endif
 
 // forward declarations

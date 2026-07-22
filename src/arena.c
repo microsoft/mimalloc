@@ -21,7 +21,7 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
-#include "mimalloc/prim.h"
+#include "mimalloc/prim-tls.h"
 #include "bitmap.h"
 
 #if (MI_ARENA_MAX_SIZE >= MI_SIZE_SIZE*UINT32_MAX)
