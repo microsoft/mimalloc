@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2025 Microsoft Research, Daan Leijen
+Copyright (c) 2018-2026 Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license.
 -----------------------------------------------------------------------------*/
