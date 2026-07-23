@@ -20,8 +20,8 @@ terms of the MIT license. A copy of the license can be found in the file
 // is always a portable fallback (based on regular thread local variables).
 //
 // Windows          : use NtCurrentTeB and TlsAlloc (MI_TLS_MODEL_WIN32)
-// Linux,FreeBSD    : use thread locals with the initial-exec model  (MI_TLS_MODEL_LOCAL)
-// macOS            : use pthread locals with assembly for the thread-id  (MI_TLS_MODEL_PTHREADS)
+// Linux,FreeBSD    : use thread locals with the initial-exec model  (MI_TLS_MODEL_LOCAL)  
+// macOS            : use pthread locals with assembly for the thread-id  (MI_TLS_MODEL_PTHREADS) 
 // Android,OpenBSD  : use pthread locals (MI_TLS_MODEL_PTHREADS). todo: maybe on Android MI_TLS_MODEL_LOCAL is better?
 // --------------------------------------------------------------------------
 
@@ -35,6 +35,18 @@ static inline bool          _mi_thread_is_initialized(void);                 // 
 static inline mi_theap_t*   _mi_heap_theap(mi_heap_t* heap);                 // get the thread local theap belonging to a heap
 static inline mi_theap_t*   _mi_heap_theap_peek(const mi_heap_t* heap);      // get the theap but don't update _mi_theap_cached
 static inline mi_theap_t*   _mi_page_associated_theap_peek(mi_page_t* page); // get the theap associated with a page (used in `mi_free_collect_mt`)
+
+
+// Default TLS model
+#if !defined(MI_TLS_MODEL_LOCAL) && !defined(MI_TLS_MODEL_PTHREADS) && !defined(MI_TLS_MODEL_FIXED) && !defined(MI_TLS_MODEL_WIN32)
+#if defined(_WIN32)
+#define MI_TLS_MODEL_WIN32        1
+#elif defined(__APPLE__) || defined(__OpenBSD__) || defined(__ANDROID__)  // and FreeBSD?
+#define MI_TLS_MODEL_PTHREADS     1
+#else
+#define MI_TLS_MODEL_LOCAL        1
+#endif
+#endif
 
 
 //-------------------------------------------------------------------
@@ -60,7 +72,7 @@ static inline mi_theap_t*   _mi_page_associated_theap_peek(mi_page_t* page); // 
 static inline void* mi_prim_tls_slot(size_t slot) mi_attr_noexcept {
   void* res;
   const size_t ofs = (slot*sizeof(void*));
-  #if defined(_WIN32)
+  #if defined(_WIN32)  
     #if (_M_X64 || _M_AMD64) && !defined(_M_ARM64EC)
       res = (void*)__readgsqword((unsigned long)ofs);   // direct load at offset from gs
     #elif _M_IX86 && !defined(_M_ARM64EC)
@@ -260,16 +272,15 @@ We have 4 models:
 - MI_TLS_MODEL_PTHREADS: use `pthread_getspecific`. (default on macOS and OpenBSD, maybe good for Android as well?)
     Use pthread local storage. Can be as fast as thread locals on many platforms (like recent macOS).
 
-- MI_TLS_MODEL_FIXED: use a fixed slot in the TLS block
+- MI_TLS_MODEL_FIXED: use a fixed slot in the TLS block.
     This reserves an unused and fixed TLS slot. This is fast and avoids the problem
     where the underlying TLS implementation (or the loader) will call itself `malloc`
     on a first access to a thread local (and recurse in the MI_TLS_MODEL_LOCAL).
     This goes wrong though if the OS or a library uses the same fixed slot, and also
-    prevents multiple instances of mimalloc in the same process.
+    prevents multiple instances of mimalloc in the same process. 
 
 - MI_TLS_MODEL_WIN32: use a dynamically allocated slot with TlsAlloc. (default on Windows)
-    Windows has somewhat slow thread locals, so by default we use TlsAlloc'd slots which
-    can be more efficient. First tries to use one of the "direct" first 64 slots which
+    We use TlsAlloc'd slot. First tries to use one of the "direct" first 64 slots which
     are the fastest, but falls back to using "expansion" slots when needed (up to 1088 slots).
     (If the allocated slot happens to always be under 64 for a particular program,
     one might use cmake with `-DMI_WIN_DIRECT_TLS=ON` to skip the expansion slot test in the fast path.)
@@ -278,20 +289,6 @@ Each model should define `MI_THEAP_INITASNULL` to signify that the initial value
 returned from `_mi_theap_default()` can be `NULL` (instead of the address of the empty heap).
 This incurs an extra check in the fast path (but can often be combined in an existing check).
 ------------------------------------------------------------------------------------------- */
-
-static inline mi_theap_t* _mi_theap_default(void);
-static inline mi_theap_t* _mi_theap_cached(void);
-
-// Default TLS model
-#if !defined(MI_TLS_MODEL_LOCAL) && !defined(MI_TLS_MODEL_PTHREADS) && !defined(MI_TLS_MODEL_FIXED) && !defined(MI_TLS_MODEL_WIN32)
-  #if defined(_WIN32)
-    #define MI_TLS_MODEL_WIN32        1
-  #elif defined(__APPLE__) || defined(__OpenBSD__) || defined(__ANDROID__)  // and FreeBSD?
-    #define MI_TLS_MODEL_PTHREADS     1
-  #else
-    #define MI_TLS_MODEL_LOCAL        1
-  #endif
-#endif
 
 #if !defined(MI_TLS_RECURSE_GUARD) && MI_TLS_MODEL_LOCAL && defined(__APPLE__)
 #define MI_TLS_RECURSE_GUARD 1     // macOS can allocate on thread-local initialization
@@ -329,7 +326,7 @@ static inline mi_theap_t* _mi_theap_cached(void) {
 }
 
 #elif MI_TLS_MODEL_PTHREADS
-// Dynamic pthread slots. This can fast depending on the platform (default for macOS and OpenBSD)
+// Dynamic pthread slots. This can be fast depending on the platform (default for macOS and OpenBSD)
 // On some platforms (like macOS), the loader might allocate on thread local declarations which
 // can be avoided with pthreads.
 #define MI_THEAP_INITASNULL  1
@@ -357,42 +354,16 @@ static inline mi_theap_t* _mi_theap_cached(void) {
   #endif
 }
 
-
-#elif MI_TLS_MODEL_FIXED
-// Fixed TLS slot. Can be fast but does not work if there are multiple instances of
-// mimalloc in the same process.
-#define MI_THEAP_INITASNULL  1
-
-#if !defined(MI_TLS_MODEL_FIXED_DEFAULT)
-  #if defined(__APPLE__) && !defined(__POWERPC__)  // macOS on arm64 or x64
-    // we use the last two swift framework slots which seem unused.
-    // we may want to use slot 6 and 11 instead which are only used by Windows emulation.
-    // see <https://github.com/apple/darwin-libpthread/blob/main/private/pthread/tsd_private.h#L99> for assigned slots
-    #define MI_TLS_MODEL_FIXED_DEFAULT   108
-    #define MI_TLS_MODEL_FIXED_CACHED    109
-  #else
-    #error define the TLS model fixed slots (or change the TLS model away from MI_TLS_MODEL_FIXED)
-  #endif
-#endif
-
-static inline mi_theap_t* _mi_theap_default(void) {
-  return (mi_theap_t*)mi_prim_tls_slot(MI_TLS_MODEL_FIXED_DEFAULT);
-}
-
-static inline mi_theap_t* _mi_theap_cached(void) {
-  return (mi_theap_t*)mi_prim_tls_slot(MI_TLS_MODEL_FIXED_CACHED);
-}
-
 #elif MI_TLS_MODEL_WIN32
-// Dynamic TLS slots (default on Windows).
+// Dynamic TLS slots -- this is the default on Windows.
 #define MI_THEAP_INITASNULL  1
 
 // We try to use direct slots (64 available), but can also use the expansion slots (upto 1024 extra available)
 // See <https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/api/pebteb/teb/index.htm> for the offsets.
 #if MI_SIZE_SIZE==4
-#define MI_TLS_EXPANSION_SLOT    (0x0F94 / MI_SIZE_SIZE)
+#define MI_TLS_EXPANSION_SLOT    (0x0F94 / MI_INTPTR_SIZE)
 #else
-#define MI_TLS_EXPANSION_SLOT    (0x1780 / MI_SIZE_SIZE)
+#define MI_TLS_EXPANSION_SLOT    (0x1780 / MI_INTPTR_SIZE)
 #endif
 
 extern mi_decl_hidden size_t _mi_theap_default_slot;
@@ -426,6 +397,37 @@ static inline mi_theap_t* _mi_theap_cached(void) {
   }
   #endif
   return theap;
+}
+
+#elif MI_TLS_MODEL_FIXED
+// Fixed TLS slot. Can be the fastest approach, but does not work if there are multiple instances of
+// mimalloc in the same process. Most OS's do not have official user reserved fixed slots so this cannot be 
+// guaranteed to work in general.
+#define MI_THEAP_INITASNULL  1
+
+#if !defined(MI_TLS_MODEL_FIXED_DEFAULT)
+  #if defined(__APPLE__) && !defined(__POWERPC__)  // macOS on arm64 or x64
+    // we use the last two swift framework slots which seem unused.
+    // we may want to use slot 6 and 11 instead which are only used by Windows emulation.
+    // see <https://github.com/apple/darwin-libpthread/blob/main/private/pthread/tsd_private.h#L99> for assigned slots
+    #define MI_TLS_MODEL_FIXED_DEFAULT   108
+    #define MI_TLS_MODEL_FIXED_CACHED    109
+  #elif defined(_WIN32)
+    // we use two seemingly unused fields in the Windows TEB.
+    // see <https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/api/pebteb/teb/index.htm>
+    #define MI_TLS_MODEL_FIXED_DEFAULT   5     // arbitrary user pointer
+    #define MI_TLS_MODEL_FIXED_CACHED    7     // environment pointer (used by OS2)
+  #else
+    #error define the TLS model fixed slots (or change the TLS model away from MI_TLS_MODEL_FIXED)
+  #endif
+#endif
+
+static inline mi_theap_t* _mi_theap_default(void) {
+  return (mi_theap_t*)mi_prim_tls_slot(MI_TLS_MODEL_FIXED_DEFAULT);
+}
+
+static inline mi_theap_t* _mi_theap_cached(void) {
+  return (mi_theap_t*)mi_prim_tls_slot(MI_TLS_MODEL_FIXED_CACHED);
 }
 
 #else

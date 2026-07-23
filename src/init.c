@@ -824,24 +824,24 @@ bool _mi_is_empty_theap(const mi_theap_t* theap) {
 // If we can, we use one of the 64 direct TLS slots (but fall back to expansion slots if needed)
 // See <https://en.wikipedia.org/wiki/Win32_Thread_Information_Block> for the offsets.
 #if MI_SIZE_SIZE==4
-#define MI_TLS_DIRECT_FIRST             (0x0E10 / MI_SIZE_SIZE)
+#define MI_TLS_DIRECT_FIRST             (0x0E10 / MI_INTPTR_SIZE)
 #else
-#define MI_TLS_DIRECT_FIRST             (0x1480 / MI_SIZE_SIZE)
+#define MI_TLS_DIRECT_FIRST             (0x1480 / MI_INTPTR_SIZE)
 #endif
 #define MI_TLS_DIRECT_SLOTS             (64)
 #define MI_TLS_EXPANSION_SLOTS          (1024)
 
-#if !MI_WIN_DIRECT_TLS
-// we initially use the last of the expansion slots as the default NULL.
-// note: this will fail if the program allocates exactly 1024+64 slots with TlsAlloc :-( (but this is quite unlikely)
+// We initially use the last of the expansion slots as the default NULL.
+// note: this will fail if the program allocates exactly 1024+64 slots with TlsAlloc 
+// before we are initialized :-( (but this seems quite unlikely).
+// (todo: another approach could be to use slot 7 (EnvironmentPointer) as the initial slot as that seems to be always NULL)
 #define MI_TLS_INITIAL_SLOT             MI_TLS_EXPANSION_SLOT
 #define MI_TLS_INITIAL_EXPANSION_SLOT   (MI_TLS_EXPANSION_SLOTS-1)
-#else
-// with only direct entries, use the "arbitrary user data" field
-// and assume it is NULL (see also <http://www.nynaeve.net/?p=98>)
-#define MI_TLS_INITIAL_SLOT             (5)
-#define MI_TLS_INITIAL_EXPANSION_SLOT   (0)
-#endif
+
+// in case of errors assign fixed slots (but since we use EFAULT the program should fail anyways)
+#define MI_TLS_ERROR_SLOT               (5)   // arbitrary user pointer
+#define MI_TLS_ERROR_EXPANSION_SLOT     (7)   // environment pointer (only used for OS/2 emulation)
+
 
 mi_decl_hidden mi_decl_cache_align size_t _mi_theap_default_slot = MI_TLS_INITIAL_SLOT;
 mi_decl_hidden size_t _mi_theap_default_expansion_slot = MI_TLS_INITIAL_EXPANSION_SLOT;
@@ -855,8 +855,8 @@ static bool mi_win_tls_slot_alloc(size_t* slot, size_t* extended, DWORD* raw_ind
   const DWORD index = TlsAlloc();
   *raw_index = index;
   if (index==TLS_OUT_OF_INDEXES) {
-    *extended = 0;
-    *slot = 0;
+    *extended = MI_TLS_ERROR_EXPANSION_SLOT;
+    *slot = MI_TLS_ERROR_SLOT;
     return false;
   }
   else if (index<MI_TLS_DIRECT_SLOTS) {
@@ -873,11 +873,11 @@ static bool mi_win_tls_slot_alloc(size_t* slot, size_t* extended, DWORD* raw_ind
   #endif
   else {
     // to high an index for us
-    _mi_error_message(EFAULT, "returned tls index was too high (%u)\n", index);
+    _mi_error_message(EFAULT, "returned TLS index was too high (%u)\n", index);
     TlsFree(index);
     *raw_index = TLS_OUT_OF_INDEXES;
-    *extended = 0;
-    *slot = 0;
+    *extended = MI_TLS_ERROR_EXPANSION_SLOT;
+    *slot = MI_TLS_ERROR_SLOT;
     return false;
   }
 }
@@ -896,7 +896,7 @@ static void mi_tls_slots_init(void) {
       ok = mi_win_tls_slot_alloc(&_mi_theap_cached_slot, &_mi_theap_cached_expansion_slot, &mi_tls_raw_index_cached);
     }
     if (!ok) {
-      _mi_error_message(EFAULT, "unable to allocate fast TLS user slot (0x%zx)\n", _mi_theap_cached_slot);
+      _mi_error_message(EFAULT, "unable to allocate a fast TLS user slot.\n");
     }
   }
 }
