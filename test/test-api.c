@@ -102,6 +102,26 @@ int main(void) {
     void* p = mi_malloc(67108872);
     mi_free(p);
   };
+  CHECK_BODY("malloc-large-cache-index") { // see issue #1121
+    #if (MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_TRACK_ETW)
+    result = true; // cache-index randomization is disabled with external trackers
+    #else
+    const size_t count = 64;
+    const size_t size = 64 * 1024 * sizeof(float) + sizeof(float);
+    void* blocks[64];
+    uintptr_t first_index = 0;
+    bool varied = false;
+    for (size_t i = 0; i < count; i++) {
+      blocks[i] = mi_malloc(size);
+      assert(blocks[i] != NULL);
+      const uintptr_t index = (uintptr_t)blocks[i] % 4096;
+      if (i == 0) { first_index = index; }
+      else if (index != first_index) { varied = true; }
+    }
+    for (size_t i = 0; i < count; i++) { mi_free(blocks[i]); }
+    result = varied;
+    #endif
+  };
 
   // ---------------------------------------------------
   // Extended

@@ -504,6 +504,14 @@ void _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const si
   mi_track_mem_defined(padding,sizeof(mi_padding_t));
   padding->delta = (uint32_t)new_delta;
   mi_track_mem_noaccess(padding,sizeof(mi_padding_t));
+  #if MI_PADDING_CHECK
+  // The usable prefix grew, so move the overflow-detection bytes with it.
+  uint8_t* fill = (uint8_t*)block + bsize - new_delta;
+  const size_t maxpad = (new_delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : new_delta);
+  mi_track_mem_defined(fill, maxpad);
+  for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
+  mi_track_mem_noaccess(fill, maxpad);
+  #endif
 }
 #else
 static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block, bool is_guarded) {

@@ -196,8 +196,38 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
   }
 }
 
+// Large singleton pages start at slice boundaries. Returning that address
+// unchanged for a run of equally-sized allocations can map every object to
+// the same cache sets. Use some of the size-class slack to vary the cache
+// index without reserving any additional memory.
+static void* mi_heap_malloc_cache_index_randomize(mi_heap_t* heap, void* p, size_t size) {
+  #if MI_TRACK_ENABLED
+  MI_UNUSED(heap); MI_UNUSED(size);
+  return p;
+  #else
+  if (p == NULL) return NULL;
+  mi_page_t* const page = _mi_ptr_page(p);
+  if (page->reserved != 1 || mi_page_has_aligned(page)) return p;
+
+  const size_t bsize = mi_page_usable_block_size(page);
+  const size_t slack = (bsize >= size ? bsize - size : 0);
+  const size_t cache_line = 64;
+  const size_t max_cache_offset = 63 * cache_line;
+  if (slack < cache_line) return p;
+
+  const size_t offset_count = 1 + ((slack < max_cache_offset ? slack : max_cache_offset) / cache_line);
+  const size_t offset = (_mi_heap_random_next(heap) % offset_count) * cache_line;
+  if (offset == 0) return p;
+
+  mi_page_set_has_aligned(page, true);
+  _mi_padding_shrink(page, (mi_block_t*)p, offset + size);
+  return (uint8_t*)p + offset;
+  #endif
+}
+
 extern inline void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept {
-  return _mi_heap_malloc_zero_ex(heap, size, zero, 0, NULL);
+  void* const p = _mi_heap_malloc_zero_ex(heap, size, zero, 0, NULL);
+  return mi_heap_malloc_cache_index_randomize(heap, p, size);
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
