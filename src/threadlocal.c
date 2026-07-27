@@ -257,7 +257,7 @@ static bool mi_thread_local_create_expand(void) {
   const size_t newsize = mi_bitmap_size( newcount, NULL );
   // mi_bitmap_t* newslots = (mi_bitmap_t*)mi_zalloc_aligned(newsize, MI_BCHUNK_SIZE);
   mi_memid_t memid;
-  mi_bitmap_t* newslots = (mi_bitmap_t*)_mi_meta_zalloc(_mi_subproc_main(), newsize, &memid); // always allocate thread locals in the main subprocess
+  mi_bitmap_t* newslots = (mi_bitmap_t*)_mi_meta_zalloc_aligned(_mi_subproc_main(), newsize, MI_BCHUNK_SIZE, &memid); // always allocate thread locals in the main subprocess
   mi_assert_internal(_mi_is_aligned(newslots,MI_BCHUNK_SIZE));
   if (newslots==NULL) { return false; }
   if (slots!=NULL) {

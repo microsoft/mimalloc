@@ -257,6 +257,7 @@ bool          _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page);
 
 // init.c
 void*         _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_memid_t* memid );
+void*         _mi_meta_zalloc_aligned( mi_subproc_t* subproc, size_t size, size_t alignment, mi_memid_t* memid );
 void          _mi_meta_free(mi_subproc_t* subproc, void* p, mi_memid_t memid);
 bool          _mi_meta_is_meta_page(mi_subproc_t* subproc, void* p);
 

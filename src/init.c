@@ -211,6 +211,16 @@ void* _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_memid_t* memid ) {
   return p;
 }
 
+void* _mi_meta_zalloc_aligned( mi_subproc_t* subproc, size_t size, size_t aligned, mi_memid_t* memid ) {
+  mi_assert_internal(subproc->theap_meta != NULL);
+  void* p;
+  mi_lock(&subproc->theap_meta_lock) {
+    p = mi_theap_zalloc_aligned(subproc->theap_meta, size, aligned);
+    if (memid != NULL) { *memid = (p==NULL ? _mi_memid_none() : _mi_memid_create_malloc(p,size,true) ); }
+  }
+  return p;
+}
+
 void _mi_meta_free(mi_subproc_t* subproc, void* p, mi_memid_t memid) {
   if (p==NULL || mi_memid_needs_no_free(memid)) return;
   if (memid.memkind == MI_MEM_MALLOC) {
