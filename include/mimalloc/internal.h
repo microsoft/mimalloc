@@ -168,7 +168,7 @@ void mi_cdecl _mi_auto_process_done(void) mi_attr_noexcept;
 bool          _mi_is_redirected(void);
 bool          _mi_allocator_init(const char** message);
 void          _mi_allocator_done(void);
-bool          _mi_is_main_thread(void);
+// bool          _mi_is_main_thread(void);
 bool          _mi_is_process_heap_main(const mi_heap_t* heap);
 bool          _mi_preloading(void);           // true while the C runtime is not initialized yet
 void          _mi_thread_done(mi_theap_t* theap);
@@ -255,9 +255,9 @@ void          _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theap
 void          _mi_arenas_page_unabandon(mi_page_t* page, mi_theap_t* current_theapx /* can be NULL */);
 bool          _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page);
 
-// arena-meta.c
+// init.c
 void*         _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_memid_t* memid );
-void          _mi_meta_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t memid);
+void          _mi_meta_free(mi_subproc_t* subproc, void* p, mi_memid_t memid);
 bool          _mi_meta_is_meta_page(mi_subproc_t* subproc, void* p);
 
 // "page-map.c"
@@ -1217,17 +1217,40 @@ static inline mi_memid_t _mi_memid_create_os(void* base, size_t size, bool commi
   return memid;
 }
 
-static inline mi_memid_t _mi_memid_create_meta(mi_meta_page_t* mpage, size_t block_idx, size_t block_count) {
-  mi_memid_t memid = _mi_memid_create(MI_MEM_META);
-  memid.mem.meta.meta_page = mpage;
-  memid.mem.meta.block_index = (uint32_t)block_idx;
-  memid.mem.meta.block_count = (uint32_t)block_count;
+static inline mi_memid_t _mi_memid_create_static(void* p, size_t size) {
+  mi_memid_t memid = _mi_memid_create(MI_MEM_STATIC);
+  memid.mem.malloc.base = p;
+  memid.mem.malloc.size = size;
   memid.initially_committed = true;
-  memid.initially_zero = true;
   memid.is_pinned = true;
   return memid;
 }
 
+static inline mi_memid_t _mi_memid_create_malloc(void* p, size_t size, bool iszero) {
+  mi_memid_t memid = _mi_memid_create(MI_MEM_MALLOC);
+  memid.mem.malloc.base = p;
+  memid.mem.malloc.size = size;
+  memid.initially_committed = true;
+  memid.initially_zero = iszero;
+  memid.is_pinned = true;
+  return memid;
+}
+
+static inline size_t _mi_memid_size(mi_memid_t memid) {
+  if (mi_memid_is_os(memid)) {
+    return memid.mem.os.size;
+  }
+  else if (memid.memkind == MI_MEM_ARENA) {
+    return mi_size_of_slices(memid.mem.arena.slice_count);
+  }
+  else if (memid.memkind == MI_MEM_MALLOC) {
+    return memid.mem.malloc.size;
+  }
+  else {
+    mi_assert_internal(mi_memid_needs_no_free(memid));
+    return 0;
+  }  
+}
 
 // -------------------------------------------------------------------
 // Fast "random" shuffle

@@ -1352,8 +1352,8 @@ void _mi_arenas_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t mem
       return;
     };
   }
-  else if (memid.memkind == MI_MEM_META) {
-    _mi_meta_free(subproc, p, size, memid);
+  else if (memid.memkind == MI_MEM_MALLOC) {
+    _mi_free_subproc_safe(p);
   }
   else {
     // arena was none, external, or static; nothing to do

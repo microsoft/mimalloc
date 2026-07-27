@@ -251,7 +251,6 @@ typedef enum mi_memkind_e {
   MI_MEM_NONE,      // not allocated (or static)
   MI_MEM_EXTERNAL,  // not owned by mimalloc but provided externally (via `mi_manage_os_memory` for example)
   MI_MEM_STATIC,    // allocated in a static area and should not be freed (the initial main theap data for example (`init.c`))
-  MI_MEM_META,      // allocated with the meta data allocator (`arena-meta.c`)
   MI_MEM_OS,        // allocated from the OS
   MI_MEM_OS_HUGE,   // allocated as huge OS pages (usually 1GiB, pinned to physical memory)
   MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
@@ -281,17 +280,16 @@ typedef struct mi_memid_arena_info {
   uint32_t      slice_count;        // allocated slices
 } mi_memid_arena_info_t;
 
-typedef struct mi_memid_meta_info {
-  mi_meta_page_t* meta_page;        // meta-page that contains the block
-  uint32_t        block_index;      // block index in the meta-data page
-  uint32_t        block_count;      // allocated blocks
-} mi_memid_meta_info_t;
+typedef struct mi_memid_malloc_info {
+  void*         base;               // returned pointer
+  size_t        size;               // allocated size
+} mi_memid_malloc_info_t;
 
 typedef struct mi_memid_s {
   union {
-    mi_memid_os_info_t    os;       // only used for MI_MEM_OS
-    mi_memid_arena_info_t arena;    // only used for MI_MEM_ARENA
-    mi_memid_meta_info_t  meta;     // only used for MI_MEM_META
+    mi_memid_os_info_t     os;       // only used for MI_MEM_OS(_HUGE/_REMAP)
+    mi_memid_arena_info_t  arena;    // only used for MI_MEM_ARENA
+    mi_memid_malloc_info_t malloc;   // only used for MI_MEM_MALLOC
   } mem;
   mi_memkind_t  memkind;
   bool          is_pinned;          // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large (2Mib) or huge (1GiB) OS pages)

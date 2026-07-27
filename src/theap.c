@@ -245,7 +245,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   mi_atomic_store_ptr_release(mi_subproc_t,&theap->subproc,heap->subproc);
   mi_assert_internal(theap->stats.size == sizeof(mi_stats_t));
   mi_theap_options_init(theap);
-  
+
   if (theap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our theap.
     // this is checked in `free.c:mi_free_try_collect_mt`
@@ -335,17 +335,7 @@ static void mi_theap_free_mem(mi_theap_t* theap) {
     if (!theap->is_detached) {
       mi_subproc_stat_decrease(_mi_theap_subproc(theap),theaps,1);  
     }
-    // free the used memory
-    if (theap->memid.memkind == MI_MEM_MALLOC) {  // note: for now unused as it would access theap_default stats in mi_free of the current theap
-      mi_assert_internal(_mi_is_heap_main(mi_heap_of(theap)));
-      _mi_free_subproc_safe(theap);
-    }
-    else if (theap->memid.memkind == MI_MEM_META) {
-      _mi_meta_free(_mi_theap_subproc(theap), theap, sizeof(*theap), theap->memid);
-    }
-    else {
-      _mi_arenas_free(_mi_theap_subproc(theap), theap, _mi_align_up(sizeof(*theap),MI_ARENA_MIN_OBJ_SIZE), theap->memid ); // issue #1168, avoid assertion failure
-    }
+    _mi_meta_free(_mi_theap_subproc(theap), theap, theap->memid);
   }
 }
 
