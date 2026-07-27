@@ -553,7 +553,7 @@ static mi_theap_t* mi_thread_init_ex(mi_heap_t* heap_main) mi_attr_noexcept
   mi_assert_internal(theap==NULL);
   #endif
   #else
-  theap = NULL
+  theap = NULL;
   #endif
   
   if (theap==NULL) {
