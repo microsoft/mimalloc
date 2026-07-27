@@ -218,15 +218,18 @@ jobs:
             cmake --build out/secure --parallel 4 --config Release
             ctest --test-dir out/secure --verbose --timeout 240 -C Release
 
-      - name: Alpine, [Debug]
+      - name: Alpine Setup
         if: matrix.tests == 'alpine'
-        steps:
-          - uses: jirutka/setup-alpine@v1
-            packages: |
-              build-base
-              cmake
-          - name: Debug
-            run: |
-              cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
-              cmake --build out/debug --parallel 4 --config Debug
-              ctest --test-dir out/debug --verbose --timeout 240 -C Debug
+        uses: jirutka/setup-alpine@v1
+        with: 
+          packages: |
+            build-base
+            cmake
+
+      - name: Alpine, Debug
+        if: matrix.tests == 'alpine'
+        shell: alpine.sh {0}
+        run: |
+          cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug --parallel 4 --config Debug
+          ctest --test-dir out/debug --verbose --timeout 240 -C Debug
