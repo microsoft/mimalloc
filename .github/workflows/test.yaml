@@ -25,6 +25,9 @@ jobs:
         include:
           - os: ubuntu-latest 
             tests: freebsd
+        include:
+          - os: ubuntu-latest 
+            tests: alpine
 
     steps:
       # Checkout: https://github.com/actions/checkout
@@ -195,6 +198,7 @@ jobs:
         env:
           MIMALLOC_GUARDED_SAMPLE_RATE: 100
   
+      # Virtual machines on Ubuntu latest
       - name: FreeBSD, [Debug, Release, Secure]
         if: matrix.tests == 'freebsd'
         uses: vmactions/freebsd-vm@v1
@@ -214,3 +218,16 @@ jobs:
             cmake . -B out/secure -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
             cmake --build out/secure --parallel 4 --config Release
             ctest --test-dir out/secure --verbose --timeout 240 -C Release
+
+      - name: Alpine, [Debug]
+        if: matrix.tests == 'alpine'
+        steps:
+          - uses: jirutka/setup-alpine@v1
+            packages: |
+              build-base
+              cmake
+          - name: Debug
+            run: |
+              cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+              cmake --build out/debug --parallel 4 --config Debug
+              ctest --test-dir out/debug --verbose --timeout 240 -C Debug
