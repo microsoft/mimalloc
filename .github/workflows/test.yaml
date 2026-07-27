@@ -191,3 +191,16 @@ jobs:
           ctest --test-dir out/release-guarded --verbose --timeout 240 -C Release
         env:
           MIMALLOC_GUARDED_SAMPLE_RATE: 100
+  test:
+    runs-on: ubuntu-latest
+    name: FreeBSD
+    steps:
+    - uses: actions/checkout@v6
+    - name: Debug
+      uses: vmactions/freebsd-vm@v1
+      with:
+        usesh: true        
+        run: |
+          cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug --parallel 4 --config Debug
+          ctest --test-dir out/debug --verbose --timeout 240 -C Debug
