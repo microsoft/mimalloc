@@ -226,6 +226,7 @@ static void mi_theap_options_init(mi_theap_t* theap) {
   theap->allow_page_reclaim = (mi_option_get(mi_option_page_reclaim_on_free) >= 0);
   theap->allow_page_abandon = (mi_option_get(mi_option_page_full_retain) >= 0);
   theap->page_full_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
+  theap->is_detached = (theap->tld->thread_id == MI_THREADID_DETACHED);
 }
 
 // todo: make order of parameters consistent (but would that break compat with CPython?)
@@ -243,8 +244,8 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   mi_atomic_store_ptr_release(mi_heap_t,&theap->heap,heap);
   mi_atomic_store_ptr_release(mi_subproc_t,&theap->subproc,heap->subproc);
   mi_assert_internal(theap->stats.size == sizeof(mi_stats_t));
-  
   mi_theap_options_init(theap);
+  
   if (theap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our theap.
     // this is checked in `free.c:mi_free_try_collect_mt`
@@ -282,7 +283,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   }
   theap->cookie = _mi_theap_random_next(theap) | 1;
   mi_theap_guarded_init(theap);
-  if (tld->thread_id != MI_THREADID_DETACHED) {
+  if (!theap->is_detached) {
     mi_subproc_stat_increase(_mi_theap_subproc(theap),theaps,1);  // on subproc to match theap_free_mem
   }
 
@@ -299,7 +300,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
 mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
   mi_assert_internal(tld!=NULL);
   mi_assert_internal(heap!=NULL);
-  mi_assert_internal(_mi_thread_id() == tld->thread_id);
+  mi_assert_internal(tld->thread_id == MI_THREADID_DETACHED || _mi_thread_id() == tld->thread_id);
   // mi_assert_internal(_mi_heap_theap_peek(heap)==NULL);  // don't access thread locals as this is called on thread init
 
   // allocate and initialize a theap
@@ -331,9 +332,11 @@ uintptr_t _mi_theap_random_next(mi_theap_t* theap) {
 
 static void mi_theap_free_mem(mi_theap_t* theap) {
   if (theap!=NULL) {
-    mi_subproc_stat_decrease(_mi_theap_subproc(theap),theaps,1);  // note: also decrements for a detached theap
+    if (!theap->is_detached) {
+      mi_subproc_stat_decrease(_mi_theap_subproc(theap),theaps,1);  
+    }
     // free the used memory
-    if (theap->memid.memkind == MI_MEM_HEAP_MAIN) {  // note: for now unused as it would access theap_default stats in mi_free of the current theap
+    if (theap->memid.memkind == MI_MEM_MALLOC) {  // note: for now unused as it would access theap_default stats in mi_free of the current theap
       mi_assert_internal(_mi_is_heap_main(mi_heap_of(theap)));
       _mi_free_subproc_safe(theap);
     }

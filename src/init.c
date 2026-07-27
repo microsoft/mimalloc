@@ -12,6 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <string.h>  // memcpy, memset
 #include <stdlib.h>  // atexit
 
+
 #define MI_MEMID_INIT(kind)   {{{NULL,0}}, kind, true /* pinned */, true /* committed */, false /* zero */ }
 #define MI_MEMID_STATIC       MI_MEMID_INIT(MI_MEM_STATIC)
 
@@ -72,14 +73,12 @@ static const mi_page_t mi_page_empty = {
 #define MI_STAT_COUNTER(stat)   {0},
 
 #define MI_STATS_FIELDS_NULL  \
-  MI_STAT_FIELDS() \
-  \
-  { MI_INIT4(MI_STAT_COUNT_NULL) }, \
-  { { 0 }, { 0 }, { 0 }, { 0 } }, \
-  \
-  { MI_INIT74(MI_STAT_COUNT_NULL) }, \
-  { MI_INIT74(MI_STAT_COUNT_NULL) }, \
-  { MI_INIT5(MI_STAT_COUNT_NULL) }
+  MI_STAT_FIELDS()                    /* regular stat fields */ \
+  { MI_INIT4(MI_STAT_COUNT_NULL) },   /* stat reserved */ \
+  { { 0 }, { 0 }, { 0 }, { 0 } },     /* stat counter reserved */ \
+  { MI_INIT74(MI_STAT_COUNT_NULL) },  /* malloc_bins */ \
+  { MI_INIT74(MI_STAT_COUNT_NULL) },  /* page bins   */ \
+  { MI_INIT5(MI_STAT_COUNT_NULL) }    /* chunk bins  */
 
 #define MI_STATS_NULL \
   { sizeof(mi_stats_t), MI_STAT_VERSION, MI_STATS_FIELDS_NULL }
@@ -93,16 +92,11 @@ static const mi_page_t mi_page_empty = {
 // may lead to allocation itself on some platforms)
 // --------------------------------------------------------
 
-static mi_decl_cache_align mi_subproc_t mi_process_subproc_main = mi_init_struct_zero;
-
-static mi_subproc_t* mi_subprocs = &mi_process_subproc_main;
-static mi_lock_t     mi_subprocs_lock;
-
-static mi_decl_cache_align mi_tld_t mi_tld_detached = {
+static mi_decl_cache_align mi_tld_t mi_tld_detached = { 
   MI_THREADID_DETACHED,   // thread_id
   0,                      // thread_seq
   0,                      // default numa node
-  &mi_process_subproc_main, // subproc
+  NULL,                   // subproc
   NULL,                   // theaps list
   MI_LOCK_INITIALIZER,    // theaps lock
   false,                  // recurse
@@ -110,7 +104,7 @@ static mi_decl_cache_align mi_tld_t mi_tld_detached = {
   MI_MEMID_STATIC         // memid
 };
 
-mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
+mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   &mi_tld_detached,       // tld
   MI_ATOMIC_VAR_INIT(NULL), // heap
   MI_ATOMIC_VAR_INIT(NULL), // subproc
@@ -128,6 +122,7 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   0,                      // full page retain
   false,                  // allow reclaim
   true,                   // allow abandon
+  true,                   // is_detached
   #if MI_GUARDED
   0, 0, 0, 1,             // sample count is 1 so we never write to it (see `internal.h:mi_theap_malloc_use_guarded`)
   #endif
@@ -137,47 +132,18 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   MI_STATS_NULL,          // stats
 };
 
-mi_decl_cache_align const mi_theap_t _mi_theap_empty_wrong = {
-  &mi_tld_detached,       // tld
-  MI_ATOMIC_VAR_INIT(NULL), // heap
-  MI_ATOMIC_VAR_INIT(NULL), // subproc
-  MI_ATOMIC_VAR_INIT(1),  // refcount
-  MI_ATOMIC_VAR_INIT(0),  // freed
-  0,                      // heartbeat
-  0,                      // cookie
-  { {0}, {0}, 0, true },  // random
-  0,                      // page count
-  MI_BIN_FULL, 0,         // page retired min/max
-  0,                      // pages_full_size
-  0, 0,                   // generic count
-  NULL, NULL,             // tnext, tprev
-  NULL, NULL,             // hnext, hprev
-  0,                      // full page retain
-  false,                  // allow reclaim
-  true,                   // allow abandon
-  #if MI_GUARDED
-  0, 0, 0, 1,             // sample count is 1 so we never write to it (see `internal.h:mi_theap_malloc_use_guarded`)
-  #endif
-  MI_SMALL_PAGES_EMPTY,
-  MI_PAGE_QUEUES_EMPTY,
-  MI_MEMID_STATIC,
-  MI_STATS_NULL
-};
+static mi_decl_cache_align mi_subproc_t mi_process_subproc_main = mi_init_struct_zero;
+static mi_decl_cache_align mi_tld_t     mi_process_tld_main   = mi_init_struct_zero;
+static mi_decl_cache_align mi_theap_t   mi_process_theap_main = mi_init_struct_zero;
+static mi_decl_cache_align mi_heap_t    mi_process_heap_main  = mi_init_struct_zero;
+static mi_decl_cache_align mi_theap_t   mi_process_theap_meta = mi_init_struct_zero;
 
-
-// Heap for the main thread
-static mi_decl_cache_align mi_tld_t   mi_process_tld_main   = mi_init_struct_zero;
-static mi_decl_cache_align mi_theap_t mi_process_theap_main = mi_init_struct_zero;
-static mi_decl_cache_align mi_heap_t  mi_process_heap_main  = mi_init_struct_zero;
-static mi_decl_cache_align mi_theap_t mi_theap_meta         = mi_init_struct_zero;
-
-mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
-  const mi_threadid_t tid = _mi_prim_thread_id();
-  mi_assert_internal( (tid & MI_PAGE_FLAG_MASK) == 0 ); // mimalloc reserves the bottom 2 bits
-  return tid;
-}
-
+mi_decl_hidden mi_decl_cache_align mi_theap_t _mi_theap_empty_wrong = mi_init_struct_zero;  // used for error paths
 mi_decl_hidden mi_decl_thread void* __mi_thread_id_helper = NULL;
+mi_decl_hidden bool                 _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
+
+static mi_subproc_t* mi_subprocs = &mi_process_subproc_main;
+static mi_lock_t     mi_subprocs_lock = MI_LOCK_INITIALIZER;
 
 #if MI_TLS_MODEL_LOCAL
 // the thread-local main theap for allocation
@@ -186,13 +152,14 @@ mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_default = (mi_theap_t*)&_mi
 mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_cached = (mi_theap_t*)&_mi_theap_empty;
 #endif
 
-mi_decl_hidden bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
-
-mi_stats_t _mi_stats_main = MI_STATS_NULL;
-
 #undef MI_STAT_COUNT
 #undef MI_STAT_COUNTER
 
+mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
+  const mi_threadid_t tid = _mi_prim_thread_id();
+  mi_assert_internal( (tid & MI_PAGE_FLAG_MASK) == 0 ); // mimalloc reserves the bottom 2 bits
+  return tid;
+}
 
 /* -----------------------------------------------------------
   Initialization
@@ -208,12 +175,16 @@ static void mi_heap_main_init(void) {
   if mi_unlikely(mi_process_heap_main.subproc == NULL) {
     mi_memid_t memid_static = _mi_memid_create(MI_MEM_STATIC);
     mi_lock_init(&mi_subprocs_lock);
-
+    _mi_memcpy(&_mi_theap_empty_wrong,&_mi_theap_empty,sizeof(_mi_theap_empty_wrong));
+    
     mi_process_subproc_main.memid = memid_static;
     mi_subproc_init(&mi_process_subproc_main,NULL);
     
     mi_process_tld_main.memid = memid_static;
     mi_tld_init(&mi_process_tld_main, &mi_process_subproc_main);
+
+    mi_tld_detached.memid = memid_static;
+    mi_tld_init(&mi_tld_detached, &mi_process_subproc_main);
     
     mi_process_heap_main.memid = memid_static;
     mi_atomic_store_ptr_release(mi_heap_t,&mi_process_subproc_main.heap_main,&mi_process_heap_main);
@@ -222,12 +193,63 @@ static void mi_heap_main_init(void) {
     mi_process_theap_main.memid = memid_static;
     _mi_theap_init(&mi_process_theap_main,&mi_process_heap_main,&mi_process_tld_main);    
     
-    mi_theap_meta.memid = memid_static;
-    _mi_theap_init(&mi_theap_meta,&mi_process_heap_main,&mi_tld_detached);
-  
+    mi_process_theap_meta.memid = memid_static;
+    _mi_theap_init(&mi_process_theap_meta,&mi_process_heap_main,&mi_tld_detached);
+
+    mi_process_subproc_main.theap_meta = &mi_process_theap_meta;
     // mi_heap_theap_set(&mi_process_heap_main,&mi_process_theap_main); // set in `mi_thread_init(_theap_default)`
   }
 }
+
+void _mi_memid_free( mi_subproc_t* subproc, void* p, size_t size, mi_memid_t memid ) {
+  if (mi_memid_needs_no_free(memid)) return;
+  if (memid.memkind == MI_MEM_MALLOC) {
+    _mi_free_subproc_safe(p);
+  }
+  else {
+    _mi_arenas_free(subproc, p, size, memid);
+  }
+}
+
+void* _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_memid_t* memid ) {
+  mi_assert_internal(subproc->theap_meta != NULL);
+  void* p;
+  mi_lock(&subproc->theap_meta_lock) {
+    p = mi_theap_zalloc(subproc->theap_meta, size);
+    if (memid != NULL) {
+      if (p==NULL) {
+        *memid = _mi_memid_none();
+      }
+      else {
+        *memid = _mi_memid_create(MI_MEM_MALLOC);
+        memid->initially_committed = true;
+        memid->initially_zero = true;
+        memid->mem.os.base = p;
+        memid->mem.os.size = size;
+      }
+    }
+  }
+  return p;
+}
+
+void _mi_meta_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t memid) {
+  if (mi_memid_needs_no_free(memid)) return;
+  if (memid.memkind == MI_MEM_MALLOC) {
+    _mi_free_subproc_safe(p);
+  }
+  else {
+    _mi_arenas_free(subproc, p, size, memid);
+  }
+}
+
+bool _mi_meta_is_meta_page(mi_subproc_t* subproc, void* p) {
+  mi_page_t* page = _mi_safe_ptr_page(p);
+  if (page==NULL || mi_page_is_abandoned(page)) return false;
+  mi_theap_t* theap = mi_page_theap(page);
+  return (theap!=NULL && subproc->theap_meta == theap);
+}
+
+
 
 
 /* -----------------------------------------------------------
@@ -238,11 +260,16 @@ static mi_tld_t* mi_tld_init(mi_tld_t* tld, mi_subproc_t* subproc) {
   tld->subproc = subproc;
   tld->theaps = NULL;
   mi_lock_init(&tld->theaps_lock);
-  tld->numa_node = _mi_os_numa_node();
-  tld->thread_id = _mi_prim_thread_id();
-  tld->thread_seq = mi_atomic_increment_relaxed(&tld->subproc->thread_total_count);
-  tld->is_in_threadpool = _mi_prim_thread_is_in_threadpool();
-  mi_atomic_increment_relaxed(&tld->subproc->thread_count);
+  if (tld->thread_id == MI_THREADID_DETACHED) {
+    tld->numa_node = -1;
+  }
+  else {
+    tld->numa_node = _mi_os_numa_node();
+    tld->thread_id = _mi_prim_thread_id();
+    tld->is_in_threadpool = _mi_prim_thread_is_in_threadpool();
+    tld->thread_seq = mi_atomic_increment_relaxed(&tld->subproc->thread_total_count);
+    mi_atomic_increment_relaxed(&tld->subproc->thread_count);
+  }
   return tld;
 }
 
@@ -251,8 +278,9 @@ static mi_tld_t* mi_tld_alloc(mi_subproc_t* subproc) {
   // allocate tld meta-data
   // note: we need to be careful to not access the tld from `_mi_meta_zalloc`
   // (and in turn from `_mi_arena_alloc_aligned` and `_mi_os_alloc_aligned`).
-  mi_memid_t memid;
-  mi_tld_t* tld = (mi_tld_t*)_mi_meta_zalloc(subproc, sizeof(mi_tld_t), &memid);
+  mi_assert_internal(subproc->theap_meta != NULL); // should be initialized on the main thread before other threads allocate
+  mi_memid_t memid = _mi_memid_create(MI_MEM_MALLOC);
+  mi_tld_t* tld  = (mi_tld_t*)_mi_meta_zalloc(subproc, sizeof(mi_tld_t), &memid);
   if (tld==NULL) {
     _mi_error_message(ENOMEM, "unable to allocate memory for thread local data\n");
     return NULL;
@@ -271,7 +299,12 @@ mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
                                                      // we also need to set an invalid tid for tld_main as sometimes the same thread-id
                                                      // is reused by the OS after a thread has terminated. (see issue #1287)
   mi_lock_done(&tld->theaps_lock);
-  _mi_meta_free(tld->subproc, tld, sizeof(mi_tld_t), tld->memid);  // note: safe for static tld_main
+  if (tld->memid.memkind == MI_MEM_MALLOC) {
+    mi_free(tld);
+  }
+  else {
+    _mi_meta_free(tld->subproc, tld, sizeof(mi_tld_t), tld->memid);  // note: safe for static tld_main
+  }
 }
 
 
@@ -355,6 +388,7 @@ static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc, mi_subproc_t* parent
   mi_stats_header_init(&subproc->stats);
   mi_lock_init(&subproc->arena_reserve_lock);
   mi_lock_init(&subproc->heaps_lock);
+  mi_lock_init(&subproc->theap_meta_lock);
   mi_lock(&mi_subprocs_lock) {
     // push on subproc list
     subproc->next = mi_subprocs;
@@ -367,20 +401,33 @@ static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc, mi_subproc_t* parent
 mi_subproc_id_t mi_subproc_new(void) {
   mi_subproc_t* const parent = _mi_subproc();
   mi_memid_t memid;
-  mi_subproc_t* subproc = (mi_subproc_t*)_mi_meta_zalloc(parent, sizeof(mi_subproc_t),&memid);
+  mi_subproc_t* const subproc = (mi_subproc_t*)_mi_meta_zalloc(parent, sizeof(mi_subproc_t), &memid);
   if (subproc == NULL) { return _mi_subproc_to_id(NULL); }
-
-  // init subproc
   subproc->memid  = memid;  
+  
+  mi_memid_t theap_memid;
+  mi_theap_t* const theap_meta = (mi_theap_t*)_mi_meta_zalloc(parent, sizeof(mi_theap_t), &theap_memid);
+  if (theap_meta==NULL) { 
+    _mi_meta_free(parent, subproc, sizeof(mi_subproc_t), memid); 
+    return _mi_subproc_to_id(NULL); 
+  }
+  theap_meta->memid = memid;
+  
+  // init subproc
   mi_subproc_init(subproc,parent);
   
   // init main heap
   mi_heap_t* heap_main = _mi_heap_new_for_subproc(subproc,0,true);
   if (heap_main==NULL) {
+    _mi_meta_free(parent, theap_meta, sizeof(*theap_meta), theap_meta->memid);
     mi_subproc_destroy(_mi_subproc_to_id(subproc));
     return _mi_subproc_to_id(NULL);
   }
   mi_assert_internal(subproc->heap_main == heap_main);
+
+  // init meta theap
+  _mi_theap_init(theap_meta,heap_main,&mi_tld_detached);
+  subproc->theap_meta = theap_meta;
 
   return _mi_subproc_to_id(subproc);
 }
@@ -423,6 +470,8 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
   // todo: should we refcount subprocesses?
   mi_lock_done(&subproc->arena_reserve_lock);
   mi_lock_done(&subproc->heaps_lock);
+  mi_lock_done(&subproc->theap_meta_lock);
+  subproc->theap_meta = NULL;
   if (subproc!=&mi_process_subproc_main) {
     _mi_meta_free( subproc->parent, subproc, sizeof(mi_subproc_t), subproc->memid);
   }
@@ -879,7 +928,7 @@ void _mi_theap_cached_set(mi_theap_t* theap) {
 void _mi_theap_default_set(mi_theap_t* theap)  {
   mi_assert_internal(theap != NULL);
   mi_assert_internal(theap->tld != NULL);
-  mi_assert_internal(theap->tld->thread_id==MI_THREADID_DETACHED || theap->tld->thread_id==_mi_thread_id());
+  mi_assert_internal(mi_theap_matches_thread(theap));
   mi_tls_slots_init();
   #if MI_TLS_MODEL_LOCAL
     __mi_theap_default = theap;

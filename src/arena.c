@@ -604,7 +604,7 @@ void* _mi_arenas_alloc(mi_heap_t* heap, size_t size, bool commit, bool allow_lar
 static bool mi_abandoned_page_unown(mi_page_t* page, mi_theap_t* current_theap) {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
-  mi_assert_internal(_mi_thread_id()==current_theap->tld->thread_id);
+  mi_assert_internal(mi_theap_matches_thread(current_theap));
   mi_thread_free_t tf_new;
   mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
   do {
@@ -1149,7 +1149,7 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(mi_page_all_free(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(page->next==NULL && page->prev==NULL);
-  mi_assert_internal(current_theapx == NULL || _mi_thread_id()==current_theapx->tld->thread_id);
+  mi_assert_internal(mi_theap_matches_thread(current_theapx));
 
   if (current_theapx != NULL) {
     mi_theap_stat_decrease(current_theapx, page_bins[_mi_page_stats_bin(page)], 1);
@@ -1174,7 +1174,7 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theap) {
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(!mi_page_all_free(page));
   mi_assert_internal(page->next==NULL && page->prev == NULL);
-  mi_assert_internal(_mi_thread_id()==current_theap->tld->thread_id);
+  mi_assert_internal(mi_theap_matches_thread(current_theap));
   // mi_assert_internal(current_theap == _mi_page_associated_theap(page));
 
   // add to abandoned?
@@ -1256,7 +1256,7 @@ void _mi_arenas_page_unabandon(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
-  mi_assert_internal(current_theapx==NULL || _mi_thread_id()==current_theapx->tld->thread_id);
+  mi_assert_internal(mi_theap_matches_thread(current_theapx));
 
   mi_heap_t* const heap = mi_page_heap(page);
   if (mi_page_is_abandoned_mapped(page)) {

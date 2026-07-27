@@ -611,8 +611,8 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
   Heap functions
 ------------------------------------------------------------------------------------------- */
 
-extern mi_decl_hidden const mi_theap_t _mi_theap_empty;       // read-only empty theap, initial value of the thread local default theap (in the MI_TLS_MODEL_LOCAL)
-extern mi_decl_hidden const mi_theap_t _mi_theap_empty_wrong; // read-only empty theap used to signal that a theap for a heap could not be allocated
+extern mi_decl_hidden const mi_theap_t _mi_theap_empty; // read-only empty theap, initial value of the thread local default theap (in the MI_TLS_MODEL_LOCAL)
+extern mi_decl_hidden mi_theap_t _mi_theap_empty_wrong; // read-only empty theap used to signal that a theap for a heap could not be allocated
 
 
 static inline mi_heap_t* _mi_theap_heap_peek(const mi_theap_t* theap) {
@@ -642,6 +642,14 @@ static inline mi_page_t* _mi_theap_get_free_small_page(mi_theap_t* theap, size_t
   return theap->pages_free_direct[idx];
 }
 
+static inline bool mi_theap_is_detached(mi_theap_t* theap) {
+  return (theap!=NULL && theap->tld->thread_id == MI_THREADID_DETACHED);
+}
+
+static inline bool mi_theap_matches_thread(mi_theap_t* theap) {
+  const mi_threadid_t tid = _mi_thread_id();
+  return (theap==NULL || theap->tld->thread_id == tid || mi_theap_is_detached(theap));
+}
 
 /* -----------------------------------------------------------
   The page map maps addresses to `mi_page_t` pointers

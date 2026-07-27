@@ -132,8 +132,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero_non
   mi_assert(theap != NULL);
   mi_assert(size <= MI_SMALL_SIZE_MAX);
   #if MI_DEBUG
-  const uintptr_t tid = _mi_thread_id();
-  mi_assert(theap->tld->thread_id == 0 || theap->tld->thread_id == tid); // theaps are thread local
+  mi_assert(mi_theap_matches_thread(theap)); // theaps are thread local
   #endif
   #if (MI_PADDING || MI_GUARDED)
   if mi_unlikely(size == 0) { size = sizeof(void*); }
@@ -171,7 +170,7 @@ static mi_decl_forceinline void* mi_theap_malloc_generic(mi_theap_t* theap, size
   #if !MI_THEAP_INITASNULL
   mi_assert(theap!=NULL);
   #endif
-  mi_assert(theap==NULL || theap->tld->thread_id == 0 || theap->tld->thread_id == _mi_thread_id());   // theaps are thread local
+  mi_assert(mi_theap_matches_thread(theap));   // theaps are thread local
   mi_assert((huge_alignment & 1)==0);
   void* const p = _mi_malloc_generic(theap, size + MI_PADDING_SIZE, (zero ? 1 : 0) | huge_alignment, usable);  // note: size can overflow but it is detected in malloc_generic
   mi_track_malloc(p, size, zero);

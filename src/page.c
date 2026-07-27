@@ -88,7 +88,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   
   mi_assert_internal(page->heap!=NULL);
   mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
-  mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap);
+  mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap || mi_page_theap(page)->tld->thread_id == MI_THREADID_DETACHED);
 
   // const size_t bsize = mi_page_block_size(page);
   // uint8_t* start = mi_page_start(page);
@@ -130,7 +130,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
     //mi_assert_internal(!_mi_process_is_initialized);
     mi_assert_internal(page->heap!=NULL);
     mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
-    mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap);
+    mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap || mi_page_theap(page)->tld->thread_id == MI_THREADID_DETACHED);
     {
       mi_page_queue_t* pq = mi_page_queue_of(page);
       mi_assert_internal(mi_page_queue_contains(pq, page));

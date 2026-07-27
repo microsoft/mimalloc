@@ -248,7 +248,7 @@ typedef struct mi_subproc_s mi_subproc_t;
 // Memory can reside in arena's, direct OS allocated, meta-data pages, or statically allocated.
 // The memid keeps track of this.
 typedef enum mi_memkind_e {
-  MI_MEM_NONE,      // not allocated
+  MI_MEM_NONE,      // not allocated (or static)
   MI_MEM_EXTERNAL,  // not owned by mimalloc but provided externally (via `mi_manage_os_memory` for example)
   MI_MEM_STATIC,    // allocated in a static area and should not be freed (the initial main theap data for example (`init.c`))
   MI_MEM_META,      // allocated with the meta data allocator (`arena-meta.c`)
@@ -256,7 +256,7 @@ typedef enum mi_memkind_e {
   MI_MEM_OS_HUGE,   // allocated as huge OS pages (usually 1GiB, pinned to physical memory)
   MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
   MI_MEM_ARENA,     // allocated from an arena (the usual case) (`arena.c`)
-  MI_MEM_HEAP_MAIN  // allocated in the main heap (for theaps)
+  MI_MEM_MALLOC     // allocated with mi_malloc
 } mi_memkind_t;
 
 static inline bool mi_memkind_is_os(mi_memkind_t memkind) {
@@ -538,6 +538,7 @@ struct mi_theap_s {
   long                  page_full_retain;                    // how many full pages can be retained per queue (before abandoning them)
   bool                  allow_page_reclaim;                  // `true` if this theap can reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this theap can abandon pages to reduce memory footprint
+  bool                  is_detached;                         // `true` if `tld->thread_id == MI_THREADID_DETACHED`
   #if MI_GUARDED
   size_t                guarded_size_min;                    // minimal size for guarded objects
   size_t                guarded_size_max;                    // maximal size for guarded objects
@@ -616,6 +617,9 @@ struct mi_subproc_s {
   _Atomic(mi_heap_t*)   heap_main;                      // main heap for this sub process
   mi_heap_t*            heaps;                          // heaps belonging to this sub-process
   mi_lock_t             heaps_lock;
+
+  mi_theap_t*           theap_meta;                     // detached theap for allocating meta-data
+  mi_lock_t             theap_meta_lock;                // all allocations in theap_meta need a lock
 
   _Atomic(size_t)       thread_count;                   // current threads associated with this sub-process
   _Atomic(size_t)       thread_total_count;             // total created threads associated with this sub-process
