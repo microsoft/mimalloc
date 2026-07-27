@@ -184,6 +184,50 @@ mi_theap_t* mi_theap_set_default(mi_theap_t* theap) {
   return previous;
 }
 
+#if MI_GUARDED
+mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed) {
+  theap->guarded_sample_rate  = sample_rate;
+  theap->guarded_sample_count = sample_rate;  // count down samples
+  if (theap->guarded_sample_rate > 1) {
+    if (seed == 0) {
+      seed = _mi_theap_random_next(theap);
+    }
+    theap->guarded_sample_count = (seed % theap->guarded_sample_rate) + 1;  // start at random count between 1 and `sample_rate`
+  }
+}
+
+mi_decl_export void mi_theap_guarded_set_size_bound(mi_theap_t* theap, size_t min, size_t max) {
+  theap->guarded_size_min = min;
+  theap->guarded_size_max = (min > max ? min : max);
+}
+
+static void mi_theap_guarded_init(mi_theap_t* theap) {
+  mi_theap_guarded_set_sample_rate(theap,
+    (size_t)mi_option_get_clamp(mi_option_guarded_sample_rate, 0, LONG_MAX),
+    (size_t)mi_option_get(mi_option_guarded_sample_seed));
+  mi_theap_guarded_set_size_bound(theap,
+    (size_t)mi_option_get_clamp(mi_option_guarded_min, 0, LONG_MAX),
+    (size_t)mi_option_get_clamp(mi_option_guarded_max, 0, LONG_MAX) );
+}
+#else
+mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed) {
+  MI_UNUSED(theap); MI_UNUSED(sample_rate); MI_UNUSED(seed);
+}
+
+mi_decl_export void mi_theap_guarded_set_size_bound(mi_theap_t* theap, size_t min, size_t max) {
+  MI_UNUSED(theap); MI_UNUSED(min); MI_UNUSED(max);
+}
+static void mi_theap_guarded_init(mi_theap_t* theap) {
+  MI_UNUSED(theap);
+}
+#endif
+
+static void mi_theap_options_init(mi_theap_t* theap) {
+  theap->allow_page_reclaim = (mi_option_get(mi_option_page_reclaim_on_free) >= 0);
+  theap->allow_page_abandon = (mi_option_get(mi_option_page_full_retain) >= 0);
+  theap->page_full_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
+}
+
 // todo: make order of parameters consistent (but would that break compat with CPython?)
 void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
 {
@@ -200,7 +244,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   mi_atomic_store_ptr_release(mi_subproc_t,&theap->subproc,heap->subproc);
   mi_assert_internal(theap->stats.size == sizeof(mi_stats_t));
   
-  _mi_theap_options_init(theap);
+  mi_theap_options_init(theap);
   if (theap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our theap.
     // this is checked in `free.c:mi_free_try_collect_mt`
@@ -237,8 +281,10 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
     _mi_random_split(&head_random, &theap->random); // &theap->random is used as nonce so it is ok if threads capture the same head->random
   }
   theap->cookie = _mi_theap_random_next(theap) | 1;
-  _mi_theap_guarded_init(theap);
-  mi_subproc_stat_increase(_mi_theap_subproc(theap),theaps,1);  // on subproc to match theap_free_mem
+  mi_theap_guarded_init(theap);
+  if (tld->thread_id != MI_THREADID_DETACHED) {
+    mi_subproc_stat_increase(_mi_theap_subproc(theap),theaps,1);  // on subproc to match theap_free_mem
+  }
 
   // push on the heap's theap list
   mi_lock(&heap->theaps_lock) {
@@ -285,7 +331,7 @@ uintptr_t _mi_theap_random_next(mi_theap_t* theap) {
 
 static void mi_theap_free_mem(mi_theap_t* theap) {
   if (theap!=NULL) {
-    mi_subproc_stat_decrease(_mi_theap_subproc(theap),theaps,1);
+    mi_subproc_stat_decrease(_mi_theap_subproc(theap),theaps,1);  // note: also decrements for a detached theap
     // free the used memory
     if (theap->memid.memkind == MI_MEM_HEAP_MAIN) {  // note: for now unused as it would access theap_default stats in mi_free of the current theap
       mi_assert_internal(_mi_is_heap_main(mi_heap_of(theap)));
@@ -432,7 +478,7 @@ bool mi_theap_reload(mi_theap_t* theap, mi_arena_id_t arena_id) {
   // reinit direct pages (as we may be in a different process)
   mi_assert_internal(theap->page_count == 0);
   for (size_t i = 0; i < MI_PAGES_DIRECT; i++) {
-    theap->pages_free_direct[i] = (mi_page_t*)&_mi_page_empty;
+    theap->pages_free_direct[i] = _mi_page_empty_get();
   }
 
   // push on the thread local theaps list

@@ -97,12 +97,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define __has_builtin(x)    0
 #endif
 
-#if defined(__cplusplus)
-#define mi_decl_externc     extern "C"
-#else
-#define mi_decl_externc
-#endif
-
 #if (defined(__GNUC__) && (__GNUC__ >= 7)) || defined(__clang__) // includes clang and icc
 #define mi_decl_maybe_unused    __attribute__((unused))
 #elif __cplusplus >= 201703L    // c++17
@@ -113,8 +107,10 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if defined(__cplusplus)
 #define mi_decl_externc         extern "C"
+#define mi_init_struct_zero     { }
 #else
 #define mi_decl_externc
+#define mi_init_struct_zero     { 0 }
 #endif
 
 
@@ -166,7 +162,7 @@ uintptr_t     _mi_os_random_weak(uintptr_t extra_seed);
 static inline uintptr_t _mi_random_shuffle(uintptr_t x);
 
 // init.c
-extern mi_decl_hidden mi_decl_cache_align const mi_page_t  _mi_page_empty;
+mi_page_t*    _mi_page_empty_get(void);
 void          _mi_auto_process_init(void);
 void mi_cdecl _mi_auto_process_done(void) mi_attr_noexcept;
 bool          _mi_is_redirected(void);
@@ -187,8 +183,6 @@ mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
 bool          _mi_is_theap_main(const mi_theap_t* theap);
-void          _mi_theap_guarded_init(mi_theap_t* theap);
-void          _mi_theap_options_init(mi_theap_t* theap);
 
 // os.c
 void          _mi_os_init(void);                                            // called from process init
@@ -295,6 +289,7 @@ size_t        _mi_bin_size(size_t bin);                  // for stats
 size_t        _mi_bin(size_t size);                      // for stats
 
 // "theap.c"
+void          _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld);
 mi_theap_t*   _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld);
 void          _mi_theap_delete(mi_theap_t* theap, bool acquire_tld_theaps_lock);
 void          _mi_theap_default_set(mi_theap_t* theap);
@@ -309,6 +304,7 @@ void          _mi_theap_decref(mi_theap_t* theap);
 bool          _mi_page_visit_blocks( mi_page_t* page, mi_block_visit_fun* visitor, void* arg );
 
 // "heap.c"
+void          _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap, mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id);
 void          _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
 mi_decl_cold  mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap);  // get (and possible create) the theap belonging to a heap
 void          _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to);  // in "arena.c"
@@ -645,12 +641,6 @@ static inline mi_page_t* _mi_theap_get_free_small_page(mi_theap_t* theap, size_t
   mi_assert_internal(idx < MI_PAGES_DIRECT);
   return theap->pages_free_direct[idx];
 }
-
-//static inline uintptr_t _mi_ptr_cookie(const void* p) {
-//  extern mi_theap_t _mi_theap_main;
-//  mi_assert_internal(_mi_theap_main.cookie != 0);
-//  return ((uintptr_t)p ^ _mi_theap_main.cookie);
-//}
 
 
 /* -----------------------------------------------------------

@@ -62,14 +62,6 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
   mi_heap_t* heap = (mi_heap_t*)const_heap;
   mi_assert_internal(heap!=NULL);
 
-  // if (_mi_is_process_heap_main(heap)) {
-  //   // this can be called if the (main) thread is not yet initialized (as no allocation happened)
-  //   // but `theap_main_init_get()` will call `mi_thread_init()`
-  //   mi_theap_t* const theap = _mi_theap_main_safe();
-  //   mi_assert_internal(theap!=NULL && _mi_is_heap_main(_mi_theap_heap(theap)));
-  //   return theap;
-  // }
-
   // initialize thread first in case this is the main heap
   // (which may allocate the default theap already for the main heap)
   if (!_mi_thread_is_initialized()) {
@@ -107,7 +99,7 @@ mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
   return theap;
 }
 
-static void mi_heap_initialize(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id)
+void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id)
 {
   // init fields
   heap->theap = theap_slot;
@@ -151,7 +143,7 @@ mi_heap_t* _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusi
     mi_assert_internal(subproc->heap_main == NULL);
     subproc->heap_main = heap;
   }
-  mi_heap_initialize(heap, theap_slot, subproc, exclusive_arena_id);
+  _mi_heap_init(heap, theap_slot, subproc, exclusive_arena_id);
   return heap;
 }
 

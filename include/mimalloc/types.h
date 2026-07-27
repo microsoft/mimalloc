@@ -336,6 +336,7 @@ typedef struct mi_block_s {
 #define MI_PAGE_IN_FULL_QUEUE           MI_ZU(0x01)
 #define MI_PAGE_HAS_INTERIOR_POINTERS   MI_ZU(0x02)
 #define MI_PAGE_FLAG_MASK               MI_ZU(0x03)
+#define MI_PAGE_FLAG_BITS               (2)
 typedef size_t mi_page_flags_t;
 
 // There are two special threadid's: 0 for pages that are abandoned (and not in a theap queue),
@@ -343,7 +344,8 @@ typedef size_t mi_page_flags_t;
 // in an arena (in `mi_heap_t.arena_pages.pages_abandoned`) so these can be quickly found for reuse.
 // Abandoning partially used pages allows for sharing of this memory between threads (in particular if threads are blocked)
 #define MI_THREADID_ABANDONED           MI_ZU(0)
-#define MI_THREADID_ABANDONED_MAPPED    (MI_PAGE_FLAG_MASK + 1)
+#define MI_THREADID_ABANDONED_MAPPED    (MI_ZU(1) << MI_PAGE_FLAG_BITS)
+#define MI_THREADID_DETACHED            (MI_ZU(2) << MI_PAGE_FLAG_BITS)
 
 // Thread free list.
 // Points to a list of blocks that are freed by other threads.
@@ -585,7 +587,7 @@ typedef struct mi_heap_s {
 
   _Atomic(mi_arena_pages_t*) arena_pages[MI_MAX_ARENAS]; // track owned and abandoned pages in the arenas (entries can be NULL)
   mi_lock_t             arena_pages_lock;                // lock to update the arena_pages array
-
+  mi_memid_t            memid;                           // provenance of the heap memory
   mi_stats_t            stats;                           // statistics for this heap; periodically updated by merging from each theap
 } mi_heap_t;
 
