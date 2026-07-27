@@ -24,8 +24,7 @@ jobs:
             tests: extra
         include:
           - os: ubuntu-latest 
-            tests: freebsd
-        include:
+            tests: freebsd        
           - os: ubuntu-latest 
             tests: alpine
 
