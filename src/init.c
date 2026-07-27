@@ -934,13 +934,33 @@ static void mi_tls_slots_init(void) {
   mi_atomic_do_once {
     _mi_pthread_key_create(&_mi_theap_default_key,NULL,NULL);
     _mi_pthread_key_create(&_mi_theap_cached_key,&mi_theap_cached_key_destroy,NULL);
-  }
+  }  
 }
 
 static void mi_tls_slots_done(void) {
   mi_pthread_key_delete(&_mi_theap_default_key);
   mi_pthread_key_delete(&_mi_theap_cached_key);
 }
+
+#elif MI_TLS_MODEL_FIXED 
+
+static void mi_tls_slots_init(void) {
+  mi_atomic_do_once {
+    mi_theap_t* theap = _mi_theap_default();
+    if (theap!=NULL) {
+      _mi_error_message(EINVAL,"fixed TLS slot is already in use (slot %d = %p)", MI_TLS_MODEL_FIXED_DEFAULT, theap);
+    }
+    theap = _mi_theap_cached();
+    if (theap!=NULL) {
+      _mi_error_message(EINVAL,"fixed TLS slot is already in use (slot %d = %p)", MI_TLS_MODEL_FIXED_CACHED, theap);
+    }
+  }
+}
+
+static void mi_tls_slots_done(void) {
+  // nothing
+}
+
 
 #else
 
