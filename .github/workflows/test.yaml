@@ -197,27 +197,41 @@ jobs:
         env:
           MIMALLOC_GUARDED_SAMPLE_RATE: 100
   
-      # Virtual machines on Ubuntu latest
-      - name: FreeBSD, [Debug, Release, Secure]
+      # VM: FreeBSD
+      - name: FreeBSD Setup
         if: matrix.tests == 'freebsd'
         uses: vmactions/freebsd-vm@v1
         with:
           usesh: true        
           prepare: |
             pkg install -y cmake
-          run: |
-            cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
-            cmake --build out/debug --parallel 4 --config Debug
-            ctest --test-dir out/debug --verbose --timeout 240 -C Debug
+      
+      - name: FreeBSD, Debug
+        if: matrix.tests == 'freebsd'
+        shell: freebsd {0}
+        run: |
+          cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug --parallel 4 --config Debug
+          ctest --test-dir out/debug --verbose --timeout 240 -C Debug
 
-            cmake . -B out/release -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
-            cmake --build out/release --parallel 4 --config Release
-            ctest --test-dir out/release --verbose --timeout 240 -C Release
+      - name: FreeBSD, Release
+        if: matrix.tests == 'freebsd'
+        shell: freebsd {0}
+        run: |      
+          cmake . -B out/release -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
+          cmake --build out/release --parallel 4 --config Release
+          ctest --test-dir out/release --verbose --timeout 240 -C Release
 
-            cmake . -B out/secure -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
-            cmake --build out/secure --parallel 4 --config Release
-            ctest --test-dir out/secure --verbose --timeout 240 -C Release
+      - name: FreeBSD, Secure
+        if: matrix.tests == 'freebsd'
+        shell: freebsd {0}
+        run: |      
+          cmake . -B out/secure -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
+          cmake --build out/secure --parallel 4 --config Release
+          ctest --test-dir out/secure --verbose --timeout 240 -C Release
 
+
+      # VM: Alpine Linux with MUSL libc
       - name: Alpine Setup
         if: matrix.tests == 'alpine'
         uses: jirutka/setup-alpine@v1
@@ -233,3 +247,19 @@ jobs:
           cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
           cmake --build out/debug --parallel 4 --config Debug
           ctest --test-dir out/debug --verbose --timeout 240 -C Debug
+
+      - name: Alpine, Release
+        if: matrix.tests == 'alpine'
+        shell: alpine.sh {0}
+        run: |
+          cmake . -B out/release -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
+          cmake --build out/release --parallel 4 --config Release
+          ctest --test-dir out/release --verbose --timeout 240 -C Release
+
+      - name: Alpine, Secure
+        if: matrix.tests == 'alpine'
+        shell: alpine.sh {0}
+        run: |
+          cmake . -B out/secure -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
+          cmake --build out/secure --parallel 4 --config Release
+          ctest --test-dir out/secure --verbose --timeout 240 -C Release

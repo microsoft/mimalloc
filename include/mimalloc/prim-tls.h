@@ -25,8 +25,8 @@ terms of the MIT license. A copy of the license can be found in the file
 // Android,OpenBSD  : use pthread locals (MI_TLS_MODEL_PTHREADS). todo: maybe on Android MI_TLS_MODEL_LOCAL is better?
 // --------------------------------------------------------------------------
 
-static inline void*         mi_prim_tls_slot(size_t slot) mi_attr_noexcept;  // directly read an entry from the thread local storage (or thread control block)
-static inline void          mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexcept;
+mi_decl_maybe_unused static inline void* mi_prim_tls_slot(size_t slot) mi_attr_noexcept;  // directly read an entry from the thread local storage (or thread control block)
+mi_decl_maybe_unused static inline void  mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexcept;
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept;       // get a unique id for a thread
 
 static inline mi_theap_t*   _mi_theap_default(void);                         // the default thread local theap

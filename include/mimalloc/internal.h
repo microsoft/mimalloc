@@ -40,7 +40,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
-#define mi_decl_unused
 #elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
 #if !MI_TRACK_ASAN
 #define mi_decl_forceinline     __attribute__((always_inline)) inline
@@ -52,7 +51,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_noreturn        __attribute__((noreturn))
 #define mi_decl_weak            __attribute__((weak))
 #define mi_decl_hidden          __attribute__((visibility("hidden")))
-#define mi_decl_unused          __attribute__((unused))
 #if (__GNUC__ >= 4) || defined(__clang__)
 #define mi_decl_cold            __attribute__((cold))
 #else
@@ -66,11 +64,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
-#if __cplusplus >= 201703L    // c++17
-#define mi_decl_unused          [[maybe_unused]]
-#else
-#define mi_decl_unused
-#endif
 #else
 #define mi_decl_forceinline     inline
 #define mi_decl_noinline
@@ -79,7 +72,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
-#define mi_decl_unused
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
