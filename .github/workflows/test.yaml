@@ -204,9 +204,11 @@ jobs:
         uses: vmactions/freebsd-vm@v1
         with:
           arch: riscv64
-          usesh: true        
           custom-shell-name: freebsd-riscv64
           prepare: |
+            uname -a
+            uname -m
+            df -h
             pkg install -y cmake
       
       - name: FreeBSD riscv64, Debug
