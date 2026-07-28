@@ -198,25 +198,42 @@ jobs:
           MIMALLOC_GUARDED_SAMPLE_RATE: 100
   
 
-      # VM: FreeBSD (riscv64 and x64)
-      - name: FreeBSD riscv64, Setup
+      # VM: FreeBSD (arm64 and x64)
+      - name: FreeBSD arm64, Setup
         if: matrix.tests == 'freebsd'
         uses: vmactions/freebsd-vm@v1
         with:
-          arch: riscv64
-          custom-shell-name: freebsd-riscv64
+          arch: arm64
+          custom-shell-name: freebsd-arm64
           cache-after-prepare: true
           prepare: |
             uname -a
-            sudo pkg install -y cmake
+            pkg install -y cmake
       
-      - name: FreeBSD riscv64, Debug
+      - name: FreeBSD arm64, Debug
         if: matrix.tests == 'freebsd'
-        shell: freebsd-riscv64 {0}
+        shell: freebsd-arm64 {0}
         run: |
-          cmake . -B out/debug-riscv64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
-          cmake --build out/debug-riscv64 --parallel 4 --config Debug
-          ctest --test-dir out/debug-riscv64 --verbose --timeout 240 -C Debug
+          cmake . -B out/debug-arm64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug-arm64 --parallel 4 --config Debug
+          ctest --test-dir out/debug-arm64 --verbose --timeout 240 -C Debug
+
+      - name: FreeBSD arm64, Release
+        if: matrix.tests == 'freebsd'
+        shell: freebsd-arm64 {0}
+        run: |      
+          cmake . -B out/release-arm64 -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
+          cmake --build out/release-arm64 --parallel 4 --config Release
+          ctest --test-dir out/release-arm64 --verbose --timeout 240 -C Release
+
+      - name: FreeBSD arm64, Secure
+        if: matrix.tests == 'freebsd'
+        shell: freebsd-arm64 {0}
+        run: |      
+          cmake . -B out/secure-arm64 -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
+          cmake --build out/secure-arm64 --parallel 4 --config Release
+          ctest --test-dir out/secure-arm64 --verbose --timeout 240 -C Release
+
 
       - name: FreeBSD x64, Setup
         if: matrix.tests == 'freebsd'
@@ -254,7 +271,7 @@ jobs:
           ctest --test-dir out/secure-x64 --verbose --timeout 240 -C Release
 
 
-      # VM: Alpine Linux with MUSL libc (x64 and arm64)
+      # VM: Alpine Linux with MUSL libc (riscv64 and x64)
       - name: Alpine riscv64, Setup
         if: matrix.tests == 'alpine'
         uses: jirutka/setup-alpine@v1
@@ -274,26 +291,23 @@ jobs:
           cmake --build out/debug-riscv64 --parallel 4 --config Debug
           ctest --test-dir out/debug-riscv64 --verbose --timeout 240 -C Debug
       
-      - name: Alpine arm64, Setup
+      - name: Alpine riscv64, Release
         if: matrix.tests == 'alpine'
-        uses: jirutka/setup-alpine@v1
-        with: 
-          arch: aarch64
-          shell-name: alpine-arm64.sh
-          packages: |
-            build-base
-            cmake
-
-      - name: Alpine arm64, Debug
-        if: matrix.tests == 'alpine'
-        shell: alpine-arm64.sh {0}
+        shell: alpine-riscv64.sh {0}
         run: |
-          uname -m
-          cmake . -B out/debug-arm64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
-          cmake --build out/debug-arm64 --parallel 4 --config Debug
-          ctest --test-dir out/debug-arm64 --verbose --timeout 240 -C Debug
-      
+          cmake . -B out/release-riscv64 -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
+          cmake --build out/release-riscv64 --parallel 4 --config Release
+          ctest --test-dir out/release-riscv64 --verbose --timeout 240 -C Release
 
+      - name: Alpine riscv64, Secure
+        if: matrix.tests == 'alpine'
+        shell: alpine-riscv64.sh {0}
+        run: |
+          cmake . -B out/secure-riscv64 -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
+          cmake --build out/secure-riscv64 --parallel 4 --config Release
+          ctest --test-dir out/secure-riscv64 --verbose --timeout 240 -C Release
+      
+      
       - name: Alpine x64, Setup
         if: matrix.tests == 'alpine'
         uses: jirutka/setup-alpine@v1        
