@@ -208,7 +208,7 @@ jobs:
           cache-after-prepare: true
           prepare: |
             uname -a
-            cd /usr/ports/devel/cmake && make install clean
+            sudo pkg install -y cmake
       
       - name: FreeBSD riscv64, Debug
         if: matrix.tests == 'freebsd'
@@ -225,6 +225,7 @@ jobs:
           arch: x86_64
           usesh: true        
           custom-shell-name: freebsd-x64
+          cache-after-prepare: true
           prepare: |
             pkg install -y cmake
       
@@ -232,25 +233,25 @@ jobs:
         if: matrix.tests == 'freebsd'
         shell: freebsd-x64 {0}
         run: |
-          cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
-          cmake --build out/debug --parallel 4 --config Debug
-          ctest --test-dir out/debug --verbose --timeout 240 -C Debug
+          cmake . -B out/debug-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug-x64 --parallel 4 --config Debug
+          ctest --test-dir out/debug-x64 --verbose --timeout 240 -C Debug
 
       - name: FreeBSD x64, Release
         if: matrix.tests == 'freebsd'
         shell: freebsd-x64 {0}
         run: |      
-          cmake . -B out/release -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
-          cmake --build out/release --parallel 4 --config Release
-          ctest --test-dir out/release --verbose --timeout 240 -C Release
+          cmake . -B out/release-x64 -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
+          cmake --build out/release-x64 --parallel 4 --config Release
+          ctest --test-dir out/release-x64 --verbose --timeout 240 -C Release
 
       - name: FreeBSD x64, Secure
         if: matrix.tests == 'freebsd'
         shell: freebsd-x64 {0}
         run: |      
-          cmake . -B out/secure -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
-          cmake --build out/secure --parallel 4 --config Release
-          ctest --test-dir out/secure --verbose --timeout 240 -C Release
+          cmake . -B out/secure-x64 -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
+          cmake --build out/secure-x64 --parallel 4 --config Release
+          ctest --test-dir out/secure-x64 --verbose --timeout 240 -C Release
 
 
       # VM: Alpine Linux with MUSL libc (x64 and arm64)
@@ -288,24 +289,24 @@ jobs:
         if: matrix.tests == 'alpine'
         shell: alpine-x64.sh {0}
         run: |
-          cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
-          cmake --build out/debug --parallel 4 --config Debug
-          ctest --test-dir out/debug --verbose --timeout 240 -C Debug
+          cmake . -B out/debug-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug-x64 --parallel 4 --config Debug
+          ctest --test-dir out/debug-x64 --verbose --timeout 240 -C Debug
 
       - name: Alpine x64, Release
         if: matrix.tests == 'alpine'
         shell: alpine-x64.sh {0}
         run: |
-          cmake . -B out/release -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
-          cmake --build out/release --parallel 4 --config Release
-          ctest --test-dir out/release --verbose --timeout 240 -C Release
+          cmake . -B out/release-x64 -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
+          cmake --build out/release-x64 --parallel 4 --config Release
+          ctest --test-dir out/release-x64 --verbose --timeout 240 -C Release
 
       - name: Alpine x64, Secure
         if: matrix.tests == 'alpine'
         shell: alpine-x64.sh {0}
         run: |
-          cmake . -B out/secure -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
-          cmake --build out/secure --parallel 4 --config Release
-          ctest --test-dir out/secure --verbose --timeout 240 -C Release
+          cmake . -B out/secure-x64 -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
+          cmake --build out/secure-x64 --parallel 4 --config Release
+          ctest --test-dir out/secure-x64 --verbose --timeout 240 -C Release
 
             
