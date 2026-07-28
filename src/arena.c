@@ -1842,7 +1842,7 @@ static size_t mi_debug_show_page_bfield(char* buf, size_t* k, mi_arena_t* arena,
       bit_set_count++;
       c = 'p';
       color = MI_GRAY;
-      if (mi_page_is_detached(page))  { c = 'm'; }
+      if (_mi_meta_is_meta_page(arena->subproc,page))  { c = 'm'; }
       else if (mi_page_is_singleton(page)) { c = 's'; }
       else if (mi_page_is_full(page)) { c = 'f'; }
       if (!mi_page_is_abandoned(page)) { c = _mi_toupper(c); }

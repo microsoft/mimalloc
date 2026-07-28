@@ -177,26 +177,26 @@ static void mi_heap_main_init(void) {
     mi_lock_init(&mi_subprocs_lock);
     _mi_memcpy(&_mi_theap_empty_wrong,&_mi_theap_empty,sizeof(_mi_theap_empty_wrong));
     
+    // main subprocess
     mi_process_subproc_main.memid = memid_static;
     mi_subproc_init(&mi_process_subproc_main,NULL);
-    
-    // mi_process_tld_main.memid = memid_static;
-    // mi_tld_init(&mi_process_tld_main, &mi_process_subproc_main);
 
+    // detached tld for mi_theap_empty (and theap_meta)
     mi_tld_detached.memid = memid_static;
     mi_tld_init(&mi_tld_detached, &mi_process_subproc_main);
-    
+        
+    // main process heap
     mi_process_heap_main.memid = memid_static;
     mi_atomic_store_ptr_release(mi_heap_t,&mi_process_subproc_main.heap_main,&mi_process_heap_main);
     _mi_heap_init(&mi_process_heap_main,mi_thread_local_key_fast,&mi_process_subproc_main,0);
     
-    // mi_process_theap_main.memid = memid_static;
-    // _mi_theap_init(&mi_process_theap_main,&mi_process_heap_main,&mi_process_tld_main);    
-    
+    // detached theap for allocating meta-data (we can allocate on this without having an initialized thread)
     mi_process_theap_meta.memid = memid_static;
     _mi_theap_init(&mi_process_theap_meta,&mi_process_heap_main,&mi_tld_detached);
-
+    mi_process_theap_meta.allow_page_abandon = false;  // for security, don't share with other threads
+    mi_process_theap_meta.page_full_retain = 2;
     mi_process_subproc_main.theap_meta = &mi_process_theap_meta;
+
     // mi_heap_theap_set(&mi_process_heap_main,&mi_process_theap_main); // set in `mi_thread_init(_theap_default)`
   }
 }
@@ -224,11 +224,17 @@ void* _mi_meta_zalloc_aligned( mi_subproc_t* subproc, size_t size, size_t aligne
 void _mi_meta_free(mi_subproc_t* subproc, void* p, mi_memid_t memid) {
   if (p==NULL || mi_memid_needs_no_free(memid)) return;
   if (memid.memkind == MI_MEM_MALLOC) {
-    _mi_free_subproc_safe(p);
+    mi_free(p);
   }
   else {
     _mi_arenas_free(subproc, p, _mi_memid_size(memid), memid);
   }
+}
+
+bool _mi_meta_is_meta_page(const mi_subproc_t* subproc, const mi_page_t* page) {
+  if (page==NULL) return false;
+  mi_theap_t* theap = page->theap;
+  return (theap != NULL && theap == subproc->theap_meta);
 }
 
 

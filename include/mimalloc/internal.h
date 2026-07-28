@@ -251,7 +251,7 @@ bool          _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page);
 void*         _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_memid_t* memid );
 void*         _mi_meta_zalloc_aligned( mi_subproc_t* subproc, size_t size, size_t alignment, mi_memid_t* memid );
 void          _mi_meta_free(mi_subproc_t* subproc, void* p, mi_memid_t memid);
-bool          _mi_meta_is_meta_page(mi_subproc_t* subproc, void* p);
+bool          _mi_meta_is_meta_page(const mi_subproc_t* subproc, const mi_page_t* p);
 
 // "page-map.c"
 bool          _mi_page_map_init(void);
@@ -983,13 +983,6 @@ static inline bool _mi_is_heap_main(const mi_heap_t* heap) {
   mi_assert_internal(heap!=NULL);
   return (mi_heap_get_heap_main(heap) == heap);
 }
-
-static inline bool mi_page_is_detached(mi_page_t* page) {
-  if (page==NULL || mi_page_is_abandoned(page)) return false;
-  mi_theap_t* theap = mi_page_theap(page);
-  return (theap != NULL && theap->is_detached);
-}
-
 
 //-----------------------------------------------------------
 // Thread free list and ownership
