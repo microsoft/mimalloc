@@ -315,7 +315,7 @@ jobs:
           path: out/release-riscv64/CMakeFiles/mimalloc.dir/src/alloc.c.s
 
       - name: Alpine riscv64, Secure
-        if: matrix.tests == 'alpine-x64'
+        if: matrix.tests == 'alpine-riscv64'
         shell: alpine-riscv64.sh {0}
         run: |
           cmake . -B out/secure-riscv64 -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
