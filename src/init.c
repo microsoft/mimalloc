@@ -174,35 +174,40 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
 static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc);
 static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc, mi_subproc_t* parent);
 
+static void mi_heap_main_init_once(void) {
+  mi_memid_t memid_static = _mi_memid_create(MI_MEM_STATIC);
+  mi_lock_init(&mi_subprocs_lock);
+  _mi_memcpy(&_mi_theap_empty_wrong,&_mi_theap_empty,sizeof(_mi_theap_empty_wrong));
+  
+  // main subprocess
+  mi_process_subproc_main.memid = memid_static;
+  mi_subproc_init(&mi_process_subproc_main,NULL);
+
+  // detached tld for mi_theap_empty (and theap_meta)
+  mi_tld_detached.memid = memid_static;
+  mi_tld_init(&mi_tld_detached, 0, &mi_process_subproc_main);
+      
+  // main process heap
+  mi_process_heap_main.memid = memid_static;
+  mi_atomic_store_ptr_release(mi_heap_t,&mi_process_subproc_main.heap_main,&mi_process_heap_main);
+  _mi_heap_init(&mi_process_heap_main,mi_thread_local_key_fast,&mi_process_subproc_main,0);
+  
+  // detached theap for allocating meta-data (we can allocate on this without having an initialized thread)
+  mi_process_theap_meta.memid = memid_static;
+  _mi_theap_init(&mi_process_theap_meta,&mi_process_heap_main,&mi_tld_detached);
+  mi_process_theap_meta.allow_page_abandon = false;  // for security, don't share with other threads
+  mi_process_theap_meta.page_full_retain = 2;
+  mi_process_subproc_main.theap_meta = &mi_process_theap_meta;
+
+  // mi_heap_theap_set(&mi_process_heap_main,&mi_process_theap_main); // set in `mi_thread_init(_theap_default)`  
+}
+
 static void mi_heap_main_init(void) {
-  if mi_unlikely(mi_process_heap_main.subproc == NULL) {
-    mi_memid_t memid_static = _mi_memid_create(MI_MEM_STATIC);
-    mi_lock_init(&mi_subprocs_lock);
-    _mi_memcpy(&_mi_theap_empty_wrong,&_mi_theap_empty,sizeof(_mi_theap_empty_wrong));
-    
-    // main subprocess
-    mi_process_subproc_main.memid = memid_static;
-    mi_subproc_init(&mi_process_subproc_main,NULL);
-
-    // detached tld for mi_theap_empty (and theap_meta)
-    mi_tld_detached.memid = memid_static;
-    mi_tld_init(&mi_tld_detached, 0, &mi_process_subproc_main);
-        
-    // main process heap
-    mi_process_heap_main.memid = memid_static;
-    mi_atomic_store_ptr_release(mi_heap_t,&mi_process_subproc_main.heap_main,&mi_process_heap_main);
-    _mi_heap_init(&mi_process_heap_main,mi_thread_local_key_fast,&mi_process_subproc_main,0);
-    
-    // detached theap for allocating meta-data (we can allocate on this without having an initialized thread)
-    mi_process_theap_meta.memid = memid_static;
-    _mi_theap_init(&mi_process_theap_meta,&mi_process_heap_main,&mi_tld_detached);
-    mi_process_theap_meta.allow_page_abandon = false;  // for security, don't share with other threads
-    mi_process_theap_meta.page_full_retain = 2;
-    mi_process_subproc_main.theap_meta = &mi_process_theap_meta;
-
-    // mi_heap_theap_set(&mi_process_heap_main,&mi_process_theap_main); // set in `mi_thread_init(_theap_default)`
+  mi_atomic_do_once {
+    mi_heap_main_init_once();
   }
 }
+
 
 void* _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_memid_t* memid ) {
   mi_assert_internal(subproc->theap_meta != NULL);
@@ -265,9 +270,6 @@ static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc) 
 
 // Allocate fresh tld
 static mi_tld_t* mi_tld_create(mi_subproc_t* subproc) {
-  // allocate tld meta-data
-  // note: we need to be careful to not access the tld from `_mi_meta_zalloc`
-  // (and in turn from `_mi_arena_alloc_aligned` and `_mi_os_alloc_aligned`).
   mi_assert_internal(subproc->theap_meta != NULL); // should be initialized on the main thread before other threads allocate
   const size_t tseq = mi_atomic_increment_relaxed(&subproc->thread_total_count);
 
@@ -288,17 +290,13 @@ static mi_tld_t* mi_tld_create(mi_subproc_t* subproc) {
   return mi_tld_init(tld,tseq,subproc);
 }
 
-#define MI_TLD_INVALID      ((mi_tld_t*)1)
-#define MI_THREADID_INVALID ((mi_threadid_t)(~0))
-
 mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
-  if (tld==NULL || tld==MI_TLD_INVALID) return;
+  if (tld==NULL) return;
   mi_atomic_decrement_relaxed(&tld->subproc->thread_count);
-  tld->thread_id = MI_THREADID_INVALID;              // note: not 0 as that would re-initialize tld_main
-                                                     // we also need to set an invalid tid for tld_main as sometimes the same thread-id
-                                                     // is reused by the OS after a thread has terminated. (see issue #1287)
+  tld->thread_id = (mi_threadid_t)(~0);          // it is best to set an invalid tid for tld_main as sometimes the same thread-id
+                                                 // is reused by the OS after a thread has terminated. (see issue #1287)
   mi_lock_done(&tld->theaps_lock);
-  _mi_meta_free(tld->subproc, tld, tld->memid);  // note: safe for static tld_main  
+  _mi_meta_free(tld->subproc, tld, tld->memid);  // note: safe for static tld
 }
 
 
@@ -307,16 +305,12 @@ mi_subproc_t* _mi_subproc_main(void) {
 }
 
 mi_subproc_t* _mi_subproc(void) {
-  // should work without doing initialization (as it may be called from `_mi_tld -> mi_tld_alloc ... -> os_alloc -> _mi_subproc()`
-  // todo: this will still fail on OS systems where the first access to a thread-local causes allocation.
-  //       on such systems we can check for this with the _mi_prim_get_default_theap as those are protected (by being
-  //       stored in a TLS slot for example)
   mi_theap_t* theap = _mi_theap_default();
   if (theap == NULL || theap->tld == NULL) {  // see issue #1289
     return _mi_subproc_main();
   }
   else {
-    return theap->tld->subproc;  // avoid using thread local storage (`thread_tld`)
+    return theap->tld->subproc;
   }
 }
 
@@ -971,21 +965,13 @@ mi_decl_nodiscard bool mi_is_redirected(void) mi_attr_noexcept {
   return _mi_is_redirected();
 }
 
-// Called once by the process loader from `src/prim/prim.c`
+// Called once by the process loader from `src/prim/prim.c` before `main` is called.
 void _mi_auto_process_init(void) {
-  // mi_heap_main_init();
-  // #if defined(__APPLE__) || defined(MI_TLS_RECURSE_GUARD)
-  // volatile mi_theap_t* dummy = __mi_theap_default; // access TLS to allocate it before setting tls_initialized to true;
-  // if (dummy == NULL) return;                       // use dummy or otherwise the access may get optimized away (issue #697)
-  // #endif
-
   os_preloading = false;
   // mi_assert_internal(_mi_is_main_thread());
 
   mi_process_init();
-  mi_tls_slots_init();
   mi_process_setup_auto_thread_done();
-  _mi_thread_locals_init();
 
   _mi_options_post_init();  // now we can print to stderr
   if (_mi_is_redirected()) _mi_verbose_message("malloc is redirected.\n");
@@ -998,7 +984,15 @@ void _mi_auto_process_init(void) {
   }
 
   // reseed random
-  // _mi_random_reinit_if_weak(&mi_process_theap_main.random);
+  mi_theap_t* theap = _mi_theap_default();
+  if (theap != NULL) {
+    _mi_random_reinit_if_weak(&theap->random);
+    if (theap->subproc->theap_meta != NULL) {
+      mi_lock(&theap->subproc->theap_meta_lock) {
+        _mi_random_reinit_if_weak(&theap->subproc->theap_meta->random);
+      }
+    }
+  }
 }
 
 // CPU features
@@ -1078,18 +1072,21 @@ static void mi_process_init_once(void) mi_attr_noexcept {
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
 
   mi_detect_cpu_features();
-  _mi_options_init();
-  _mi_stats_init();    // start timer
-  _mi_os_init();
-  // the following can potentially allocate (on freeBSD for pthread keys)
-  // todo: do 2-phase so we can use stats at first, then later init the keys?
-  mi_heap_main_init(); // before page_map_init so stats are working
-  _mi_page_map_init(); // todo: this could fail.. should we abort in that case?
+  _mi_options_init();        // read environment (if possible)
+  _mi_stats_init();          // start timer
+  _mi_os_init();             // primitive dependent
+  
+  mi_heap_main_init();       // before page_map_init so stats are working
+  _mi_page_map_init();       // todo: this could fail.. should we abort in that case?
   mi_thread_init();
+  
+  // the following can potentially allocate (on freeBSD for pthread keys)
+  mi_tls_slots_init();       // pthread key create
+  _mi_thread_locals_init();  // pthread key create
   _mi_process_is_initialized = true;
 
   #if defined(_WIN32) && defined(MI_WIN_USE_FLS)
-  // On windows, when building as a static lib the FLS cleanup happens to early for the main thread.
+  // On windows, when building as a static lib the FLS cleanup happens too early for the main thread.
   // To avoid this, set the FLS value for the main thread to NULL so the fls cleanup
   // will not call _mi_thread_done on the (still executing) main thread. See issue #508.
   _mi_prim_thread_associate_default_theap(NULL);
@@ -1116,9 +1113,6 @@ static void mi_process_init_once(void) mi_attr_noexcept {
 
 // Initialize the process; called by thread_init or the process loader
 void mi_process_init(void) mi_attr_noexcept {
-  // #if _MSC_VER < 1920
-	// mi_heap_main_init(); // vs2017 can dynamically re-initialize _mi_heap_main
-	// #endif
   mi_atomic_do_once {
     mi_process_init_once();
   }
