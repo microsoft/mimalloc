@@ -446,13 +446,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
     }
   }
 
-  // merge theap stats
-  mi_lock(&subproc->theap_meta_lock) {
-    if (subproc->theap_meta != NULL) { 
-      _mi_stats_merge_into(&subproc->stats, &subproc->theap_meta->stats);
-    }
-    subproc->theap_meta = NULL;
-  }
+  subproc->theap_meta = NULL; // theap meta stats are merged during heap_destroy of the main heap
 
   // merge stats back into the main subproc?
   if (subproc!=&mi_process_subproc_main) {
