@@ -54,6 +54,10 @@ static int ITER    = 20;
 static int THREADS = NTHREADS/4;
 static int SCALE   = 50;
 static int ITER    = 25;
+#elif MI_DEBUG && MI_QEMU
+static int THREADS = NTHREADS/4;
+static int SCALE   = 25;
+static int ITER    = 10;
 #elif MI_DEBUG
 static int THREADS = NTHREADS;
 static int SCALE   = 25;
