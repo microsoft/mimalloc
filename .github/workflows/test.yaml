@@ -213,6 +213,8 @@ jobs:
       - name: FreeBSD arm64, Debug
         if: matrix.tests == 'freebsd'
         shell: freebsd-arm64 {0}
+        env:
+          MI_TEST_LIGHT=1
         run: |
           cmake . -B out/debug-arm64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
           cmake --build out/debug-arm64 --parallel 4 --config Debug
@@ -248,7 +250,7 @@ jobs:
       
       - name: FreeBSD x64, Debug
         if: matrix.tests == 'freebsd'
-        shell: freebsd-x64 {0}
+        shell: freebsd-x64 {0}        
         run: |
           cmake . -B out/debug-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
           cmake --build out/debug-x64 --parallel 4 --config Debug
@@ -285,6 +287,8 @@ jobs:
       - name: Alpine riscv64, Debug
         if: matrix.tests == 'alpine'
         shell: alpine-riscv64.sh {0}
+        env:
+          MI_TEST_LIGHT=1
         run: |
           uname -m
           cmake . -B out/debug-riscv64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
@@ -295,9 +299,15 @@ jobs:
         if: matrix.tests == 'alpine'
         shell: alpine-riscv64.sh {0}
         run: |
-          cmake . -B out/release-riscv64 -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
+          cmake . -B out/release-riscv64 -DCMAKE_BUILD_TYPE=Release -DMI_SEE_ASM=ON -DMI_OPT_ARCH=ON
           cmake --build out/release-riscv64 --parallel 4 --config Release
           ctest --test-dir out/release-riscv64 --verbose --timeout 240 -C Release
+
+      - name: Alpine risc64, Upload assembly
+        uses: actions/upload-artifact@v4
+        with:
+          name: alpine-riscv64-alloc.c.s
+          path: out/release-riscv64/CMakeFiles/mimalloc.dir/src/alloc.c.s
 
       - name: Alpine riscv64, Secure
         if: matrix.tests == 'alpine'
@@ -307,7 +317,7 @@ jobs:
           cmake --build out/secure-riscv64 --parallel 4 --config Release
           ctest --test-dir out/secure-riscv64 --verbose --timeout 240 -C Release
       
-      
+
       - name: Alpine x64, Setup
         if: matrix.tests == 'alpine'
         uses: jirutka/setup-alpine@v1        
@@ -321,6 +331,8 @@ jobs:
       - name: Alpine x64, Debug
         if: matrix.tests == 'alpine'
         shell: alpine-x64.sh {0}
+        env:
+          MI_TEST_LIGHT=1
         run: |
           cmake . -B out/debug-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
           cmake --build out/debug-x64 --parallel 4 --config Debug

@@ -173,8 +173,8 @@ elseif(MI_ARCH STREQUAL "arm64")
   set(MI_OPT_ARCH "ON")  # enable armv8.1-a by default on arm64 unless MI_NO_OPT_ARCH is set
 endif()
 
-if(DEFINED ENV{QEMU_RESERVED_VA})
-  list(APPEND mi_defines MI_QEMU=1)  # to lighten test load in test integration
+if(DEFINED ENV{MI_TEST_LIGHT})
+  list(APPEND mi_defines MI_TEST_LIGHT=1)  # to lighten test load in test integration
 endif()
 
 # -----------------------------------------------------------------------------
