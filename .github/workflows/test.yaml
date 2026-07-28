@@ -205,9 +205,10 @@ jobs:
         with:
           arch: riscv64
           custom-shell-name: freebsd-riscv64
+          cache-after-prepare: true
           prepare: |
             uname -a
-            # pkg install -y cmake
+            cd /usr/ports/devel/cmake && make install clean
       
       - name: FreeBSD riscv64, Debug
         if: matrix.tests == 'freebsd'
