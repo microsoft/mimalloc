@@ -234,7 +234,12 @@ void _mi_heap_force_destroy(mi_heap_t* heap) {
   if (heap==NULL) return;
   mi_heap_free_theaps(heap);
   _mi_heap_destroy_pages(heap);
-  if (!_mi_is_heap_main(heap)) { mi_heap_free(heap); }  // todo: release locks of the main heap?
+  if (_mi_is_heap_main(heap)) {
+    _mi_stats_merge_into(&heap->subproc->stats,&heap->stats);
+  }
+  else { 
+    mi_heap_free(heap);   // todo: release locks of the main heap?
+  }
 }
 
 void mi_heap_destroy(mi_heap_t* heap) {

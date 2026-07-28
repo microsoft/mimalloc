@@ -132,17 +132,20 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   MI_STATS_NULL,          // stats
 };
 
+// pre-allocate the process subprocess, heap, and meta-data theap
 static mi_decl_cache_align mi_subproc_t mi_process_subproc_main = mi_init_struct_zero;
-// static mi_decl_cache_align mi_tld_t     mi_process_tld_main   = mi_init_struct_zero;
-// static mi_decl_cache_align mi_theap_t   mi_process_theap_main = mi_init_struct_zero;
 static mi_decl_cache_align mi_heap_t    mi_process_heap_main  = mi_init_struct_zero;
 static mi_decl_cache_align mi_theap_t   mi_process_theap_meta = mi_init_struct_zero;
+
+// pre-allocate the initial tld and theap for the main thread (this is not strictly needed but nice for stats)
+static mi_decl_cache_align mi_tld_t     mi_process_tld_main   = mi_init_struct_zero;
+static mi_decl_cache_align mi_theap_t   mi_process_theap_main = mi_init_struct_zero;
 
 mi_decl_hidden mi_decl_cache_align mi_theap_t _mi_theap_empty_wrong = mi_init_struct_zero;  // used for error paths
 mi_decl_hidden mi_decl_thread void* __mi_thread_id_helper = NULL;
 mi_decl_hidden bool                 _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
-static mi_subproc_t* mi_subprocs = &mi_process_subproc_main;
+static mi_subproc_t* mi_subprocs = NULL;
 static mi_lock_t     mi_subprocs_lock = MI_LOCK_INITIALIZER;
 
 #if MI_TLS_MODEL_LOCAL
@@ -168,7 +171,7 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
 ----------------------------------------------------------- */
 
 // Initialize main heap
-static mi_tld_t* mi_tld_init(mi_tld_t* tld, mi_subproc_t* subproc);
+static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc);
 static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc, mi_subproc_t* parent);
 
 static void mi_heap_main_init(void) {
@@ -183,7 +186,7 @@ static void mi_heap_main_init(void) {
 
     // detached tld for mi_theap_empty (and theap_meta)
     mi_tld_detached.memid = memid_static;
-    mi_tld_init(&mi_tld_detached, &mi_process_subproc_main);
+    mi_tld_init(&mi_tld_detached, 0, &mi_process_subproc_main);
         
     // main process heap
     mi_process_heap_main.memid = memid_static;
@@ -227,6 +230,7 @@ void _mi_meta_free(mi_subproc_t* subproc, void* p, mi_memid_t memid) {
     mi_free(p);
   }
   else {
+    mi_assert_internal(subproc!=NULL);  
     _mi_arenas_free(subproc, p, _mi_memid_size(memid), memid);
   }
 }
@@ -242,7 +246,7 @@ bool _mi_meta_is_meta_page(const mi_subproc_t* subproc, const mi_page_t* page) {
   Thread local data
 ----------------------------------------------------------- */
 
-static mi_tld_t* mi_tld_init(mi_tld_t* tld, mi_subproc_t* subproc) {
+static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc) {
   tld->subproc = subproc;
   tld->theaps = NULL;
   mi_lock_init(&tld->theaps_lock);
@@ -253,7 +257,7 @@ static mi_tld_t* mi_tld_init(mi_tld_t* tld, mi_subproc_t* subproc) {
     tld->numa_node = _mi_os_numa_node();
     tld->thread_id = _mi_prim_thread_id();
     tld->is_in_threadpool = _mi_prim_thread_is_in_threadpool();
-    tld->thread_seq = mi_atomic_increment_relaxed(&tld->subproc->thread_total_count);
+    tld->thread_seq = tseq;
     mi_atomic_increment_relaxed(&tld->subproc->thread_count);
   }
   return tld;
@@ -265,14 +269,23 @@ static mi_tld_t* mi_tld_create(mi_subproc_t* subproc) {
   // note: we need to be careful to not access the tld from `_mi_meta_zalloc`
   // (and in turn from `_mi_arena_alloc_aligned` and `_mi_os_alloc_aligned`).
   mi_assert_internal(subproc->theap_meta != NULL); // should be initialized on the main thread before other threads allocate
-  mi_memid_t memid = _mi_memid_create(MI_MEM_MALLOC);
-  mi_tld_t* tld  = (mi_tld_t*)_mi_meta_zalloc(subproc, sizeof(mi_tld_t), &memid);
+  const size_t tseq = mi_atomic_increment_relaxed(&subproc->thread_total_count);
+
+  mi_memid_t memid;
+  mi_tld_t* tld;
+  if (subproc == &mi_process_subproc_main && tseq==0 /* first tld */) {
+    tld = &mi_process_tld_main;
+    memid = _mi_memid_create_static(tld,sizeof(*tld));
+  }
+  else {
+    tld  = (mi_tld_t*)_mi_meta_zalloc(subproc, sizeof(mi_tld_t), &memid);
+  }
   if (tld==NULL) {
     _mi_error_message(ENOMEM, "unable to allocate memory for thread local data\n");
     return NULL;
   }
   tld->memid = memid;  
-  return mi_tld_init(tld,subproc);
+  return mi_tld_init(tld,tseq,subproc);
 }
 
 #define MI_TLD_INVALID      ((mi_tld_t*)1)
@@ -439,20 +452,33 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
     }
   }
 
-  // remove associated arenas
-  _mi_arenas_unsafe_destroy_all(subproc);
+  // merge theap stats
+  mi_lock(&subproc->theap_meta_lock) {
+    if (subproc->theap_meta != NULL) { 
+      _mi_stats_merge_into(&subproc->stats, &subproc->theap_meta->stats);
+    }
+    subproc->theap_meta = NULL;
+  }
 
   // merge stats back into the main subproc?
   if (subproc!=&mi_process_subproc_main) {
     _mi_stats_merge_into(&mi_process_subproc_main.stats, &subproc->stats);
   }
 
-  // safe to release
+  // remove associated arenas
+  _mi_arenas_unsafe_destroy_all(subproc);
+
+  // show stats of the main process (at process end) before releasing the heaps lock
+  if (subproc==&mi_process_subproc_main) {
+    if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
+      mi_subproc_stats_print_out(mi_subproc_main(), NULL, NULL);
+    }
+  }
+
   // todo: should we refcount subprocesses?
   mi_lock_done(&subproc->arena_reserve_lock);
   mi_lock_done(&subproc->heaps_lock);
-  mi_lock_done(&subproc->theap_meta_lock);
-  subproc->theap_meta = NULL;
+  mi_lock_done(&subproc->theap_meta_lock);  
   _mi_meta_free( subproc->parent, subproc, subproc->memid);
   // for the main subproc, also release the global page map
   if (subproc==&mi_process_subproc_main) {
@@ -567,8 +593,15 @@ static mi_theap_t* mi_thread_init_ex(mi_heap_t* heap_main) mi_attr_noexcept
     mi_tld_t* tld = mi_tld_create(heap_main->subproc);
     if (tld==NULL) return NULL;    // out-of-memory on tld allocation
     // allocate and initialize the theap for the main heap
-    theap = _mi_theap_create(heap_main, tld);
-    if (theap==NULL) { mi_tld_free(tld); return NULL; } // out-of-memory on theap allocation
+    if (tld==&mi_process_tld_main) {
+      theap = &mi_process_theap_main;          // initial theap is pre-allocated
+      theap->memid = _mi_memid_create_static(theap,sizeof(*theap));      
+    }
+    else {
+      theap = _mi_theap_alloc(heap_main,tld);  // otherwise meta allocate
+      if (theap==NULL) { mi_tld_free(tld); return NULL; } // out-of-memory on theap allocation
+    }
+    _mi_theap_init(theap,heap_main,tld);    
   }
   
   // now initialize the thread
@@ -1126,14 +1159,14 @@ static void mi_process_done_once(void) {
     mi_subprocs_unsafe_destroy_all(); // destroys all mi_subprocs, arenas, and the page_map!
   }
   else if (mi_process_subproc_main.heap_main != NULL) {
-    mi_heap_stats_merge_to_subproc(mi_process_subproc_main.heap_main);
+    if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
+      _mi_theap_merge_stats(mi_process_subproc_main.theap_meta);
+      mi_heap_stats_merge_to_subproc(mi_process_subproc_main.heap_main);    
+      mi_subproc_stats_print_out(mi_subproc_main(), NULL, NULL);
+    } 
   }
-
-  // careful now to no longer access any allocator functionality
-  if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
-    mi_subproc_stats_print_out(mi_subproc_main(), NULL, NULL);
-  }
-  mi_lock_done(&mi_subprocs_lock);
+  
+  mi_lock_done(&mi_subprocs_lock);  
   mi_tls_slots_done();
   _mi_allocator_done();
   _mi_verbose_message("process done\n"); // : 0x%zx\n", mi_process_tld_main.thread_id);

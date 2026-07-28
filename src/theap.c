@@ -113,7 +113,7 @@ static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_pag
   return true; // don't break
 }
 
-static void mi_theap_merge_stats(mi_theap_t* theap) {
+void _mi_theap_merge_stats(mi_theap_t* theap) {
   mi_assert_internal(mi_theap_is_initialized(theap));
   mi_heap_t* const heap = _mi_theap_heap(theap);
   _mi_stats_merge_into(&heap->stats, &theap->stats);
@@ -130,8 +130,8 @@ static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
   // python/cpython#112532: we may be called from a thread that is not the owner of the theap
   // const bool is_main_thread = (_mi_is_main_thread() && theap->thread_id == _mi_thread_id());
 
-  // collect retired pages
-  _mi_theap_collect_retired(theap, force);
+  // collect retired pages (and full pages if theap->allow_page_abandon is false)
+  _mi_theap_collect_retired(theap, force); 
 
   // collect all pages owned by this thread
   mi_theap_visit_pages(theap, &mi_theap_page_collect, (collect!=MI_NORMAL), &collect, NULL);  // dont normally visit full pages, see issue #1220
@@ -141,7 +141,7 @@ static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
   _mi_arenas_collect(collect == MI_FORCE /* force purge? */, collect >= MI_FORCE /* visit all? */, theap->tld);
 
   // merge statistics
-  mi_theap_merge_stats(theap);
+  _mi_theap_merge_stats(theap);
 }
 
 void _mi_theap_collect_abandon(mi_theap_t* theap) {
@@ -297,7 +297,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   }
 }
 
-mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
+mi_theap_t* _mi_theap_alloc(mi_heap_t* heap, mi_tld_t* tld) {
   mi_assert_internal(tld!=NULL);
   mi_assert_internal(heap!=NULL);
   mi_assert_internal(tld->thread_id == MI_THREADID_DETACHED || _mi_thread_id() == tld->thread_id);
@@ -322,7 +322,13 @@ mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
   }
 
   theap->memid = memid;
-  _mi_theap_init(theap, heap, tld);  
+  return theap;
+}
+
+mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
+  mi_theap_t* theap = _mi_theap_alloc(heap,tld);
+  if (theap == NULL) return NULL;
+  _mi_theap_init(theap, heap, tld);
   return theap;
 }
 

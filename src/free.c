@@ -634,8 +634,15 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
 #if (MI_STAT>0)
 static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(block);
-  mi_theap_t* const theap = _mi_theap_default();
-  if (!mi_theap_is_initialized(theap)) return; // (for now) skip statistics if free'd after thread_done was called (usually a thread cleanup call by the OS)
+  mi_theap_t* theap = _mi_theap_default();
+  mi_lock_t* lock = NULL;
+  if mi_unlikely(!mi_theap_is_initialized(theap)) { // can happen if free'd after thread_done was called (usually a thread cleanup call by the OS)
+    mi_subproc_t* subproc = mi_page_subproc(page);
+    if (subproc==NULL || subproc->theap_meta==NULL) return; // give up
+    theap = subproc->theap_meta;
+    lock = &subproc->theap_meta_lock;
+    mi_lock_acquire(lock);
+  }
 
   const size_t bsize = mi_page_usable_block_size(page);
   // #if (MI_STAT>1)
@@ -651,6 +658,10 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   else {
     const size_t bpsize = mi_page_block_size(page);  // match stat in page.c:mi_huge_page_alloc
     mi_theap_stat_decrease(theap, malloc_huge, bpsize);
+  }
+
+  if mi_unlikely(lock!=NULL) {
+    mi_lock_release(lock);
   }
 }
 #else
