@@ -255,6 +255,25 @@ jobs:
 
 
       # VM: Alpine Linux with MUSL libc (x64 and arm64)
+      - name: Alpine riscv64, Setup
+        if: matrix.tests == 'alpine'
+        uses: jirutka/setup-alpine@v1
+        with: 
+          arch: riscv64
+          shell-name: alpine-riscv64.sh
+          packages: |
+            build-base
+            cmake
+
+      - name: Alpine riscv64, Debug
+        if: matrix.tests == 'alpine'
+        shell: alpine-riscv64.sh {0}
+        run: |
+          uname -m
+          cmake . -B out/debug-riscv64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug-riscv64 --parallel 4 --config Debug
+          ctest --test-dir out/debug-riscv64 --verbose --timeout 240 -C Debug
+      
       - name: Alpine arm64, Setup
         if: matrix.tests == 'alpine'
         uses: jirutka/setup-alpine@v1
