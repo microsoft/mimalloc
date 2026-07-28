@@ -214,7 +214,7 @@ jobs:
         if: matrix.tests == 'freebsd'
         shell: freebsd-arm64 {0}
         env:
-          MI_TEST_LIGHT=1
+          MI_TEST_LIGHT: 1
         run: |
           cmake . -B out/debug-arm64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
           cmake --build out/debug-arm64 --parallel 4 --config Debug
@@ -288,7 +288,7 @@ jobs:
         if: matrix.tests == 'alpine'
         shell: alpine-riscv64.sh {0}
         env:
-          MI_TEST_LIGHT=1
+          MI_TEST_LIGHT: 1
         run: |
           uname -m
           cmake . -B out/debug-riscv64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
@@ -332,7 +332,7 @@ jobs:
         if: matrix.tests == 'alpine'
         shell: alpine-x64.sh {0}
         env:
-          MI_TEST_LIGHT=1
+          MI_TEST_LIGHT: 1
         run: |
           cmake . -B out/debug-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
           cmake --build out/debug-x64 --parallel 4 --config Debug
