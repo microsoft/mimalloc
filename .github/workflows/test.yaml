@@ -317,6 +317,7 @@ jobs:
       #   with:
       #     name: alpine-riscv64-alloc.c.s
       #     path: out/release-riscv64/CMakeFiles/mimalloc.dir/src/alloc.c.s
+      #     page: out/release-riscv64/alloc.s
 
       - name: Alpine riscv64, Secure
         if: matrix.tests == 'alpine-riscv64'

@@ -231,16 +231,6 @@ void _mi_meta_free(mi_subproc_t* subproc, void* p, mi_memid_t memid) {
   }
 }
 
-bool _mi_meta_is_meta_page(mi_subproc_t* subproc, void* p) {
-  MI_UNUSED(subproc);
-  mi_page_t* page = _mi_safe_ptr_page(p);  
-  if (page==NULL || mi_page_is_abandoned(page)) return false;
-  mi_theap_t* theap = mi_page_theap(page);
-  return (theap != NULL && theap->is_detached);
-}
-
-
-
 
 /* -----------------------------------------------------------
   Thread local data

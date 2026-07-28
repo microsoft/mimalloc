@@ -984,6 +984,11 @@ static inline bool _mi_is_heap_main(const mi_heap_t* heap) {
   return (mi_heap_get_heap_main(heap) == heap);
 }
 
+static inline bool mi_page_is_detached(mi_page_t* page) {
+  if (page==NULL || mi_page_is_abandoned(page)) return false;
+  mi_theap_t* theap = mi_page_theap(page);
+  return (theap != NULL && theap->is_detached);
+}
 
 
 //-----------------------------------------------------------
