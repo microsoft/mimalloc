@@ -263,9 +263,10 @@ jobs:
       # VM: Alpine Linux with MUSL libc
       - name: Alpine x64, Setup
         if: matrix.tests == 'alpine'
-        uses: jirutka/setup-alpine@v1
-        shell-name: alpine-x64.sh
+        uses: jirutka/setup-alpine@v1        
         with: 
+          arch: x86_64
+          shell-name: alpine-x64.sh
           packages: |
             build-base
             cmake
