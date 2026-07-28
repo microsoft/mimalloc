@@ -24,13 +24,15 @@ jobs:
             tests: extra
         include:
           - os: ubuntu-latest 
-            tests: freebsd-arm64
-          - os: ubuntu-latest 
             tests: freebsd-x64
           - os: ubuntu-latest 
-            tests: alpine-riscv64
-          - os: ubuntu-latest 
             tests: alpine-x64
+          # - os: ubuntu-latest 
+          #   tests: freebsd-arm64  # qemu
+          - os: ubuntu-latest 
+            tests: alpine-riscv64   # qemu
+          - os: ubuntu-latest 
+            tests: alpine-arm32     # qemu
 
     steps:
       # Checkout: https://github.com/actions/checkout
@@ -217,9 +219,8 @@ jobs:
       - name: FreeBSD arm64, Debug
         if: matrix.tests == 'freebsd-arm64'
         shell: freebsd-arm64 {0}
-        env:
-          MI_TEST_LIGHT: 1
         run: |
+          export MI_TEST_LIGHT=1
           cmake . -B out/debug-arm64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
           cmake --build out/debug-arm64 --parallel 4 --config Debug
           ctest --test-dir out/debug-arm64 --verbose --timeout 240 -C Debug
@@ -296,7 +297,7 @@ jobs:
         run: |
           uname -m
           cmake . -B out/debug-riscv64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
-          cmake --build out/debug-riscv64 --parallel 4 --config Debug
+          cmake --build out/debug-riscv64 --parallel 8 --config Debug
           ctest --test-dir out/debug-riscv64 --verbose --timeout 240 -C Debug
       
       - name: Alpine riscv64, Release
@@ -304,7 +305,7 @@ jobs:
         shell: alpine-riscv64.sh {0}
         run: |
           cmake . -B out/release-riscv64 -DCMAKE_BUILD_TYPE=Release -DMI_SEE_ASM=ON -DMI_OPT_ARCH=ON
-          cmake --build out/release-riscv64 --parallel 4 --config Release
+          cmake --build out/release-riscv64 --parallel 8 --config Release
           ctest --test-dir out/release-riscv64 --verbose --timeout 240 -C Release
 
       - name: Alpine risc64, Upload assembly
@@ -319,7 +320,7 @@ jobs:
         shell: alpine-riscv64.sh {0}
         run: |
           cmake . -B out/secure-riscv64 -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
-          cmake --build out/secure-riscv64 --parallel 4 --config Release
+          cmake --build out/secure-riscv64 --parallel 8 --config Release
           ctest --test-dir out/secure-riscv64 --verbose --timeout 240 -C Release
       
 
@@ -336,8 +337,6 @@ jobs:
       - name: Alpine x64, Debug
         if: matrix.tests == 'alpine-x64'
         shell: alpine-x64.sh {0}
-        env:
-          MI_TEST_LIGHT: 1
         run: |
           cmake . -B out/debug-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
           cmake --build out/debug-x64 --parallel 4 --config Debug
@@ -358,3 +357,24 @@ jobs:
           cmake . -B out/secure-x64 -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
           cmake --build out/secure-x64 --parallel 4 --config Release
           ctest --test-dir out/secure-x64 --verbose --timeout 240 -C Release
+
+      - name: Alpine arm32, Setup
+        if: matrix.tests == 'alpine-arm32'
+        uses: jirutka/setup-alpine@v1
+        with: 
+          arch: armv7  # or armhf for arm-v6 with hard float
+          shell-name: alpine-arm32.sh
+          packages: |
+            build-base
+            cmake
+
+      - name: Alpine arm32, Debug
+        if: matrix.tests == 'alpine-arm32'
+        shell: alpine-arm32.sh {0}
+        env:
+          MI_TEST_LIGHT: 1
+        run: |
+          uname -m
+          cmake . -B out/debug-arm32 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug-arm32 --parallel 8 --config Debug
+          ctest --test-dir out/debug-arm32 --verbose --timeout 240 -C Debug
