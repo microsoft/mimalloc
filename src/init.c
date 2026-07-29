@@ -146,7 +146,7 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty_wrong = {
   MI_ATOMIC_VAR_INIT(1),  // refcount
   MI_ATOMIC_VAR_INIT(0),  // freed
   0,                      // heartbeat
-  0,                      // cookie
+  1,                      // cookie  (see issue #1343)
   { {0}, {0}, 0, true },  // random
   0,                      // page count
   MI_BIN_FULL, 0,         // page retired min/max
