@@ -109,6 +109,13 @@ int main(void) {
     void* p = mi_malloc(67108872);
     mi_free(p);
   };
+  CHECK_BODY("mi_urealloc_invalid") {
+    void* p = mi_malloc(64);
+    size_t pre, post;
+    void* q = mi_urealloc((char*)p + 3, 32, &pre, &post);
+    mi_free(p);
+    result = (q==NULL || q==(uint8_t*)p+3);
+  }
 
   // ---------------------------------------------------
   // Extended

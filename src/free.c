@@ -108,6 +108,18 @@ mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
   return (mi_block_t*)((uintptr_t)p - adjust);
 }
 
+#if MI_SECURE>=3
+static inline mi_block_t* mi_cast_ptr_to_block(const mi_page_t* page, const void* p) {
+  return _mi_page_ptr_unalign(page,p);
+}
+#else
+static inline mi_block_t* mi_cast_ptr_to_block(const mi_page_t* page, const void* p) {
+  MI_UNUSED_RELEASE(page);
+  mi_assert_internal(_mi_page_ptr_unalign(page,p) == (mi_block_t*)p);
+  return (mi_block_t*)p;
+}
+#endif
+
 // forward declaration for a MI_GUARDED build
 #if MI_GUARDED
 static void mi_block_unguard(mi_page_t* page, mi_block_t* block, void* p); // forward declaration
@@ -127,7 +139,7 @@ static inline bool mi_block_check_unguard(mi_page_t* page, mi_block_t* block, vo
 }
 #endif
 
-static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, void* p ) {
+static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, const void* p ) {
   mi_assert(_mi_page_ptr_unalign(page,p) == (mi_block_t*)p); // should never be an interior pointer
   #if MI_SECURE > 0
   // in secure mode we always unalign to guard against free-ing interior pointers
@@ -415,16 +427,17 @@ static size_t mi_decl_noinline mi_page_usable_aligned_size_of(const mi_page_t* p
   const mi_block_t* block = _mi_page_ptr_unalign(page, p);
   const bool is_guarded = mi_block_ptr_is_guarded(block,p);
   const size_t size = mi_page_usable_size_of(page, block, is_guarded);
-  const ptrdiff_t adjust = (uint8_t*)p - (uint8_t*)block;
-  mi_assert_internal(adjust >= 0 && (size_t)adjust <= size);
-  const size_t aligned_size = (size - adjust);  
+  mi_assert_internal((void*)p >= (void*)block);
+  const size_t adjust = (uint8_t*)p - (uint8_t*)block;
+  mi_assert_internal(adjust <= size);
+  const size_t aligned_size = (adjust <= size ? size - adjust : 0);  // size can be zero if the padding is corrupted
   return aligned_size;
 }
 
 static inline size_t _mi_usable_size(const void* p, const mi_page_t* page) mi_attr_noexcept {
   if mi_unlikely(page==NULL) return 0;
   if mi_likely(!mi_page_has_interior_pointers(page)) {
-    const mi_block_t* block = (const mi_block_t*)p;
+    const mi_block_t* block = mi_validate_block_from_ptr(page,p);
     return mi_page_usable_size_of(page, block, false /* is guarded */);
   }
   else {

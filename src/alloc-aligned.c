@@ -110,6 +110,11 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
   mi_page_t* page = _mi_ptr_page(p);
   if (aligned_p != p) {
     mi_page_set_has_interior_pointers(page, true);
+    if (usable!=NULL) { 
+      mi_assert_internal(*usable > adjust);
+      if (*usable > adjust) { *usable = *usable - adjust; }
+      mi_assert_internal(*usable >= size);
+    }
     #if MI_GUARDED
     // set tag to aligned so mi_usable_size works with guard pages
     if (adjust >= sizeof(mi_block_t)) {

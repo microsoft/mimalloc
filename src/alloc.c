@@ -369,8 +369,13 @@ void* _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool ze
     size = 0;
     if (usable_pre!=NULL) { *usable_pre = 0; }
   }
-  else {
-    page = mi_validate_ptr_page(p,"mi_realloc");
+  else {    
+    page = mi_validate_ptr_page(p,"mi_realloc"); 
+    if mi_unlikely(page==NULL) {  // invalid pointer
+      if (usable_pre!=NULL) { *usable_pre = 0; }
+      if (usable_post!=NULL) { *usable_post = 0; }  
+      return NULL;
+    } 
     size = _mi_usable_size(p,page);
     if (usable_pre!=NULL) { *usable_pre = mi_page_usable_block_size(page); }
   }
