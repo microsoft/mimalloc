@@ -70,6 +70,18 @@ mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
   return (mi_block_t*)((uintptr_t)p - adjust);
 }
 
+#if MI_SECURE>=3
+static inline mi_block_t* mi_cast_ptr_to_block(const mi_page_t* page, const void* p) {
+  return _mi_page_ptr_unalign(page,p);
+}
+#else
+static inline mi_block_t* mi_cast_ptr_to_block(const mi_page_t* page, const void* p) {
+  MI_UNUSED_RELEASE(page);
+  mi_assert_internal(_mi_page_ptr_unalign(page,p) == (mi_block_t*)p);
+  return (mi_block_t*)p;
+}
+#endif
+
 // forward declaration for a MI_GUARDED build
 #if MI_GUARDED
 static void mi_block_unguard(mi_page_t* page, mi_block_t* block, void* p); // forward declaration
@@ -92,7 +104,7 @@ static inline bool mi_block_check_unguard(mi_page_t* page, mi_block_t* block, vo
 // free a local pointer  (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, mi_segment_t* segment, void* p) mi_attr_noexcept {
   MI_UNUSED(segment);
-  mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(page, p) : (mi_block_t*)p);
+  mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(page, p) : mi_cast_ptr_to_block(page,p));
   const bool was_guarded = mi_block_check_unguard(page, block, p);
   mi_free_block_local(page, block, was_guarded, true /* track stats */, true /* check for a full page */);
 }
@@ -160,7 +172,7 @@ static inline void mi_free_ex(void* p, size_t* usable) mi_attr_noexcept
   if mi_likely(is_local) {                        // thread-local free?
     if mi_likely(page->flags.full_aligned == 0) { // and it is not a full page (full pages need to move from the full bin), nor has aligned blocks (aligned blocks need to be unaligned)
       // thread-local, aligned, and not a full page
-      mi_block_t* const block = (mi_block_t*)p;
+      mi_block_t* const block = mi_cast_ptr_to_block(page,p);
       mi_free_block_local(page, block, false /* is guarded */, true /* track stats */, false /* no need to check if the page is full */);
     }
     else {
@@ -346,7 +358,7 @@ static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg) {
 static inline size_t _mi_usable_size(const void* p, const mi_page_t* page) mi_attr_noexcept {
   if mi_unlikely(page==NULL) return 0;
   if mi_likely(!mi_page_has_aligned(page)) {
-    const mi_block_t* block = (const mi_block_t*)p;
+    const mi_block_t* block = mi_cast_ptr_to_block(page,p);
     return mi_page_usable_size_of(page, block, false /* is guarded */);
   }
   else {

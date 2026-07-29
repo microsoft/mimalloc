@@ -293,7 +293,12 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero,
     if (usable_pre!=NULL) { *usable_pre = 0; }
   }
   else {    
-    page = mi_validate_ptr_page(p,"mi_realloc");  
+    page = mi_validate_ptr_page(p,"mi_realloc"); 
+    if mi_unlikely(page==NULL) {  // invalid pointer
+      if (usable_pre!=NULL) { *usable_pre = 0; }
+      if (usable_post!=NULL) { *usable_post = 0; }  
+      return NULL;
+    } 
     size = _mi_usable_size(p,page);
     if (usable_pre!=NULL) { *usable_pre = mi_page_usable_block_size(page); }    
   }
