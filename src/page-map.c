@@ -48,6 +48,9 @@ bool _mi_page_map_init(void) {
   if (vbits < MI_ARENA_SLICE_SHIFT) {
     vbits = MI_ARENA_SLICE_SHIFT;
   }
+  if (vbits < MI_MIN_VABITS) {    // cover at least this much for a faster _mi_checked_ptr
+    vbits = MI_MIN_VABITS;
+  }
 
   // Allocate the page map and commit bits
   mi_atomic_store_ptr_release(void, &_mi_page_map_max_address, (void*)(vbits >= MI_SIZE_BITS ? (SIZE_MAX - MI_ARENA_SLICE_SIZE + 1) : (MI_PU(1) << vbits)));
@@ -256,6 +259,9 @@ bool _mi_page_map_init(void) {
   }
   if (vbits < MI_PAGE_MAP_SUB_SHIFT + MI_ARENA_SLICE_SHIFT) {
     vbits = MI_PAGE_MAP_SUB_SHIFT + MI_ARENA_SLICE_SHIFT;
+  }
+  if (vbits < MI_MIN_VABITS) {    // cover at least this much for a faster _mi_checked_ptr
+    vbits = MI_MIN_VABITS;
   }
 
   // Allocate the page map and commit bits
