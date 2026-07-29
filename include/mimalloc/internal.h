@@ -662,20 +662,28 @@ static inline mi_page_t* _mi_theap_get_free_small_page(mi_theap_t* theap, size_t
 // flat page-map committed on demand, using one byte per slice (64 KiB).
 // single indirection and low commit, but large initial virtual reserve (4 GiB with 48 bit virtual addresses)
 // used by default on <= 40 bit virtual address spaces.
-extern mi_decl_hidden uint8_t* _mi_page_map;
+extern mi_decl_hidden _Atomic(uint8_t*) _mi_page_map;
+extern mi_decl_hidden _Atomic(void*)    _mi_page_map_max_address;
 
 static inline size_t _mi_page_map_index(const void* p) {
   return (size_t)((uintptr_t)p >> MI_ARENA_SLICE_SHIFT);
 }
 
+static inline uint8_t _mi_page_map_at(size_t idx) {
+  return mi_atomic_load_ptr_relaxed(uint8_t,&_mi_page_map)[idx];
+}
+
 static inline mi_page_t* _mi_ptr_page_ex(const void* p, bool* valid) {
   const size_t idx = _mi_page_map_index(p);
-  const size_t ofs = _mi_page_map[idx];
+  const size_t ofs = _mi_page_map_at(idx);
   if (valid != NULL) { *valid = (ofs != 0); }
   return (mi_page_t*)((((uintptr_t)p >> MI_ARENA_SLICE_SHIFT) + 1 - ofs) << MI_ARENA_SLICE_SHIFT);
 }
 
 static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
+  #if MI_MAX_VABITS > 32
+  if (p > mi_atomic_load_ptr_relaxed(void, &_mi_page_map_max_address)) return NULL;
+  #endif  
   bool valid;
   mi_page_t* const page = _mi_ptr_page_ex(p, &valid);
   return (valid ? page : NULL);
@@ -701,6 +709,7 @@ static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
 
 typedef mi_page_t**   mi_submap_t;
 extern mi_decl_hidden _Atomic(mi_submap_t)* _mi_page_map;
+extern mi_decl_hidden _Atomic(void*) _mi_page_map_max_address;
 
 static inline size_t _mi_page_map_index(const void* p, size_t* sub_idx) {
   const size_t u = (size_t)((uintptr_t)p / MI_ARENA_SLICE_SIZE);
@@ -719,6 +728,9 @@ static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
 }
 
 static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
+  #if MI_MAX_VABITS > 32
+  if (p > mi_atomic_load_ptr_relaxed(void, &_mi_page_map_max_address)) return NULL;
+  #endif
   size_t sub_idx;
   const size_t idx = _mi_page_map_index(p, &sub_idx);
   mi_submap_t const sub = _mi_page_map_at(idx);
@@ -727,7 +739,6 @@ static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
 }
 
 #endif
-
 
 static inline mi_page_t* _mi_ptr_page(const void* p) {
   mi_assert_internal(p==NULL || mi_is_in_heap_region(p));
