@@ -263,6 +263,9 @@ bool _mi_page_map_init(void) {
   if (vbits < MI_MIN_VABITS) {    // cover at least this much for a faster _mi_checked_ptr
     vbits = MI_MIN_VABITS;
   }
+  if (vbits > MI_MAX_VABITS) {    // limit page map size even if more virtual addresses are available
+    vbits = MI_MAX_VABITS;
+  }
 
   // Allocate the page map and commit bits
   mi_assert(MI_MAX_VABITS >= vbits);
