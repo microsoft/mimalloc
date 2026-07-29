@@ -313,7 +313,7 @@ void          _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
 mi_decl_cold  mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap);  // get (and possible create) the theap belonging to a heap
 void          _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to);  // in "arena.c"
 void          _mi_heap_destroy_pages(mi_heap_t* heap_from);                   // in "arena.c"
-void          _mi_heap_force_destroy(mi_heap_t* heap);                        // allow destroying the main heap
+void          _mi_heap_force_destroy(mi_heap_t* heap, bool acquire_heaps_lock); // allow destroying the main heap
 mi_heap_t*    _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool is_heap_main);
 bool          _mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap);
 

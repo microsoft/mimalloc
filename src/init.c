@@ -519,12 +519,12 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
     mi_heap_t* heap = subproc->heaps;
     while (heap != NULL) {
       mi_heap_t* next = heap->next;
-      if (heap!=subproc->heap_main) { mi_heap_destroy(heap); }
+      if (heap!=subproc->heap_main) { _mi_heap_force_destroy(heap,false /* do not re-acquire the heaps_lock */); }
       heap = next;
     }
     mi_assert_internal(subproc->heap_main==NULL || subproc->heaps == subproc->heap_main);
     if (subproc->heap_main!=NULL) {
-      _mi_heap_force_destroy(subproc->heap_main);  // no warning if destroying the main heap
+      _mi_heap_force_destroy(subproc->heap_main,false /* do not re-acquire the heaps_lock */);  // no warning if destroying the main heap
     }
   }
 

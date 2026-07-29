@@ -195,7 +195,7 @@ static void mi_heap_free_theaps(mi_heap_t* heap) {
 }
 
 // free the heap resources (assuming the pages are already moved/destroyed, and all theaps have been freed)
-static void mi_heap_free(mi_heap_t* heap) {
+static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
   mi_assert_internal(heap!=NULL && !_mi_is_heap_main(heap));
 
   // free all arena pages infos
@@ -213,7 +213,7 @@ static void mi_heap_free(mi_heap_t* heap) {
   mi_heap_stats_merge_to_main(heap);
   mi_atomic_decrement_relaxed(&heap->subproc->heap_count);
   mi_subproc_stat_decrease(heap->subproc, heaps, 1);
-  mi_lock(&heap->subproc->heaps_lock) {
+  mi_lock_maybe(&heap->subproc->heaps_lock, acquire_heaps_lock) {
     if (heap->next!=NULL) { heap->next->prev = heap->prev; }
     if (heap->prev!=NULL) { heap->prev->next = heap->next; }
                      else { heap->subproc->heaps = heap->next; }
@@ -235,14 +235,14 @@ void mi_heap_delete(mi_heap_t* heap) {
   }
   mi_heap_free_theaps(heap);
   _mi_heap_move_pages(heap, heap_main);
-  mi_heap_free(heap);
+  mi_heap_free(heap,true /* acquire subproc->heaps_lock */);
 }
 
-void _mi_heap_force_destroy(mi_heap_t* heap) {
+void _mi_heap_force_destroy(mi_heap_t* heap, bool acquire_heaps_lock) {
   if (heap==NULL) return;
   mi_heap_free_theaps(heap);
   _mi_heap_destroy_pages(heap);
-  if (!_mi_is_heap_main(heap)) { mi_heap_free(heap); }  // todo: release locks of the main heap?
+  if (!_mi_is_heap_main(heap)) { mi_heap_free(heap, acquire_heaps_lock); }  // todo: release locks of the main heap?
 }
 
 void mi_heap_destroy(mi_heap_t* heap) {
@@ -251,7 +251,7 @@ void mi_heap_destroy(mi_heap_t* heap) {
     _mi_warning_message("cannot destroy the main heap\n");
     return;
   }
-  _mi_heap_force_destroy(heap);
+  _mi_heap_force_destroy(heap,true /* acquire subproc->heaps_lock */);
 }
 
 mi_heap_t* mi_heap_of(const void* p) {
