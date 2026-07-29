@@ -85,11 +85,7 @@ void _mi_segment_map_allocated_at(const mi_segment_t* segment) {
   size_t bitidx;
   mi_segmap_part_t* part = mi_segment_map_index_of(segment, true /* alloc map if needed */, &index, &bitidx);
   if (part == NULL) return; // outside our address range..
-  uintptr_t mask = mi_atomic_load_relaxed(&part->map[index]);
-  uintptr_t newmask;
-  do {
-    newmask = (mask | ((uintptr_t)1 << bitidx));
-  } while (!mi_atomic_cas_weak_release(&part->map[index], &mask, newmask));
+  mi_atomic_or_release(&part->map[index], ((uintptr_t)1 << bitidx));
 }
 
 void _mi_segment_map_freed_at(const mi_segment_t* segment) {
@@ -98,11 +94,7 @@ void _mi_segment_map_freed_at(const mi_segment_t* segment) {
   size_t bitidx;
   mi_segmap_part_t* part = mi_segment_map_index_of(segment, false /* don't alloc if not present */, &index, &bitidx);
   if (part == NULL) return; // outside our address range..
-  uintptr_t mask = mi_atomic_load_relaxed(&part->map[index]);
-  uintptr_t newmask;
-  do {
-    newmask = (mask & ~((uintptr_t)1 << bitidx));
-  } while (!mi_atomic_cas_weak_release(&part->map[index], &mask, newmask));
+  mi_atomic_and_release(&part->map[index], ~((uintptr_t)1 << bitidx));
 }
 
 // Determine the segment belonging to a pointer or NULL if it is not in a valid segment.
