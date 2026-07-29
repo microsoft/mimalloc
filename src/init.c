@@ -131,7 +131,7 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   false,                  // allow reclaim
   true,                   // allow abandon
   #if MI_GUARDED
-  0, 0, 0, 1,             // sample count is 1 so we never write to it (see `internal.h:mi_theap_malloc_use_guarded`)
+  1, 0, 0, 1,             // min>max and count is 1 so we never write to it (see `internal.h:mi_heap_malloc_use_guarded`)
   #endif
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
@@ -158,7 +158,7 @@ mi_decl_cache_align const mi_theap_t _mi_theap_empty_wrong = {
   false,                  // allow reclaim
   true,                   // allow abandon
   #if MI_GUARDED
-  0, 0, 0, 1,             // sample count is 1 so we never write to it (see `internal.h:mi_theap_malloc_use_guarded`)
+  1, 0, 0, 1,             // min>max and sample count is 1 so we never write to it (see `internal.h:mi_theap_malloc_use_guarded`)
   #endif
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
