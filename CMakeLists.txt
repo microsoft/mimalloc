@@ -508,7 +508,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU" AND NOT MI_CLANG_CL)
     list(APPEND mi_cflags -Wstrict-prototypes)
   endif()
   if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")
-    list(APPEND mi_cflags -Wno-static-in-inline)
+    list(APPEND mi_cflags -Wno-static-in-inline -mno-outline)
   endif()
 endif()
 
