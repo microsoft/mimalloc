@@ -588,7 +588,11 @@ static void mi_process_done_once(void) {
   if (process_done) return;
   process_done = true;
 
+  // decref any cached theap
+  _mi_theap_cached_set(_mi_theap_empty_get()); 
+
   // free dynamic thread locals (if used at all)
+  _mi_thread_locals_thread_done();
   _mi_thread_locals_done();
 
   // release any thread specific resources and ensure _mi_thread_done is called on all but the main thread

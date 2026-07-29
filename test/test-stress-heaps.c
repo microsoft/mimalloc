@@ -5,7 +5,7 @@ terms of the MIT license.
 -----------------------------------------------------------------------------*/
 
 #define TEST_STRESS          1
-#define MI_USE_HEAPS         4
+#define MI_USE_HEAPS         1
 
 #if !defined(MI_TEST_LIGHT)  // too slow in test integration
 #define ALLOW_LARGE          1

@@ -117,7 +117,7 @@ mi_subproc_id_t mi_subproc_current(void) {
 static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc, mi_subproc_t* parent) {
   static _Atomic(size_t) subproc_total_count;
   subproc->parent = parent;
-  subproc->subproc_seq = mi_atomic_increment_relaxed(&subproc_total_count) + 1;
+  subproc->subproc_seq = mi_atomic_increment_relaxed(&subproc_total_count);
   mi_stats_header_init(&subproc->stats);
   mi_lock_init(&subproc->arena_reserve_lock);
   mi_lock_init(&subproc->heaps_lock);

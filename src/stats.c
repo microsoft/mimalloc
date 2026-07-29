@@ -485,7 +485,9 @@ void mi_subproc_heap_stats_print_out(mi_subproc_id_t subproc_id, mi_output_fun* 
   if (subproc==NULL) return;
   mi_heap_print_visit_info_t vinfo = { out, arg };
   mi_subproc_visit_heaps(subproc_id, &mi_heap_print_visitor, &vinfo);
-  // todo: show meta data stats separately?
+  if (subproc->theap_meta!=NULL) {
+    _mi_stats_print("meta", subproc->subproc_seq, &subproc->theap_meta->stats, out, arg);
+  }
   // if (subproc->theap_meta!=NULL) { _mi_stats_merge_into(&subproc->stats, &subproc->theap_meta->stats); }
   _mi_stats_print("subproc", subproc->subproc_seq, &subproc->stats, out, arg);
 }

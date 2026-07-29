@@ -1985,7 +1985,7 @@ static void mi_debug_show_arenas_ex(mi_heap_t* heap, bool show_pages, bool narro
       // mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena);
       // if (arena_pages != NULL)
       {
-        const char* header1 = "chunks (p:page, f:full, s:singleton, P,F,S:not abandoned, i:arena-info, m:meta-data, ~:free-purgable, _:free-committed, .:free-reserved)";
+        const char* header1 = "chunks (p:page, f:full, s:single, m:meta-data, i:arena-info, P,F,S,M:not abandoned, ~:free-purgable, _:free-committed, .:free-reserved)";
         const char* header2 = (narrow ? "\n       " : " ");
         const char* header3 = "(chunk bin: S:small, M : medium, L : large, X : other)";
         page_total += mi_debug_show_chunks(header1, header2, header3, arena->slice_count,

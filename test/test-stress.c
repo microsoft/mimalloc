@@ -318,10 +318,14 @@ static void test_stress(mi_subproc_id_t subproc) {
   }
 
   #ifndef USE_STD_MALLOC
+  #ifdef MI_USE_HEAPS
+  mi_subproc_heap_stats_print_out(mi_subproc_current(),NULL,NULL);
+  #else
   mi_stats_print(NULL);
   #endif
+  #endif
 
-  // clean up  (a bit too early to test the final free_items still works correctly)
+  // clean up  (a bit too early in order to test if the final `free_items` still works correctly)
   #ifdef MI_USE_HEAPS
   for (int i = 0; i < MI_USE_HEAPS; i++) {
     mi_heap_delete(prev_heaps[i]); prev_heaps[i] = NULL;

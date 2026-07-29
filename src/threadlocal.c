@@ -116,7 +116,9 @@ static mi_thread_locals_t* mi_thread_locals_expand(size_t least_idx) {
     count = least_idx + 1;
   }
   if (count > MI_TLS_IDX_MAX) { return NULL; }  // too large
-  mi_thread_locals_t* tls = (mi_thread_locals_t*)mi_rezalloc(tls_old, sizeof(mi_thread_locals_t) + count*sizeof(mi_tls_slot_t));
+  // allocate on the main heap; this is recursion safe as that uses the fast local key
+  mi_assert_internal(mi_heap_main()->theap == mi_thread_local_key_fast);
+  mi_thread_locals_t* tls = (mi_thread_locals_t*)mi_heap_rezalloc(mi_heap_main(), tls_old, sizeof(mi_thread_locals_t) + count*sizeof(mi_tls_slot_t));
   if mi_unlikely(tls==NULL) return NULL;
   tls->count = count;
   mi_thread_locals_set(tls);
