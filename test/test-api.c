@@ -102,6 +102,15 @@ int main(void) {
     void* p = mi_malloc(67108872);
     mi_free(p);
   };
+  #if !MI_DEBUG
+  CHECK_BODY("mi_usable_size") {   // @zoxc opus, #11
+    char* p = mi_malloc_aligned(32, 64);        // adjust = 16
+    memset(p, 0x41, mi_usable_size(p) + 24);    // smash the canary
+    size_t sz1 = mi_usable_size(p);
+    size_t sz2 = mi_malloc_usable_size(p);
+    result = (sz1==32 && sz2==33)  || (sz1==0 && sz2==0);  // depends on build    
+  }
+  #endif
 
   // ---------------------------------------------------
   // Extended
