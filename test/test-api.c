@@ -66,7 +66,7 @@ bool mem_is_zero(uint8_t* p, size_t size) {
 // ---------------------------------------------------------------------------
 int main(void) {
   mi_option_disable(mi_option_verbose);
-
+  
   CHECK_BODY("malloc-aligned9a") { // test large alignments
     void* p = mi_zalloc_aligned(1024 * 1024, 2);
     mi_free(p);
@@ -109,6 +109,13 @@ int main(void) {
     void* p = mi_malloc(67108872);
     mi_free(p);
   };
+  CHECK_BODY("mi_urealloc_invalid") {
+    void* p = mi_malloc(64);
+    size_t pre, post;
+    void* q = mi_urealloc((char*)p + 3, 32, &pre, &post);
+    mi_free(p);
+    result = (q==NULL || q==(uint8_t*)p+3);
+  }
 
   // ---------------------------------------------------
   // Extended
@@ -373,6 +380,32 @@ int main(void) {
   // ---------------------------------------------------
   // Heaps
   // ---------------------------------------------------
+
+  CHECK_BODY("heap-os1") {
+    // @zoxc opus bug #2.
+    mi_heap_t* h = mi_heap_new();
+    void* p = mi_heap_malloc_aligned(h, 1<<20, 2<<20);   // forced OS allocation
+    mi_heap_delete(h);
+    mi_free(p);                                          // SIGSEGV
+  }
+
+  CHECK_BODY("heap-os2") {
+    // @zoxc opus bug #3.
+    mi_stats_t_decl(stats0); 
+    mi_stats_get(&stats0);
+
+    mi_heap_t* h = mi_heap_new();      
+    for(int i = 0; i < 10; i++) {
+      int* p = (int*)mi_heap_malloc_aligned(h, 1<<20, 2<<20);   // forced OS allocation
+      p[0] = 42;
+    }
+    mi_heap_destroy(h);
+
+    mi_stats_t_decl(stats1); 
+    mi_stats_get(&stats1);
+    result = (stats0.pages.current == stats1.pages.current);    
+  }
+
   //CHECK("theap_destroy", test_theap1());
   //CHECK("theap_delete", test_theap2());
   //CHECK("theap_arena_destroy", test_theap_arena_destroy());

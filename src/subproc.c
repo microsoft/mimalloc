@@ -190,19 +190,24 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
     mi_heap_t* heap = subproc->heaps;
     while (heap != NULL) {
       mi_heap_t* next = heap->next;
-      if (heap!=subproc->heap_main) { mi_heap_destroy(heap); }
+      if (heap!=subproc->heap_main) { _mi_heap_force_destroy(heap, false /* don't re-acquire the heaps_lock */); }
       heap = next;
     }
     mi_assert_internal(subproc->heap_main==NULL || subproc->heaps == subproc->heap_main);
     if (subproc->heap_main!=NULL) {
-      _mi_heap_force_destroy(subproc->heap_main);  // no warning if destroying the main heap
+      _mi_heap_force_destroy(subproc->heap_main, false /* don't re-acquire the heaps_lock */);  // no warning if destroying the main heap
     }
   }
 
   subproc->theap_meta = NULL; // theap meta stats are merged during heap_destroy of the main heap
 
-  // merge stats back into the main subproc?
-  if (subproc!=&mi_process_subproc_main) {
+  if (_mi_subproc_is_main(subproc)) {
+    // free dynamic thread locals after destroying the heaps 
+    _mi_thread_locals_thread_done();
+    _mi_thread_locals_done();
+  }
+  else {
+    // merge stats back into the main subproc  
     _mi_stats_merge_into(&mi_process_subproc_main.stats, &subproc->stats);
   }
 
@@ -210,7 +215,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
   _mi_arenas_unsafe_destroy_all(subproc);
 
   // show stats of the main process (at process end) before releasing the heaps lock
-  if (subproc==&mi_process_subproc_main) {
+  if (_mi_subproc_is_main(subproc)) {
     if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
       mi_subproc_stats_print_out(mi_subproc_main(), NULL, NULL);
     }
@@ -220,9 +225,9 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
   mi_lock_done(&subproc->arena_reserve_lock);
   mi_lock_done(&subproc->heaps_lock);
   mi_lock_done(&subproc->theap_meta_lock);  
-  _mi_meta_free( subproc->parent, subproc, subproc->memid);
-  // for the main subproc, also release the global page map
-  if (subproc==&mi_process_subproc_main) {
+  _mi_meta_free( subproc->parent, subproc, subproc->memid);  
+  if (_mi_subproc_is_main(subproc)) {
+    // for the main subproc, also release the global page map
     _mi_page_map_unsafe_destroy();
   }
 }

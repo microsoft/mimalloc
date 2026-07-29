@@ -110,6 +110,11 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
   mi_page_t* page = _mi_ptr_page(p);
   if (aligned_p != p) {
     mi_page_set_has_interior_pointers(page, true);
+    if (usable!=NULL) { 
+      mi_assert_internal(*usable > adjust);
+      if (*usable > adjust) { *usable = *usable - adjust; }
+      mi_assert_internal(*usable >= size);
+    }
     #if MI_GUARDED
     // set tag to aligned so mi_usable_size works with guard pages
     if (adjust >= sizeof(mi_block_t)) {
@@ -187,7 +192,7 @@ static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, con
   // note: we don't require `size > offset`, we just guarantee that the address at offset is aligned regardless of the allocated size.
   if mi_unlikely(alignment == 0 || !_mi_is_power_of_two(alignment)) { // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
     #if MI_DEBUG > 0
-    _mi_error_message(EOVERFLOW, "aligned allocation requires the alignment to be a power-of-two (size %zu, alignment %zu)\n", size, alignment);
+    _mi_error_message(EOVERFLOW, "aligned allocation requires the alignment to be a power-of-two (size %zu, alignment %zu, offset %zu)\n", size, alignment, offset);
     #endif
     return NULL;
   }
@@ -330,12 +335,17 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_calloc_aligned(mi_heap_t* heap,
 // ------------------------------------------------------
 
 static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t newsize, size_t alignment, size_t offset, bool zero) mi_attr_noexcept {
-  mi_assert(alignment > 0);
+  mi_assert(alignment > 0 && _mi_is_power_of_two(alignment));
+  if mi_unlikely(alignment == 0 || !_mi_is_power_of_two(alignment)) { // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
+    #if MI_DEBUG > 0
+    _mi_error_message(EOVERFLOW, "aligned allocation requires the alignment to be a power-of-two (size %zu, alignment %zu, offset %zu)\n", newsize, alignment, offset);
+    #endif
+    return NULL;
+  }
   if (alignment <= sizeof(uintptr_t) && offset==0) return _mi_theap_realloc_zero(theap,p,newsize,zero,NULL,NULL);
   if (p == NULL) return mi_theap_malloc_zero_aligned_at(theap,newsize,alignment,offset,zero,NULL);
   size_t size = mi_usable_size(p);
-  if (newsize <= size && newsize >= (size - (size / 2))
-      && (((uintptr_t)p + offset) % alignment) == 0) {
+  if (newsize <= size && newsize >= (size - (size / 2)) && (((uintptr_t)p + offset) & (alignment-1)) == 0) {
     return p;  // reallocation still fits, is aligned and not more than 25% waste
   }
   else {

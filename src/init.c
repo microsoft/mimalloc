@@ -124,7 +124,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   true,                   // allow abandon
   true,                   // is_detached
   #if MI_GUARDED
-  0, 0, 0, 1,             // sample count is 1 so we never write to it (see `internal.h:mi_theap_malloc_use_guarded`)
+  1, 0, 0, 1,             // min>max and count is 1 so we never write to it (see `internal.h:mi_heap_malloc_use_guarded`)
   #endif
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
@@ -591,10 +591,6 @@ static void mi_process_done_once(void) {
   // decref any cached theap
   _mi_theap_cached_set(_mi_theap_empty_get()); 
 
-  // free dynamic thread locals (if used at all)
-  _mi_thread_locals_thread_done();
-  _mi_thread_locals_done();
-
   // release any thread specific resources and ensure _mi_thread_done is called on all but the main thread
   _mi_prim_thread_done_auto_done();
 
@@ -615,14 +611,19 @@ static void mi_process_done_once(void) {
   // or C-runtime termination code.
   mi_subproc_t* subproc_main = _mi_subproc_main();
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
-    _mi_subprocs_unsafe_destroy_all(); // destroys all mi_subprocs, arenas, and the page_map!
+    _mi_subprocs_unsafe_destroy_all(); // destroys all mi_subprocs, arenas, thread locals, and the page_map!
   }
-  else if (subproc_main->heap_main != NULL) {
-    if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
-      _mi_theap_merge_stats(subproc_main->theap_meta);
-      mi_heap_stats_merge_to_subproc(subproc_main->heap_main);    
-      mi_subproc_stats_print_out(mi_subproc_main(), NULL, NULL);
-    } 
+  else {
+    // free dynamic thread locals (if used at all)
+    _mi_thread_locals_thread_done();
+    _mi_thread_locals_done();
+    if (subproc_main->heap_main != NULL) {
+      if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
+        _mi_theap_merge_stats(subproc_main->theap_meta);
+        mi_heap_stats_merge_to_subproc(subproc_main->heap_main);    
+        mi_subproc_stats_print_out(mi_subproc_main(), NULL, NULL);
+      } 
+    }
   }
   
   _mi_tls_slots_done();

@@ -127,6 +127,15 @@ typedef int32_t  mi_ssize_t;
 #define MI_MAX_VABITS     (32)
 #endif
 
+// the MI_MIN_VABITS determine how many bits of the address are always mapped in the page_map
+#if MI_MAX_VABITS <= 32
+#define MI_MIN_VABITS     (32)
+#elif MI_MAX_VABITS <= 43
+#define MI_MIN_VABITS     MI_MAX_VABITS
+#else
+#define MI_MIN_VABITS     (43)    /* 8 TiB */
+#endif
+
 // use a flat page-map or a 2-level one
 #ifndef MI_PAGE_MAP_FLAT
 #if MI_MAX_VABITS <= 40 && !defined(__APPLE__) && MI_SECURE==0 && !MI_PAGE_META_IS_SEPARATED
