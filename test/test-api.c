@@ -381,6 +381,24 @@ int main(void) {
     mi_heap_delete(h);
     mi_free(p);                                          // SIGSEGV
   }
+
+  CHECK_BODY("heap-os2") {
+    // @zoxc opus bug #3.
+    mi_stats_t_decl(stats0); 
+    mi_stats_get(&stats0);
+
+    mi_heap_t* h = mi_heap_new();      
+    for(int i = 0; i < 10; i++) {
+      int* p = (int*)mi_heap_malloc_aligned(h, 1<<20, 2<<20);   // forced OS allocation
+      p[0] = 42;
+    }
+    mi_heap_destroy(h);
+
+    mi_stats_t_decl(stats1); 
+    mi_stats_get(&stats1);
+    result = (stats0.pages.current == stats1.pages.current);    
+  }
+
   //CHECK("theap_destroy", test_theap1());
   //CHECK("theap_delete", test_theap2());
   //CHECK("theap_arena_destroy", test_theap_arena_destroy());
