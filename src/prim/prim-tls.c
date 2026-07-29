@@ -99,7 +99,7 @@ static void mi_win_tls_slot_free(DWORD* raw_index) {
   }
 }
 
-static void _mi_tls_slots_init(void) {
+void _mi_tls_slots_init(void) {
   mi_atomic_do_once {
     bool ok = mi_win_tls_slot_alloc(&_mi_theap_default_slot, &_mi_theap_default_expansion_slot, &mi_tls_raw_index_default);
     if (ok) {
@@ -111,7 +111,7 @@ static void _mi_tls_slots_init(void) {
   }
 }
 
-static void _mi_tls_slots_done(void) {
+void _mi_tls_slots_done(void) {
   mi_win_tls_slot_free(&mi_tls_raw_index_default);
   mi_win_tls_slot_free(&mi_tls_raw_index_cached );
 }

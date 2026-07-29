@@ -9,14 +9,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/internal.h"
 #include "mimalloc/prim-tls.h"
 
+// pre-allocate the main subprocess structure.
 static mi_decl_cache_align mi_subproc_t mi_process_subproc_main = mi_init_struct_zero;
 static mi_subproc_t* mi_subprocs = NULL;
 static mi_lock_t     mi_subprocs_lock = MI_LOCK_INITIALIZER;
-
-
-mi_heap_t* mi_heap_main(void) {
-  return _mi_subproc_heap_main(_mi_subproc()); // don't use mi_theap_main_init_get() so this call works during process_init
-}
 
 
 /* -----------------------------------------------------------
@@ -89,6 +85,11 @@ mi_subproc_t* _mi_subproc(void) {
     return theap->tld->subproc;
   }
 }
+
+mi_heap_t* mi_heap_main(void) {
+  return _mi_subproc_heap_main(_mi_subproc()); // don't use mi_theap_main_init_get() so this call works during process_init
+}
+
 
 mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id) {
   return (mi_subproc_t*)(subproc_id._mi_subproc_id);

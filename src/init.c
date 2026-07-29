@@ -136,7 +136,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
 #undef MI_STAT_COUNTER
 
 
-// pre-allocate the process subprocess, heap, and meta-data theap
+// pre-allocate the process heap, and meta-data theap
 static mi_decl_cache_align mi_heap_t    mi_process_heap_main  = mi_init_struct_zero;
 static mi_decl_cache_align mi_theap_t   mi_process_theap_meta = mi_init_struct_zero;
 
