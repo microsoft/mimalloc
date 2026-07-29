@@ -981,9 +981,10 @@ void _mi_auto_process_init(void) {
   mi_theap_t* theap = _mi_theap_default();
   if (theap != NULL) {
     _mi_random_reinit_if_weak(&theap->random);
-    if (theap->subproc->theap_meta != NULL) {
-      mi_lock(&theap->subproc->theap_meta_lock) {
-        _mi_random_reinit_if_weak(&theap->subproc->theap_meta->random);
+    mi_subproc_t* subproc = _mi_theap_subproc(theap);
+    if (subproc->theap_meta != NULL) {
+      mi_lock(&subproc->theap_meta_lock) {
+        _mi_random_reinit_if_weak(&subproc->theap_meta->random);
       }
     }
   }
