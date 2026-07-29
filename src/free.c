@@ -108,17 +108,16 @@ mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
   return (mi_block_t*)((uintptr_t)p - adjust);
 }
 
-#if MI_SECURE>=3
-static inline mi_block_t* mi_cast_ptr_to_block(const mi_page_t* page, const void* p) {
+static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, const void* p ) {
+  mi_assert(_mi_page_ptr_unalign(page,p) == (mi_block_t*)p); // should never be an interior pointer
+  #if MI_SECURE > 0
+  // in secure mode we always unalign to guard against free-ing interior pointers
   return _mi_page_ptr_unalign(page,p);
-}
-#else
-static inline mi_block_t* mi_cast_ptr_to_block(const mi_page_t* page, const void* p) {
-  MI_UNUSED_RELEASE(page);
-  mi_assert_internal(_mi_page_ptr_unalign(page,p) == (mi_block_t*)p);
+  #else
+  MI_UNUSED(page);
   return (mi_block_t*)p;
+  #endif
 }
-#endif
 
 // forward declaration for a MI_GUARDED build
 #if MI_GUARDED
@@ -138,17 +137,6 @@ static inline bool mi_block_check_unguard(mi_page_t* page, mi_block_t* block, vo
   return false;
 }
 #endif
-
-static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, const void* p ) {
-  mi_assert(_mi_page_ptr_unalign(page,p) == (mi_block_t*)p); // should never be an interior pointer
-  #if MI_SECURE > 0
-  // in secure mode we always unalign to guard against free-ing interior pointers
-  return _mi_page_ptr_unalign(page,p);
-  #else
-  MI_UNUSED(page);
-  return (mi_block_t*)p;
-  #endif
-}
 
 
 // free a local pointer  (page parameter comes first for better codegen)
