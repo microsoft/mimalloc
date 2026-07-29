@@ -97,6 +97,11 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
   void* aligned_p = (void*)((uintptr_t)p + adjust);
   if (aligned_p != p) {
     mi_page_set_has_aligned(page, true);
+    if (usable!=NULL) { 
+      mi_assert_internal(*usable > adjust);
+      if (*usable > adjust) { *usable = *usable - adjust; }
+      mi_assert_internal(*usable >= size);
+    }
     #if MI_GUARDED
     // set tag to aligned so mi_usable_size works with guard pages
     if (adjust >= sizeof(mi_block_t)) {
