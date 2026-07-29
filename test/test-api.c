@@ -373,6 +373,14 @@ int main(void) {
   // ---------------------------------------------------
   // Heaps
   // ---------------------------------------------------
+
+  CHECK_BODY("heap-os1") {
+    // @zoxc opus bug #2.
+    mi_heap_t* h = mi_heap_new();
+    void* p = mi_heap_malloc_aligned(h, 1<<20, 2<<20);   // forced OS allocation
+    mi_heap_delete(h);
+    mi_free(p);                                          // SIGSEGV
+  }
   //CHECK("theap_destroy", test_theap1());
   //CHECK("theap_delete", test_theap2());
   //CHECK("theap_arena_destroy", test_theap_arena_destroy());
