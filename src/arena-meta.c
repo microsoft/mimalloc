@@ -147,7 +147,7 @@ mi_decl_noinline void* _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_m
     }
   }
   // if all this failed, allocate from the OS
-  return _mi_os_alloc(subproc, size, pmemid);
+  return _mi_os_zalloc(subproc, size, pmemid);
 }
 
 // free meta-data
