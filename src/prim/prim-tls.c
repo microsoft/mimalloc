@@ -10,6 +10,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim.h"
 #include "mimalloc/prim-tls.h"
 
+// --------------------------------------------------------------------------
+// Implement fast access to the thread local storage for `_mi_theap_default()`
+// and `mi_theap_cached()`. See `include/mimalloc/prim-tls.h` for more info
+// on the TLS models.
+// --------------------------------------------------------------------------
+
+void _mi_tls_slots_init(void);
+void _mi_tls_slots_done(void);
+void _mi_theap_default_set(mi_theap_t* theap);
+void _mi_theap_cached_set(mi_theap_t* theap);
+
+
 #if MI_TLS_MODEL_LOCAL
 // the thread-local main theap for allocation
 mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_default = (mi_theap_t*)&_mi_theap_empty;

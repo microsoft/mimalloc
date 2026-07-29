@@ -158,6 +158,8 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x);
 void          _mi_tls_slots_init(void);
 void          _mi_tls_slots_done(void);
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
+void          _mi_theap_default_set(mi_theap_t* theap);
+void          _mi_theap_cached_set(mi_theap_t* theap);
 
 // subproc.c
 mi_subproc_t* _mi_subproc_main_init(void);
@@ -293,8 +295,6 @@ void          _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld);
 mi_theap_t*   _mi_theap_alloc(mi_heap_t* heap, mi_tld_t* tld);
 mi_theap_t*   _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld);
 void          _mi_theap_delete(mi_theap_t* theap, bool acquire_tld_theaps_lock);
-void          _mi_theap_default_set(mi_theap_t* theap);
-void          _mi_theap_cached_set(mi_theap_t* theap);
 void          _mi_theap_collect_retired(mi_theap_t* theap, bool force);
 void          _mi_theap_collect_abandon(mi_theap_t* theap);
 bool          _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
