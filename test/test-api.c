@@ -66,7 +66,7 @@ bool mem_is_zero(uint8_t* p, size_t size) {
 // ---------------------------------------------------------------------------
 int main(void) {
   mi_option_disable(mi_option_verbose);
-
+  
   CHECK_BODY("malloc-aligned9a") { // test large alignments
     void* p = mi_zalloc_aligned(1024 * 1024, 2);
     mi_free(p);

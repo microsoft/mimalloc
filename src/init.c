@@ -528,6 +528,11 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
     }
   }
 
+  if (subproc==&subproc_main) {
+    // for the main subproc, release the thread locals now (as they may free memory)
+    _mi_thread_locals_done();
+  }
+
   // remove associated arenas
   _mi_arenas_unsafe_destroy_all(subproc);
 
@@ -1197,10 +1202,7 @@ static void mi_process_done_once(void) {
   static bool process_done = false;
   if (process_done) return;
   process_done = true;
-
-  // free dynamic thread locals (if used at all)
-  _mi_thread_locals_done();
-
+  
   // release any thread specific resources and ensure _mi_thread_done is called on all but the main thread
   _mi_prim_thread_done_auto_done();
 
@@ -1220,10 +1222,14 @@ static void mi_process_done_once(void) {
   // since after process_done there might still be other code running that calls `free` (like at_exit routines,
   // or C-runtime termination code.
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
-    mi_subprocs_unsafe_destroy_all(); // destroys all subprocs, arenas, and the page_map!
+    mi_subprocs_unsafe_destroy_all(); // destroys all subprocs, arenas, thread locals, and the page_map!
   }
-  else if (subproc_main.heap_main != NULL) {
-    mi_heap_stats_merge_to_subproc(subproc_main.heap_main);
+  else {
+    // free dynamic thread locals (if used at all)
+    _mi_thread_locals_done();
+    if (subproc_main.heap_main != NULL) {
+      mi_heap_stats_merge_to_subproc(subproc_main.heap_main);
+    }
   }
 
   // careful now to no longer access any allocator functionality
