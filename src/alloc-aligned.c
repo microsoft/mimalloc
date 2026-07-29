@@ -97,6 +97,11 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
   void* aligned_p = (void*)((uintptr_t)p + adjust);
   if (aligned_p != p) {
     mi_page_set_has_aligned(page, true);
+    if (usable!=NULL) { 
+      mi_assert_internal(*usable > adjust);
+      if (*usable > adjust) { *usable = *usable - adjust; }
+      mi_assert_internal(*usable >= size);
+    }
     #if MI_GUARDED
     // set tag to aligned so mi_usable_size works with guard pages
     if (adjust >= sizeof(mi_block_t)) {
@@ -176,7 +181,7 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
   // note: we don't require `size > offset`, we just guarantee that the address at offset is aligned regardless of the allocated size.
   if mi_unlikely(alignment == 0 || !_mi_is_power_of_two(alignment)) { // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
     #if MI_DEBUG > 0
-    _mi_error_message(EOVERFLOW, "aligned allocation requires the alignment to be a power-of-two (size %zu, alignment %zu)\n", size, alignment);
+    _mi_error_message(EOVERFLOW, "aligned allocation requires the alignment to be a power-of-two (size %zu, alignment %zu, offset %zu)\n", size, alignment, offset);
     #endif
     return NULL;
   }
@@ -288,12 +293,17 @@ mi_decl_nodiscard mi_decl_restrict void* mi_calloc_aligned(size_t count, size_t 
 // ------------------------------------------------------
 
 static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t newsize, size_t alignment, size_t offset, bool zero) mi_attr_noexcept {
-  mi_assert(alignment > 0);
-  if (alignment <= sizeof(uintptr_t) && offset==0) return _mi_heap_realloc_zero(heap,p,newsize,zero,NULL,NULL);
+  mi_assert(alignment > 0 && _mi_is_power_of_two(alignment));
+  if mi_unlikely(alignment == 0 || !_mi_is_power_of_two(alignment)) { // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
+    #if MI_DEBUG > 0
+    _mi_error_message(EOVERFLOW, "aligned allocation requires the alignment to be a power-of-two (size %zu, alignment %zu, offset %zu)\n", newsize, alignment, offset);
+    #endif
+    return NULL;
+  }
+  if (alignment <= sizeof(uintptr_t) && offset==0) return _mi_heap_realloc_zero(heap,p,newsize,zero,NULL,NULL); 
   if (p == NULL) return mi_heap_malloc_zero_aligned_at(heap,newsize,alignment,offset,zero,NULL);
   size_t size = mi_usable_size(p);
-  if (newsize <= size && newsize >= (size - (size / 2))
-      && (((uintptr_t)p + offset) % alignment) == 0) {
+  if (newsize <= size && newsize >= (size - (size / 2)) && (((uintptr_t)p + offset) & (alignment-1)) == 0) {
     return p;  // reallocation still fits, is aligned and not more than 25% waste
   }
   else {
