@@ -129,6 +129,7 @@ size_t        _mi_strnlen(const char* s, size_t max_len);
 char*         _mi_strnstr(char* s, size_t max_len, const char* pat);
 bool          _mi_streq(const char* s, const char* t);
 int           _mi_getenv(const char* name, char* result, size_t result_size);
+void          _mi_detect_cpu_features(void);
 
 // "options.c"
 void          _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
@@ -153,6 +154,27 @@ uintptr_t     _mi_theap_random_next(mi_theap_t* theap);
 uintptr_t     _mi_os_random_weak(uintptr_t extra_seed);
 static inline uintptr_t _mi_random_shuffle(uintptr_t x);
 
+// prim-tls.c
+void          _mi_tls_slots_init(void);
+void          _mi_tls_slots_done(void);
+mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
+
+// subproc.c
+mi_subproc_t* _mi_subproc_main_init(void);
+void          _mi_subproc_main_done(void);
+mi_subproc_t* _mi_subproc_main(void);
+bool          _mi_subproc_is_main(mi_subproc_t* subproc);
+mi_subproc_t* _mi_subproc(void);          // current subproc of this thread
+mi_heap_t*    _mi_subproc_heap_main(mi_subproc_t* subproc);
+mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
+void          _mi_subprocs_unsafe_destroy_all(void);
+
+void*         _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_memid_t* memid );
+void*         _mi_meta_zalloc_aligned( mi_subproc_t* subproc, size_t size, size_t alignment, mi_memid_t* memid );
+void          _mi_meta_free(mi_subproc_t* subproc, void* p, mi_memid_t memid);
+bool          _mi_meta_is_meta_page(const mi_subproc_t* subproc, const mi_page_t* p);
+
+
 // init.c
 mi_page_t*    _mi_page_empty_get(void);
 void          _mi_auto_process_init(void);
@@ -160,21 +182,12 @@ void mi_cdecl _mi_auto_process_done(void) mi_attr_noexcept;
 bool          _mi_is_redirected(void);
 bool          _mi_allocator_init(const char** message);
 void          _mi_allocator_done(void);
-// bool          _mi_is_main_thread(void);
-bool          _mi_is_process_heap_main(const mi_heap_t* heap);
 bool          _mi_preloading(void);           // true while the C runtime is not initialized yet
 void          _mi_thread_done(mi_theap_t* theap);
 mi_theap_t*   _mi_thread_init(void);
+mi_theap_t*   _mi_thread_init_with_heap(mi_heap_t* heap);
 bool          _mi_is_empty_theap(const mi_theap_t* theap);
-
-mi_subproc_t* _mi_subproc(void);
-mi_subproc_t* _mi_subproc_main(void);
-mi_heap_t*    _mi_subproc_heap_main(mi_subproc_t* subproc);
-mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
-
-mi_threadid_t _mi_thread_id(void) mi_attr_noexcept;
 size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
-bool          _mi_is_theap_main(const mi_theap_t* theap);
 
 // os.c
 void          _mi_os_init(void);                                            // called from process init
@@ -246,12 +259,6 @@ void          _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx /
 void          _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theap);
 void          _mi_arenas_page_unabandon(mi_page_t* page, mi_theap_t* current_theapx /* can be NULL */);
 bool          _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page);
-
-// init.c
-void*         _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_memid_t* memid );
-void*         _mi_meta_zalloc_aligned( mi_subproc_t* subproc, size_t size, size_t alignment, mi_memid_t* memid );
-void          _mi_meta_free(mi_subproc_t* subproc, void* p, mi_memid_t memid);
-bool          _mi_meta_is_meta_page(const mi_subproc_t* subproc, const mi_page_t* p);
 
 // "page-map.c"
 bool          _mi_page_map_init(void);

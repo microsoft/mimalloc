@@ -6,9 +6,9 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 /* ----------------------------------------------------------------------------
-Implement dynamic thread local variables (for heap's).
-Unlike most OS native implementations there is no limit on the number
-that can be allocated.
+  Implement dynamic thread local variables (used by heap's for their theap's).
+  Unlike most OS native implementations there is no limit on the number
+  that can be allocated.
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc.h"

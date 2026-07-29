@@ -86,9 +86,11 @@ set(mi_sources
     src/page-map.c
     src/random.c
     src/stats.c
+    src/subproc.c
     src/theap.c
     src/threadlocal.c
-    src/prim/prim.c)
+    src/prim/prim.c
+    src/prim/prim-tls.c)
 
 set(mi_cflags "")
 set(mi_cflags_static "")            # extra flags for a static library build
