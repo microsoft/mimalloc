@@ -277,7 +277,10 @@ int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
       if (c >= '1' && c <= '9') {
         width = (c - '0'); MI_NEXTC();
         while (c >= '0' && c <= '9') {
-          width = (10 * width) + (c - '0'); MI_NEXTC();
+          if (width < SIZE_MAX/1024) {  // no overflow
+            width = (10 * width) + (c - '0');
+          }
+          MI_NEXTC();
         }
         if (c == 0) break;  // extra check due to while
       }

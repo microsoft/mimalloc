@@ -1743,7 +1743,13 @@ bool mi_manage_memory(void* start, size_t size, bool is_committed, bool is_pinne
 // Reserve a range of regular OS memory
 static int mi_reserve_os_memory_ex2(mi_subproc_t* subproc, size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) {
   if (arena_id != NULL) *arena_id = _mi_arena_id_none();
-  size = _mi_align_up(size, MI_ARENA_SLICE_SIZE); // at least one slice
+  if (size <= MI_MAX_ALLOC_SIZE) {
+    size = _mi_align_up(size, MI_ARENA_SLICE_SIZE); // at least one slice
+  }
+  if (size > MI_MAX_ALLOC_SIZE) {
+    _mi_error_message(EOVERFLOW, "memory reservation request is too large (size %zu)\n", size);
+    return ENOMEM;
+  }
   mi_memid_t memid;
   void* start = _mi_os_alloc_aligned(subproc, size, MI_ARENA_SLICE_ALIGN, commit, allow_large, &memid);
   if (start == NULL) return ENOMEM;

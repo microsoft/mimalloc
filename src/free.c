@@ -410,7 +410,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
 
 
 // ------------------------------------------------------
-// Usable size
+// Usable size 
 // ------------------------------------------------------
 
 // Bytes available in a block
