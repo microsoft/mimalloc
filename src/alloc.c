@@ -503,8 +503,11 @@ The standard requires calling into `get_new_handler` and
 throwing the bad_alloc exception on failure. If we compile
 with a C++ compiler we can implement this precisely. If we
 use a C compiler we cannot throw a `bad_alloc` exception
-but we call `exit` instead (i.e. not returning).
+but we call `abort` instead (i.e. not returning).
+Also, the standard requires calling the new handler until
+it returns false, but we limit the total calls.
 -------------------------------------------------------*/
+#define MI_TRY_NEW_MAX (4)
 
 #ifdef __cplusplus
 #include <new>
@@ -566,7 +569,8 @@ static bool mi_try_new_handler(bool nothrow) {
 
 mi_decl_export mi_decl_noinline void* mi_heap_try_new(mi_heap_t* heap, size_t size, bool nothrow ) {
   void* p = NULL;
-  while(p == NULL && mi_try_new_handler(nothrow)) {
+  for(int i = 0; i < MI_TRY_NEW_MAX && p == NULL && mi_try_new_handler(nothrow); i++) {
+    if (size > MI_MAX_ALLOC_SIZE) return NULL; // call try_new_handler at least once
     p = mi_heap_malloc(heap,size);
   }
   return p;
@@ -575,7 +579,6 @@ mi_decl_export mi_decl_noinline void* mi_heap_try_new(mi_heap_t* heap, size_t si
 static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow) {
   return mi_heap_try_new(mi_prim_get_default_heap(), size, nothrow);
 }
-
 
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size_t size) {
   void* p = mi_heap_malloc(heap,size);
@@ -586,7 +589,6 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size
 mi_decl_nodiscard mi_decl_restrict void* mi_new(size_t size) {
   return mi_heap_alloc_new(mi_prim_get_default_heap(), size);
 }
-
 
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) {
   size_t total;
@@ -603,36 +605,45 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new_n(size_t count, size_t size) {
   return mi_heap_alloc_new_n(mi_prim_get_default_heap(), count, size);
 }
 
-
 mi_decl_nodiscard mi_decl_restrict void* mi_new_nothrow(size_t size) mi_attr_noexcept {
   void* p = mi_malloc(size);
   if mi_unlikely(p == NULL) return mi_try_new(size, true);
   return p;
 }
 
-mi_decl_nodiscard mi_decl_restrict void* mi_new_aligned(size_t size, size_t alignment) {
-  void* p;
-  do {
-    p = mi_malloc_aligned(size, alignment);
+static mi_decl_noinline void* mi_try_new_aligned(size_t size, size_t alignment, bool nothrow) {
+  void* p = NULL;
+  for(int i = 0; i < MI_TRY_NEW_MAX && p==NULL && mi_try_new_handler(nothrow); i++) {
+    if (alignment==0 || !_mi_is_power_of_two(alignment)) return NULL;
+    p = mi_malloc_aligned(size,alignment);
   }
-  while(p == NULL && mi_try_new_handler(false));
+  return p;
+}
+
+mi_decl_nodiscard mi_decl_restrict void* mi_new_aligned(size_t size, size_t alignment) {
+  void* p = mi_malloc_aligned(size, alignment);
+  if mi_unlikely(p==NULL) return mi_try_new_aligned(size,alignment,false);
   return p;
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_new_aligned_nothrow(size_t size, size_t alignment) mi_attr_noexcept {
-  void* p;
-  do {
-    p = mi_malloc_aligned(size, alignment);
-  }
-  while(p == NULL && mi_try_new_handler(true));
+  void* p = mi_malloc_aligned(size, alignment);
+  if mi_unlikely(p==NULL) return mi_try_new_aligned(size,alignment,true);
   return p;
 }
 
+static mi_decl_noinline void* mi_try_new_realloc(void* p, size_t newsize) {
+  void* q = NULL;
+  for(int i = 0; i < MI_TRY_NEW_MAX && q==NULL && mi_try_new_handler(false); i++) {
+    if (newsize > MI_MAX_ALLOC_SIZE) return NULL;
+    q = mi_realloc(p,newsize);
+  }
+  return q;
+}
+
 mi_decl_nodiscard void* mi_new_realloc(void* p, size_t newsize) {
-  void* q;
-  do {
-    q = mi_realloc(p, newsize);
-  } while (q == NULL && mi_try_new_handler(false));
+  void* q = mi_realloc(p, newsize);
+  if (q == NULL) return mi_try_new_realloc(p,newsize);
   return q;
 }
 

@@ -312,6 +312,10 @@ static int unix_mmap_fd(void) {
   #endif
 }
 
+#if defined(MAP_ALIGNED_SUPER) || defined(MAP_HUGETLB) || defined(MAP_HUGE_1GB) || defined(MAP_HUGE_2MB) || defined(VM_FLAGS_SUPERPAGE_SIZE_2MB)
+#define MI_OS_HAS_HUGE_PAGES  1
+#endif
+
 static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protect_flags, bool large_only, bool allow_large, bool* is_large) {
   #if !defined(MAP_ANONYMOUS)
   #define MAP_ANONYMOUS  MAP_ANON
@@ -329,6 +333,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   protect_flags |= PROT_MAX(PROT_READ | PROT_WRITE); // BSD
   #endif
   // huge page allocation
+  #if MI_OS_HAS_HUGE_PAGES
   if (allow_large && (large_only || (_mi_os_canuse_large_page(size, try_alignment) && mi_option_is_enabled(mi_option_allow_large_os_pages)))) {
     static _Atomic(size_t) large_page_try_ok; // = 0;
     size_t try_ok = mi_atomic_load_acquire(&large_page_try_ok);
@@ -383,7 +388,8 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
         }
       }
     }
-  }
+  } // huge pages
+  #endif
   // regular allocation
   if (p == NULL) {
     *is_large = false;
@@ -896,7 +902,10 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   size_t count = 0;
   while(count < buf_len) {
     ssize_t ret = mi_prim_read(fd, (char*)buf + count, buf_len - count);
-    if (ret<=0) {
+    if (ret==0) {
+      break;
+    }
+    else if (ret<0) {
       if (errno!=EAGAIN && errno!=EINTR) break;
     }
     else {
