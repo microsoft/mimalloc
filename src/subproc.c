@@ -195,18 +195,17 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
     }
     mi_assert_internal(subproc->heap_main==NULL || subproc->heaps == subproc->heap_main);
     if (subproc->heap_main!=NULL) {
+      _mi_thread_locals_thread_done(); // release thread locals that may have been allocated (safe as the main heap uses the fast key)
+      if (_mi_subproc_is_main(subproc)) {
+        _mi_thread_locals_done();      
+      }
       _mi_heap_force_destroy(subproc->heap_main, false /* don't re-acquire the heaps_lock */);  // no warning if destroying the main heap
     }
   }
 
   subproc->theap_meta = NULL; // theap meta stats are merged during heap_destroy of the main heap
 
-  if (_mi_subproc_is_main(subproc)) {
-    // free dynamic thread locals after destroying the heaps 
-    _mi_thread_locals_thread_done();
-    _mi_thread_locals_done();
-  }
-  else {
+  if (!_mi_subproc_is_main(subproc)) {
     // merge stats back into the main subproc  
     _mi_stats_merge_into(&mi_process_subproc_main.stats, &subproc->stats);
   }
