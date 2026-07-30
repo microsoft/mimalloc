@@ -434,7 +434,7 @@ static void* mi_theap_reallocf(mi_theap_t* theap, void* p, size_t newsize) mi_at
   return newp;
 }
 
-static void* mi_theap_rezalloc(mi_theap_t* theap, void* p, size_t newsize) mi_attr_noexcept {
+mi_decl_nodiscard void* mi_theap_rezalloc(mi_theap_t* theap, void* p, size_t newsize) mi_attr_noexcept {
   return _mi_theap_realloc_zero(theap, p, newsize, true, NULL, NULL);
 }
 

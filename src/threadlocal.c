@@ -27,10 +27,11 @@ typedef struct mi_tls_slot_s {
 
 typedef struct mi_thread_locals_s {
   size_t        count;
+  mi_memid_t    memid;
   mi_tls_slot_t slots[1];
 } mi_thread_locals_t;
 
-static mi_thread_locals_t mi_thread_locals_empty = { 0, {{0,NULL}} };
+static mi_thread_locals_t mi_thread_locals_empty = mi_init_struct_zero;
 
 
 /* -----------------------------------------------------------
@@ -117,9 +118,10 @@ static mi_thread_locals_t* mi_thread_locals_expand(size_t least_idx) {
   }
   if (count > MI_TLS_IDX_MAX) { return NULL; }  // too large
   // allocate on the main heap; this is recursion safe as that uses the fast local key
-  mi_assert_internal(mi_heap_main()->theap == mi_thread_local_key_fast);
-  mi_thread_locals_t* tls = (mi_thread_locals_t*)mi_heap_rezalloc(mi_heap_main(), tls_old, sizeof(mi_thread_locals_t) + count*sizeof(mi_tls_slot_t));
+  mi_memid_t memid;
+  mi_thread_locals_t* tls = (mi_thread_locals_t*)_mi_meta_rezalloc(_mi_subproc(), tls_old, sizeof(mi_thread_locals_t) + count*sizeof(mi_tls_slot_t), &memid);
   if mi_unlikely(tls==NULL) return NULL;
+  tls->memid = memid;
   tls->count = count;
   mi_thread_locals_set(tls);
   return tls;
@@ -195,7 +197,7 @@ void* _mi_thread_local_get( mi_thread_local_t key ) {
 void _mi_thread_locals_thread_done(void) {
   mi_thread_locals_t* const tls = mi_thread_locals_peek();
   if (tls!=NULL && tls->count > 0) {
-    mi_free(tls);
+    _mi_meta_free(_mi_subproc(), tls, tls->memid);
     mi_thread_locals_set(NULL);
   }
   if (mi_slot_fast_peek() != NULL) {
