@@ -122,10 +122,6 @@ extern void* _mi_page_malloc_zeroed(mi_heap_t* heap, mi_page_t* page, size_t siz
   return _mi_page_malloc_zero(heap,page,size,true,NULL);
 }
 
-#if MI_GUARDED
-mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
-#endif
-
 static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, size_t size, bool zero, size_t* usable) mi_attr_noexcept {
   mi_assert(heap != NULL);
   mi_assert(size <= MI_SMALL_SIZE_MAX);
@@ -138,7 +134,7 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
   #endif
   #if MI_GUARDED
   if (mi_heap_malloc_use_guarded(heap,size)) {
-    return _mi_heap_malloc_guarded(heap, size, zero);
+    return _mi_heap_malloc_guarded(heap, size, zero, usable);
   }
   #endif
 
@@ -177,7 +173,7 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
   }
   #if MI_GUARDED
   else if (huge_alignment==0 && mi_heap_malloc_use_guarded(heap,size)) {
-    return _mi_heap_malloc_guarded(heap, size, zero);
+    return _mi_heap_malloc_guarded(heap, size, zero, usable);
   }
   #endif
   else {
@@ -698,7 +694,7 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
   return p;
 }
 
-mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept
+mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero, size_t* usable) mi_attr_noexcept
 {
   // allocate multiple of page size ending in a guard page
   // ensure minimal alignment requirement?
@@ -710,10 +706,10 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   const size_t obj_size = (mi_option_is_enabled(mi_option_guarded_precise) ? size : _mi_align_up(size, MI_MAX_ALIGN_SIZE));
   const size_t bsize    = _mi_align_up(_mi_align_up(obj_size, MI_MAX_ALIGN_SIZE) + sizeof(mi_block_t), MI_MAX_ALIGN_SIZE);
   const size_t req_size = _mi_align_up(bsize + os_page_size, os_page_size);
-  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(heap, req_size, false /* don't zero */, 0 /* huge_alignment */, NULL);
+  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(heap, req_size, false /* don't zero */, 0 /* huge_alignment */, usable);
   if (block==NULL) return NULL;
   void* const p   = mi_block_ptr_set_guarded(block, obj_size);
-  if (p == NULL) return NULL;  
+  if (p == NULL) return NULL;    
   if (zero) {
     _mi_memzero(p,obj_size);  // we have to zero afterwards as padding might have written inside the block (if the `blocksize > reqsize + os_page_size`)
   }

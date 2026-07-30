@@ -25,7 +25,7 @@ static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
 }
 
 #if MI_GUARDED
-static mi_decl_noinline mi_decl_restrict void* mi_heap_malloc_guarded_aligned(mi_heap_t* heap, size_t size, size_t alignment, bool zero) mi_attr_noexcept {
+static mi_decl_noinline mi_decl_restrict void* mi_heap_malloc_guarded_aligned(mi_heap_t* heap, size_t size, size_t alignment, bool zero, size_t* usable) mi_attr_noexcept {
   // use over allocation for guarded blocksl
   mi_assert_internal(alignment > 0 && alignment < MI_BLOCK_ALIGNMENT_MAX);
   if mi_unlikely(alignment >= MI_BLOCK_ALIGNMENT_MAX || size > (MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE - alignment)) {
@@ -33,7 +33,7 @@ static mi_decl_noinline mi_decl_restrict void* mi_heap_malloc_guarded_aligned(mi
     return NULL;
   }
   const size_t oversize = size + alignment - 1;
-  void* const base = _mi_heap_malloc_guarded(heap, oversize, zero);
+  void* const base = _mi_heap_malloc_guarded(heap, oversize, zero, usable);
   if (base==NULL) return NULL;
   void* const p = _mi_align_up_ptr(base, alignment);
   mi_track_align(base, p, (uint8_t*)p - (uint8_t*)base, size);
@@ -188,7 +188,7 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
 
   #if MI_GUARDED
   if (offset==0 && alignment < MI_BLOCK_ALIGNMENT_MAX && mi_heap_malloc_use_guarded(heap,size)) {
-    return mi_heap_malloc_guarded_aligned(heap, size, alignment, zero);
+    return mi_heap_malloc_guarded_aligned(heap, size, alignment, zero, usable);
   }
   #endif
 
