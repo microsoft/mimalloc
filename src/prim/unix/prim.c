@@ -906,7 +906,10 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   size_t count = 0;
   while(count < buf_len) {
     ssize_t ret = mi_prim_read(fd, (char*)buf + count, buf_len - count);
-    if (ret<=0) {
+    if (ret==0) {
+      break;
+    }
+    else if (ret<0) {
       if (errno!=EAGAIN && errno!=EINTR) break;
     }
     else {
