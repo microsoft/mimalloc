@@ -1009,6 +1009,11 @@ static inline bool _mi_is_heap_main(const mi_heap_t* heap) {
   return (mi_heap_get_heap_main(heap) == heap);
 }
 
+static inline bool _mi_is_process_heap_main(const mi_heap_t* heap) {
+  mi_assert_internal(heap!=NULL);
+  return (_mi_subproc_main()->heap_main == heap);
+}
+
 //-----------------------------------------------------------
 // Thread free list and ownership
 //-----------------------------------------------------------

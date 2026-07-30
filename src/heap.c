@@ -188,21 +188,29 @@ static void mi_heap_free_theaps(mi_heap_t* heap) {
 
 // free the heap resources (assuming the pages are already moved/destroyed, and all theaps have been freed)
 static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
-  mi_assert_internal(heap!=NULL && !_mi_is_heap_main(heap));
+  mi_assert_internal(heap!=NULL); // && !_mi_is_process_heap_main(heap));
 
   // free all arena pages infos
-  mi_lock(&heap->arena_pages_lock) {
-    for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
-      mi_arena_pages_t* arena_pages = mi_atomic_load_ptr_relaxed(mi_arena_pages_t, &heap->arena_pages[i]);
-      if (arena_pages!=NULL) {
-        mi_atomic_store_ptr_relaxed(mi_arena_pages_t, &heap->arena_pages[i], NULL);
-        _mi_free_subproc_safe(arena_pages);
+  const bool is_main = _mi_is_heap_main(heap);
+  if (!is_main) {  // pages for the main heap are pre-allocated in the arenas
+    mi_lock(&heap->arena_pages_lock) {
+      for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
+        mi_arena_pages_t* arena_pages = mi_atomic_load_ptr_relaxed(mi_arena_pages_t, &heap->arena_pages[i]);
+        if (arena_pages!=NULL) {
+          mi_atomic_store_ptr_relaxed(mi_arena_pages_t, &heap->arena_pages[i], NULL);
+          _mi_free_subproc_safe(arena_pages);
+        }
       }
     }
   }
 
   // remove the heap from the subproc
-  mi_heap_stats_merge_to_main(heap);
+  if (!is_main) { 
+    mi_heap_stats_merge_to_main(heap); 
+  }
+  else {
+    _mi_stats_merge_into(&heap->subproc->stats,&heap->stats);
+  }
   mi_atomic_decrement_relaxed(&heap->subproc->heap_count);
   mi_subproc_stat_decrease(heap->subproc, heaps, 1);
   mi_lock_maybe(&heap->subproc->heaps_lock, acquire_heaps_lock) {
@@ -211,11 +219,13 @@ static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
                      else { heap->subproc->heaps = heap->next; }
   }
 
-  _mi_thread_local_free(heap->theap);
   mi_lock_done(&heap->theaps_lock);
   mi_lock_done(&heap->os_abandoned_pages_lock);
   mi_lock_done(&heap->arena_pages_lock);
-  _mi_free_subproc_safe(heap);
+  if (!_mi_is_process_heap_main(heap)) { 
+    _mi_thread_local_free(heap->theap);
+    _mi_free_subproc_safe(heap); 
+  }
 }
 
 void mi_heap_delete(mi_heap_t* heap) {
@@ -234,11 +244,12 @@ void _mi_heap_force_destroy(mi_heap_t* heap, bool acquire_heaps_lock) {
   if (heap==NULL) return;
   mi_heap_free_theaps(heap);
   _mi_heap_destroy_pages(heap);
-  if (_mi_is_heap_main(heap)) {
-    _mi_stats_merge_into(&heap->subproc->stats,&heap->stats);
-  }
-  else { 
-    mi_heap_free(heap, acquire_heaps_lock);   // todo: release locks of the main heap?
+  // if (_mi_subproc_main()->heap_main == heap) {
+  //   _mi_stats_merge_into(&heap->subproc->stats,&heap->stats);
+  // }
+  // else 
+  {
+    mi_heap_free(heap, acquire_heaps_lock);   // todo: release locks of the main heap?  
   }
 }
 
