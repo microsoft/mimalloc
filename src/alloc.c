@@ -652,7 +652,7 @@ mi_decl_nodiscard void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
 // We then set the first word of the block to `0` for regular offset aligned allocations (in `alloc-aligned.c`)
 // and the first word to `~0` for guarded allocations to have a correct `mi_usable_size`
 
-static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
+static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size, size_t* usable_size) {
   // TODO: we can still make padding work by moving it out of the guard page area
   mi_page_t* const page = _mi_ptr_page(block);
   mi_page_set_has_aligned(page, true);
@@ -688,7 +688,8 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
     offset = MI_BLOCK_ALIGNMENT_MAX;
   }
   uint8_t* const p = (uint8_t*)block + offset;
-  mi_assert_internal(p == guard_page - obj_size);
+  mi_assert_internal(p == guard_page - obj_size || offset == MI_BLOCK_ALIGNMENT_MAX);
+  if (usable_size != NULL) { *usable_size = (guard_page - p); mi_assert_internal(mi_usable_size(p)==*usable_size); }
   mi_track_align(block, p, offset, obj_size);
   mi_track_mem_defined(block, sizeof(mi_block_t));
   return p;
@@ -708,14 +709,15 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   const size_t req_size = _mi_align_up(bsize + os_page_size, os_page_size);
   mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(heap, req_size, false /* don't zero */, 0 /* huge_alignment */, usable);
   if (block==NULL) return NULL;
-  void* const p   = mi_block_ptr_set_guarded(block, obj_size);
+  size_t usable_size;
+  void* const p   = mi_block_ptr_set_guarded(block, obj_size, &usable_size);
   if (p == NULL) return NULL;    
   if (zero) {
     _mi_memzero(p,obj_size);  // we have to zero afterwards as padding might have written inside the block (if the `blocksize > reqsize + os_page_size`)
   }
 
   // stats
-  mi_track_malloc(p, obj_size, zero);   
+  mi_track_malloc(p, usable_size, zero);   
   if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
   _mi_stat_counter_increase(&heap->tld->stats.malloc_guarded_count, 1);
   #if MI_STAT>1
