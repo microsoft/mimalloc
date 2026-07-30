@@ -1323,9 +1323,10 @@ static bool mi_bitmap_try_find_and_claim_visit(mi_bitmap_t* bitmap, size_t chunk
       return true;
     }
     else {
-      // failed to claim it, set abandoned mapping again (unless the page was freed)
+      // failed to claim it, set abandoned mapping again (unless the page was freed and keep_set will be false)
       if (keep_set) {
         const bool wasclear = mi_bchunk_set(&bitmap->chunks[chunk_idx], cidx, NULL);
+        mi_bitmap_chunkmap_set(bitmap, chunk_idx);
         mi_assert_internal(wasclear); MI_UNUSED(wasclear);
       }
     }
