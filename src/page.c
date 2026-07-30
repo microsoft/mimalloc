@@ -520,7 +520,7 @@ static void mi_theap_collect_full_pages(mi_theap_t* theap) {
 #define MI_MIN_SLICES       (2)
 
 static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* const page, const size_t bsize, const size_t extend) {
-  #if (MI_SECURE<3)
+  #if (MI_SECURE < 2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
   #endif
@@ -577,7 +577,7 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
 
 static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t bsize, const size_t extend)
 {
-  #if (MI_SECURE<3)
+  #if (MI_SECURE < 2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
   #endif
@@ -618,7 +618,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 // extra test in malloc? or cache effects?)
 static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_expensive(mi_page_is_valid_init(page));
-  #if (MI_SECURE<3)
+  #if (MI_SECURE < 2)
   mi_assert(page->free == NULL);
   mi_assert(page->local_free == NULL);
   if (page->free != NULL) return true;

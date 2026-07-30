@@ -120,10 +120,6 @@ extern void* _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t siz
   return mi_page_malloc_zero(theap, page, size, zero, NULL);
 }
 
-#if MI_GUARDED
-mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero) mi_attr_noexcept;
-#endif
-
 // main allocation primitives for small and generic allocation
 
 // internal small size allocation
@@ -140,7 +136,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero_non
   #endif
   #if MI_GUARDED
   if mi_unlikely(mi_theap_malloc_use_guarded(theap,size)) {
-    return _mi_theap_malloc_guarded(theap, size, zero);
+    return _mi_theap_malloc_guarded(theap, size, zero, usable);
   }
   #endif
 
@@ -165,7 +161,7 @@ static mi_decl_forceinline void* mi_theap_malloc_generic(mi_theap_t* theap, size
   if (theap!=NULL)
   #endif
   if (huge_alignment==0 && mi_theap_malloc_use_guarded(theap, size)) {
-    return _mi_theap_malloc_guarded(theap, size, zero);
+    return _mi_theap_malloc_guarded(theap, size, zero, usable);
   }
   #endif
   #if !MI_THEAP_INITASNULL
@@ -836,7 +832,7 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size, size_t
   return p;
 }
 
-mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero) mi_attr_noexcept
+mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero, size_t* usable) mi_attr_noexcept
 {
   // allocate multiple of page size ending in a guard page
   // ensure minimal alignment requirement?
@@ -848,7 +844,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   const size_t obj_size = (mi_option_is_enabled(mi_option_guarded_precise) ? size : _mi_align_up(size, MI_MAX_ALIGN_SIZE));
   const size_t bsize    = _mi_align_up(_mi_align_up(obj_size, MI_MAX_ALIGN_SIZE) + sizeof(mi_block_t), MI_MAX_ALIGN_SIZE);
   const size_t req_size = _mi_align_up(bsize + os_page_size, os_page_size);  
-  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(theap, req_size, 0 /* don't zero */, NULL);
+  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(theap, req_size, 0 /* don't zero */, usable);
   if (block==NULL) return NULL;
   size_t usable_size = 0;
   void* const p = mi_block_ptr_set_guarded(block, obj_size, &usable_size);

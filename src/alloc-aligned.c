@@ -28,7 +28,7 @@ static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
 }
 
 #if MI_GUARDED
-static mi_decl_restrict void* mi_theap_malloc_guarded_aligned(mi_theap_t* theap, size_t size, size_t alignment, bool zero) mi_attr_noexcept {
+static mi_decl_noinline mi_decl_restrict void* mi_theap_malloc_guarded_aligned(mi_theap_t* theap, size_t size, size_t alignment, bool zero, size_t* usable) mi_attr_noexcept {
   // use over allocation for guarded blocksl
   #if MI_THEAP_INITASNULL
   if mi_unlikely(theap==NULL) { theap = _mi_theap_empty_get(); }
@@ -39,7 +39,7 @@ static mi_decl_restrict void* mi_theap_malloc_guarded_aligned(mi_theap_t* theap,
     return NULL;
   }
   const size_t oversize = size + alignment - 1;
-  void* const base = _mi_theap_malloc_guarded(theap, oversize, zero);
+  void* const base = _mi_theap_malloc_guarded(theap, oversize, zero, usable);
   if (base==NULL) return NULL;
   void* const p = _mi_align_up_ptr(base, alignment);
   mi_track_align(base, p, (uint8_t*)p - (uint8_t*)base, size);
@@ -202,7 +202,7 @@ static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, con
   if mi_likely(theap!=NULL)
   #endif
   if (offset==0 && alignment < MI_PAGE_MAX_OVERALLOC_ALIGN && mi_theap_malloc_use_guarded(theap,size)) {
-    return mi_theap_malloc_guarded_aligned(theap, size, alignment, zero);
+    return mi_theap_malloc_guarded_aligned(theap, size, alignment, zero, usable);
   }
   #endif
 

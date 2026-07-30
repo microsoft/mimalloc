@@ -1089,10 +1089,8 @@ static inline bool mi_theap_malloc_use_guarded(mi_theap_t* theap, size_t size) {
   }
 }
 
-mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero) mi_attr_noexcept;
-
+mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero, size_t* usable) mi_attr_noexcept;
 #endif
-
 
 /* -------------------------------------------------------------------
 Encoding/Decoding the free list next pointers
