@@ -176,7 +176,10 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
 static inline void mi_free_ex(void* p, size_t* usable) mi_attr_noexcept
 {
   mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
-  if mi_unlikely(segment==NULL) return;
+  if mi_unlikely(segment==NULL) {
+    if (usable!=NULL) { *usable = 0; }
+    return;
+  }
 
   const bool is_local = (_mi_prim_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
   mi_page_t* const page = _mi_segment_page_of(segment, p);

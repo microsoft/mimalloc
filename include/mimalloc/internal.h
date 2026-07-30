@@ -745,7 +745,7 @@ static inline bool mi_heap_malloc_use_guarded(mi_heap_t* heap, size_t size) {
   }
 }
 
-mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
+mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero, size_t* usable) mi_attr_noexcept;
 
 #endif
 
