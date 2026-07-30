@@ -93,15 +93,18 @@ int main(void) {
     // use (size_t)&mi_calloc to get some number without triggering compiler warnings
     result = (mi_calloc((size_t)&mi_calloc,SIZE_MAX/1000) == NULL);
   };
-  CHECK_BODY("calloc0") {
-    void* p = mi_calloc(0,1000);
-    result = (mi_usable_size(p) <= 16);
-    mi_free(p);
-  };
   CHECK_BODY("malloc-large") {   // see PR #544.
     void* p = mi_malloc(67108872);
     mi_free(p);
   };
+  
+  CHECK_BODY("calloc0") {
+    void* p = mi_calloc(0,1000);
+    const size_t usable = mi_usable_size(p);    
+    result = (usable <= 16);
+    mi_free(p);
+  };
+  
   CHECK_BODY("mi_urealloc_invalid") {
     void* p = mi_malloc(64);
     size_t pre, post;
@@ -109,7 +112,7 @@ int main(void) {
     mi_free(p);
     result = (q==NULL || q==(uint8_t*)p+3);
   }
-
+  
   // ---------------------------------------------------
   // Extended
   // ---------------------------------------------------
