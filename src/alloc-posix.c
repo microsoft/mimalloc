@@ -122,7 +122,7 @@ mi_decl_nodiscard int mi_reallocarr( void* ptrp, size_t count, size_t size ) mi_
   }
   void** op = (void**)ptrp;
   if (total == 0) {
-    free(*op);
+    mi_free(*op);
     *op = NULL;
     return 0;
   }
