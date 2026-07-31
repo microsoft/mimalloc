@@ -409,10 +409,16 @@ void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
 
 #if (MI_ENCODE_FREELIST && (MI_SECURE>=4 || MI_DEBUG!=0))
 // linear check if the free list contains a specific element
-static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, const mi_block_t* elem) {
-  while (list != NULL) {
+static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, const mi_block_t* elem, const char* list_kind) {
+  const size_t max_count = page->capacity;      // can never hold more blocks than the capacity
+  size_t count = 0;
+  while (list != NULL && count <= max_count) {  // double-free can create cycles so we limit the number of iterations
     if (elem==list) return true;
     list = mi_block_next(page, list);
+    count++;    
+  }
+  if mi_unlikely(count > max_count) {
+    _mi_error_message(EFAULT, "corrupted %s list (possibly due to cross-thread double free)\n", list_kind);
   }
   return false;
 }
@@ -420,9 +426,9 @@ static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, cons
 static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, const mi_block_t* block) {
   // The decoded value is in the same page (or NULL).
   // Walk the free lists to verify positively if it is already freed
-  if (mi_list_contains(page, page->free, block) ||
-      mi_list_contains(page, page->local_free, block) ||
-      mi_list_contains(page, mi_page_thread_free(page), block))
+  if (mi_list_contains(page, page->free, block, "free") ||
+      mi_list_contains(page, page->local_free, block, "local free") ||
+      mi_list_contains(page, mi_page_thread_free(page), block, "thread free"))
   {
     _mi_error_message(EAGAIN, "double free detected of block %p with size %zu\n", block, mi_page_block_size(page));
     return true;

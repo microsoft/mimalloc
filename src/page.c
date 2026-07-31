@@ -204,7 +204,7 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
   }
   // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
   if mi_unlikely(count > max_count) {
-    _mi_error_message(EFAULT, "corrupted thread-free list\n");
+    _mi_error_message(EFAULT, "corrupted thread-free list (possibly due to cross-thread double free)\n");
     return; // the thread-free items cannot be freed
   }
   // if `count > page->used` there was another kind memory corruption (either in the page meta-data or in the linked list)
