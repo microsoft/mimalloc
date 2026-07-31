@@ -17,7 +17,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
   // objects up to `MI_MAX_ALIGN_GUARANTEE` are allocated aligned to their size (see `segment.c:_mi_segment_page_start`).
-  mi_assert_internal(_mi_is_power_of_two(alignment) && (alignment > 0));
+  mi_assert_internal(mi_alignment_is_valid(alignment));
   if (alignment > size) return false;
   if (alignment <= MI_MAX_ALIGN_SIZE) return true;
   const size_t bsize = mi_good_size(size);
@@ -60,7 +60,7 @@ static void* mi_heap_malloc_zero_no_guarded(mi_heap_t* heap, size_t size, bool z
 static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t* const heap, const size_t size, const size_t alignment, const size_t offset, const bool zero, size_t* usable) mi_attr_noexcept
 {
   mi_assert_internal(size <= (MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE));
-  mi_assert_internal(alignment != 0 && _mi_is_power_of_two(alignment));
+  mi_assert_internal(mi_alignment_is_valid(alignment));
 
   void* p;
   size_t oversize;
@@ -128,7 +128,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
     // for the tracker, on huge aligned allocations only from the start of the large block is defined
     mi_track_mem_undefined(aligned_p, size);
     if (zero) {
-      _mi_memzero_aligned(aligned_p, mi_usable_size(aligned_p));
+      _mi_memzero(aligned_p, mi_usable_size(aligned_p));  // cannot be aligned due to abitrary offset... (todo: require offset to be a multiple of sizeof(void*)?)
     }
   }
 
@@ -144,7 +144,7 @@ static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_overalloc(mi_heap_t
 // Generic primitive aligned allocation -- split out for better codegen
 static mi_decl_noinline void* mi_heap_malloc_zero_aligned_at_generic(mi_heap_t* const heap, const size_t size, const size_t alignment, const size_t offset, const bool zero, size_t* usable) mi_attr_noexcept
 {
-  mi_assert_internal(alignment != 0 && _mi_is_power_of_two(alignment));
+  mi_assert_internal(mi_alignment_is_valid(alignment));
   // we don't allocate more than MI_MAX_ALLOC_SIZE (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
   if mi_unlikely(size > (MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE)) {
     _mi_error_message(EOVERFLOW, "aligned allocation request is too large (size %zu, alignment %zu)\n", size, alignment);
@@ -179,7 +179,7 @@ static void* mi_heap_malloc_zero_aligned_at(mi_heap_t* const heap, const size_t 
                                             size_t* usable) mi_attr_noexcept
 {
   // note: we don't require `size > offset`, we just guarantee that the address at offset is aligned regardless of the allocated size.
-  if mi_unlikely(alignment == 0 || !_mi_is_power_of_two(alignment)) { // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
+  if mi_unlikely(!mi_alignment_is_valid(alignment)) { // require power-of-two and multiple of void* (see <https://en.cppreference.com/w/c/memory/aligned_alloc#Notes>)
     #if MI_DEBUG > 0
     _mi_error_message(EOVERFLOW, "aligned allocation requires the alignment to be a power-of-two (size %zu, alignment %zu, offset %zu)\n", size, alignment, offset);
     #endif
@@ -288,8 +288,8 @@ mi_decl_nodiscard mi_decl_restrict void* mi_calloc_aligned(size_t count, size_t 
 // ------------------------------------------------------
 
 static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t newsize, size_t alignment, size_t offset, bool zero) mi_attr_noexcept {
-  mi_assert(alignment > 0 && _mi_is_power_of_two(alignment));
-  if mi_unlikely(alignment == 0 || !_mi_is_power_of_two(alignment)) { // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
+  mi_assert(mi_alignment_is_valid(alignment));
+  if mi_unlikely(!mi_alignment_is_valid(alignment)) { // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
     #if MI_DEBUG > 0
     _mi_error_message(EOVERFLOW, "aligned allocation requires the alignment to be a power-of-two (size %zu, alignment %zu, offset %zu)\n", newsize, alignment, offset);
     #endif
@@ -310,7 +310,7 @@ static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t ne
         size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
         _mi_memzero((uint8_t*)newp + start, newsize - start);
       }
-      _mi_memcpy_aligned(newp, p, (newsize > size ? size : newsize));
+      _mi_memcpy(newp, p, (newsize > size ? size : newsize)); // cannot be aligned due to abitrary offset... (todo: require offset to be a multiple of sizeof(void*)?)
       mi_free(p); // only free if successful
     }
     return newp;

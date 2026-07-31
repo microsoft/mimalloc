@@ -377,6 +377,11 @@ static inline bool _mi_is_power_of_two(uintptr_t x) {
   return ((x & (x - 1)) == 0);
 }
 
+// valid alignment values are as posix memalign: <https://en.cppreference.com/c/memory/aligned_alloc#Notes>
+static inline bool mi_alignment_is_valid(size_t alignment) {
+  return ((alignment!=0) && _mi_is_power_of_two(alignment)); 
+}
+
 // Is a pointer aligned?
 static inline bool _mi_is_aligned(void* p, size_t alignment) {
   return (alignment==0 || ((uintptr_t)p % alignment) == 0);
