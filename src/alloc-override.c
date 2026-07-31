@@ -325,10 +325,21 @@ typedef void* mi_nothrow_t;
 extern "C" {
 #endif
 
+// defined here instead alloc-posix so we can alias it
+mi_decl_nodiscard size_t mi_malloc_size(const void* p) mi_attr_noexcept {
+  // if (!mi_is_in_heap_region(p)) return 0;
+  return mi_usable_size(p);
+}
+
+mi_decl_nodiscard size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept {
+  // if (!mi_is_in_heap_region(p)) return 0;
+  return mi_usable_size(p);
+}
+
 #ifndef MI_OSX_IS_INTERPOSED
   // Forward Posix/Unix calls as well
   void*  reallocf(void* p, size_t newsize) MI_FORWARD2(mi_reallocf,p,newsize)
-  size_t malloc_size(const void* p)        MI_FORWARD1(mi_malloc_usable_size,p)
+  size_t malloc_size(const void* p)        MI_FORWARD1(mi_malloc_size,p)
   #if !defined(__ANDROID__) && !defined(__FreeBSD__) && !defined(__DragonFly__)
   size_t malloc_usable_size(void *p)       MI_FORWARD1(mi_malloc_usable_size,p)
   #else
