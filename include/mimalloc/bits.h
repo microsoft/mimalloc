@@ -193,7 +193,7 @@ static inline size_t mi_popcount(size_t x) {
   #if mi_has_builtinz(popcount)
     return mi_builtinz(popcount)(x);
   #elif defined(_MSC_VER) && (MI_ARCH_ARM64 || MI_ARCH_ARM32)
-    return mi_msc_builtinz(__popcnt)(x);
+    return mi_msc_builtinz(_CountOneBits)(x);
   #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86)
     if (_mi_cpu_has_popcnt) { return mi_msc_builtinz(__popcnt)(x); }
                        else { return _mi_popcount_generic(x); }      // see issue #1291
