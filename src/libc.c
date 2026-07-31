@@ -387,7 +387,7 @@ static size_t mi_ctz_generic32(uint32_t x) {
     31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9
   };
   if (x==0) return 32;
-  return debruijn[(uint32_t)((x & -(int32_t)x) * (uint32_t)(0x077CB531U)) >> 27];
+  return debruijn[(uint32_t)((x & (~x + 1U)) * (uint32_t)(0x077CB531U)) >> 27];
 }
 
 static size_t mi_clz_generic32(uint32_t x) {
