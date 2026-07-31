@@ -68,13 +68,13 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was
   mi_track_free_size(block, mi_page_usable_size_of(page, block, was_guarded));
 
   // _mi_padding_shrink(page, block, sizeof(mi_block_t));
-#if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
+  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
   if (!was_guarded) {
     size_t dbgsize = mi_usable_size(block);
     if (dbgsize > MI_MiB) { dbgsize = MI_MiB; }
     _mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);
   }
-#endif
+  #endif
 
   // push atomically on the page thread free list
   mi_thread_free_t tf_new;
@@ -505,8 +505,6 @@ static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, con
   return false;
 }
 
-#define mi_track_page(page,access)  { size_t psize; void* pstart = _mi_page_start(_mi_page_segment(page),page,&psize); mi_track_mem_##access( pstart, psize); }
-
 // Used for double free checking to avoid checking free lists too frequently
 static inline bool mi_block_could_be_double_free(const mi_page_t* page, const mi_block_t* block) {
   mi_block_t* n = mi_block_nextx(page,block,page->keys);
@@ -514,6 +512,7 @@ static inline bool mi_block_could_be_double_free(const mi_page_t* page, const mi
           (n==NULL || mi_is_in_same_page(block,n))); // quick check: in the same page or NULL?  
 }
 
+// check if `block` was free'd before
 static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block) {
   if mi_unlikely(mi_block_could_be_double_free(page,block))  // quick check: next field is aligned in the same page or NULL?
   {
