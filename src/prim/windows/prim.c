@@ -103,15 +103,17 @@ static bool win_enable_large_os_pages_once(size_t* large_page_size)
   unsigned long err = 0;
   HANDLE token = NULL;
   BOOL ok = OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token);
+  err = GetLastError();
   if (ok) {
     TOKEN_PRIVILEGES tp;
     ok = LookupPrivilegeValue(NULL, TEXT("SeLockMemoryPrivilege"), &tp.Privileges[0].Luid);
+    err = GetLastError();
     if (ok) {
       tp.PrivilegeCount = 1;
       tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
       ok = AdjustTokenPrivileges(token, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
+      err = GetLastError();
       if (ok) {
-        err = GetLastError();
         ok = (err == ERROR_SUCCESS);
         if (ok && large_page_size != NULL && pGetLargePageMinimum != NULL) {
           *large_page_size = (*pGetLargePageMinimum)();
@@ -121,7 +123,7 @@ static bool win_enable_large_os_pages_once(size_t* large_page_size)
     CloseHandle(token);
   }
   if (!ok) {
-    if (err == 0) err = GetLastError();
+    if (err == 0) { err = GetLastError(); }
     _mi_warning_message("cannot enable large OS page support, error %lu\n", err);
   }
   return (ok!=0);
