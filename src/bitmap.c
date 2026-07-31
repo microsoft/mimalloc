@@ -1950,7 +1950,12 @@ bool mi_bbitmap_try_find_and_clearN_(mi_bbitmap_t* bbitmap, size_t tseq, size_t 
         }
         mi_assert_internal(*pidx + n <= mi_bbitmap_max_bits(bbitmap));
         return true;
-      }      
+      }
+      else {
+        // contended: we reset count to retry from the first 
+        // (we still skip the first chunk to guarantee progress)
+        count = 0;
+      }
     }
 
     // keep searching but skip the scanned range
