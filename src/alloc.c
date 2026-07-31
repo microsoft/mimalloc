@@ -663,7 +663,7 @@ mi_decl_nodiscard void* mi_new_realloc(void* p, size_t newsize) {
 mi_decl_nodiscard void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
   size_t total;
   if mi_unlikely(mi_count_size_overflow(newcount, size, &total)) {
-    mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
+    mi_try_new_handler(false);
     return NULL;
   }
   else {

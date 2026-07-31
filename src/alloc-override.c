@@ -128,7 +128,7 @@ typedef void* mi_nothrow_t;
 #elif defined(_MSC_VER)
   _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Size) _ACRTIMP _CRTALLOCATOR _CRT_HYBRIDPATCHABLE
   void* __cdecl _expand(_Pre_notnull_ void* _Block, _In_ _CRT_GUARDOVERFLOW size_t _Size) {
-    return mi_expand(_Block, _Size);
+    return mi__expand(_Block, _Size);
   }
   _Check_return_ _ACRTIMP 
   size_t __cdecl _msize_base(_Pre_notnull_ void* _Block) _CRT_NOEXCEPT {

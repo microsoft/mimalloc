@@ -66,10 +66,21 @@ int main(void) {
   mi_option_disable(mi_option_verbose);
 
   #ifdef __cplusplus
-  CHECK_BODY("new-handler") {
+  CHECK_BODY("c++ new-handler") {
     std::set_new_handler([]{ throw std::bad_alloc(); });
     void* p = ::operator new(size_t(1)<<62, std::nothrow);
     result = (p==NULL);
+  }
+  CHECK_BODY("c++ new handler2") {
+    std::set_new_handler([]{});
+    try {
+      void* p = mi_new_n(SIZE_MAX/2, 4);
+      (void)(p);
+      result = false;
+    }
+    catch(std::bad_alloc) {
+      result = true;
+    }
   }
   #endif
 
