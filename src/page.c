@@ -321,7 +321,9 @@ static mi_page_t* mi_page_fresh_alloc(mi_theap_t* theap, mi_page_queue_t* pq, si
     if (!mi_page_immediate_available(page)) {
       if (mi_page_is_expandable(page)) {
         if (!mi_page_extend_free(theap, page)) {
-          return NULL; // cannot commit
+          // cannot commit
+          _mi_page_abandon(page,pq);
+          return NULL;
         };
       }
       else {
