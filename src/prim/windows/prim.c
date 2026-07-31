@@ -128,10 +128,12 @@ static bool win_enable_large_os_pages_once(size_t* large_page_size)
 }
 
 static bool win_enable_large_os_pages(size_t* large_page_size) {
+  static size_t win_large_page_size = 0;
   mi_atomic_do_once {
-    win_enable_large_os_pages_once(large_page_size);
+    win_enable_large_os_pages_once(&win_large_page_size);
   }
-  return (_mi_os_large_page_size() > 0);
+  if (large_page_size != NULL) { *large_page_size = win_large_page_size;  }
+  return (win_large_page_size > 0);
 }
 
 
