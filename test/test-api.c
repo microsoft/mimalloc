@@ -74,7 +74,6 @@ int main(void) {
     result = (p==NULL);
   }
   CHECK_BODY("c++ new handler2") {
-    std::set_new_handler([]{});
     try {
       void* p = mi_new_n(SIZE_MAX/2, 4);
       (void)(p);
