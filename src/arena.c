@@ -24,8 +24,8 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 #include "mimalloc/prim-tls.h"
 #include "bitmap.h"
 
-#if (MI_ARENA_MAX_SIZE >= MI_SIZE_SIZE*UINT32_MAX)
-#error "The page_t.page_woffset field is not large enough to cover a full arena (redefine it to be an offset in MI_MAX_ALIGN_SIZE sizes?)"
+#if (MI_ARENA_MAX_SIZE > MI_MAX_ALIGN_SIZE*UINT32_MAX)
+#error "The page_t.page_ma_offset field is not large enough to cover a full arena"
 #endif
 
 /* -----------------------------------------------------------
@@ -812,31 +812,33 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
 
 static size_t mi_page_block_start(size_t block_size, bool os_align)
 {
+  size_t offset;  
   #if MI_GUARDED
   // in a guarded build, we align pages with blocks a multiple of an OS page size, to the OS page size
   // this ensures that all blocks in such pages are OS page size aligned (which is needed for the guard pages)
   const size_t os_page_size = _mi_os_page_size();
   mi_assert_internal(MI_PAGE_ALIGN >= os_page_size);
   if (!os_align && block_size % os_page_size == 0 && block_size > os_page_size /* at least 2 or more */ ) {
-    return _mi_align_up(mi_page_info_size(), os_page_size);
+    offset = _mi_align_up(mi_page_info_size(), os_page_size);
   }
   else
   #endif
   if (os_align) {
-    return MI_PAGE_ALIGN;
+    offset = MI_PAGE_ALIGN;
   }
   else if (_mi_is_power_of_two(block_size) && block_size <= MI_PAGE_MAX_START_BLOCK_ALIGN2) {
     // naturally align power-of-2 blocks up to MI_PAGE_MAX_START_BLOCK_ALIGN2 size (4KiB)
-    return _mi_align_up(mi_page_info_size(), block_size);
+    offset = _mi_align_up(mi_page_info_size(), block_size);
   }
   else if (block_size != 0 && (block_size % MI_PAGE_OSPAGE_BLOCK_ALIGN2) == 0) {
     // also align large pages that are a multiple of MI_PAGE_OSPAGE_BLOCK_ALIGN2 (4KiB)
-    return _mi_align_up(mi_page_info_size(), MI_PAGE_OSPAGE_BLOCK_ALIGN2);
+    offset = _mi_align_up(mi_page_info_size(), MI_PAGE_OSPAGE_BLOCK_ALIGN2);
   }
   else {
     // otherwise start after the info
-    return mi_page_info_size();
+    offset = mi_page_info_size();
   }
+  return _mi_align_up(offset,MI_MAX_ALIGN_SIZE);
 }
 
 // Free a page without modifying page_bin stats
@@ -897,6 +899,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
     page = (mi_page_t*)slice_start;
     block_start = mi_page_block_start(block_size, os_align);
   }
+  mi_assert_internal(_mi_is_aligned(block_start, MI_MAX_ALIGN_SIZE));
 
   // commit first block?
   size_t commit_size = 0;
@@ -919,7 +922,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   // set the guard page
   #if MI_SECURE>=5
   if (memid.initially_committed) {
-    _mi_os_secure_guard_page_set_at(slice_start + page_noguard_size, memid);
+    _mi_os_secure_guard_page_set_at(_mi_theap_subproc(theap), slice_start + page_noguard_size, memid);
   }
   #endif
   
@@ -946,8 +949,8 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   uint8_t* const start = slice_start + block_start;
   mi_assert_internal(start > (uint8_t*)page);
   const size_t offset = start - (uint8_t*)page;
-  mi_assert_internal((offset % MI_SIZE_SIZE) == 0 && (offset / MI_SIZE_SIZE) < UINT32_MAX);
-  page->page_woffset = (uint32_t)(offset / MI_SIZE_SIZE);
+  mi_assert_internal((offset % MI_MAX_ALIGN_SIZE) == 0 && (offset / MI_MAX_ALIGN_SIZE) <= UINT32_MAX);
+  page->page_ma_offset = (uint32_t)(offset / MI_MAX_ALIGN_SIZE);
 
   // initialize page meta-data
   page->reserved = (uint16_t)reserved;  
@@ -1108,7 +1111,7 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
   // we must do this since we may later allocate large spans over this page and cannot have a guard page in between
   #if MI_SECURE >= 5
   if (!page->memid.is_pinned) {
-    _mi_os_secure_guard_page_reset_before(mi_page_slice_start(page) + mi_page_full_size(page), page->memid);
+    _mi_os_secure_guard_page_reset_before(mi_page_subproc(page), mi_page_slice_start(page) + mi_page_full_size(page), page->memid);
   }
   #endif
 

@@ -763,7 +763,7 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
 // Page start
 static inline uint8_t* mi_page_start(const mi_page_t* page) {
   // multiplication must be done in `size_t`; in a 32-bit multiplication the offset wraps for pages whose blocks start 4 GiB or more after the page meta info
-  return (uint8_t*)page + ((size_t)page->page_woffset * MI_SIZE_SIZE);
+  return (uint8_t*)page + (((size_t)page->page_ma_offset) * MI_MAX_ALIGN_SIZE);
 }
 
 static inline size_t mi_page_size(const mi_page_t* page) {
