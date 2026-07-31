@@ -762,7 +762,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new_nothrow(size_t size) mi_attr_noe
 static mi_decl_noinline void* mi_try_new_aligned(size_t size, size_t alignment, bool nothrow) {
   void* p = NULL;
   for(int i = 0; i < MI_TRY_NEW_MAX && p==NULL && mi_try_new_handler(nothrow); i++) {
-    if (alignment==0 || !_mi_is_power_of_two(alignment)) return NULL;
+    if (!mi_alignment_is_valid(alignment)) return NULL;
     p = mi_malloc_aligned(size,alignment);
   }
   return p;
