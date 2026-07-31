@@ -33,7 +33,9 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   if (!was_guarded) { mi_check_padding(page, block); }
   if (track_stats) { mi_stat_free(page, block); }
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
-  memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
+  size_t dbgsize = mi_page_block_size(page);
+  if (dbgsize > 1*MI_MiB) { dbgsize = 1*MI_MiB; }
+  _mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);  
   #endif
   if (track_stats) { mi_track_free_size(block, mi_page_usable_size_of(page, block, was_guarded)); } // faster then mi_usable_size as we already know the page and that p is unaligned
 
@@ -71,7 +73,7 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
   if (!was_guarded) {
     size_t dbgsize = mi_usable_size(block);
-    if (dbgsize > MI_MiB) { dbgsize = MI_MiB; }
+    if (dbgsize > 1*MI_MiB) { dbgsize = 1*MI_MiB; }
     _mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);
   }
   #endif
