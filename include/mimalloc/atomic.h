@@ -211,11 +211,6 @@ static inline uintptr_t mi_atomic_exchange_explicit(_Atomic(uintptr_t)*p, uintpt
   (void)(mo);
   return (uintptr_t)MI_MSC_64(_InterlockedExchange)((volatile msc_intptr_t*)p, (msc_intptr_t)exchange);
 }
-static inline void mi_atomic_thread_fence(mi_memory_order mo) {
-  (void)(mo);
-  _Atomic(uintptr_t) x = 0;
-  mi_atomic_exchange_explicit(&x, 1, mo);
-}
 
 static inline uintptr_t mi_atomic_load_explicit(_Atomic(uintptr_t) const* p, mi_memory_order mo) {
   (void)(mo);
