@@ -653,7 +653,10 @@ static mi_theap_t* _mi_thread_init_theap_default(mi_heap_t* heap_main) {
 
       // allocate and initialize the theap for the main heap
       theap = _mi_theap_create( heap_main, tld);
-      if (theap==NULL) return NULL;  // out-of-memory on theap allocation
+      if (theap==NULL) {
+        mi_tld_free(tld);
+        return NULL;  // out-of-memory on theap allocation
+      }
     }
   }
   // now initialize the thread
