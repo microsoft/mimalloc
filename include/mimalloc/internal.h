@@ -105,8 +105,8 @@ int         _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list ar
 int         _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...);
 char        _mi_toupper(char c);
 int         _mi_strnicmp(const char* s, const char* t, size_t n);
-void        _mi_strlcpy(char* dest, const char* src, size_t dest_size);
-void        _mi_strlcat(char* dest, const char* src, size_t dest_size);
+bool        _mi_strlcpy(char* dest, const char* src, size_t dest_size);  // returns true if the full string was copied
+bool        _mi_strlcat(char* dest, const char* src, size_t dest_size);  // returns true if the full string was catenated
 size_t      _mi_strlen(const char* s);
 size_t      _mi_strnlen(const char* s, size_t max_len);
 bool        _mi_streq(const char* s, const char* t);
