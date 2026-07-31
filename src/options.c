@@ -577,24 +577,27 @@ static _Atomic(void*) mi_error_arg;     // = NULL
 
 static void mi_error_default(int err) {
   MI_UNUSED(err);
-#if (MI_DEBUG>0)
-  if (err==EFAULT) {
-    #ifdef _MSC_VER
-    __debugbreak();
-    #endif
-    abort();
+  #if (MI_DEBUG>0)
+    if (err==EFAULT) {
+      #ifdef _MSC_VER
+      __debugbreak();
+      #endif
+      abort();
+    }
+  #endif
+  #if (MI_SECURE>0)
+    if (err==EFAULT) {  // abort on serious errors in secure mode (corrupted meta-data)
+      abort();
+    }
+  #endif
+  #if defined(MI_XMALLOC)
+    if (err==ENOMEM || err==EOVERFLOW || err=EINVAL) { // abort on memory allocation fails in xmalloc mode
+      abort();
+    }
+  #endif
+  if (errno==0) {
+    errno = (err==EINVAL ? EINVAL : ENOMEM /* compatibility */ );
   }
-#endif
-#if (MI_SECURE>0)
-  if (err==EFAULT) {  // abort on serious errors in secure mode (corrupted meta-data)
-    abort();
-  }
-#endif
-#if defined(MI_XMALLOC)
-  if (err==ENOMEM || err==EOVERFLOW) { // abort on memory allocation fails in xmalloc mode
-    abort();
-  }
-#endif
 }
 
 void mi_register_error(mi_error_fun* fun, void* arg) {
@@ -608,7 +611,7 @@ void _mi_error_message(int err, const char* fmt, ...) {
   va_start(args, fmt);
   mi_show_error_message(fmt, args);
   va_end(args);
-  // and call the error handler which may abort (or return normally)
+  // and call the error handler which may abort (or return normally, potentially setting errno)
   if (mi_error_handler != NULL) {
     mi_error_handler(err, mi_atomic_load_ptr_acquire(void,&mi_error_arg));
   }
