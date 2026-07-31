@@ -81,7 +81,7 @@ int _mi_getenv(const char* name, char* result, size_t result_size) {
 }
 #else
 int _mi_getenv(const char* name, char* result, size_t result_size) {
-  if (name==NULL || result == NULL || result_size < 64) return false;
+  if (name==NULL || result == NULL || result_size < 64) return ENOENT;
   // change the result of _mi_prim_getenv to an errno result
   const int res = _mi_prim_getenv(name,result,result_size);
   return (res > 0 ? 0 : (res == 0 ? ENOENT : EAGAIN));
