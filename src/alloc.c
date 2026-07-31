@@ -233,6 +233,10 @@ mi_decl_nodiscard mi_decl_restrict void* mi_umalloc_small(size_t size, size_t* u
   return mi_heap_malloc_small_zero(mi_prim_get_default_heap(), size, false, usable);
 }
 
+mi_decl_nodiscard mi_decl_restrict void* mi_uzalloc_small(size_t size, size_t* usable) mi_attr_noexcept {
+  return mi_heap_malloc_small_zero(mi_prim_get_default_heap(), size, true, usable);
+}
+
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_umalloc(mi_heap_t* heap, size_t size, size_t* usable) mi_attr_noexcept {
   return _mi_heap_malloc_zero_ex(heap, size, false, 0, usable);
 }
@@ -529,8 +533,17 @@ static bool mi_try_new_handler(bool nothrow) {
     #endif
     return false;
   }
-  else {
+  else if (!nothrow) {
     h();
+    return true;
+  }
+  else {
+    try {
+      h();
+    }
+    catch(...) {     // swallow std::bad_alloc
+      return false;  // stop trying
+    }
     return true;
   }
 }
@@ -650,7 +663,7 @@ mi_decl_nodiscard void* mi_new_realloc(void* p, size_t newsize) {
 mi_decl_nodiscard void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
   size_t total;
   if mi_unlikely(mi_count_size_overflow(newcount, size, &total)) {
-    mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
+    mi_try_new_handler(false);
     return NULL;
   }
   else {
