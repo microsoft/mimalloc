@@ -366,19 +366,19 @@ static inline mi_theap_t* _mi_theap_cached(void) {
 #define MI_TLS_EXPANSION_SLOT    (0x1780 / MI_INTPTR_SIZE)
 #endif
 
-extern mi_decl_hidden size_t _mi_theap_default_slot;
-extern mi_decl_hidden size_t _mi_theap_cached_slot;
-extern mi_decl_hidden size_t _mi_theap_default_expansion_slot;
-extern mi_decl_hidden size_t _mi_theap_cached_expansion_slot;
+extern mi_decl_hidden _Atomic(size_t) _mi_theap_default_slot;
+extern mi_decl_hidden _Atomic(size_t) _mi_theap_cached_slot;
+extern mi_decl_hidden _Atomic(size_t) _mi_theap_default_expansion_slot;
+extern mi_decl_hidden _Atomic(size_t) _mi_theap_cached_expansion_slot;
 
 static inline mi_theap_t* _mi_theap_default(void) {
-  const size_t slot = _mi_theap_default_slot;
+  const size_t slot = mi_atomic_load_relaxed(&_mi_theap_default_slot);
   mi_theap_t* theap  = (mi_theap_t*)mi_prim_tls_slot(slot);
   #if !MI_WIN_DIRECT_TLS
   if mi_unlikely(slot==MI_TLS_EXPANSION_SLOT) {       // in TlsExpansionSlots ?
     mi_theap_t** const eslots = (mi_theap_t**)theap;  // theap is actually the expansion slot entry
     if mi_likely(eslots!=NULL) {                      // is it initialized? (on this thread)
-      theap = eslots[_mi_theap_default_expansion_slot];
+      theap = eslots[mi_atomic_load_relaxed(&_mi_theap_default_expansion_slot)];
     }
   }
   #endif
@@ -386,13 +386,13 @@ static inline mi_theap_t* _mi_theap_default(void) {
 }
 
 static inline mi_theap_t* _mi_theap_cached(void) {
-  const size_t slot = _mi_theap_cached_slot;
+  const size_t slot = mi_atomic_load_relaxed(&_mi_theap_cached_slot);
   mi_theap_t* theap = (mi_theap_t*)mi_prim_tls_slot(slot);
   #if !MI_WIN_DIRECT_TLS
   if mi_unlikely(slot==MI_TLS_EXPANSION_SLOT) {       // in TlsExpansionSlots ?
     mi_theap_t** const eslots = (mi_theap_t**)theap;  // theap is the expansion slot entry
     if mi_likely(eslots!=NULL) {                      // is it initialized? (on this thread)
-      theap = eslots[_mi_theap_cached_expansion_slot];
+      theap = eslots[mi_atomic_load_relaxed(&_mi_theap_cached_expansion_slot)];
     }
   }
   #endif

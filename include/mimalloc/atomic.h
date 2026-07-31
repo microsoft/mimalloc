@@ -220,6 +220,7 @@ static inline uintptr_t mi_atomic_load_explicit(_Atomic(uintptr_t) const* p, mi_
   (void)(mo);
   // assert(mo<=mi_memory_order_acquire); // others are not used by mimalloc
   #if defined(_M_IX86) || defined(_M_X64)
+    // on x86/x64 we have a strong memory model so any load is acquire
     return (uintptr_t)MI_MSC_XX(__iso_volatile_load)((volatile const intptr_t*)p);
   #elif defined(_M_ARM) || defined(_M_ARM64)
     if (mo == mi_memory_order_relaxed) {
