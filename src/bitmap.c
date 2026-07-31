@@ -1508,14 +1508,15 @@ bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_fo
         const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
         mi_bfield_t b = mi_atomic_exchange_relaxed(&chunk->bfields[j], (mi_bfield_t)0);   // atomic clear
         mi_bfield_t skipped = 0;                                                          // but track which bits we skip so we can restore them
-        for(size_t shift = 0; rngslices + shift <= MI_BFIELD_BITS; shift += rngslices) {  // per `rngslices` to keep alignment
+        size_t shift;
+        for(shift = 0; rngslices + shift <= MI_BFIELD_BITS; shift += rngslices) {  // per `rngslices` to keep alignment
           const mi_bfield_t rngmask = mi_bfield_mask(rngslices, shift);
           if ((b & rngmask) == rngmask) {
             const size_t idx = base_idx + shift;
             if (!visit(idx, rngslices, arena, arg)) {
               // break early: restore non-visited entries
               mi_bfield_t notyet_visited = 0;
-              if (shift + rngslices < MI_BFIELD_BITS) {
+              if (rngslices + shift < MI_BFIELD_BITS) {
                 notyet_visited = (b & (~(mi_bfield_t)0 << (shift + rngslices)));
               }
               mi_assert_internal((notyet_visited & skipped) == 0);
@@ -1529,8 +1530,13 @@ bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_fo
             skipped = skipped | (b & rngmask);
           }          
         } 
-        
+        if (shift < MI_BFIELD_BITS) {
+          // there are some non-visited top bits when `MI_BFIELD_BITS % rngslices != 0`.
+          mi_assert_internal(MI_BFIELD_BITS % rngslices != 0);
+          skipped = skipped | (b & (~(mi_bfield_t)0 << shift));
+        }
         if (skipped != 0) {
+          //  restore non-visited entries
           mi_atomic_or_relaxed(&chunk->bfields[j], skipped);
         }
       }
