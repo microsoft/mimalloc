@@ -272,7 +272,7 @@ int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
         if (width == 0 && (c == 'x' || c == 'p')) {
           if (c == 'p')   { width = 2 * (x <= UINT32_MAX ? 4 : ((x >> 16) <= UINT32_MAX ? 6 : sizeof(void*))); }
           if (width == 0) { width = 2; }
-          fill = '0';
+          if (alignright) { fill = '0'; }
         }
         mi_out_num(x, (c == 'x' || c == 'p' ? 16 : 10), numplus, &out, end);
       }
