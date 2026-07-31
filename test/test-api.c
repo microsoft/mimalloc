@@ -68,7 +68,7 @@ int main(void) {
   #ifdef __cplusplus
   CHECK_BODY("c++ new-handler") {
     std::set_new_handler([]{ throw std::bad_alloc(); });
-    void* p = ::operator new(size_t(1)<<62, std::nothrow);
+    void* p = mi_new_nothrow(size_t(1)<<(MI_SIZE_BITS-2));
     result = (p==NULL);
   }
   CHECK_BODY("c++ new handler2") {
