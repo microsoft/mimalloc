@@ -659,8 +659,9 @@ static void mi_option_init(mi_option_desc_t* desc) {
     }
     else {
       char* end = buf;
+      errno = 0;
       long value = strtol(buf, &end, 10);
-      if (mi_option_has_size_in_kib(desc->option)) {
+      if (errno==0 && mi_option_has_size_in_kib(desc->option)) {
         // this option is interpreted in KiB to prevent overflow of `long` for large allocations
         // (long is 32-bit on 64-bit windows, which allows for 4TiB max.)
         size_t size = (value < 0 ? 0 : (size_t)value);
@@ -675,7 +676,7 @@ static void mi_option_init(mi_option_desc_t* desc) {
         if (overflow || size > (MI_MAX_ALLOC_SIZE / MI_KiB)) { size = (MI_MAX_ALLOC_SIZE / MI_KiB); }
         value = (size > LONG_MAX ? LONG_MAX : (long)size);
       }
-      if (*end == 0) {
+      if (errno==0 && *end == 0) {
         mi_option_set(desc->option, value);
       }
       else {

@@ -1462,6 +1462,8 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
           mi_assert_internal(rng>=1 && rng<=MI_BFIELD_BITS);
           mi_assert_internal((idx % MI_BFIELD_BITS) + rng <= MI_BFIELD_BITS);
           mi_assert_internal((idx / MI_BCHUNK_BITS) < mi_bitmap_chunk_count(bitmap));
+          // clear rng bits in b
+          b = b & ~mi_bfield_mask(rng, bidx);
           if (!visit(idx, rng, arena, arg)) {
             // break early: reset the non-visited bits
             if (b!=0) {
@@ -1469,8 +1471,6 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
             }
             return false;
           }
-          // clear rng bits in b
-          b = b & ~mi_bfield_mask(rng, bidx);
         }
         mi_assert_internal(rngcount == bpopcount);
       }
