@@ -331,7 +331,7 @@ mi_decl_noinline static bool mi_bchunk_xsetNC(mi_xset_t set, mi_bchunk_t* chunk,
     bool all_clear = false;
     const bool transition = (set ? mi_bfield_atomic_set_mask(&chunk->bfields[field], mask, &already_set)
                                  : mi_bfield_atomic_clear_mask(&chunk->bfields[field], mask, &all_clear));
-    mi_assert_internal((transition && already_set == 0) || (!transition && already_set > 0));
+    mi_assert_internal(!set || ((transition && already_set == 0) || (!transition && already_set > 0)));
     all_transition = all_transition && transition;
     total_already_set += already_set;
     maybe_all_clear = maybe_all_clear && all_clear;
