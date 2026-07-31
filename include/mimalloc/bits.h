@@ -103,13 +103,13 @@ typedef int32_t  mi_ssize_t;
 #include <intrin.h>
 #endif
 
-#if MI_ARCH_X64 && defined(__AVX2__) && !defined(__BMI2__) // msvc
+#if MI_ARCH_X64 && defined(__AVX2__) && !defined(__BMI2__) // avx2 implies bmi2
 #define __BMI2__  1
 #endif
-#if MI_ARCH_X64 && (defined(__AVX2__) || defined(__BMI2__)) && !defined(__BMI1__) // msvc
+#if MI_ARCH_X64 && (defined(__AVX2__) || defined(__BMI2__) || defined(__BMI__)) && !defined(__BMI1__) // bmi2 implies bmi1
 #define __BMI1__  1
 #endif
-#if MI_ARCH_X64 && defined(__AVX2__) && !defined(__LZCNT__) // msvc
+#if MI_ARCH_X64 && defined(__AVX2__) && !defined(__LZCNT__) // avx2 implies lzcnt
 #define __LZCNT__  1
 #endif
 
