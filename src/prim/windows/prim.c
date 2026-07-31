@@ -822,6 +822,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     #pragma comment(linker, "/INCLUDE:_tls_used")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_post")
+    #pragma comment(linker, "/INCLUDE:_mi_crt_callback_init")
     #pragma const_seg(".CRT$XLB")
       extern const PIMAGE_TLS_CALLBACK _mi_tls_callback_pre[];
       const PIMAGE_TLS_CALLBACK _mi_tls_callback_pre[] = { &mi_tls_attach };
@@ -838,6 +839,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     #pragma comment(linker, "/INCLUDE:__tls_used")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_post")
+    #pragma comment(linker, "/INCLUDE:__mi_crt_callback_init")
     #pragma data_seg(".CRT$XLB")
       PIMAGE_TLS_CALLBACK _mi_tls_callback_pre[] = { &mi_tls_attach };
     #pragma data_seg()
