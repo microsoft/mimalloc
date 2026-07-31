@@ -232,8 +232,9 @@ int _mi_prim_free(void* addr, size_t size ) {
     // the memory region returned by VirtualAlloc; in that case we need to free using
     // the start of the region.
     MEMORY_BASIC_INFORMATION info; _mi_memzero_var(info);
-    VirtualQuery(addr, &info, sizeof(info));
-    if (info.AllocationBase < addr && ((uint8_t*)addr - (uint8_t*)info.AllocationBase) < (ptrdiff_t)(4*MI_MiB)) {
+    err = (VirtualQuery(addr, &info, sizeof(info)) == 0);
+    if (err) { errcode = GetLastError(); }
+    if (!err && info.AllocationBase < addr && ((uint8_t*)addr - (uint8_t*)info.AllocationBase) < (ptrdiff_t)(4*MI_MiB)) {
       errcode = 0;
       err = (VirtualFree(info.AllocationBase, 0, MEM_RELEASE) == 0);
       if (err) { errcode = GetLastError(); }
@@ -529,8 +530,9 @@ static mi_msecs_t mi_to_msecs(LARGE_INTEGER t) {
   static LARGE_INTEGER mfreq; // = 0
   if (mfreq.QuadPart == 0LL) {
     LARGE_INTEGER f;
-    QueryPerformanceFrequency(&f);
-    mfreq.QuadPart = f.QuadPart/1000LL;
+    if (QueryPerformanceFrequency(&f)) {
+      mfreq.QuadPart = f.QuadPart/1000LL;
+    }
     if (mfreq.QuadPart == 0) mfreq.QuadPart = 1;
   }
   return (mi_msecs_t)(t.QuadPart / mfreq.QuadPart);
@@ -538,8 +540,12 @@ static mi_msecs_t mi_to_msecs(LARGE_INTEGER t) {
 
 mi_msecs_t _mi_prim_clock_now(void) {
   LARGE_INTEGER t;
-  QueryPerformanceCounter(&t);
-  return mi_to_msecs(t);
+  if (QueryPerformanceCounter(&t)) {
+    return mi_to_msecs(t);
+  }
+  else {
+    return 0;
+  }
 }
 
 
@@ -566,9 +572,10 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
   FILETIME ut;
   FILETIME st;
   FILETIME et;
-  GetProcessTimes(GetCurrentProcess(), &ct, &et, &st, &ut);
-  pinfo->utime = filetime_msecs(&ut);
-  pinfo->stime = filetime_msecs(&st);
+  if (GetProcessTimes(GetCurrentProcess(), &ct, &et, &st, &ut)) {
+    pinfo->utime = filetime_msecs(&ut);
+    pinfo->stime = filetime_msecs(&st);
+  }
 
   // load psapi on demand
   mi_atomic_do_once {
