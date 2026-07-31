@@ -233,6 +233,10 @@ mi_decl_nodiscard mi_decl_restrict void* mi_umalloc_small(size_t size, size_t* u
   return mi_heap_malloc_small_zero(mi_prim_get_default_heap(), size, false, usable);
 }
 
+mi_decl_nodiscard mi_decl_restrict void* mi_uzalloc_small(size_t size, size_t* usable) mi_attr_noexcept {
+  return mi_heap_malloc_small_zero(mi_prim_get_default_heap(), size, true, usable);
+}
+
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_umalloc(mi_heap_t* heap, size_t size, size_t* usable) mi_attr_noexcept {
   return _mi_heap_malloc_zero_ex(heap, size, false, 0, usable);
 }
