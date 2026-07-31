@@ -65,14 +65,13 @@ bool mem_is_zero(uint8_t* p, size_t size) {
 int main(void) {
   mi_option_disable(mi_option_verbose);
 
-  CHECK_BODY("malloc-aligned9a") { // test large alignments
-    void* p = mi_zalloc_aligned(1024 * 1024, 2);
-    mi_free(p);
-    p = mi_zalloc_aligned(1024 * 1024, 2);
-    mi_free(p);
-    result = true;
-  };
-  
+  #ifdef __cplusplus
+  CHECK_BODY("new-handler") {
+    std::set_new_handler([]{ throw std::bad_alloc(); });
+    void* p = ::operator new(size_t(1)<<62, std::nothrow);
+    result = (p==NULL);
+  }
+  #endif
 
   // ---------------------------------------------------
   // Malloc
@@ -210,6 +209,7 @@ int main(void) {
     }
     result = ok;
   };
+  
   CHECK_BODY("malloc-aligned9") { // test large alignments
     bool ok = true;
     void* p[8];
@@ -230,6 +230,15 @@ int main(void) {
     }
     result = ok;
   };
+  
+  CHECK_BODY("malloc-aligned9a") { // test large alignments
+    void* p = mi_zalloc_aligned(1024 * 1024, 2);
+    mi_free(p);
+    p = mi_zalloc_aligned(1024 * 1024, 2);
+    mi_free(p);
+    result = true;
+  };
+  
   CHECK_BODY("malloc-aligned10") {
     bool ok = true;
     void* p[10+1];
@@ -244,17 +253,20 @@ int main(void) {
     }
     result = ok;
   }
+  
   CHECK_BODY("malloc_aligned11") {
     mi_heap_t* heap = mi_heap_new();
     void* p = mi_heap_malloc_aligned(heap, 33554426, 8);
     result = mi_heap_contains_block(heap, p);
     mi_heap_destroy(heap);
   }
+  
   CHECK_BODY("mimalloc-aligned12") {
     void* p = mi_malloc_aligned(0x100, 0x100);
     result = (((uintptr_t)p % 0x100) == 0); // #602
     mi_free(p);
   }
+  
   CHECK_BODY("mimalloc-aligned13") {
     bool ok = true;
     for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size++ ) {

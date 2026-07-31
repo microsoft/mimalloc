@@ -533,8 +533,17 @@ static bool mi_try_new_handler(bool nothrow) {
     #endif
     return false;
   }
-  else {
+  else if (!nothrow) {
     h();
+    return true;
+  }
+  else {
+    try {
+      h();
+    }
+    catch(...) {     // swallow std::bad_alloc
+      return false;  // stop trying
+    }
     return true;
   }
 }
