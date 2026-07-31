@@ -575,16 +575,17 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
     }
   }
 
-  // get process info
-  PROCESS_MEMORY_COUNTERS info; _mi_memzero_var(info);
+  // get process info  
   if (pGetProcessMemoryInfo != NULL) {
-    pGetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info));
+    PROCESS_MEMORY_COUNTERS info; _mi_memzero_var(info);
+    if (pGetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info))) {
+      pinfo->current_rss = (size_t)info.WorkingSetSize;
+      pinfo->peak_rss = (size_t)info.PeakWorkingSetSize;
+      pinfo->current_commit = (size_t)info.PagefileUsage;
+      pinfo->peak_commit = (size_t)info.PeakPagefileUsage;
+      pinfo->page_faults = (size_t)info.PageFaultCount;
+    }
   }
-  pinfo->current_rss    = (size_t)info.WorkingSetSize;
-  pinfo->peak_rss       = (size_t)info.PeakWorkingSetSize;
-  pinfo->current_commit = (size_t)info.PagefileUsage;
-  pinfo->peak_commit    = (size_t)info.PeakPagefileUsage;
-  pinfo->page_faults    = (size_t)info.PageFaultCount;
 }
 
 //----------------------------------------------------------------
