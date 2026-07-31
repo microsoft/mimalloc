@@ -13,9 +13,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdio.h>   // fputs, stderr
 #include <stdlib.h>  // atexit
 
-// xbox has no console IO
-#if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP | WINAPI_PARTITION_SYSTEM)
-#define MI_HAS_CONSOLE_IO
+// xbox has no console IO and cannot use mi_win_loadlibrary
+#if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)
+#define MI_WIN_DESKTOP  1
 #endif
 
 //---------------------------------------------
@@ -78,6 +78,14 @@ static PGetLargePageMinimum pGetLargePageMinimum = NULL;
 // Available after Windows XP
 typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalMemoryInKilobytes );
 
+// Load a library
+static HMODULE mi_win_loadlibrary(const TCHAR* library) {
+  #if MI_WIN_DESKTOP
+    return LoadLibrary(library);
+  #else
+    return LoadPackagedLibrary(library, 0);
+  #endif
+}
 
 //---------------------------------------------
 // Enable large page support dynamically (if possible)
@@ -151,7 +159,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
 
   // get the VirtualAlloc2 function
   HINSTANCE  hDll;
-  hDll = LoadLibrary(TEXT("kernelbase.dll"));
+  hDll = mi_win_loadlibrary(TEXT("kernelbase.dll"));
   if (hDll != NULL) {
     // use VirtualAlloc2FromApp if possible as it is available to Windows store apps
     pVirtualAlloc2 = (PVirtualAlloc2)(void (*)(void))GetProcAddress(hDll, "VirtualAlloc2FromApp");
@@ -159,13 +167,13 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     FreeLibrary(hDll);
   }
   // NtAllocateVirtualMemoryEx is used for huge page allocation
-  hDll = LoadLibrary(TEXT("ntdll.dll"));
+  hDll = mi_win_loadlibrary(TEXT("ntdll.dll"));
   if (hDll != NULL) {
     pNtAllocateVirtualMemoryEx = (PNtAllocateVirtualMemoryEx)(void (*)(void))GetProcAddress(hDll, "NtAllocateVirtualMemoryEx");
     FreeLibrary(hDll);
   }
   // Try to use Win7+ numa API
-  hDll = LoadLibrary(TEXT("kernel32.dll"));
+  hDll = mi_win_loadlibrary(TEXT("kernel32.dll"));
   if (hDll != NULL) {
     pGetCurrentProcessorNumberEx = (PGetCurrentProcessorNumberEx)(void (*)(void))GetProcAddress(hDll, "GetCurrentProcessorNumberEx");
     pGetNumaProcessorNodeEx = (PGetNumaProcessorNodeEx)(void (*)(void))GetProcAddress(hDll, "GetNumaProcessorNodeEx");
@@ -554,7 +562,7 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
 
   // load psapi on demand
   mi_atomic_do_once {
-    HINSTANCE hDll = LoadLibrary(TEXT("psapi.dll"));
+    HINSTANCE hDll = mi_win_loadlibrary(TEXT("psapi.dll"));
     if (hDll != NULL) {
       pGetProcessMemoryInfo = (PGetProcessMemoryInfo)(void (*)(void))GetProcAddress(hDll, "GetProcessMemoryInfo");
       // FreeLibrary(hDll);  // don't free
@@ -588,7 +596,7 @@ void _mi_prim_out_stderr( const char* msg )
     static bool hconIsConsole = false;
     if (hcon == INVALID_HANDLE_VALUE) {
       hcon = GetStdHandle(STD_ERROR_HANDLE);
-      #ifdef MI_HAS_CONSOLE_IO
+      #if MI_WIN_DESKTOP
       CONSOLE_SCREEN_BUFFER_INFO sbi;
       hconIsConsole = ((hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
       #endif
@@ -597,7 +605,7 @@ void _mi_prim_out_stderr( const char* msg )
     if (len > 0 && len < UINT32_MAX) {
       DWORD written = 0;
       if (hconIsConsole) {
-        #ifdef MI_HAS_CONSOLE_IO
+        #if MI_WIN_DESKTOP
         WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
         #endif
       }
@@ -660,7 +668,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   mi_assert(buf_len <= ULONG_MAX);
   if (buf_len > ULONG_MAX) return false;
   mi_atomic_do_once {
-    HINSTANCE hDll = LoadLibrary(TEXT("bcrypt.dll"));
+    HINSTANCE hDll = mi_win_loadlibrary(TEXT("bcrypt.dll"));
     if (hDll != NULL) {
       pBCryptGenRandom = (PBCryptGenRandom)(void (*)(void))GetProcAddress(hDll, "BCryptGenRandom");
       // FreeLibrary(hDll);  // don't free
