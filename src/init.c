@@ -323,7 +323,7 @@ static void mi_theap_main_init(void) {
   if mi_unlikely(mi_theap_main.memid.memkind != MI_MEM_STATIC) {
     // theap
     mi_theap_main.memid = _mi_memid_create(MI_MEM_STATIC);
-    #if defined(__APPLE__) || defined(_WIN32) && !defined(MI_SHARED_LIB)
+    #if defined(__APPLE__) || (defined(_WIN32) && !defined(MI_SHARED_LIB))
       _mi_random_init_weak(&mi_theap_main.random);    // prevent allocation failure during bcrypt dll initialization with static linking (issue #1185)
     #else
       _mi_random_init(&mi_theap_main.random);

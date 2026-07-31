@@ -194,6 +194,7 @@ static void mi_random_init_ex(mi_random_ctx_t* ctx, bool use_weak) {
     ctx->weak = false;
   }
   chacha_init(ctx, key, (uintptr_t)ctx /*nonce*/ );
+  _mi_memzero(key, sizeof(key));
 }
 
 void _mi_random_init(mi_random_ctx_t* ctx) {
