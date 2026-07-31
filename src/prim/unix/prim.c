@@ -817,8 +817,8 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
     const char* s = env[i];
     if (_mi_strnicmp(name, s, len) == 0 && s[len] == '=') { // case insensitive
       // found it
-      _mi_strlcpy(result, s + len + 1, result_size);
-      return 1;  // success
+      if (!_mi_strlcpy(result, s + len + 1, result_size)) return -1; 
+      return 1;   // success
     }
   }
   return 0; // not found
@@ -839,9 +839,9 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
     buf[len] = 0;
     s = getenv(buf);
   }
-  if (s == NULL || _mi_strnlen(s,result_size) >= result_size)  return 0; // not found
-  _mi_strlcpy(result, s, result_size);
-  return 1;  // success
+  if (s == NULL || _mi_strnlen(s,result_size) >= result_size) return 0; // not found
+  if (!_mi_strlcpy(result, s, result_size)) return -1;
+  return 1;  // success  
 }
 #endif  // !MI_USE_ENVIRON
 
