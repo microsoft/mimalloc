@@ -23,7 +23,7 @@ typedef bool (theap_page_visitor_fun)(mi_theap_t* theap, mi_page_queue_t* pq, mi
 // Visit all pages in a theap; returns `false` if break was called.
 static bool mi_theap_visit_pages(mi_theap_t* theap, theap_page_visitor_fun* fn, bool include_full, void* arg1, void* arg2)
 {
-  if (theap==NULL || theap->page_count==0) return 0;
+  if (theap==NULL || theap->page_count==0) return true;
 
   // visit all pages
   #if MI_DEBUG>1
