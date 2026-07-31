@@ -98,6 +98,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ENCODE_FREELIST  1
 #endif
 
+#if (MI_ENCODE_FREELIST && (MI_SECURE>=4 || MI_DEBUG!=0))
+#define MI_CHECK_DOUBLE_FREE  1
+#endif
+
 
 // We used to abandon huge pages in order to eagerly deallocate it if freed from another thread.
 // Unfortunately, that makes it not possible to visit them during a heap walk or include them in a
