@@ -85,16 +85,16 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_likely(x)       (x)
 #endif
 
-#ifndef __has_builtin
-#define __has_builtin(x)    0
-#endif
-
 #if (defined(__GNUC__) && (__GNUC__ >= 7)) || defined(__clang__) // includes clang and icc
 #define mi_decl_maybe_unused    __attribute__((unused))
 #elif __cplusplus >= 201703L    // c++17
 #define mi_decl_maybe_unused    [[maybe_unused]]
 #else
 #define mi_decl_maybe_unused
+#endif
+
+#ifndef __has_builtin
+#define __has_builtin(x)    0
 #endif
 
 #if defined(__cplusplus)
@@ -135,7 +135,6 @@ void          _mi_detect_cpu_features(void);
 void          _mi_fputs(mi_output_fun* out, void* arg, const char* prefix, const char* message);
 void          _mi_fprintf(mi_output_fun* out, void* arg, const char* fmt, ...);
 void          _mi_raw_message(const char* fmt, ...);
-void          _mi_message(const char* fmt, ...);
 void          _mi_warning_message(const char* fmt, ...);
 void          _mi_verbose_message(const char* fmt, ...);
 void          _mi_trace_message(const char* fmt, ...);
@@ -190,7 +189,6 @@ void          _mi_thread_done(mi_theap_t* theap);
 mi_theap_t*   _mi_thread_init(void);
 mi_theap_t*   _mi_thread_init_with_heap(mi_heap_t* heap);
 bool          _mi_is_empty_theap(const mi_theap_t* theap);
-size_t        _mi_thread_seq_id(void) mi_attr_noexcept;
 
 // os.c
 void          _mi_os_init(void);                                            // called from process init
@@ -253,7 +251,6 @@ bool          _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_t* request_
 void*         _mi_arenas_alloc(mi_heap_t* heap, size_t size, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, int numa_node, mi_memid_t* memid);
 void*         _mi_arenas_alloc_aligned(mi_heap_t* heap, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_pinned, mi_arena_t* req_arena, size_t tseq, int numa_node, mi_memid_t* memid);
 void          _mi_arenas_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t memid);
-bool          _mi_arenas_contain(const void* p);
 void          _mi_arenas_collect(bool force_purge, bool visit_all, mi_tld_t* tld);
 void          _mi_arenas_unsafe_destroy_all(mi_subproc_t* subproc);
 
@@ -278,10 +275,7 @@ void          _mi_page_retire(mi_page_t* page) mi_attr_noexcept;       // free t
 void          _mi_page_unfull(mi_page_t* page);
 void          _mi_page_free(mi_page_t* page, mi_page_queue_t* pq);     // free the page
 void          _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);  // abandon the page, to be picked up by another thread...
-
-size_t        _mi_page_queue_append(mi_theap_t* theap, mi_page_queue_t* pq, mi_page_queue_t* append);
 void          _mi_deferred_free(mi_theap_t* theap, bool force);
-
 void          _mi_page_free_collect(mi_page_t* page, bool force);
 void          _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
 mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page);
@@ -295,7 +289,6 @@ size_t        _mi_bin(size_t size);                      // for stats
 void          _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld);
 mi_theap_t*   _mi_theap_alloc(mi_heap_t* heap, mi_tld_t* tld);
 mi_theap_t*   _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld);
-void          _mi_theap_delete(mi_theap_t* theap, bool acquire_tld_theaps_lock);
 void          _mi_theap_collect_retired(mi_theap_t* theap, bool force);
 void          _mi_theap_collect_abandon(mi_theap_t* theap);
 bool          _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);
@@ -303,7 +296,6 @@ void          _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page);
 bool          _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acquire_tld_theaps_lock);
 void          _mi_theap_incref(mi_theap_t* theap);
 void          _mi_theap_decref(mi_theap_t* theap);
-bool          _mi_page_visit_blocks( mi_page_t* page, mi_block_visit_fun* visitor, void* arg );
 void          _mi_theap_merge_stats(mi_theap_t* theap);
 
 // "heap.c"
@@ -1085,16 +1077,23 @@ static inline bool mi_theap_malloc_use_guarded(mi_theap_t* theap, size_t size) {
     // no sample
     theap->guarded_sample_count = count;
     return false;
-  }
-  else if (size >= theap->guarded_size_min && size <= theap->guarded_size_max) {
-    // use guarded allocation
-    theap->guarded_sample_count = theap->guarded_sample_rate;  // reset
-    return (theap->guarded_sample_rate != 0);
-  }
-  else {
-    // failed size criteria, rewind count (but don't write to an empty theap)
-    if (theap->guarded_sample_rate != 0) { theap->guarded_sample_count = 1; }
-    return false;
+  }  
+  else { 
+    // count == 0
+    const size_t rate = theap->guarded_sample_rate;
+    if (rate == 0) {
+      return false; // don't write to an empty theap
+    }
+    else if (size >= theap->guarded_size_min && size <= theap->guarded_size_max) {
+      // use guarded allocation        
+      theap->guarded_sample_count = rate;  // reset
+      return true;
+    }
+    else {
+      // failed size criteria, rewind count
+      theap->guarded_sample_count = 1;
+      return false;
+    }
   }
 }
 

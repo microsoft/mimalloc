@@ -103,8 +103,8 @@ static size_t mi_arena_max_object_size(void) {
   if (max_size <= MI_ARENA_MIN_OBJ_SIZE) {
     return MI_ARENA_MIN_OBJ_SIZE;
   }
-  else if (max_size >= MI_ARENA_MAX_SIZE - MI_BCHUNK_SIZE) {  // minus a bchunk to accommodate meta info
-    return (MI_ARENA_MAX_SIZE - MI_BCHUNK_SIZE);
+  else if (max_size >= MI_ARENA_MAX_SIZE - (MI_BCHUNK_BITS*MI_ARENA_SLICE_SIZE)) {  // minus an initial chunk to accommodate meta info
+    return (MI_ARENA_MAX_SIZE - (MI_BCHUNK_BITS*MI_ARENA_SLICE_SIZE));
   }
   else {
     return max_size;
@@ -237,6 +237,10 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
     memid->initially_zero = mi_bitmap_setN(arena->slices_dirty, slice_index, slice_count, &already_dirty);
     mi_assert_internal(already_dirty <= touched_slices);
     touched_slices -= already_dirty;
+  }
+  else {
+    // todo: properly count touched pages with a separate bitmap?
+    touched_slices = 0; 
   }
 
   // set commit state
@@ -1017,7 +1021,7 @@ static mi_page_t* mi_arenas_page_regular_alloc(mi_theap_t* theap, size_t slice_c
 
   mi_assert_internal(page->memid.memkind != MI_MEM_ARENA || page->memid.mem.arena.slice_count == slice_count);
   if (!_mi_page_init(theap, page)) {
-    mi_arenas_page_free_prim(page);
+    _mi_arenas_page_free(page,theap);
     return NULL;
   }
 
@@ -1401,10 +1405,10 @@ static bool mi_arenas_contain_ex(const void* p, mi_arena_t* parent) {
   return false;
 }
 
-// Is a pointer inside any of our arenas?
-bool _mi_arenas_contain(const void* p) {
-  return mi_arenas_contain_ex(p, NULL);
-}
+// // Is a pointer inside any of our arenas?
+// bool _mi_arenas_contain(const void* p) {
+//   return mi_arenas_contain_ex(p, NULL);
+// }
 
 // Is a pointer contained in the given arena area?
 bool mi_arena_contains(mi_arena_id_t arena_id, const void* p) {

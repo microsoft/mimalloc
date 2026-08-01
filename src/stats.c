@@ -443,7 +443,7 @@ void _mi_stats_merge_into(mi_stats_t* to, mi_stats_t* from) {
   mi_assert_internal(to != NULL && from != NULL);
   if (to == from) return;
   mi_stats_add(to, from);
-  _mi_memzero(from, sizeof(mi_stats_t));
+  mi_stats_init(from); // zero field and keep the header 
 }
 
 static const mi_stats_t* mi_stats_merge_theap_to_heap(mi_theap_t* theap) mi_attr_noexcept {
@@ -564,8 +564,10 @@ mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, s
   pinfo.elapsed        = _mi_clock_end(mi_process_start);
   { const mi_subproc_t* subproc = _mi_subproc_main();
     if (subproc!=NULL) {
-      pinfo.current_commit = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&subproc->stats.committed.current)));
-      pinfo.peak_commit    = (size_t)(mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&subproc->stats.committed.peak)));
+      const int64_t current = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&subproc->stats.committed.current));
+      const int64_t peak    = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)(&subproc->stats.committed.peak));
+      pinfo.current_commit  = (current < 0 ? 0 : (current < PTRDIFF_MAX ? (size_t)current : PTRDIFF_MAX));
+      pinfo.peak_commit     = (peak < 0 ? 0 : (peak < PTRDIFF_MAX ? (size_t)peak : PTRDIFF_MAX));
     }  
   }
   pinfo.current_rss    = pinfo.current_commit;
@@ -740,9 +742,6 @@ static void mi_json_buf_print_counter_value(mi_json_buf_t* hbuf, const char* nam
   mi_json_buf_print_value(hbuf, name, stat->total);
 }
 
-#define MI_STAT_COUNT(stat)    mi_json_buf_print_count_value(&hbuf, #stat, &stats->stat);
-#define MI_STAT_COUNTER(stat)  mi_json_buf_print_counter_value(&hbuf, #stat, &stats->stat);
-
 static char* mi_stats_get_json_from(const mi_stats_t* stats, size_t output_size, char* output_buf) mi_attr_noexcept {
   if (stats==NULL || stats->size!=sizeof(mi_stats_t) || stats->version!=MI_STAT_VERSION) return NULL;
   mi_json_buf_t hbuf = { NULL, 0, 0, true };
@@ -781,7 +780,13 @@ static char* mi_stats_get_json_from(const mi_stats_t* stats, size_t output_size,
   mi_json_buf_print(&hbuf, "  },\n");
 
   // statistics
+  #define MI_STAT_COUNT(stat)    mi_json_buf_print_count_value(&hbuf, #stat, &stats->stat);
+  #define MI_STAT_COUNTER(stat)  mi_json_buf_print_counter_value(&hbuf, #stat, &stats->stat);
+
   MI_STAT_FIELDS()
+  
+  #undef MI_STAT_COUNT
+  #undef MI_STAT_COUNTER
 
   // size bins
   mi_json_buf_print(&hbuf, "  \"malloc_bins\": [\n");
@@ -800,7 +805,7 @@ static char* mi_stats_get_json_from(const mi_stats_t* stats, size_t output_size,
   }
   mi_json_buf_print(&hbuf, "  ]\n");
   mi_json_buf_print(&hbuf, "}\n");
-  if (hbuf.used >= hbuf.size) {
+  if (hbuf.used + 1 >= hbuf.size) {
     // failed
     if (hbuf.can_realloc) { mi_free(hbuf.buf); }
     return NULL;

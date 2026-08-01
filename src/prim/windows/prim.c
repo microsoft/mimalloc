@@ -641,10 +641,10 @@ void _mi_prim_out_stderr( const char* msg )
     static HANDLE hcon = INVALID_HANDLE_VALUE;
     static bool hconIsConsole = false;
     if (hcon == INVALID_HANDLE_VALUE) {
-      hcon = GetStdHandle(STD_ERROR_HANDLE);
+      hcon = GetStdHandle(STD_ERROR_HANDLE); // returns NULL on error
       #if MI_WIN_DESKTOP
       CONSOLE_SCREEN_BUFFER_INFO sbi;
-      hconIsConsole = ((hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
+      hconIsConsole = ((hcon != NULL && hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
       #endif
     }
     const size_t len = _mi_strlen(msg);
@@ -655,7 +655,7 @@ void _mi_prim_out_stderr( const char* msg )
         WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
         #endif
       }
-      else if (hcon != INVALID_HANDLE_VALUE) {
+      else if (hcon != NULL && hcon != INVALID_HANDLE_VALUE) {
         // use direct write if stderr was redirected
         WriteFile(hcon, msg, (DWORD)len, &written, NULL);
       }

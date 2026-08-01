@@ -241,7 +241,6 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
   mi_atomic_store_release(&theap->refcount,1);
   mi_atomic_store_release(&theap->freed,0);
-  mi_atomic_store_ptr_release(mi_heap_t,&theap->heap,heap);
   mi_atomic_store_ptr_release(mi_subproc_t,&theap->subproc,heap->subproc);
   mi_assert_internal(theap->stats.size == sizeof(mi_stats_t));
   mi_theap_options_init(theap);
@@ -249,7 +248,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   if (theap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our theap.
     // this is checked in `free.c:mi_free_try_collect_mt`
-    // .. but abandoning is good in this case: halve the full page retain (possibly to 0)
+    // .. but abandoning is good in this case: quarter the full page retain (possibly to 0)
     // (so blocked threads do not hold on to too much memory)
     if (theap->page_full_retain > 0) {
       theap->page_full_retain = theap->page_full_retain / 4;
@@ -271,22 +270,29 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   }
 
   // initialize random if heap==NULL
-  if (head == NULL) {  // first theap in this thread?
+  if (head==NULL) {  // first theap of the first thread?
     #if defined(_WIN32) && !defined(MI_SHARED_LIB)
+    if (tld->thread_seq==0) {
       _mi_random_init_weak(&theap->random);    // prevent allocation failure during bcrypt dll initialization with static linking (issue #1185)
-    #else
-      _mi_random_init(&theap->random);
+    }
+    else
     #endif
+    {
+      _mi_random_init(&theap->random);
+    }
   }
   else {
     _mi_random_split(&head_random, &theap->random); // &theap->random is used as nonce so it is ok if threads capture the same head->random
   }
   theap->cookie = _mi_theap_random_next(theap) | 1;
-  mi_theap_guarded_init(theap);
+  mi_theap_guarded_init(theap); // needs theap->random
   if (!theap->is_detached) {
     mi_subproc_stat_increase(_mi_theap_subproc(theap),theaps,1);  // on subproc to match theap_free_mem
   }
 
+  // only now set the heap member as it is used to determine if a theap is initialized
+  mi_atomic_store_ptr_release(mi_heap_t,&theap->heap,heap);
+  
   // push on the heap's theap list
   mi_lock(&heap->theaps_lock) {
     head = heap->theaps;
@@ -411,19 +417,19 @@ bool _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acqui
 ----------------------------------------------------------- */
 
 // Safe delete a theap without freeing any still allocated blocks in that theap.
-void _mi_theap_delete(mi_theap_t* theap, bool acquire_tld_theaps_lock)
-{
-  mi_assert(theap != NULL);
-  mi_assert(mi_theap_is_initialized(theap));
-  mi_assert_expensive(mi_theap_is_valid(theap));
-  if (theap==NULL || !mi_theap_is_initialized(theap)) return;
+// void _mi_theap_delete(mi_theap_t* theap, bool acquire_tld_theaps_lock)
+// {
+//   mi_assert(theap != NULL);
+//   mi_assert(mi_theap_is_initialized(theap));
+//   mi_assert_expensive(mi_theap_is_valid(theap));
+//   if (theap==NULL || !mi_theap_is_initialized(theap)) return;
 
-  // abandon all pages
-  _mi_theap_collect_abandon(theap);
+//   // abandon all pages
+//   _mi_theap_collect_abandon(theap);
 
-  mi_assert_internal(theap->page_count==0);
-  _mi_theap_free(theap, true /* acquire heap->theaps_lock */, acquire_tld_theaps_lock);
-}
+//   mi_assert_internal(theap->page_count==0);
+//   _mi_theap_free(theap, true /* acquire heap->theaps_lock */, acquire_tld_theaps_lock);
+// }
 
 
 
@@ -622,11 +628,11 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
   return true;
 }
 
-bool _mi_page_visit_blocks( mi_page_t* page, mi_block_visit_fun* visitor, void* arg ) {
-  mi_heap_area_t area;
-  _mi_heap_area_init(&area, page);
-  return _mi_theap_area_visit_blocks(&area, page, visitor, arg);
-}
+// bool _mi_page_visit_blocks( mi_page_t* page, mi_block_visit_fun* visitor, void* arg ) {
+//   mi_heap_area_t area;
+//   _mi_heap_area_init(&area, page);
+//   return _mi_theap_area_visit_blocks(&area, page, visitor, arg);
+// }
 
 
 // Separate struct to keep `mi_page_t` out of the public interface

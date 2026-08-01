@@ -71,10 +71,12 @@ mi_define_thread_local(void*, mi_slot_fast, NULL)
   a value, we also set the version of the key.
 ----------------------------------------------------------- */
 
-#if MI_SIZE_BITS < 64
-#define MI_TLS_IDX_BITS     (MI_SIZE_BITS/2)      // half for the index, half for the version
+#if MI_SIZE_BITS >= 64
+#define MI_TLS_IDX_BITS     (MI_SIZE_BITS/4)      /* 16 bits for the index, 48 bits for the version */
+#elif MI_SIZE_BITS >= 32
+#define MI_TLS_IDX_BITS     (12)                  /* 12 bits for index, 20 for the version? */
 #else
-#define MI_TLS_IDX_BITS     (MI_SIZE_BITS/4)      // 16 bits for the index, 48 bits for the version
+#error not enough bits for the version for thread locals
 #endif
 #define MI_TLS_IDX_MASK     ((MI_ZU(1)<<MI_TLS_IDX_BITS)-1)
 #define MI_TLS_IDX_MAX      MI_TLS_IDX_MASK

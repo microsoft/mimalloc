@@ -124,7 +124,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   true,                   // allow abandon
   true,                   // is_detached
   #if MI_GUARDED
-  1, 0, 0, 1,             // min>max and count is 1 so we never write to it (see `internal.h:mi_heap_malloc_use_guarded`)
+  0, 0, 0, 1,             // rate is 0 and count is 1 so we never write to it (see `internal.h:mi_heap_malloc_use_guarded`)
   #endif
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
@@ -545,8 +545,8 @@ static void mi_process_init_once(void) {
   _mi_thread_locals_init();  // pthread key create
   _mi_process_is_initialized = true;
 
-  #if defined(_WIN32) && defined(MI_WIN_USE_FLS)
-  // On windows, when building as a static lib the FLS cleanup happens too early for the main thread.
+  #if defined(_WIN32) && defined(MI_WIN_INIT_USE_FLS)
+  // On windows, when building as a static lib the FLS cleanup happens to early for the main thread.
   // To avoid this, set the FLS value for the main thread to NULL so the fls cleanup
   // will not call _mi_thread_done on the (still executing) main thread. See issue #508.
   _mi_prim_thread_associate_default_theap(NULL);

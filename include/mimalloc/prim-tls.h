@@ -25,6 +25,9 @@ terms of the MIT license. A copy of the license can be found in the file
 // Android,OpenBSD  : use pthread locals (MI_TLS_MODEL_PTHREADS). todo: maybe on Android MI_TLS_MODEL_LOCAL is better?
 // --------------------------------------------------------------------------
 
+// static inline void*         mi_prim_tls_slot(size_t slot) mi_attr_noexcept;  // directly read an entry from the thread local storage (or thread control block)
+// static inline void          mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexcept;
+
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept;       // get a unique id for a thread
 static inline mi_theap_t*   _mi_theap_default(void);                         // the default thread local theap
 static inline mi_theap_t*   _mi_theap_cached(void);                          // last used thread local theap using the _heap_ api
@@ -401,6 +404,10 @@ static inline mi_theap_t* _mi_theap_cached(void) {
 // mimalloc in the same process. Most OS's do not have official user reserved fixed slots so this cannot be 
 // guaranteed to work in general.
 #define MI_THEAP_INITASNULL  1
+
+#if !MI_HAS_TLS_SLOT
+#error this platform cannot support MI_TLS_MODEL_FIXED without defining mi_prim_tls_slot
+#endif
 
 #if !defined(MI_TLS_MODEL_FIXED_DEFAULT)
   #if defined(__APPLE__) && !defined(__POWERPC__)  // macOS on arm64 or x64

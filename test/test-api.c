@@ -38,6 +38,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 
 #include "testhelper.h"
 
+
 // ---------------------------------------------------------------------------
 // Test functions
 // ---------------------------------------------------------------------------
@@ -52,6 +53,8 @@ bool test_stl_theap_allocator1(void);
 bool test_stl_theap_allocator2(void);
 bool test_stl_theap_allocator3(void);
 bool test_stl_theap_allocator4(void);
+
+static bool test_zero_aligned_first(void);
 
 bool mem_is_zero(uint8_t* p, size_t size) {
   if (p==NULL) return false;
@@ -436,6 +439,14 @@ int main(void) {
   //CHECK("theap_arena_destroy", test_theap_arena_destroy());
   //CHECK("theap_arena_delete", test_theap_arena_delete());
 
+  
+  // ---------------------------------------------------
+  // Threads
+  // ---------------------------------------------------
+  CHECK_BODY("zero_aligned_first") {
+    result = mi_run_on_thread(&test_zero_aligned_first);
+  }
+  
   //mi_stats_print(NULL);
 
   // ---------------------------------------------------
@@ -597,3 +608,20 @@ bool test_stl_theap_allocator4(void) {
 #endif
 }
 */
+
+// ---------------------------------------------------------------------------
+// Test a zero size aligned allocation as the very first allocation of a fresh thread.
+// ---------------------------------------------------------------------------
+
+static bool test_zero_aligned_first(void) {
+  void* p = mi_malloc_aligned(0, 16);     // must be the first mimalloc call on this thread
+  bool res = (p != NULL && (uintptr_t)(p) % 16 == 0);
+  mi_free(p);
+  p = mi_zalloc_aligned(0, 32);
+  res = res && (p != NULL && (uintptr_t)(p) % 32 == 0);
+  mi_free(p);
+  return res;
+}
+
+
+

@@ -31,7 +31,7 @@ void mi_heap_stats_merge_to_subproc(mi_heap_t* heap) {
 
 void mi_heap_stats_merge_to_main(mi_heap_t* heap) {
   if (heap==NULL) return;
-  _mi_stats_merge_into(&mi_heap_main()->stats, &heap->stats);
+  _mi_stats_merge_into(&mi_heap_get_heap_main(heap)->stats, &heap->stats);
 }
 
 bool _mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap) {
