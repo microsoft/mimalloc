@@ -433,7 +433,7 @@ int main(void) {
     mi_stats_get(&stats1);    
     result = (stats0.pages.current == stats1.pages.current);    
     if (!result) {
-      fprintf(stderr, "heap-os2: pages: %lld != %lld (expecting 16==16)\n", stats0.pages.current, stats1.pages.current);
+      fprintf(stderr, "heap-os2: pages: %ld != %ld (expecting 16==16)\n", (long)stats0.pages.current, (long)stats1.pages.current);
     }
   }
 
