@@ -196,11 +196,11 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
   mi_atomic_store_release(&theap->refcount,1);
   mi_atomic_store_release(&theap->freed,0);
-  mi_atomic_store_ptr_release(mi_heap_t,&theap->heap,heap);
   mi_atomic_store_ptr_release(mi_subproc_t,&theap->subproc,heap->subproc);
   mi_assert_internal(theap->stats.size == sizeof(mi_stats_t));
   
   _mi_theap_options_init(theap);
+  
   if (theap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our theap.
     // this is checked in `free.c:mi_free_try_collect_mt`
@@ -226,20 +226,27 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   }
 
   // initialize random if heap==NULL
-  if (head == NULL) {  // first theap in this thread?
+  if (head==NULL) {  // first theap of the first thread?
     #if defined(_WIN32) && !defined(MI_SHARED_LIB)
+    if (tld->thread_seq==0) {
       _mi_random_init_weak(&theap->random);    // prevent allocation failure during bcrypt dll initialization with static linking (issue #1185)
-    #else
-      _mi_random_init(&theap->random);
+    }
+    else
     #endif
+    {
+      _mi_random_init(&theap->random);
+    }
   }
   else {
     _mi_random_split(&head_random, &theap->random); // &theap->random is used as nonce so it is ok if threads capture the same head->random
   }
   theap->cookie = _mi_theap_random_next(theap) | 1;
-  _mi_theap_guarded_init(theap);
+  _mi_theap_guarded_init(theap);  // needs theap->random
   mi_subproc_stat_increase(_mi_theap_subproc(theap),theaps,1);  // on subproc to match theap_free_mem
 
+  // only now set the heap member as it is used to determine if a theap is initialized
+  mi_atomic_store_ptr_release(mi_heap_t,&theap->heap,heap);
+  
   // push on the heap's theap list
   mi_lock(&heap->theaps_lock) {
     head = heap->theaps;
