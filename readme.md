@@ -15,9 +15,9 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.4.3`  (2026-07-20) recommended.  
-Latest v2 release: `v2.4.1`  (2026-07-14) stable.  
-Latest v1 release: `v1.9.11` (2026-07-14) legacy.
+Latest release   : `v3.4.4`  (2026-08-01) recommended.  
+Latest v2 release: `v2.4.4`  (2026-08-01) stable.  
+Latest v1 release: `v1.9.14` (2026-08-01) legacy.
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -88,6 +88,10 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 - __v1__: legacy version: initial design of mimalloc (release tags: `v1.9.x`, development branch `dev`). Send PR's against this version if possible.
 
 ### Releases
+* 2026-08-01, `v1.9.14`, `v2.4.4`, `v3.4.4`: various bug and security fixes through Opus 5 LLM audit (#1271, by @Zoxc). 
+  (v3): use pthreads by default on macOS (#1333,#1327), fix glibc 2.44 crash (#1341). Add initial mingw support,
+  set `errno` on allocation errors, improved double-free checks and size checks in secure mode, enable 
+  build for universal windows platform and xbox (#1340), fix numa node detection when numa nodes are sparse. 
 * 2026-07-20, `v3.4.3`: revert TLS slots on macOS to 108/109 (issue #1333).
 * 2026-07-14, `v1.9.11`, `v2.4.1`, `v3.4.1`: various bug and security fixes through LLM audit (by @Zoxc). 
   Fix issue with using OS memory instead of arenas for > 4GiB memory usage (v3), fix concurrency bug in concurrent
