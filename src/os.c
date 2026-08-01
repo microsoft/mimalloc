@@ -724,7 +724,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
     start = huge_start;
     if (start == 0) {
       // Initialize the start address after the 32TiB area
-      start = ((uintptr_t)8 << 40);   // 8TiB virtual start address
+      start = ((uintptr_t)32 << 40);    // 32TiB virtual start address (after addresses returned by _mi_os_get_aligned_hint)
       #if (MI_SECURE>0 || MI_DEBUG==0)  // security: randomize start of huge pages unless in debug mode
       mi_theap_t* const theap = _mi_theap_default();     // don't use `mi_theap_get_default()` as that can cause allocation recursively (issue #1267)
       if (mi_theap_is_initialized(theap)) {              // todo: or no hint at all if we lack randomness?
