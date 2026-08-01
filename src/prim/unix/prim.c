@@ -560,7 +560,7 @@ int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, bo
   bool is_large = true;
   *is_zero = true;
   *addr = unix_mmap(hint_addr, size, MI_SEGMENT_SIZE, PROT_READ | PROT_WRITE, true, true, &is_large);
-  if (*addr != NULL && numa_node >= 0 && numa_node < 8*MI_INTPTR_SIZE) { // at most 64 nodes
+  if (*addr != NULL && numa_node >= 0 && numa_node < (8*MI_INTPTR_SIZE - 1)) { // at most 63 nodes
     unsigned long numa_mask = (1UL << numa_node);
     // TODO: does `mbind` work correctly for huge OS pages? should we
     // use `set_mempolicy` before calling mmap instead?
@@ -593,9 +593,9 @@ int _mi_prim_alloc_huge_os_pages(void* hint_addr, size_t size, int numa_node, bo
 
 size_t _mi_prim_numa_node(void) {
   #if defined(MI_HAS_SYSCALL_H) && defined(SYS_getcpu)
-    unsigned long node = 0;
-    unsigned long ncpu = 0;
-    long err = syscall(SYS_getcpu, &ncpu, &node, NULL);
+    unsigned int node = 0;
+    unsigned int ncpu = 0;
+    int err = syscall(SYS_getcpu, &ncpu, &node, NULL);
     if (err != 0) return 0;
     return node;
   #else
@@ -606,10 +606,15 @@ size_t _mi_prim_numa_node(void) {
 size_t _mi_prim_numa_node_count(void) {
   char buf[128];
   unsigned node = 0;
+  size_t skipped = 0;
   for(node = 0; node < 256; node++) {
     // enumerate node entries -- todo: it there a more efficient way to do this? (but ensure there is no allocation)
     _mi_snprintf(buf, 127, "/sys/devices/system/node/node%u", node + 1);
-    if (mi_prim_access(buf,R_OK) != 0) break;
+    if (mi_prim_access(buf,R_OK) != 0) {
+      skipped++;
+      if (skipped > 4) break; // allow some sparseness of nodes but not more than 4
+    }
+    else { skipped = 0; }     // reset skipped count
   }
   return (node+1);
 }
@@ -723,43 +728,48 @@ static mi_msecs_t timeval_secs(const struct timeval* tv) {
 }
 
 void _mi_prim_process_info(mi_process_info_t* pinfo)
-{
+{  
   struct rusage rusage;
-  getrusage(RUSAGE_SELF, &rusage);
-  pinfo->utime = timeval_secs(&rusage.ru_utime);
-  pinfo->stime = timeval_secs(&rusage.ru_stime);
-#if !defined(__HAIKU__)
-  pinfo->page_faults = rusage.ru_majflt;
-#endif
-#if defined(__HAIKU__)
-  // Haiku does not have (yet?) a way to
-  // get these stats per process
-  thread_info tid;
-  area_info mem;
-  ssize_t c;
-  get_thread_info(find_thread(0), &tid);
-  while (get_next_area_info(tid.team, &c, &mem) == B_OK) {
-    pinfo->peak_rss += mem.ram_size;
+  if (getrusage(RUSAGE_SELF, &rusage) == 0) {
+    pinfo->utime = timeval_secs(&rusage.ru_utime);
+    pinfo->stime = timeval_secs(&rusage.ru_stime);
+    #if !defined(__HAIKU__)
+      pinfo->page_faults = rusage.ru_majflt;
+    #endif
+    #if defined(__APPLE__)
+      pinfo->peak_rss = rusage.ru_maxrss;         // macos reports in bytes
+    #else
+      pinfo->peak_rss = rusage.ru_maxrss * 1024;  // Linux/BSD report in KiB
+    #endif
   }
-  pinfo->page_faults = 0;
-#elif defined(__APPLE__)
-  pinfo->peak_rss = rusage.ru_maxrss;         // macos reports in bytes
-  #ifdef MACH_TASK_BASIC_INFO
-  struct mach_task_basic_info info;
-  mach_msg_type_number_t infoCount = MACH_TASK_BASIC_INFO_COUNT;
-  if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &infoCount) == KERN_SUCCESS) {
-    pinfo->current_rss = (size_t)info.resident_size;
-  }
-  #else
-  struct task_basic_info info;
-  mach_msg_type_number_t infoCount = TASK_BASIC_INFO_COUNT;
-  if (task_info(mach_task_self(), TASK_BASIC_INFO, (task_info_t)&info, &infoCount) == KERN_SUCCESS) {
-    pinfo->current_rss = (size_t)info.resident_size;
-  }
+  
+  #if defined(__HAIKU__)
+    // Haiku does not have (yet?) a way to
+    // get these stats per process
+    thread_info tid;
+    if (get_thread_info(find_thread(0), &tid) == B_OK) {
+      area_info mem;
+      ssize_t c;    
+      while (get_next_area_info(tid.team, &c, &mem) == B_OK) {
+        pinfo->peak_rss += mem.ram_size;
+      }
+    }
+    pinfo->page_faults = 0;
+  #elif defined(__APPLE__)  
+    #ifdef MACH_TASK_BASIC_INFO
+    struct mach_task_basic_info info;
+    mach_msg_type_number_t infoCount = MACH_TASK_BASIC_INFO_COUNT;
+    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &infoCount) == KERN_SUCCESS) {
+      pinfo->current_rss = (size_t)info.resident_size;
+    }
+    #else
+    struct task_basic_info info;
+    mach_msg_type_number_t infoCount = TASK_BASIC_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_BASIC_INFO, (task_info_t)&info, &infoCount) == KERN_SUCCESS) {
+      pinfo->current_rss = (size_t)info.resident_size;
+    }
+    #endif
   #endif
-#else
-  pinfo->peak_rss = rusage.ru_maxrss * 1024;  // Linux/BSD report in KiB
-#endif
   // use defaults for commit
 }
 

@@ -737,16 +737,23 @@ static inline bool mi_heap_malloc_use_guarded(mi_heap_t* heap, size_t size) {
     // no sample
     heap->guarded_sample_count = count;
     return false;
-  }
-  else if (size >= heap->guarded_size_min && size <= heap->guarded_size_max) {
-    // use guarded allocation
-    heap->guarded_sample_count = heap->guarded_sample_rate;  // reset
-    return (heap->guarded_sample_rate != 0);
-  }
-  else {
-    // failed size criteria, rewind count (but don't write to an empty heap)
-    if (heap->guarded_sample_rate != 0) { heap->guarded_sample_count = 1; }
-    return false;
+  }  
+  else { 
+    // count == 0
+    const size_t rate = heap->guarded_sample_rate;
+    if (rate == 0) {
+      return false; // don't write to an empty theap
+    }
+    else if (size >= heap->guarded_size_min && size <= heap->guarded_size_max) {
+      // use guarded allocation        
+      heap->guarded_sample_count = rate;  // reset
+      return true;
+    }
+    else {
+      // failed size criteria, rewind count
+      heap->guarded_sample_count = 1;
+      return false;
+    }
   }
 }
 
