@@ -204,7 +204,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   if (theap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our theap.
     // this is checked in `free.c:mi_free_try_collect_mt`
-    // .. but abandoning is good in this case: halve the full page retain (possibly to 0)
+    // .. but abandoning is good in this case: quarter the full page retain (possibly to 0)
     // (so blocked threads do not hold on to too much memory)
     if (theap->page_full_retain > 0) {
       theap->page_full_retain = theap->page_full_retain / 4;
