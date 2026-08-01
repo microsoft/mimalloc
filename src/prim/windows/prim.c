@@ -79,12 +79,32 @@ static PGetLargePageMinimum pGetLargePageMinimum = NULL;
 typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalMemoryInKilobytes );
 
 // Load a library
-static HMODULE mi_win_loadlibrary(const TCHAR* library) {
+static HMODULE mi_win_loadlibrary(const TCHAR* library) {  
   #if MI_WIN_DESKTOP
     return LoadLibrary(library);
   #else
     return LoadPackagedLibrary(library, 0);
   #endif
+}
+
+// Get a library handle (and possibly load it)
+static HMODULE mi_win_getlibrary(const TCHAR* library, bool* should_free) {
+  #if MI_WIN_DESKTOP
+  // avoid calling LoadLibrary for "kernel32", "ntdll", and "kernelbase" (also to avoid hitting the loader lock)
+  HMODULE mod = GetModuleHandle(library); 
+  if (mod!=NULL) {
+    *should_free = false;
+    return mod;
+  }
+  #endif
+  *should_free = true;
+  return mi_win_loadlibrary(library);
+}
+
+static void mi_win_freelibrary(HMODULE mod, bool should_free) {
+  if (should_free) { 
+    FreeLibrary(mod);
+  }
 }
 
 //---------------------------------------------
@@ -158,22 +178,22 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   }
 
   // get the VirtualAlloc2 function
-  HINSTANCE  hDll;
-  hDll = mi_win_loadlibrary(TEXT("kernelbase.dll"));
+  bool hDllFree;
+  HINSTANCE hDll = mi_win_getlibrary(TEXT("kernelbase.dll"), &hDllFree);
   if (hDll != NULL) {
     // use VirtualAlloc2FromApp if possible as it is available to Windows store apps
     pVirtualAlloc2 = (PVirtualAlloc2)(void (*)(void))GetProcAddress(hDll, "VirtualAlloc2FromApp");
     if (pVirtualAlloc2==NULL) pVirtualAlloc2 = (PVirtualAlloc2)(void (*)(void))GetProcAddress(hDll, "VirtualAlloc2");
-    FreeLibrary(hDll);
+    mi_win_freelibrary(hDll, hDllFree);
   }
   // NtAllocateVirtualMemoryEx is used for huge page allocation
-  hDll = mi_win_loadlibrary(TEXT("ntdll.dll"));
+  hDll = mi_win_getlibrary(TEXT("ntdll.dll"), &hDllFree);
   if (hDll != NULL) {
     pNtAllocateVirtualMemoryEx = (PNtAllocateVirtualMemoryEx)(void (*)(void))GetProcAddress(hDll, "NtAllocateVirtualMemoryEx");
-    FreeLibrary(hDll);
+    mi_win_freelibrary(hDll, hDllFree);
   }
   // Try to use Win7+ numa API
-  hDll = mi_win_loadlibrary(TEXT("kernel32.dll"));
+  hDll = mi_win_getlibrary(TEXT("kernel32.dll"), &hDllFree);
   if (hDll != NULL) {
     pGetCurrentProcessorNumberEx = (PGetCurrentProcessorNumberEx)(void (*)(void))GetProcAddress(hDll, "GetCurrentProcessorNumberEx");
     pGetNumaProcessorNodeEx = (PGetNumaProcessorNodeEx)(void (*)(void))GetProcAddress(hDll, "GetNumaProcessorNodeEx");
@@ -192,7 +212,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
         }
       }
     }
-    FreeLibrary(hDll);
+    mi_win_freelibrary(hDll, hDllFree);
   }
   // Enable large/huge OS page support?
   if (mi_option_is_enabled(mi_option_allow_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
@@ -561,11 +581,11 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
   }
 
   // load psapi on demand
-  mi_atomic_do_once {
+  mi_atomic_do_once{
     HINSTANCE hDll = mi_win_loadlibrary(TEXT("psapi.dll"));
     if (hDll != NULL) {
       pGetProcessMemoryInfo = (PGetProcessMemoryInfo)(void (*)(void))GetProcAddress(hDll, "GetProcessMemoryInfo");
-      // FreeLibrary(hDll);  // don't free
+      // mi_win_freelibrary(hDll, true);  // don't free
     }
   }
 
@@ -671,7 +691,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
     HINSTANCE hDll = mi_win_loadlibrary(TEXT("bcrypt.dll"));
     if (hDll != NULL) {
       pBCryptGenRandom = (PBCryptGenRandom)(void (*)(void))GetProcAddress(hDll, "BCryptGenRandom");
-      // FreeLibrary(hDll);  // don't free
+      // mi_win_freelibrary(hDll);  // don't free
     }
   }
   if (pBCryptGenRandom == NULL) return false;
