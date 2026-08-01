@@ -1021,7 +1021,7 @@ static mi_page_t* mi_arenas_page_regular_alloc(mi_theap_t* theap, size_t slice_c
 
   mi_assert_internal(page->memid.memkind != MI_MEM_ARENA || page->memid.mem.arena.slice_count == slice_count);
   if (!_mi_page_init(theap, page)) {
-    mi_arenas_page_free_prim(page);
+    _mi_arenas_page_free(page,theap);
     return NULL;
   }
 
