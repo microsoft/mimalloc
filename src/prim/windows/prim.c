@@ -153,6 +153,7 @@ static bool win_enable_large_os_pages(size_t* large_page_size) {
   mi_atomic_do_once {
     win_enable_large_os_pages_once(&win_large_page_size);
   }
+  if (large_page_size != NULL) { *large_page_size = win_large_page_size; }
   return (win_large_page_size > 0);
 }
 
