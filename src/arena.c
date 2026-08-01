@@ -238,6 +238,10 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
     mi_assert_internal(already_dirty <= touched_slices);
     touched_slices -= already_dirty;
   }
+  else {
+    // todo: properly count touched pages with a separate bitmap?
+    touched_slices = 0; 
+  }
 
   // set commit state
   if (commit) {
