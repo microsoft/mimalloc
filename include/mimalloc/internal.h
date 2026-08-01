@@ -903,7 +903,8 @@ static inline void mi_page_set_in_full(mi_page_t* page, bool in_full) {
     mi_theap_t* const theap = page->theap;
     mi_assert_internal(theap!=NULL);
     if (theap != NULL) {
-      const size_t size = page->capacity * mi_page_block_size(page);
+      mi_assert_internal(page->capacity==page->reserved);
+      const size_t size = page->reserved * mi_page_block_size(page);
       if (in_full) { theap->pages_full_size += size; }
               else { mi_assert_internal(size <= theap->pages_full_size); theap->pages_full_size -= size; }
     }

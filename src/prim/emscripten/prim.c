@@ -61,7 +61,6 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config) {
 extern void emmalloc_free(void*);
 
 int _mi_prim_free(void* addr, size_t size) {
-  if (size==0) return 0;
   emmalloc_free(addr);
   return 0;
 }
