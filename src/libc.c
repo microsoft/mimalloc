@@ -371,6 +371,7 @@ int _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...) {
   return written;
 }
 
+#undef MI_NEXTC
 
 
 // --------------------------------------------------------

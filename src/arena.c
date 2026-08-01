@@ -1405,10 +1405,10 @@ static bool mi_arenas_contain_ex(const void* p, mi_arena_t* parent) {
   return false;
 }
 
-// Is a pointer inside any of our arenas?
-bool _mi_arenas_contain(const void* p) {
-  return mi_arenas_contain_ex(p, NULL);
-}
+// // Is a pointer inside any of our arenas?
+// bool _mi_arenas_contain(const void* p) {
+//   return mi_arenas_contain_ex(p, NULL);
+// }
 
 // Is a pointer contained in the given arena area?
 bool mi_arena_contains(mi_arena_id_t arena_id, const void* p) {

@@ -442,11 +442,6 @@ bool _mi_is_process_heap_main(const mi_heap_t* heap) {
   return (heap == NULL || heap == &mi_process_heap_main);
 }
 
-bool _mi_is_theap_main(const mi_theap_t* theap) {
-  return (mi_theap_is_initialized(theap) && _mi_is_heap_main(_mi_theap_heap(theap)));
-}
-
-
 
 /* -----------------------------------------------------------
   Sub process
@@ -1169,7 +1164,7 @@ static void mi_process_init_once(void) mi_attr_noexcept {
   mi_thread_init();
   _mi_process_is_initialized = true;
 
-  #if defined(_WIN32) && defined(MI_WIN_USE_FLS)
+  #if defined(_WIN32) && defined(MI_WIN_INIT_USE_FLS)
   // On windows, when building as a static lib the FLS cleanup happens to early for the main thread.
   // To avoid this, set the FLS value for the main thread to NULL so the fls cleanup
   // will not call _mi_thread_done on the (still executing) main thread. See issue #508.

@@ -736,9 +736,6 @@ static void mi_json_buf_print_counter_value(mi_json_buf_t* hbuf, const char* nam
   mi_json_buf_print_value(hbuf, name, stat->total);
 }
 
-#define MI_STAT_COUNT(stat)    mi_json_buf_print_count_value(&hbuf, #stat, &stats->stat);
-#define MI_STAT_COUNTER(stat)  mi_json_buf_print_counter_value(&hbuf, #stat, &stats->stat);
-
 static char* mi_stats_get_json_from(const mi_stats_t* stats, size_t output_size, char* output_buf) mi_attr_noexcept {
   if (stats==NULL || stats->size!=sizeof(mi_stats_t) || stats->version!=MI_STAT_VERSION) return NULL;
   mi_json_buf_t hbuf = { NULL, 0, 0, true };
@@ -777,7 +774,13 @@ static char* mi_stats_get_json_from(const mi_stats_t* stats, size_t output_size,
   mi_json_buf_print(&hbuf, "  },\n");
 
   // statistics
+  #define MI_STAT_COUNT(stat)    mi_json_buf_print_count_value(&hbuf, #stat, &stats->stat);
+  #define MI_STAT_COUNTER(stat)  mi_json_buf_print_counter_value(&hbuf, #stat, &stats->stat);
+
   MI_STAT_FIELDS()
+  
+  #undef MI_STAT_COUNT
+  #undef MI_STAT_COUNTER
 
   // size bins
   mi_json_buf_print(&hbuf, "  \"malloc_bins\": [\n");

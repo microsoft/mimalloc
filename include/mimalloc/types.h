@@ -672,11 +672,11 @@ struct mi_tld_s {
 typedef struct mi_bitmap_s  mi_bitmap_t;    // atomic bitmap  (defined in `src/bitmap.h`)
 typedef struct mi_bbitmap_s mi_bbitmap_t;   // atomic binned bitmap (defined in `src/bitmap.h`)
 
-typedef struct mi_arena_pages_s {
+struct mi_arena_pages_s {
   mi_bitmap_t* pages;                // all registered pages (abandoned and owned)
   mi_bitmap_t* pages_abandoned[MI_ARENA_BIN_COUNT];  // abandoned pages per size bin (a set bit means the start of the page)
   // followed by the bitmaps (whose siz`es depend on the arena size)
-} mi_arena_pages_t;
+};
 
 
 // A memory arena

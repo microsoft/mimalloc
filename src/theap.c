@@ -373,19 +373,19 @@ bool _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acqui
 ----------------------------------------------------------- */
 
 // Safe delete a theap without freeing any still allocated blocks in that theap.
-void _mi_theap_delete(mi_theap_t* theap, bool acquire_tld_theaps_lock)
-{
-  mi_assert(theap != NULL);
-  mi_assert(mi_theap_is_initialized(theap));
-  mi_assert_expensive(mi_theap_is_valid(theap));
-  if (theap==NULL || !mi_theap_is_initialized(theap)) return;
+// void _mi_theap_delete(mi_theap_t* theap, bool acquire_tld_theaps_lock)
+// {
+//   mi_assert(theap != NULL);
+//   mi_assert(mi_theap_is_initialized(theap));
+//   mi_assert_expensive(mi_theap_is_valid(theap));
+//   if (theap==NULL || !mi_theap_is_initialized(theap)) return;
 
-  // abandon all pages
-  _mi_theap_collect_abandon(theap);
+//   // abandon all pages
+//   _mi_theap_collect_abandon(theap);
 
-  mi_assert_internal(theap->page_count==0);
-  _mi_theap_free(theap, true /* acquire heap->theaps_lock */, acquire_tld_theaps_lock);
-}
+//   mi_assert_internal(theap->page_count==0);
+//   _mi_theap_free(theap, true /* acquire heap->theaps_lock */, acquire_tld_theaps_lock);
+// }
 
 
 
@@ -584,11 +584,11 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
   return true;
 }
 
-bool _mi_page_visit_blocks( mi_page_t* page, mi_block_visit_fun* visitor, void* arg ) {
-  mi_heap_area_t area;
-  _mi_heap_area_init(&area, page);
-  return _mi_theap_area_visit_blocks(&area, page, visitor, arg);
-}
+// bool _mi_page_visit_blocks( mi_page_t* page, mi_block_visit_fun* visitor, void* arg ) {
+//   mi_heap_area_t area;
+//   _mi_heap_area_init(&area, page);
+//   return _mi_theap_area_visit_blocks(&area, page, visitor, arg);
+// }
 
 
 // Separate struct to keep `mi_page_t` out of the public interface
