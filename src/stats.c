@@ -443,7 +443,7 @@ void _mi_stats_merge_into(mi_stats_t* to, mi_stats_t* from) {
   mi_assert_internal(to != NULL && from != NULL);
   if (to == from) return;
   mi_stats_add(to, from);
-  _mi_memzero(from, sizeof(mi_stats_t));
+  mi_stats_init(from); // zero field and keep the header 
 }
 
 static const mi_stats_t* mi_stats_merge_theap_to_heap(mi_theap_t* theap) mi_attr_noexcept {
