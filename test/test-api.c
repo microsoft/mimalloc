@@ -430,8 +430,11 @@ int main(void) {
     mi_heap_destroy(h);
 
     mi_stats_t_decl(stats1); 
-    mi_stats_get(&stats1);
+    mi_stats_get(&stats1);    
     result = (stats0.pages.current == stats1.pages.current);    
+    if (!result) {
+      fprintf(stderr, "heap-os2: pages: %lld != %lld (expecting 16==16)\n", stats0.pages.current, stats1.pages.current);
+    }
   }
 
   //CHECK("theap_destroy", test_theap1());
