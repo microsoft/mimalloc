@@ -1044,7 +1044,7 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_theap_t* theap, size_t block
 
   mi_assert(page->reserved == 1);
   if (!_mi_page_init(theap, page)) {
-    _mi_arenas_free( _mi_theap_subproc(theap), page, mi_page_full_size(page), page->memid);
+    _mi_arenas_page_free(page,theap);
     return NULL;
   }
 
