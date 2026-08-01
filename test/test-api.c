@@ -436,6 +436,7 @@ int main(void) {
     }
     mi_heap_destroy(h);
 
+    mi_collect(true);
     mi_stats_t_decl(stats1); 
     mi_stats_get(&stats1);    
     result = (stats0.pages.current == stats1.pages.current);    
