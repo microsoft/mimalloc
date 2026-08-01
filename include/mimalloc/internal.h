@@ -663,7 +663,8 @@ static inline void mi_page_set_in_full(mi_page_t* page, bool in_full) {
   if (page->flags.x.in_full != in_full) {
     // optimize: maintain pages_full_size to avoid visiting the full queue (issue #1220)
     mi_heap_t* const heap = mi_page_heap(page);
-    const size_t size = page->capacity * mi_page_block_size(page);
+    mi_assert_internal(page->capacity==page->reserved);
+    const size_t size = page->reserved * mi_page_block_size(page);
     if (in_full) { heap->pages_full_size += size; }
             else { mi_assert_internal(size <= heap->pages_full_size); heap->pages_full_size -= size; }
   }
