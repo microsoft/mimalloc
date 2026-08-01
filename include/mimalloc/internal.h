@@ -105,8 +105,8 @@ int         _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list ar
 int         _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...);
 char        _mi_toupper(char c);
 int         _mi_strnicmp(const char* s, const char* t, size_t n);
-void        _mi_strlcpy(char* dest, const char* src, size_t dest_size);
-void        _mi_strlcat(char* dest, const char* src, size_t dest_size);
+bool        _mi_strlcpy(char* dest, const char* src, size_t dest_size);  // returns true if the full string was copied
+bool        _mi_strlcat(char* dest, const char* src, size_t dest_size);  // returns true if the full string was catenated
 size_t      _mi_strlen(const char* s);
 size_t      _mi_strnlen(const char* s, size_t max_len);
 bool        _mi_streq(const char* s, const char* t);
@@ -379,6 +379,11 @@ static inline bool _mi_is_power_of_two(uintptr_t x) {
   return ((x & (x - 1)) == 0);
 }
 
+// valid alignment values are as posix memalign: <https://en.cppreference.com/c/memory/aligned_alloc#Notes>
+static inline bool mi_alignment_is_valid(size_t alignment) {
+  return ((alignment!=0) && _mi_is_power_of_two(alignment)); 
+}
+
 // Is a pointer aligned?
 static inline bool _mi_is_aligned(void* p, size_t alignment) {
   return (alignment==0 || ((uintptr_t)p % alignment) == 0);
@@ -456,10 +461,10 @@ static inline size_t _mi_wsize_from_size(size_t size) {
 #undef _CLOCK_T
 #endif
 static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
-  #if (SIZE_MAX == ULONG_MAX)
-    return __builtin_umull_overflow(count, size, (unsigned long *)total);
-  #elif (SIZE_MAX == UINT_MAX)
+  #if (SIZE_MAX == UINT_MAX)
     return __builtin_umul_overflow(count, size, (unsigned int *)total);
+  #elif (SIZE_MAX == ULONG_MAX)
+    return __builtin_umull_overflow(count, size, (unsigned long *)total);
   #else
     return __builtin_umulll_overflow(count, size, (unsigned long long *)total);
   #endif
@@ -696,7 +701,8 @@ static inline void mi_page_set_in_full(mi_page_t* page, bool in_full) {
   if (page->flags.x.in_full != in_full) {
     // optimize: maintain pages_full_size to avoid visiting the full queue (issue #1220)
     mi_heap_t* const heap = mi_page_heap(page);
-    const size_t size = page->capacity * mi_page_block_size(page);
+    mi_assert_internal(page->capacity==page->reserved);
+    const size_t size = page->reserved * mi_page_block_size(page);
     if (in_full) { heap->pages_full_size += size; }
             else { mi_assert_internal(size <= heap->pages_full_size); heap->pages_full_size -= size; }
   }
@@ -732,20 +738,27 @@ static inline bool mi_heap_malloc_use_guarded(mi_heap_t* heap, size_t size) {
     // no sample
     heap->guarded_sample_count = count;
     return false;
-  }
-  else if (size >= heap->guarded_size_min && size <= heap->guarded_size_max) {
-    // use guarded allocation
-    heap->guarded_sample_count = heap->guarded_sample_rate;  // reset
-    return (heap->guarded_sample_rate != 0);
-  }
-  else {
-    // failed size criteria, rewind count (but don't write to an empty heap)
-    if (heap->guarded_sample_rate != 0) { heap->guarded_sample_count = 1; }
-    return false;
+  }  
+  else { 
+    // count == 0
+    const size_t rate = heap->guarded_sample_rate;
+    if (rate == 0) {
+      return false; // don't write to an empty theap
+    }
+    else if (size >= heap->guarded_size_min && size <= heap->guarded_size_max) {
+      // use guarded allocation        
+      heap->guarded_sample_count = rate;  // reset
+      return true;
+    }
+    else {
+      // failed size criteria, rewind count
+      heap->guarded_sample_count = 1;
+      return false;
+    }
   }
 }
 
-mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
+mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero, size_t* usable) mi_attr_noexcept;
 
 #endif
 

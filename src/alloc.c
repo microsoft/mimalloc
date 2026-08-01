@@ -122,10 +122,6 @@ extern void* _mi_page_malloc_zeroed(mi_heap_t* heap, mi_page_t* page, size_t siz
   return _mi_page_malloc_zero(heap,page,size,true,NULL);
 }
 
-#if MI_GUARDED
-mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
-#endif
-
 static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, size_t size, bool zero, size_t* usable) mi_attr_noexcept {
   mi_assert(heap != NULL);
   mi_assert(size <= MI_SMALL_SIZE_MAX);
@@ -138,7 +134,7 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
   #endif
   #if MI_GUARDED
   if (mi_heap_malloc_use_guarded(heap,size)) {
-    return _mi_heap_malloc_guarded(heap, size, zero);
+    return _mi_heap_malloc_guarded(heap, size, zero, usable);
   }
   #endif
 
@@ -177,7 +173,7 @@ extern inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool z
   }
   #if MI_GUARDED
   else if (huge_alignment==0 && mi_heap_malloc_use_guarded(heap,size)) {
-    return _mi_heap_malloc_guarded(heap, size, zero);
+    return _mi_heap_malloc_guarded(heap, size, zero, usable);
   }
   #endif
   else {
@@ -237,6 +233,10 @@ mi_decl_nodiscard mi_decl_restrict void* mi_umalloc_small(size_t size, size_t* u
   return mi_heap_malloc_small_zero(mi_prim_get_default_heap(), size, false, usable);
 }
 
+mi_decl_nodiscard mi_decl_restrict void* mi_uzalloc_small(size_t size, size_t* usable) mi_attr_noexcept {
+  return mi_heap_malloc_small_zero(mi_prim_get_default_heap(), size, true, usable);
+}
+
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_umalloc(mi_heap_t* heap, size_t size, size_t* usable) mi_attr_noexcept {
   return _mi_heap_malloc_zero_ex(heap, size, false, 0, usable);
 }
@@ -293,7 +293,12 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero,
     if (usable_pre!=NULL) { *usable_pre = 0; }
   }
   else {    
-    page = mi_validate_ptr_page(p,"mi_realloc");  
+    page = mi_validate_ptr_page(p,"mi_realloc"); 
+    if mi_unlikely(page==NULL) {  // invalid pointer
+      if (usable_pre!=NULL) { *usable_pre = 0; }
+      if (usable_post!=NULL) { *usable_post = 0; }  
+      return NULL;
+    } 
     size = _mi_usable_size(p,page);
     if (usable_pre!=NULL) { *usable_pre = mi_page_usable_block_size(page); }    
   }
@@ -426,13 +431,30 @@ mi_decl_nodiscard mi_decl_restrict char* mi_strndup(const char* s, size_t n) mi_
 
 mi_decl_nodiscard mi_decl_restrict char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept {
   // todo: use GetFullPathNameW to allow longer file names
+  if (fname==NULL || *fname==0) {
+    errno = EINVAL;
+    return NULL;
+  }
   char buf[PATH_MAX];
   DWORD res = GetFullPathNameA(fname, PATH_MAX, (resolved_name == NULL ? buf : resolved_name), NULL);
   if (res == 0) {
-    errno = GetLastError(); return NULL;
+    DWORD err = GetLastError();
+    switch (err) {
+      case ERROR_LOCK_VIOLATION:
+      case ERROR_SHARING_VIOLATION:
+      case ERROR_INVALID_ACCESS:    errno = EACCES; break;
+      case ERROR_INVALID_HANDLE:
+      case ERROR_INVALID_FUNCTION:  errno = EINVAL; break;
+      case ERROR_PATH_NOT_FOUND:    errno = ENOTDIR; break;
+      case ERROR_FILE_NOT_FOUND:    errno = ENOENT; break;
+      case ERROR_NOT_ENOUGH_MEMORY: errno = ENOMEM; break;
+      default:                      errno = EIO;
+    }
+    return NULL;
   }
   else if (res > PATH_MAX) {
-    errno = EINVAL; return NULL;
+    errno = ENAMETOOLONG;
+    return NULL;
   }
   else if (resolved_name != NULL) {
     return resolved_name;
@@ -502,8 +524,11 @@ The standard requires calling into `get_new_handler` and
 throwing the bad_alloc exception on failure. If we compile
 with a C++ compiler we can implement this precisely. If we
 use a C compiler we cannot throw a `bad_alloc` exception
-but we call `exit` instead (i.e. not returning).
+but we call `abort` instead (i.e. not returning).
+Also, the standard requires calling the new handler until
+it returns false, but we limit the total calls.
 -------------------------------------------------------*/
+#define MI_TRY_NEW_MAX (4)
 
 #ifdef __cplusplus
 #include <new>
@@ -525,8 +550,17 @@ static bool mi_try_new_handler(bool nothrow) {
     #endif
     return false;
   }
-  else {
+  else if (!nothrow) {
     h();
+    return true;
+  }
+  else {
+    try {
+      h();
+    }
+    catch(...) {     // swallow std::bad_alloc
+      return false;  // stop trying
+    }
     return true;
   }
 }
@@ -565,7 +599,8 @@ static bool mi_try_new_handler(bool nothrow) {
 
 mi_decl_export mi_decl_noinline void* mi_heap_try_new(mi_heap_t* heap, size_t size, bool nothrow ) {
   void* p = NULL;
-  while(p == NULL && mi_try_new_handler(nothrow)) {
+  for(int i = 0; i < MI_TRY_NEW_MAX && p == NULL && mi_try_new_handler(nothrow); i++) {
+    if (size > MI_MAX_ALLOC_SIZE) return NULL; // call try_new_handler at least once
     p = mi_heap_malloc(heap,size);
   }
   return p;
@@ -574,7 +609,6 @@ mi_decl_export mi_decl_noinline void* mi_heap_try_new(mi_heap_t* heap, size_t si
 static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow) {
   return mi_heap_try_new(mi_prim_get_default_heap(), size, nothrow);
 }
-
 
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size_t size) {
   void* p = mi_heap_malloc(heap,size);
@@ -585,7 +619,6 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size
 mi_decl_nodiscard mi_decl_restrict void* mi_new(size_t size) {
   return mi_heap_alloc_new(mi_prim_get_default_heap(), size);
 }
-
 
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) {
   size_t total;
@@ -602,43 +635,52 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new_n(size_t count, size_t size) {
   return mi_heap_alloc_new_n(mi_prim_get_default_heap(), count, size);
 }
 
-
 mi_decl_nodiscard mi_decl_restrict void* mi_new_nothrow(size_t size) mi_attr_noexcept {
   void* p = mi_malloc(size);
   if mi_unlikely(p == NULL) return mi_try_new(size, true);
   return p;
 }
 
-mi_decl_nodiscard mi_decl_restrict void* mi_new_aligned(size_t size, size_t alignment) {
-  void* p;
-  do {
-    p = mi_malloc_aligned(size, alignment);
+static mi_decl_noinline void* mi_try_new_aligned(size_t size, size_t alignment, bool nothrow) {
+  void* p = NULL;
+  for(int i = 0; i < MI_TRY_NEW_MAX && p==NULL && mi_try_new_handler(nothrow); i++) {
+    if (!mi_alignment_is_valid(alignment)) return NULL;
+    p = mi_malloc_aligned(size,alignment);
   }
-  while(p == NULL && mi_try_new_handler(false));
+  return p;
+}
+
+mi_decl_nodiscard mi_decl_restrict void* mi_new_aligned(size_t size, size_t alignment) {
+  void* p = mi_malloc_aligned(size, alignment);
+  if mi_unlikely(p==NULL) return mi_try_new_aligned(size,alignment,false);
   return p;
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_new_aligned_nothrow(size_t size, size_t alignment) mi_attr_noexcept {
-  void* p;
-  do {
-    p = mi_malloc_aligned(size, alignment);
-  }
-  while(p == NULL && mi_try_new_handler(true));
+  void* p = mi_malloc_aligned(size, alignment);
+  if mi_unlikely(p==NULL) return mi_try_new_aligned(size,alignment,true);
   return p;
 }
 
+static mi_decl_noinline void* mi_try_new_realloc(void* p, size_t newsize) {
+  void* q = NULL;
+  for(int i = 0; i < MI_TRY_NEW_MAX && q==NULL && mi_try_new_handler(false); i++) {
+    if (newsize > MI_MAX_ALLOC_SIZE) return NULL;
+    q = mi_realloc(p,newsize);
+  }
+  return q;
+}
+
 mi_decl_nodiscard void* mi_new_realloc(void* p, size_t newsize) {
-  void* q;
-  do {
-    q = mi_realloc(p, newsize);
-  } while (q == NULL && mi_try_new_handler(false));
+  void* q = mi_realloc(p, newsize);
+  if (q == NULL) return mi_try_new_realloc(p,newsize);
   return q;
 }
 
 mi_decl_nodiscard void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
   size_t total;
   if mi_unlikely(mi_count_size_overflow(newcount, size, &total)) {
-    mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
+    mi_try_new_handler(false);
     return NULL;
   }
   else {
@@ -651,7 +693,7 @@ mi_decl_nodiscard void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
 // We then set the first word of the block to `0` for regular offset aligned allocations (in `alloc-aligned.c`)
 // and the first word to `~0` for guarded allocations to have a correct `mi_usable_size`
 
-static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
+static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size, size_t* usable_size) {
   // TODO: we can still make padding work by moving it out of the guard page area
   mi_page_t* const page = _mi_ptr_page(block);
   mi_page_set_has_aligned(page, true);
@@ -687,13 +729,14 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size) {
     offset = MI_BLOCK_ALIGNMENT_MAX;
   }
   uint8_t* const p = (uint8_t*)block + offset;
-  mi_assert_internal(p == guard_page - obj_size);
+  mi_assert_internal(p == guard_page - obj_size || offset == MI_BLOCK_ALIGNMENT_MAX);
+  if (usable_size != NULL) { *usable_size = (guard_page - p); mi_assert_internal(mi_usable_size(p)==*usable_size); }
   mi_track_align(block, p, offset, obj_size);
   mi_track_mem_defined(block, sizeof(mi_block_t));
   return p;
 }
 
-mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept
+mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero, size_t* usable) mi_attr_noexcept
 {
   // allocate multiple of page size ending in a guard page
   // ensure minimal alignment requirement?
@@ -705,16 +748,17 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   const size_t obj_size = (mi_option_is_enabled(mi_option_guarded_precise) ? size : _mi_align_up(size, MI_MAX_ALIGN_SIZE));
   const size_t bsize    = _mi_align_up(_mi_align_up(obj_size, MI_MAX_ALIGN_SIZE) + sizeof(mi_block_t), MI_MAX_ALIGN_SIZE);
   const size_t req_size = _mi_align_up(bsize + os_page_size, os_page_size);
-  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(heap, req_size, false /* don't zero */, 0 /* huge_alignment */, NULL);
+  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(heap, req_size, false /* don't zero */, 0 /* huge_alignment */, usable);
   if (block==NULL) return NULL;
-  void* const p   = mi_block_ptr_set_guarded(block, obj_size);
-  if (p == NULL) return NULL;  
+  size_t usable_size;
+  void* const p   = mi_block_ptr_set_guarded(block, obj_size, &usable_size);
+  if (p == NULL) return NULL;    
   if (zero) {
     _mi_memzero(p,obj_size);  // we have to zero afterwards as padding might have written inside the block (if the `blocksize > reqsize + os_page_size`)
   }
 
   // stats
-  mi_track_malloc(p, obj_size, zero);   
+  mi_track_malloc(p, usable_size, zero);   
   if (!mi_heap_is_initialized(heap)) { heap = mi_prim_get_default_heap(); }
   _mi_stat_counter_increase(&heap->tld->stats.malloc_guarded_count, 1);
   #if MI_STAT>1

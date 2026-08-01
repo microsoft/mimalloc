@@ -832,6 +832,10 @@ static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int
     _mi_warning_message("the arena size is too small (memory at %p with size %zu)\n", start, size);
     return false;
   }
+  if (size > MI_MAX_ALLOC_SIZE) {
+    _mi_error_message(EOVERFLOW, "the arena size is too large (memory at %p with size %zu)\n", start, size);
+    return false;
+  }
   if (is_large) {
     mi_assert_internal(memid.initially_committed && memid.is_pinned);
   }
@@ -902,7 +906,13 @@ bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is
 // Reserve a range of regular OS memory
 int mi_reserve_os_memory_ex(size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept {
   if (arena_id != NULL) *arena_id = _mi_arena_id_none();
-  size = _mi_align_up(size, MI_ARENA_BLOCK_SIZE); // at least one block
+  if (size < MI_MAX_ALLOC_SIZE) {
+    size = _mi_align_up(size, MI_ARENA_BLOCK_SIZE); // at least one block
+  }
+  if (size > MI_MAX_ALLOC_SIZE) {
+    _mi_error_message(EOVERFLOW, "memory reservation request is too large (size %zu)\n", size);
+    return ENOMEM;
+  }
   mi_memid_t memid;
   void* start = _mi_os_alloc_aligned(size, MI_SEGMENT_ALIGN, commit, allow_large, &memid);
   if (start == NULL) return ENOMEM;

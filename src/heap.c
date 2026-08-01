@@ -26,7 +26,7 @@ typedef bool (heap_page_visitor_fun)(mi_heap_t* heap, mi_page_queue_t* pq, mi_pa
 // Visit all pages in a heap; returns `false` if break was called.
 static bool mi_heap_visit_pages(mi_heap_t* heap, heap_page_visitor_fun* fn, bool include_full, void* arg1, void* arg2)
 {
-  if (heap==NULL || heap->page_count==0) return 0;
+  if (heap==NULL || heap->page_count==0) return true;
 
   // visit all pages
   #if MI_DEBUG>1

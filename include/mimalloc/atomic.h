@@ -211,11 +211,6 @@ static inline uintptr_t mi_atomic_exchange_explicit(_Atomic(uintptr_t)*p, uintpt
   (void)(mo);
   return (uintptr_t)MI_MSC_64(_InterlockedExchange)((volatile msc_intptr_t*)p, (msc_intptr_t)exchange);
 }
-static inline void mi_atomic_thread_fence(mi_memory_order mo) {
-  (void)(mo);
-  _Atomic(uintptr_t) x = 0;
-  mi_atomic_exchange_explicit(&x, 1, mo);
-}
 
 static inline uintptr_t mi_atomic_load_explicit(_Atomic(uintptr_t) const* p, mi_memory_order mo) {
   (void)(mo);
@@ -330,18 +325,18 @@ static inline void mi_atomic_void_addi64_relaxed(volatile int64_t* p, const vola
   }
 }
 
-static inline void mi_atomic_maxi64_relaxed(volatile _Atomic(int64_t)*p, int64_t x) {
+static inline void mi_atomic_maxi64_relaxed(volatile _Atomic(int64_t)* p, int64_t x) {
   int64_t current;
   do {
     current = *p;
   } while (current < x && _InterlockedCompareExchange64(p, x, current) != current);
 }
 
-static inline void mi_atomic_addi64_acq_rel(volatile _Atomic(int64_t*)p, int64_t i) {
+static inline void mi_atomic_addi64_acq_rel(volatile _Atomic(int64_t)* p, int64_t i) {
   mi_atomic_addi64_relaxed(p, i);
 }
 
-static inline bool mi_atomic_casi64_strong_acq_rel(volatile _Atomic(int64_t*)p, int64_t* exp, int64_t des) {
+static inline bool mi_atomic_casi64_strong_acq_rel(volatile _Atomic(int64_t)* p, int64_t* exp, int64_t des) {
   const int64_t read = _InterlockedCompareExchange64(p, des, *exp);
   if (read == *exp) {
     return true;

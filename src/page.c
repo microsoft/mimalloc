@@ -226,7 +226,7 @@ static void _mi_page_thread_free_collect(mi_page_t* page)
   }
   // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
   if mi_unlikely(count > max_count) {
-    _mi_error_message(EFAULT, "corrupted thread-free list\n");
+    _mi_error_message(EFAULT, "corrupted thread-free list (possibly due to a cross-thread double free)\n");
     return; // the thread-free items cannot be freed
   }
   // if `count > page->used` there was another kind memory corruption (either in the page meta-data or in the linked list)
@@ -482,7 +482,6 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq, bool force) {
   _mi_segment_page_free(page, force, segments_tld);
 }
 
-#define MI_MAX_RETIRE_SIZE    MI_MEDIUM_OBJ_SIZE_MAX   // should be less than size for MI_BIN_HUGE
 #define MI_RETIRE_CYCLES      (16)
 
 // Retire a page with no more used blocks
@@ -567,7 +566,7 @@ void _mi_heap_collect_retired(mi_heap_t* heap, bool force) {
 
 static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* const page, const size_t bsize, const size_t extend, mi_stats_t* const stats) {
   MI_UNUSED(stats);
-  #if (MI_SECURE<=2)
+  #if (MI_SECURE < 2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
   #endif
@@ -625,7 +624,7 @@ static void mi_page_free_list_extend_secure(mi_heap_t* const heap, mi_page_t* co
 static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t bsize, const size_t extend, mi_stats_t* const stats)
 {
   MI_UNUSED(stats);
-  #if (MI_SECURE <= 2)
+  #if (MI_SECURE < 2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
   #endif
@@ -666,7 +665,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 // extra test in malloc? or cache effects?)
 static bool mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld) {
   mi_assert_expensive(mi_page_is_valid_init(page));
-  #if (MI_SECURE<=2)
+  #if (MI_SECURE < 2)
   mi_assert(page->free == NULL);
   mi_assert(page->local_free == NULL);
   if (page->free != NULL) return true;
