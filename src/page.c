@@ -411,7 +411,6 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   _mi_arenas_collect(false, false, theap->tld);  // allow purging
 }
 
-#define MI_MAX_RETIRE_SIZE    MI_LARGE_OBJ_SIZE_MAX   // should be less than size for MI_BIN_HUGE
 #define MI_RETIRE_CYCLES      (16)
 
 // Retire a page with no more used blocks
