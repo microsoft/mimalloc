@@ -60,7 +60,6 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config) {
 extern void emmalloc_free(void*);
 
 int _mi_prim_free(void* addr, size_t size) {
-  if (size==0) return 0;
   emmalloc_free(addr);
   return 0;
 }
@@ -154,7 +153,8 @@ size_t _mi_prim_numa_node_count(void) {
 #include <emscripten/html5.h>
 
 mi_msecs_t _mi_prim_clock_now(void) {
-  return emscripten_date_now();
+  // todo: use a monotonic clock instead
+  return emscripten_date_now();  
 }
 
 

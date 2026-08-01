@@ -125,7 +125,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   false,            // can reclaim
   0,                // tag
   #if MI_GUARDED
-  0, 0, 0, 1,       // count is 1 so we never write to it (see `internal.h:mi_heap_malloc_use_guarded`)
+  0, 0, 0, 1,       // rate is 0 and count is 1 so we never write to it (see `internal.h:mi_heap_malloc_use_guarded`)
   #endif
   MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY

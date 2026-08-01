@@ -873,6 +873,11 @@ static mi_segment_t* mi_segment_os_alloc( size_t required, size_t page_alignment
   if (memid.initially_committed) {
     mi_commit_mask_create_full(&commit_mask);
   }
+  else if (required > 0) {
+    // huge segments must be fully committed
+    _mi_arena_free(segment, segment_size, 0, memid);
+    return NULL;
+  }
   else {
     // at least commit the info slices
     const size_t commit_needed = _mi_divide_up((*pinfo_slices)*MI_SEGMENT_SLICE_SIZE, MI_COMMIT_SIZE);
@@ -918,22 +923,22 @@ static mi_segment_t* mi_segment_alloc(size_t required, size_t page_alignment, mi
                             tld->peak_count < (size_t)mi_option_get(mi_option_eager_commit_delay));
   const bool eager = !eager_delay && mi_option_is_enabled(mi_option_eager_commit);
   bool commit = eager || (required > 0);
-
+  
   // Allocate the segment from the OS
   mi_segment_t* segment = mi_segment_os_alloc(required, page_alignment, eager_delay, req_arena_id,
                                               &segment_slices, &info_slices, commit, tld);
   if (segment == NULL) return NULL;
 
   // zero the segment info? -- not always needed as it may be zero initialized from the OS
+  const size_t slice_entries = (segment_slices > MI_SLICES_PER_SEGMENT ? MI_SLICES_PER_SEGMENT : segment_slices);
   if (!segment->memid.initially_zero) {
     ptrdiff_t ofs    = offsetof(mi_segment_t, next);
     size_t    prefix = offsetof(mi_segment_t, slices) - ofs;
-    size_t    zsize  = prefix + (sizeof(mi_slice_t) * (segment_slices + 1)); // one more
+    size_t    zsize  = prefix + (sizeof(mi_slice_t) * (slice_entries + 1)); // one more
     _mi_memzero((uint8_t*)segment + ofs, zsize);
   }
 
   // initialize the rest of the segment info
-  const size_t slice_entries = (segment_slices > MI_SLICES_PER_SEGMENT ? MI_SLICES_PER_SEGMENT : segment_slices);
   segment->segment_slices = segment_slices;
   segment->segment_info_slices = info_slices;
   segment->thread_id = _mi_thread_id();
