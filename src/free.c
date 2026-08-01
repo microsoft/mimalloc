@@ -653,9 +653,11 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   mi_theap_t* theap = _mi_theap_default();
   mi_lock_t* lock = NULL;
   mi_subproc_t* const subproc = mi_page_subproc(page);
-  if mi_unlikely(!mi_theap_is_initialized(theap) || page->theap == subproc->theap_meta) { // can happen if free'd after thread_done was called (usually a thread cleanup call by the OS)
-    if (subproc->theap_meta==NULL) return; // give up
-    theap = subproc->theap_meta;
+  mi_theap_t* const theap_meta = subproc->theap_meta;
+  if mi_unlikely(!mi_theap_is_initialized(theap) || // can happen if free'd after thread_done was called (usually a thread cleanup call by the OS)
+                  // page->theap == subproc->theap_meta  .. but we cannot read `theap` if we don't own the page
+                  (theap_meta != NULL && mi_page_thread_id(page) == theap_meta->tld->thread_id)) { 
+    theap = theap_meta;
     lock = &subproc->theap_meta_lock;
     mi_lock_acquire(lock);
   }
