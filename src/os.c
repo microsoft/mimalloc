@@ -636,7 +636,7 @@ static mi_decl_cache_align _Atomic(uintptr_t)  mi_huge_start; // = 0
 // Claim an aligned address range for huge pages
 static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
   if (total_size != NULL) *total_size = 0;
-  const size_t size = 0;
+  size_t size = 0;
   if (mi_mul_overflow(pages,MI_HUGE_OS_PAGE_SIZE,&size)) {
     _mi_warning_message("too many huge pages requested: %zu\n", pages);
     return NULL;

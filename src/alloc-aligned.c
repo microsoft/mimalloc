@@ -298,7 +298,7 @@ static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t ne
   if (p == NULL) return mi_heap_malloc_zero_aligned_at(heap,newsize,alignment,offset,zero,NULL);
   size_t size = mi_usable_size(p);
   if (newsize <= size && newsize >= (size - (size / 2)) && (((uintptr_t)p + offset) & (alignment-1)) == 0) {
-    return p;  // reallocation still fits, is aligned and not more than 25% waste
+    return p;  // reallocation still fits, is aligned and not more than 50% waste
   }
   else {
     // note: we don't zero allocate upfront so we only zero initialize the expanded part
