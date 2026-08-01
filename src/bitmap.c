@@ -965,7 +965,7 @@ static bool mi_bchunk_bsr(mi_bchunk_t* chunk, size_t* pidx) {
   return false;
 }
 
-static bool mi_bchunk_bsr_inv(mi_bchunk_t* chunk, size_t* pidx) {
+static bool mi_bchunk_bsr_inv(mi_bchunk_t* chunk, size_t* pidx) {  
   for (size_t i = MI_BCHUNK_FIELDS; i > 0; ) {
     i--;
     mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[i]);
@@ -1587,6 +1587,7 @@ void mi_bbitmap_unsafe_setN(mi_bbitmap_t* bbitmap, size_t idx, size_t n) {
 bool mi_bbitmap_bsr_inv(mi_bbitmap_t* bbitmap, size_t* idx) {
   // scan for highest zero bit in the bitmap
   // note: we cannot use the chunkmap since that only conservatively denotes if there might be a set bit in a chuck
+  // todo: bbitmap_init rounds up the bitcount to BCHUNK_BITS and we should skip the top-padding!
   const size_t chunk_count = mi_bbitmap_chunk_count(bbitmap);
   for(size_t i = chunk_count; i > 0; ) {
     i--;

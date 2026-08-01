@@ -103,8 +103,8 @@ static size_t mi_arena_max_object_size(void) {
   if (max_size <= MI_ARENA_MIN_OBJ_SIZE) {
     return MI_ARENA_MIN_OBJ_SIZE;
   }
-  else if (max_size >= MI_ARENA_MAX_SIZE - MI_BCHUNK_SIZE) {  // minus a bchunk to accommodate meta info
-    return (MI_ARENA_MAX_SIZE - MI_BCHUNK_SIZE);
+  else if (max_size >= MI_ARENA_MAX_SIZE - (MI_BCHUNK_BITS*MI_ARENA_SLICE_SIZE)) {  // minus an initial chunk to accommodate meta info
+    return (MI_ARENA_MAX_SIZE - (MI_BCHUNK_BITS*MI_ARENA_SLICE_SIZE));
   }
   else {
     return max_size;
