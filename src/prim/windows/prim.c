@@ -13,9 +13,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdio.h>   // fputs, stderr
 #include <stdlib.h>  // atexit
 
-// xbox has no console IO
-#if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP | WINAPI_PARTITION_SYSTEM)
-#define MI_HAS_CONSOLE_IO
+// xbox has no console IO and cannot use mi_win_loadlibrary
+#if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)
+#define MI_WIN_DESKTOP  1
 #endif
 
 //---------------------------------------------
@@ -78,6 +78,34 @@ static PGetLargePageMinimum pGetLargePageMinimum = NULL;
 // Available after Windows XP
 typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalMemoryInKilobytes );
 
+// Load a library
+static HMODULE mi_win_loadlibrary(const TCHAR* library) {  
+  #if MI_WIN_DESKTOP
+    return LoadLibrary(library);
+  #else
+    return LoadPackagedLibrary(library, 0);
+  #endif
+}
+
+// Get a library handle (and possibly load it)
+static HMODULE mi_win_getlibrary(const TCHAR* library, bool* should_free) {
+  #if MI_WIN_DESKTOP
+  // avoid calling LoadLibrary for "kernel32", "ntdll", and "kernelbase" (also to avoid hitting the loader lock)
+  HMODULE mod = GetModuleHandle(library); 
+  if (mod!=NULL) {
+    *should_free = false;
+    return mod;
+  }
+  #endif
+  *should_free = true;
+  return mi_win_loadlibrary(library);
+}
+
+static void mi_win_freelibrary(HMODULE mod, bool should_free) {
+  if (should_free) { 
+    FreeLibrary(mod);
+  }
+}
 
 //---------------------------------------------
 // Enable large page support dynamically (if possible)
@@ -94,15 +122,17 @@ static bool win_enable_large_os_pages_once(size_t* large_page_size)
   unsigned long err = 0;
   HANDLE token = NULL;
   BOOL ok = OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token);
+  err = GetLastError();
   if (ok) {
     TOKEN_PRIVILEGES tp;
     ok = LookupPrivilegeValue(NULL, TEXT("SeLockMemoryPrivilege"), &tp.Privileges[0].Luid);
+    err = GetLastError();
     if (ok) {
       tp.PrivilegeCount = 1;
       tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
       ok = AdjustTokenPrivileges(token, FALSE, &tp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
+      err = GetLastError();
       if (ok) {
-        err = GetLastError();
         ok = (err == ERROR_SUCCESS);
         if (ok && large_page_size != NULL && pGetLargePageMinimum != NULL) {
           *large_page_size = (*pGetLargePageMinimum)();
@@ -112,17 +142,19 @@ static bool win_enable_large_os_pages_once(size_t* large_page_size)
     CloseHandle(token);
   }
   if (!ok) {
-    if (err == 0) err = GetLastError();
+    if (err == 0) { err = GetLastError(); }
     _mi_warning_message("cannot enable large OS page support, error %lu\n", err);
   }
   return (ok!=0);
 }
 
 static bool win_enable_large_os_pages(size_t* large_page_size) {
+  static size_t win_large_page_size = 0;
   mi_atomic_do_once {
-    win_enable_large_os_pages_once(large_page_size);
+    win_enable_large_os_pages_once(&win_large_page_size);
   }
-  return (_mi_os_large_page_size() > 0);
+  if (large_page_size != NULL) { *large_page_size = win_large_page_size; }
+  return (win_large_page_size > 0);
 }
 
 
@@ -147,22 +179,22 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   }
 
   // get the VirtualAlloc2 function
-  HINSTANCE  hDll;
-  hDll = LoadLibrary(TEXT("kernelbase.dll"));
+  bool hDllFree;
+  HINSTANCE hDll = mi_win_getlibrary(TEXT("kernelbase.dll"), &hDllFree);
   if (hDll != NULL) {
     // use VirtualAlloc2FromApp if possible as it is available to Windows store apps
     pVirtualAlloc2 = (PVirtualAlloc2)(void (*)(void))GetProcAddress(hDll, "VirtualAlloc2FromApp");
     if (pVirtualAlloc2==NULL) pVirtualAlloc2 = (PVirtualAlloc2)(void (*)(void))GetProcAddress(hDll, "VirtualAlloc2");
-    FreeLibrary(hDll);
+    mi_win_freelibrary(hDll, hDllFree);
   }
   // NtAllocateVirtualMemoryEx is used for huge page allocation
-  hDll = LoadLibrary(TEXT("ntdll.dll"));
+  hDll = mi_win_getlibrary(TEXT("ntdll.dll"), &hDllFree);
   if (hDll != NULL) {
     pNtAllocateVirtualMemoryEx = (PNtAllocateVirtualMemoryEx)(void (*)(void))GetProcAddress(hDll, "NtAllocateVirtualMemoryEx");
-    FreeLibrary(hDll);
+    mi_win_freelibrary(hDll, hDllFree);
   }
   // Try to use Win7+ numa API
-  hDll = LoadLibrary(TEXT("kernel32.dll"));
+  hDll = mi_win_getlibrary(TEXT("kernel32.dll"), &hDllFree);
   if (hDll != NULL) {
     pGetCurrentProcessorNumberEx = (PGetCurrentProcessorNumberEx)(void (*)(void))GetProcAddress(hDll, "GetCurrentProcessorNumberEx");
     pGetNumaProcessorNodeEx = (PGetNumaProcessorNodeEx)(void (*)(void))GetProcAddress(hDll, "GetNumaProcessorNodeEx");
@@ -181,7 +213,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
         }
       }
     }
-    FreeLibrary(hDll);
+    mi_win_freelibrary(hDll, hDllFree);
   }
   // Enable large/huge OS page support?
   if (mi_option_is_enabled(mi_option_allow_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
@@ -204,8 +236,9 @@ int _mi_prim_free(void* addr, size_t size ) {
     // the memory region returned by VirtualAlloc; in that case we need to free using
     // the start of the region.
     MEMORY_BASIC_INFORMATION info; _mi_memzero_var(info);
-    VirtualQuery(addr, &info, sizeof(info));
-    if (info.AllocationBase < addr && ((uint8_t*)addr - (uint8_t*)info.AllocationBase) < (ptrdiff_t)MI_SEGMENT_SIZE) {
+    err = (VirtualQuery(addr, &info, sizeof(info)) == 0);
+    if (err) { errcode = GetLastError(); }
+    if (!err && info.AllocationBase < addr && ((uint8_t*)addr - (uint8_t*)info.AllocationBase) < (ptrdiff_t)MI_SEGMENT_SIZE) {
       errcode = 0;
       err = (VirtualFree(info.AllocationBase, 0, MEM_RELEASE) == 0);
       if (err) { errcode = GetLastError(); }
@@ -501,8 +534,9 @@ static mi_msecs_t mi_to_msecs(LARGE_INTEGER t) {
   static LARGE_INTEGER mfreq; // = 0
   if (mfreq.QuadPart == 0LL) {
     LARGE_INTEGER f;
-    QueryPerformanceFrequency(&f);
-    mfreq.QuadPart = f.QuadPart/1000LL;
+    if (QueryPerformanceFrequency(&f)) {
+      mfreq.QuadPart = f.QuadPart/1000LL;
+    }
     if (mfreq.QuadPart == 0) mfreq.QuadPart = 1;
   }
   return (mi_msecs_t)(t.QuadPart / mfreq.QuadPart);
@@ -510,8 +544,12 @@ static mi_msecs_t mi_to_msecs(LARGE_INTEGER t) {
 
 mi_msecs_t _mi_prim_clock_now(void) {
   LARGE_INTEGER t;
-  QueryPerformanceCounter(&t);
-  return mi_to_msecs(t);
+  if (QueryPerformanceCounter(&t)) {
+    return mi_to_msecs(t);
+  }
+  else {
+    return 0;
+  }
 }
 
 
@@ -538,29 +576,31 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
   FILETIME ut;
   FILETIME st;
   FILETIME et;
-  GetProcessTimes(GetCurrentProcess(), &ct, &et, &st, &ut);
-  pinfo->utime = filetime_msecs(&ut);
-  pinfo->stime = filetime_msecs(&st);
+  if (GetProcessTimes(GetCurrentProcess(), &ct, &et, &st, &ut)) {
+    pinfo->utime = filetime_msecs(&ut);
+    pinfo->stime = filetime_msecs(&st);
+  }
 
   // load psapi on demand
-  mi_atomic_do_once {
-    HINSTANCE hDll = LoadLibrary(TEXT("psapi.dll"));
+  mi_atomic_do_once{
+    HINSTANCE hDll = mi_win_loadlibrary(TEXT("psapi.dll"));
     if (hDll != NULL) {
       pGetProcessMemoryInfo = (PGetProcessMemoryInfo)(void (*)(void))GetProcAddress(hDll, "GetProcessMemoryInfo");
-      // FreeLibrary(hDll);  // don't free
+      // mi_win_freelibrary(hDll, true);  // don't free
     }
   }
 
   // get process info
-  PROCESS_MEMORY_COUNTERS info; _mi_memzero_var(info);
   if (pGetProcessMemoryInfo != NULL) {
-    pGetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info));
+    PROCESS_MEMORY_COUNTERS info; _mi_memzero_var(info);
+    if (pGetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info))) {
+      pinfo->current_rss    = (size_t)info.WorkingSetSize;
+      pinfo->peak_rss       = (size_t)info.PeakWorkingSetSize;
+      pinfo->current_commit = (size_t)info.PagefileUsage;
+      pinfo->peak_commit    = (size_t)info.PeakPagefileUsage;
+      pinfo->page_faults    = (size_t)info.PageFaultCount;
+    }
   }
-  pinfo->current_rss    = (size_t)info.WorkingSetSize;
-  pinfo->peak_rss       = (size_t)info.PeakWorkingSetSize;
-  pinfo->current_commit = (size_t)info.PagefileUsage;
-  pinfo->peak_commit    = (size_t)info.PeakPagefileUsage;
-  pinfo->page_faults    = (size_t)info.PageFaultCount;
 }
 
 //----------------------------------------------------------------
@@ -577,7 +617,7 @@ void _mi_prim_out_stderr( const char* msg )
     static bool hconIsConsole = false;
     if (hcon == INVALID_HANDLE_VALUE) {
       hcon = GetStdHandle(STD_ERROR_HANDLE);
-      #ifdef MI_HAS_CONSOLE_IO
+      #if MI_WIN_DESKTOP
       CONSOLE_SCREEN_BUFFER_INFO sbi;
       hconIsConsole = ((hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
       #endif
@@ -586,7 +626,7 @@ void _mi_prim_out_stderr( const char* msg )
     if (len > 0 && len < UINT32_MAX) {
       DWORD written = 0;
       if (hconIsConsole) {
-        #ifdef MI_HAS_CONSOLE_IO
+        #if MI_WIN_DESKTOP
         WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
         #endif
       }
@@ -649,10 +689,10 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   mi_assert(buf_len <= ULONG_MAX);
   if (buf_len > ULONG_MAX) return false;
   mi_atomic_do_once {
-    HINSTANCE hDll = LoadLibrary(TEXT("bcrypt.dll"));
+    HINSTANCE hDll = mi_win_loadlibrary(TEXT("bcrypt.dll"));
     if (hDll != NULL) {
       pBCryptGenRandom = (PBCryptGenRandom)(void (*)(void))GetProcAddress(hDll, "BCryptGenRandom");
-      // FreeLibrary(hDll);  // don't free
+      // mi_win_freelibrary(hDll);  // don't free
     }
   }
   if (pBCryptGenRandom == NULL) return false;
@@ -806,6 +846,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     #pragma comment(linker, "/INCLUDE:_tls_used")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_post")
+    #pragma comment(linker, "/INCLUDE:_mi_crt_callback_init")
     #pragma const_seg(".CRT$XLB")
       extern const PIMAGE_TLS_CALLBACK _mi_tls_callback_pre[];
       const PIMAGE_TLS_CALLBACK _mi_tls_callback_pre[] = { &mi_tls_attach };
@@ -822,6 +863,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     #pragma comment(linker, "/INCLUDE:__tls_used")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_post")
+    #pragma comment(linker, "/INCLUDE:__mi_crt_callback_init")
     #pragma data_seg(".CRT$XLB")
       PIMAGE_TLS_CALLBACK _mi_tls_callback_pre[] = { &mi_tls_attach };
     #pragma data_seg()
@@ -988,7 +1030,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     #pragma data_seg(".CRT$XLB")
     PIMAGE_TLS_CALLBACK _mi_tls_callback_pre[] = { &mi_win_main_attach };
     #pragma data_seg()
-    #pragma data_seg(".CRT$XIY")
+    #pragma data_seg(".CRT$XLY")
     PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_win_main_detach };
     #pragma data_seg()
   #endif

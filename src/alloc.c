@@ -431,13 +431,30 @@ mi_decl_nodiscard mi_decl_restrict char* mi_strndup(const char* s, size_t n) mi_
 
 mi_decl_nodiscard mi_decl_restrict char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept {
   // todo: use GetFullPathNameW to allow longer file names
+  if (fname==NULL || *fname==0) {
+    errno = EINVAL;
+    return NULL;
+  }
   char buf[PATH_MAX];
   DWORD res = GetFullPathNameA(fname, PATH_MAX, (resolved_name == NULL ? buf : resolved_name), NULL);
   if (res == 0) {
-    errno = GetLastError(); return NULL;
+    DWORD err = GetLastError();
+    switch (err) {
+      case ERROR_LOCK_VIOLATION:
+      case ERROR_SHARING_VIOLATION:
+      case ERROR_INVALID_ACCESS:    errno = EACCES; break;
+      case ERROR_INVALID_HANDLE:
+      case ERROR_INVALID_FUNCTION:  errno = EINVAL; break;
+      case ERROR_PATH_NOT_FOUND:    errno = ENOTDIR; break;
+      case ERROR_FILE_NOT_FOUND:    errno = ENOENT; break;
+      case ERROR_NOT_ENOUGH_MEMORY: errno = ENOMEM; break;
+      default:                      errno = EIO;
+    }
+    return NULL;
   }
   else if (res > PATH_MAX) {
-    errno = EINVAL; return NULL;
+    errno = ENAMETOOLONG;
+    return NULL;
   }
   else if (resolved_name != NULL) {
     return resolved_name;
