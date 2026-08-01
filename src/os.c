@@ -307,7 +307,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
       // note: this is dangerous on Windows as VirtualFree needs the actual base pointer
       // this is handled though by having the `base` field in the memid's
       os_base = p; // remember the base
-      os_size = over_size;
+      os_size = size; // not over_size as otherwise we over-decrement commit stats on free
       p = _mi_align_up_ptr(p, alignment);
 
       // explicitly commit only the aligned part
