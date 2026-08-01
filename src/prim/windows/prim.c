@@ -778,9 +778,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
    both static and dynamic linkage (`MI_WIN_INIT_USE_CRT_TLS`).
 ------------------------------------------------------------------------- */
 #if !defined(MI_WIN_INIT_USE_CRT_TLS) && !defined(MI_WIN_INIT_USE_RAW_DLLMAIN) && !defined(MI_WIN_INIT_USE_TLS_DLLMAIN) && !defined(MI_WIN_INIT_USE_FLS)
-  #if defined(__GNUC__) && !defined(_MSC_VER)  /* mingw */
-    #define MI_WIN_INIT_USE_FLS          1     /* needed for v1/v2, see <https://github.com/zackees/mimalloc-pprof/pull/48> */
-  #elif defined(__INTEL_LLVM_COMPILER) || defined(__INTEL_COMPILER)
+  #if defined(__INTEL_LLVM_COMPILER) || defined(__INTEL_COMPILER)
     #define MI_WIN_INIT_USE_TLS_DLLMAIN  1     /* needed for Intel ICX, see issue #1268 */    
   #else
     #define MI_WIN_INIT_USE_CRT_TLS      1     /* default */
