@@ -154,7 +154,8 @@ size_t _mi_prim_numa_node_count(void) {
 #include <emscripten/html5.h>
 
 mi_msecs_t _mi_prim_clock_now(void) {
-  return emscripten_date_now();
+  // todo: use a monotonic clock instead
+  return emscripten_date_now();  
 }
 
 
