@@ -122,8 +122,8 @@ int           _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list 
 int           _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...);
 char          _mi_toupper(char c);
 int           _mi_strnicmp(const char* s, const char* t, size_t n);
-void          _mi_strlcpy(char* dest, const char* src, size_t dest_size);
-void          _mi_strlcat(char* dest, const char* src, size_t dest_size);
+bool          _mi_strlcpy(char* dest, const char* src, size_t dest_size); // returns true if the entire src was copied
+bool          _mi_strlcat(char* dest, const char* src, size_t dest_size); // returns true if the entire src was appended
 size_t        _mi_strlen(const char* s);
 size_t        _mi_strnlen(const char* s, size_t max_len);
 char*         _mi_strnstr(char* s, size_t max_len, const char* pat);
@@ -497,6 +497,11 @@ static inline bool _mi_is_power_of_two(uintptr_t x) {
   return ((x & (x - 1)) == 0);
 }
 
+// valid alignment values are as posix memalign: <https://en.cppreference.com/c/memory/aligned_alloc#Notes>
+static inline bool mi_alignment_is_valid(size_t alignment) {
+  return ((alignment!=0) && _mi_is_power_of_two(alignment)); 
+}
+
 // Is a pointer aligned?
 static inline bool _mi_is_aligned(const void* p, size_t alignment) {
   return (alignment==0 || ((uintptr_t)p % alignment) == 0);
@@ -571,10 +576,10 @@ static inline size_t _mi_wsize_from_size(size_t size) {
 #undef _CLOCK_T
 #endif
 static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
-  #if (SIZE_MAX == ULONG_MAX)
-    return __builtin_umull_overflow(count, size, (unsigned long *)total);
-  #elif (SIZE_MAX == UINT_MAX)
+  #if (SIZE_MAX == UINT_MAX)
     return __builtin_umul_overflow(count, size, (unsigned int *)total);
+  #elif (SIZE_MAX == ULONG_MAX)
+    return __builtin_umull_overflow(count, size, (unsigned long *)total);
   #else
     return __builtin_umulll_overflow(count, size, (unsigned long long *)total);
   #endif
@@ -764,7 +769,7 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
 // Page start
 static inline uint8_t* mi_page_start(const mi_page_t* page) {
   // multiplication must be done in `size_t`; in a 32-bit multiplication the offset wraps for pages whose blocks start 4 GiB or more after the page meta info
-  return (uint8_t*)page + ((size_t)page->page_woffset * MI_SIZE_SIZE);
+  return (uint8_t*)page + (((size_t)page->page_ma_offset) * MI_MAX_ALIGN_SIZE);
 }
 
 static inline size_t mi_page_size(const mi_page_t* page) {
@@ -1093,10 +1098,8 @@ static inline bool mi_theap_malloc_use_guarded(mi_theap_t* theap, size_t size) {
   }
 }
 
-mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero) mi_attr_noexcept;
-
+mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero, size_t* usable) mi_attr_noexcept;
 #endif
-
 
 /* -------------------------------------------------------------------
 Encoding/Decoding the free list next pointers
@@ -1197,6 +1200,8 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
   mi_block_set_nextx(page,block,next,NULL);
   #endif
 }
+
+
 
 /* -----------------------------------------------------------
   arena blocks

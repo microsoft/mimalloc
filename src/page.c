@@ -163,7 +163,7 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
 
   // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
   if mi_unlikely(count > max_count) {
-    _mi_error_message(EFAULT, "corrupted thread-free list\n");
+    _mi_error_message(EFAULT, "corrupted thread-free list (possibly due to a cross-thread double free)\n");
     return; // the thread-free items cannot be freed
   }
   // if `count > page->used` there was another kind memory corruption (either in the page meta-data or in the linked list)
@@ -321,7 +321,9 @@ static mi_page_t* mi_page_fresh_alloc(mi_theap_t* theap, mi_page_queue_t* pq, si
     if (!mi_page_immediate_available(page)) {
       if (mi_page_is_expandable(page)) {
         if (!mi_page_extend_free(theap, page)) {
-          return NULL; // cannot commit
+          // cannot commit
+          _mi_page_abandon(page,pq);
+          return NULL;
         };
       }
       else {
@@ -524,7 +526,7 @@ void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {
 #define MI_MIN_SLICES       (2)
 
 static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* const page, const size_t bsize, const size_t extend) {
-  #if (MI_SECURE<3)
+  #if (MI_SECURE < 2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
   #endif
@@ -581,7 +583,7 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
 
 static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t bsize, const size_t extend)
 {
-  #if (MI_SECURE<3)
+  #if (MI_SECURE < 2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
   #endif
@@ -622,7 +624,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 // extra test in malloc? or cache effects?)
 static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_expensive(mi_page_is_valid_init(page));
-  #if (MI_SECURE<3)
+  #if (MI_SECURE < 2)
   mi_assert(page->free == NULL);
   mi_assert(page->local_free == NULL);
   if (page->free != NULL) return true;
@@ -656,8 +658,21 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
 
   // commit on demand?
   if (page->slice_committed > 0) {
+    // reduce extend if it commits more than an arena slice
+    if ((extend * bsize) > MI_ARENA_SLICE_SIZE) {
+      extend = _mi_divide_up(MI_ARENA_SLICE_SIZE, bsize);
+    }
+    // commit required size
     const size_t needed_size = (page->capacity + extend)*bsize;
-    const size_t needed_commit = _mi_align_up( mi_page_slice_offset_of(page, needed_size), MI_PAGE_MIN_COMMIT_SIZE );
+    mi_assert_internal(needed_size <= page_size);
+    size_t needed_commit = _mi_align_up( mi_page_slice_offset_of(page, needed_size), MI_PAGE_MIN_COMMIT_SIZE );
+    #if MI_SECURE>=5
+    // the previous alignup could extend the commit into the guard page; re-adjust if needed
+    const size_t page_size_commit = _mi_align_up( mi_page_slice_offset_of(page, page_size), _mi_os_page_size() );    
+    if (needed_commit > page_size_commit) { 
+      needed_commit = page_size_commit;
+    }
+    #endif
     if (needed_commit > page->slice_committed) {
       mi_assert_internal(((needed_commit - page->slice_committed) % _mi_os_page_size()) == 0);
       if (!_mi_os_commit(_mi_theap_subproc(theap), mi_page_slice_start(page) + page->slice_committed, needed_commit - page->slice_committed, NULL)) {

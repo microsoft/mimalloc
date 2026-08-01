@@ -97,15 +97,17 @@ void __mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount) {
 static void mi_stat_count_add_mt(mi_stat_count_t* stat, const mi_stat_count_t* src) {
   if (stat==src) return;
   mi_atomic_void_addi64_relaxed(&stat->total, &src->total);
-  const int64_t prev_current = mi_atomic_addi64_relaxed(&stat->current, src->current);
+  const int64_t src_peak = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&src->peak);
+  const int64_t src_current = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&src->current);
+  const int64_t prev_current = mi_atomic_addi64_relaxed(&stat->current, src_current);
 
   // Global current plus thread peak approximates new global peak
   // note: peak scores do really not work across threads.
   // we used to just add them together but that often overestimates in practice.
   // similarly, max does not seem to work well. The current approach
   // by Artem Kharytoniuk (@artem-lunarg) seems to work better, see PR#1112
-  // for a longer description.
-  mi_atomic_maxi64_relaxed(&stat->peak, prev_current + src->peak);
+  // for a longer description.  
+  mi_atomic_maxi64_relaxed(&stat->peak, prev_current + src_peak);
 }
 
 static void mi_stat_counter_add_mt(mi_stat_counter_t* stat, const mi_stat_counter_t* src) {
@@ -146,7 +148,7 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
 // unit > 0 : size in binary bytes
 // unit == 0: count as decimal
 // unit < 0 : count in binary
-static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, void* arg, const char* fmt) {
+static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, void* arg, bool limitwidth) {
   char buf[32]; _mi_memzero_var(buf);
   int  len = 32;
   const char* suffix = (unit <= 0 ? " " : "B");
@@ -171,12 +173,17 @@ static void mi_printf_amount(int64_t n, int64_t unit, mi_output_fun* out, void* 
     _mi_snprintf(unitdesc, 8, "%s%s%s", magnitude, (base==1024 ? "i" : ""), suffix);
     _mi_snprintf(buf, len, "%ld.%ld %-3s", whole, (frac1 < 0 ? -frac1 : frac1), unitdesc);
   }
-  _mi_fprintf(out, arg, (fmt==NULL ? "%12s" : fmt), buf);
+  if (limitwidth) {
+    _mi_fprintf(out, arg, "%12s", buf);
+  }
+  else {
+    _mi_fprintf(out, arg, "%s", buf);
+  }
 }
 
 
 static void mi_print_amount(int64_t n, int64_t unit, mi_output_fun* out, void* arg) {
-  mi_printf_amount(n,unit,out,arg,NULL);
+  mi_printf_amount(n,unit,out,arg,true);
 }
 
 static void mi_print_count(int64_t n, int64_t unit, mi_output_fun* out, void* arg) {
@@ -210,7 +217,7 @@ static void mi_stat_print_ex(const mi_stat_count_t* stat, const char* msg, int64
     }
     if (stat->current != 0) {
       _mi_fprintf(out, arg, "  ");
-      _mi_fprintf(out, arg, (notok == NULL ? "not all freed" : notok));
+      _mi_fprintf(out, arg, "%s", (notok == NULL ? "not all freed" : notok));
       _mi_fprintf(out, arg, "\n");
     }
     else {
@@ -335,10 +342,10 @@ mi_decl_export void mi_process_info_print_out(mi_output_fun* out, void* arg) mi_
   _mi_fprintf(out, arg, "  %-10s: %5zu.%03zu s\n", "elapsed", elapsed/1000, elapsed%1000);
   _mi_fprintf(out, arg, "  %-10s: user: %zu.%03zu s, system: %zu.%03zu s, faults: %zu, peak rss: ", "process",
     user_time/1000, user_time%1000, sys_time/1000, sys_time%1000, page_faults);
-  mi_printf_amount((int64_t)peak_rss, 1, out, arg, "%s");
+  mi_printf_amount((int64_t)peak_rss, 1, out, arg, false);
   if (peak_commit > 0) {
     _mi_fprintf(out, arg, ", peak commit: ");
-    mi_printf_amount((int64_t)peak_commit, 1, out, arg, "%s");
+    mi_printf_amount((int64_t)peak_commit, 1, out, arg, false);
   }
   _mi_fprintf(out, arg, "\n");
 }

@@ -22,7 +22,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #elif __cplusplus >= 201103L
 #define mi_decl_align(a)        alignas(a)
 #else
-#define mi_decl_align(a)
+#define mi_decl_align(a)        _Alignas(a)
 #endif
 
 

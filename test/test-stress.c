@@ -266,7 +266,7 @@ static void run_os_threads(mi_subproc_id_t subproc, size_t nthreads, thread_entr
 static void test_stress(mi_subproc_id_t subproc) {
   // printf("test stress: subproc: %p\n", subproc._mi_subproc_id);
   volatile void* transfers[TRANSFERS];
-  memset(transfers,0,sizeof(transfers));
+  memset((void**)transfers,0,sizeof(transfers));
 
   #ifdef MI_USE_HEAPS
   mi_heap_t* prev_heaps[MI_USE_HEAPS] = { NULL };
@@ -286,7 +286,7 @@ static void test_stress(mi_subproc_id_t subproc) {
     current_heap = mi_heap_new();
     #endif
 
-    run_os_threads(subproc, THREADS, &stress, transfers);
+    run_os_threads(subproc, THREADS, &stress, (void**)transfers);
 
     #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
     // switch between arena and OS allocation for testing
@@ -398,7 +398,7 @@ int main(int argc, char** argv) {
     mi_version();
   #endif  
   #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
-    mi_option_set(mi_option_arena_reserve, mi_arena_min_size()/1024 /* in KiB ! */);
+    mi_option_set(mi_option_arena_reserve, (long)(mi_arena_min_size()/1024) /* in KiB ! */);
     mi_option_set(mi_option_purge_delay,1);
   #endif
   #if defined(NDEBUG) && !defined(USE_STD_MALLOC)

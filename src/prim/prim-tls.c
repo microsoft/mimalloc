@@ -53,43 +53,50 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
 #define MI_TLS_DIRECT_SLOTS             (64)
 #define MI_TLS_EXPANSION_SLOTS          (1024)
 
+#if !MI_WIN_DIRECT_TLS
 // We initially use the last of the expansion slots as the default NULL.
 // note: this will fail if the program allocates exactly 1024+64 slots with TlsAlloc 
 // before we are initialized :-( (but this seems quite unlikely).
 // (todo: another approach could be to use slot 7 (EnvironmentPointer) as the initial slot as that seems to be always NULL)
 #define MI_TLS_INITIAL_SLOT             MI_TLS_EXPANSION_SLOT
 #define MI_TLS_INITIAL_EXPANSION_SLOT   (MI_TLS_EXPANSION_SLOTS-1)
+#else
+// With direct tls we need an initial NULL slot outside the expansion slots
+#define MI_TLS_INITIAL_SLOT             (5)  // Arbitrary user pointer
+#define MI_TLS_INITIAL_EXPANSION_SLOT   (MI_TLS_EXPANSION_SLOTS-1)  // unused
+#endif
 
 // in case of errors assign fixed slots (but since we use EFAULT the program should fail anyways)
 #define MI_TLS_ERROR_SLOT               (5)   // arbitrary user pointer
 #define MI_TLS_ERROR_EXPANSION_SLOT     (7)   // environment pointer (only used for OS/2 emulation)
 
 
-mi_decl_hidden mi_decl_cache_align size_t _mi_theap_default_slot = MI_TLS_INITIAL_SLOT;
-mi_decl_hidden size_t _mi_theap_default_expansion_slot = MI_TLS_INITIAL_EXPANSION_SLOT;
-mi_decl_hidden size_t _mi_theap_cached_slot            = MI_TLS_INITIAL_SLOT;
-mi_decl_hidden size_t _mi_theap_cached_expansion_slot  = MI_TLS_INITIAL_EXPANSION_SLOT;
+mi_decl_hidden mi_decl_cache_align _Atomic(size_t) _mi_theap_default_slot = MI_ATOMIC_VAR_INIT(MI_TLS_INITIAL_SLOT);
+mi_decl_hidden _Atomic(size_t) _mi_theap_default_expansion_slot = MI_ATOMIC_VAR_INIT(MI_TLS_INITIAL_EXPANSION_SLOT);
+mi_decl_hidden _Atomic(size_t) _mi_theap_cached_slot            = MI_ATOMIC_VAR_INIT(MI_TLS_INITIAL_SLOT);
+mi_decl_hidden _Atomic(size_t) _mi_theap_cached_expansion_slot  = MI_ATOMIC_VAR_INIT(MI_TLS_INITIAL_EXPANSION_SLOT);
 
 static DWORD mi_tls_raw_index_default = TLS_OUT_OF_INDEXES;
 static DWORD mi_tls_raw_index_cached  = TLS_OUT_OF_INDEXES;
 
-static bool mi_win_tls_slot_alloc(size_t* slot, size_t* extended, DWORD* raw_index) {
+static bool mi_win_tls_slot_alloc(_Atomic(size_t)* slot, _Atomic(size_t)* extended, DWORD* raw_index) {
+  // always write slot before extended due to concurrent readers
   const DWORD index = TlsAlloc();
   *raw_index = index;
   if (index==TLS_OUT_OF_INDEXES) {
-    *extended = MI_TLS_ERROR_EXPANSION_SLOT;
-    *slot = MI_TLS_ERROR_SLOT;
+    mi_atomic_store_release(slot,MI_TLS_ERROR_SLOT);
+    mi_atomic_store_release(extended,MI_TLS_ERROR_EXPANSION_SLOT);
     return false;
   }
   else if (index<MI_TLS_DIRECT_SLOTS) {
-    *extended = 0;
-    *slot = index + MI_TLS_DIRECT_FIRST;
+    mi_atomic_store_release(slot,index + MI_TLS_DIRECT_FIRST);
+    mi_atomic_store_release(extended,0);
     return true;
   }
   #if !MI_WIN_DIRECT_TLS
   else if (index < MI_TLS_DIRECT_SLOTS + MI_TLS_EXPANSION_SLOTS - 1) { // check maximum number of expansion slots - 1 (as we use the last one as the default)
-    *extended = index - MI_TLS_DIRECT_SLOTS;
-    *slot = MI_TLS_EXPANSION_SLOT;
+    mi_atomic_store_release(slot, MI_TLS_EXPANSION_SLOT);
+    mi_atomic_store_release(extended,index - MI_TLS_DIRECT_SLOTS);
     return true;
   }
   #endif
@@ -98,20 +105,22 @@ static bool mi_win_tls_slot_alloc(size_t* slot, size_t* extended, DWORD* raw_ind
     _mi_error_message(EFAULT, "returned TLS index was too high (%u)\n", index);
     TlsFree(index);
     *raw_index = TLS_OUT_OF_INDEXES;
-    *extended = MI_TLS_ERROR_EXPANSION_SLOT;
-    *slot = MI_TLS_ERROR_SLOT;
+    mi_atomic_store_release(slot, MI_TLS_ERROR_SLOT);
+    mi_atomic_store_release(extended,MI_TLS_ERROR_EXPANSION_SLOT);
     return false;
   }
 }
 
-static void mi_win_tls_slot_free(DWORD* raw_index) {
+static void mi_win_tls_slot_free(_Atomic(size_t)*slot, _Atomic(size_t)*extended, DWORD* raw_index) {
   if (*raw_index != TLS_OUT_OF_INDEXES) {
+    mi_atomic_store_release(slot, MI_TLS_ERROR_SLOT);
+    mi_atomic_store_release(extended, MI_TLS_ERROR_EXPANSION_SLOT);
     TlsFree(*raw_index);
     *raw_index = TLS_OUT_OF_INDEXES;
   }
 }
 
-void _mi_tls_slots_init(void) {
+static void mi_tls_slots_init(void) {
   mi_atomic_do_once {
     bool ok = mi_win_tls_slot_alloc(&_mi_theap_default_slot, &_mi_theap_default_expansion_slot, &mi_tls_raw_index_default);
     if (ok) {
@@ -123,9 +132,9 @@ void _mi_tls_slots_init(void) {
   }
 }
 
-void _mi_tls_slots_done(void) {
-  mi_win_tls_slot_free(&mi_tls_raw_index_default);
-  mi_win_tls_slot_free(&mi_tls_raw_index_cached );
+static void mi_tls_slots_done(void) {
+  mi_win_tls_slot_free(&_mi_theap_default_slot, &_mi_theap_default_expansion_slot, &mi_tls_raw_index_default);
+  mi_win_tls_slot_free(&_mi_theap_cached_slot, &_mi_theap_cached_expansion_slot, &mi_tls_raw_index_cached );
 }
 
 static void mi_win_tls_slot_set(size_t slot, size_t extended_slot, void* value) {
