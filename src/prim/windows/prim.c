@@ -13,9 +13,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdio.h>   // fputs, stderr
 #include <stdlib.h>  // atexit
 
-// xbox has no console IO
-#if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP | WINAPI_PARTITION_SYSTEM)
-#define MI_HAS_CONSOLE_IO
+// xbox has no console IO and cannot use mi_win_loadlibrary
+#if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)
+#define MI_WIN_DESKTOP  1
 #endif
 
 //---------------------------------------------
@@ -87,6 +87,34 @@ typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalM
 typedef BOOL (__stdcall* PGetVersionExW)(LPOSVERSIONINFOW lpVersionInformation);
 
 
+// Load a library
+static HMODULE mi_win_loadlibrary(const TCHAR* library) {  
+  #if MI_WIN_DESKTOP
+    return LoadLibrary(library);
+  #else
+    return LoadPackagedLibrary(library, 0);
+  #endif
+}
+
+// Get a library handle (and possibly load it)
+static HMODULE mi_win_getlibrary(const TCHAR* library, bool* should_free) {
+  #if MI_WIN_DESKTOP
+  // avoid calling LoadLibrary for "kernel32", "ntdll", and "kernelbase" (also to avoid hitting the loader lock)
+  HMODULE mod = GetModuleHandle(library); 
+  if (mod!=NULL) {
+    *should_free = false;
+    return mod;
+  }
+  #endif
+  *should_free = true;
+  return mi_win_loadlibrary(library);
+}
+
+static void mi_win_freelibrary(HMODULE mod, bool should_free) {
+  if (should_free) { 
+    FreeLibrary(mod);
+  }
+}
 
 //---------------------------------------------
 // Enable large page support dynamically (if possible)
@@ -134,7 +162,7 @@ static bool win_enable_large_os_pages(size_t* large_page_size) {
   mi_atomic_do_once {
     win_enable_large_os_pages_once(&win_large_page_size);
   }
-  if (large_page_size != NULL) { *large_page_size = win_large_page_size;  }
+  if (large_page_size != NULL) { *large_page_size = win_large_page_size; }
   return (win_large_page_size > 0);
 }
 
@@ -166,21 +194,22 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   }
 
   // get the VirtualAlloc2 function
-  HINSTANCE hDll = LoadLibrary(TEXT("kernelbase.dll"));
+  bool hDllFree;
+  HINSTANCE hDll = mi_win_getlibrary(TEXT("kernelbase.dll"), &hDllFree);
   if (hDll != NULL) {
     // use VirtualAlloc2FromApp if possible as it is available to Windows store apps
     pVirtualAlloc2 = (PVirtualAlloc2)(void (*)(void))GetProcAddress(hDll, "VirtualAlloc2FromApp");
     if (pVirtualAlloc2==NULL) pVirtualAlloc2 = (PVirtualAlloc2)(void (*)(void))GetProcAddress(hDll, "VirtualAlloc2");
-    FreeLibrary(hDll);
+    mi_win_freelibrary(hDll, hDllFree);
   }
   // NtAllocateVirtualMemoryEx is used for huge page allocation
-  hDll = LoadLibrary(TEXT("ntdll.dll"));
+  hDll = mi_win_getlibrary(TEXT("ntdll.dll"), &hDllFree);
   if (hDll != NULL) {
     pNtAllocateVirtualMemoryEx = (PNtAllocateVirtualMemoryEx)(void (*)(void))GetProcAddress(hDll, "NtAllocateVirtualMemoryEx");
-    FreeLibrary(hDll);
+    mi_win_freelibrary(hDll, hDllFree);
   }
   // Try to use Win7+ numa API
-  hDll = LoadLibrary(TEXT("kernel32.dll"));
+  hDll = mi_win_getlibrary(TEXT("kernel32.dll"), &hDllFree);
   if (hDll != NULL) {
     pGetCurrentProcessorNumberEx = (PGetCurrentProcessorNumberEx)(void (*)(void))GetProcAddress(hDll, "GetCurrentProcessorNumberEx");
     pGetNumaProcessorNodeEx = (PGetNumaProcessorNodeEx)(void (*)(void))GetProcAddress(hDll, "GetNumaProcessorNodeEx");
@@ -209,7 +238,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
         win_minor_version = version.dwMinorVersion;
       }
     }
-    FreeLibrary(hDll);
+    mi_win_freelibrary(hDll, hDllFree);
   }
   // Enable large/huge OS page support?
   if (mi_option_is_enabled(mi_option_allow_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
@@ -578,11 +607,11 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
   }
 
   // load psapi on demand
-  mi_atomic_do_once {
-    HINSTANCE hDll = LoadLibrary(TEXT("psapi.dll"));
+  mi_atomic_do_once{
+    HINSTANCE hDll = mi_win_loadlibrary(TEXT("psapi.dll"));
     if (hDll != NULL) {
       pGetProcessMemoryInfo = (PGetProcessMemoryInfo)(void (*)(void))GetProcAddress(hDll, "GetProcessMemoryInfo");
-      // FreeLibrary(hDll);  // don't free
+      // mi_win_freelibrary(hDll, true);  // don't free
     }
   }
 
@@ -613,7 +642,7 @@ void _mi_prim_out_stderr( const char* msg )
     static bool hconIsConsole = false;
     if (hcon == INVALID_HANDLE_VALUE) {
       hcon = GetStdHandle(STD_ERROR_HANDLE);
-      #ifdef MI_HAS_CONSOLE_IO
+      #if MI_WIN_DESKTOP
       CONSOLE_SCREEN_BUFFER_INFO sbi;
       hconIsConsole = ((hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
       #endif
@@ -622,7 +651,7 @@ void _mi_prim_out_stderr( const char* msg )
     if (len > 0 && len < UINT32_MAX) {
       DWORD written = 0;
       if (hconIsConsole) {
-        #ifdef MI_HAS_CONSOLE_IO
+        #if MI_WIN_DESKTOP
         WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
         #endif
       }
@@ -685,10 +714,10 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   mi_assert(buf_len <= ULONG_MAX);
   if (buf_len > ULONG_MAX) return false;
   mi_atomic_do_once {
-    HINSTANCE hDll = LoadLibrary(TEXT("bcrypt.dll"));
+    HINSTANCE hDll = mi_win_loadlibrary(TEXT("bcrypt.dll"));
     if (hDll != NULL) {
       pBCryptGenRandom = (PBCryptGenRandom)(void (*)(void))GetProcAddress(hDll, "BCryptGenRandom");
-      // FreeLibrary(hDll);  // don't free
+      // mi_win_freelibrary(hDll);  // don't free
     }
   }
   if (pBCryptGenRandom == NULL) return false;

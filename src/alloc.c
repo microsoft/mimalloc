@@ -555,7 +555,7 @@ mi_decl_nodiscard static mi_decl_restrict char* mi_theap_realpath(mi_theap_t* th
   char buf[PATH_MAX];
   DWORD res = GetFullPathNameA(fname, PATH_MAX, (resolved_name == NULL ? buf : resolved_name), NULL);
   if (res == 0) {
-    DWORD err = GetLastError(); return NULL;
+    DWORD err = GetLastError();
     switch (err) {
       case ERROR_LOCK_VIOLATION:
       case ERROR_SHARING_VIOLATION:
