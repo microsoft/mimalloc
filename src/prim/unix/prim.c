@@ -610,10 +610,15 @@ size_t _mi_prim_numa_node(void) {
 size_t _mi_prim_numa_node_count(void) {
   char buf[128];
   unsigned node = 0;
+  size_t skipped = 0;
   for(node = 0; node < 256; node++) {
     // enumerate node entries -- todo: it there a more efficient way to do this? (but ensure there is no allocation)
     _mi_snprintf(buf, 127, "/sys/devices/system/node/node%u", node + 1);
-    if (mi_prim_access(buf,R_OK) != 0) break;
+    if (mi_prim_access(buf,R_OK) != 0) {
+      skipped++;
+      if (skipped > 4) break; // allow some sparseness of nodes but not more than 4
+    }
+    else { skipped = 0; }     // reset skipped count
   }
   return (node+1);
 }
