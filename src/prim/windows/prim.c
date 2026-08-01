@@ -13,7 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdio.h>   // fputs, stderr
 #include <stdlib.h>  // atexit
 
-// xbox has no console IO and cannot use mi_win_loadlibrary
+// xbox has no console IO and cannot use LoadLibrary or GetModuleHandle
 #if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)
 #define MI_WIN_DESKTOP  1
 #endif
@@ -761,10 +761,12 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
    both static and dynamic linkage (`MI_WIN_INIT_USE_CRT_TLS`).
 ------------------------------------------------------------------------- */
 #if !defined(MI_WIN_INIT_USE_CRT_TLS) && !defined(MI_WIN_INIT_USE_RAW_DLLMAIN) && !defined(MI_WIN_INIT_USE_TLS_DLLMAIN) && !defined(MI_WIN_INIT_USE_FLS)
-  #if !defined(__INTEL_LLVM_COMPILER) && !defined(__INTEL_COMPILER)
-    #define MI_WIN_INIT_USE_CRT_TLS      1
+  #if defined(__GNUC__) && !defined(_MSC_VER)  /* mingw */
+    #define MI_WIN_INIT_USE_FLS          1     /* needed for v1/v2, see <https://github.com/zackees/mimalloc-pprof/pull/48> */
+  #elif defined(__INTEL_LLVM_COMPILER) || defined(__INTEL_COMPILER)
+    #define MI_WIN_INIT_USE_TLS_DLLMAIN  1     /* needed for Intel ICX, see issue #1268 */    
   #else
-    #define MI_WIN_INIT_USE_TLS_DLLMAIN  1  /* default for Intel ICX, see issue #1268 */
+    #define MI_WIN_INIT_USE_CRT_TLS      1     /* default */
   #endif
 #endif
 
@@ -842,7 +844,8 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   #endif
 
   typedef int (mi_cdecl* mi_crt_callback_t)(void);
-  #if defined(_WIN64)
+
+  #if defined(_WIN64) && defined(_MSC_VER) // 64-bit
     #pragma comment(linker, "/INCLUDE:_tls_used")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_post")
@@ -859,7 +862,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
       extern const mi_crt_callback_t _mi_crt_callback_init[];
       const mi_crt_callback_t _mi_crt_callback_init[] = { &mi_crt_init };
     #pragma const_seg()
-  #else
+  #elif defined(_MSC_VER) // 32-bit
     #pragma comment(linker, "/INCLUDE:__tls_used")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_post")
@@ -873,6 +876,12 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     #pragma data_seg(".CRT$XIB")
       mi_crt_callback_t _mi_crt_callback_init[] = { &mi_crt_init };
     #pragma data_seg()
+  #elif defined(__GCC__)  // mingw
+    extern const IMAGE_TLS_DIRECTORY _tls_used;
+    __attribute__((used)) static const void* const mi_tls_used_ref = &_tls_used; // pull in the CRT tls
+    __attribute__((used, section(".CRT$XLB"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_pre = &mi_tls_attach;
+    __attribute__((used, section(".CRT$XLY"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_post = &mi_tls_detach;
+    __attribute__((used, section(".CRT$XIB"))) mi_crt_callback_t   _mi_crt_callback_init = &mi_crt_init;  
   #endif
 
   #if defined(__cplusplus)
@@ -942,7 +951,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   extern "C" {
   #endif
 
-  #if defined(_WIN64)
+  #if defined(_WIN64) && defined(_MSC_VER) // 64-bit
     #pragma comment(linker, "/INCLUDE:_tls_used")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_post")
@@ -954,7 +963,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
       extern const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[];
       const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_tls_detach };
     #pragma const_seg()
-  #else
+  #elif defined(_MSC_VER) // 32-bit
     #pragma comment(linker, "/INCLUDE:__tls_used")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_post")
@@ -964,6 +973,11 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     #pragma data_seg(".CRT$XLY")
       PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_tls_detach };
     #pragma data_seg()
+  #elif defined(__GCC__)  // mingw
+    extern const IMAGE_TLS_DIRECTORY _tls_used;
+    __attribute__((used)) static const void* const mi_tls_used_ref = &_tls_used; // pull in the CRT tls
+    __attribute__((used, section(".CRT$XLB"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_pre  = &mi_tls_attach;
+    __attribute__((used, section(".CRT$XLY"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_post = &mi_tls_detach;      
   #endif
 
   #if defined(__cplusplus)
@@ -1011,7 +1025,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   extern "C" {
   #endif
 
-  #if defined(_WIN64)
+  #if defined(_WIN64) && defined(_MSC_VER) // 64-bit
     #pragma comment(linker, "/INCLUDE:_tls_used")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_post")
@@ -1023,7 +1037,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     extern const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[];
     const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_win_main_detach };
     #pragma const_seg()
-  #else
+  #elif defined(_MSC_VER) // 32-bit
     #pragma comment(linker, "/INCLUDE:__tls_used")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_post")
@@ -1033,6 +1047,11 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     #pragma data_seg(".CRT$XLY")
     PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_win_main_detach };
     #pragma data_seg()
+  #elif defined(__GCC__)  // mingw
+    extern const IMAGE_TLS_DIRECTORY _tls_used;
+    __attribute__((used)) static const void* const mi_tls_used_ref = &_tls_used; // pull in the CRT tls
+    __attribute__((used, section(".CRT$XLB"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_pre  = &mi_tls_attach;
+    __attribute__((used, section(".CRT$XLY"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_post = &mi_tls_detach;    
   #endif
 
   #if defined(__cplusplus)
@@ -1053,21 +1072,31 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     // See <https://www.codeguru.com/cpp/misc/misc/applicationcontrol/article.php/c6945/Running-Code-Before-and-After-Main.htm>
     #define MI_PRIM_HAS_PROCESS_ATTACH 1
 
-    static int mi_process_attach(void) {
+    static int mi_cdecl mi_crt_init(void) {
       mi_win_main(NULL,DLL_PROCESS_ATTACH,NULL);
       atexit(&_mi_auto_process_done);
       return 0;
     }
-    typedef int(*mi_crt_callback_t)(void);
-    #if defined(_WIN64)
-      #pragma comment(linker, "/INCLUDE:_mi_tls_callback")
-      #pragma section(".CRT$XIU", long, read)
-    #else
-      #pragma comment(linker, "/INCLUDE:__mi_tls_callback")
+
+    #if defined(__cplusplus)
+    extern "C" {
     #endif
-    #pragma data_seg(".CRT$XIU")
-    mi_decl_externc mi_crt_callback_t _mi_tls_callback[] = { &mi_process_attach };
-    #pragma data_seg()
+    typedef int (mi_cdecl* mi_crt_callback_t)(void);
+    #if defined(_WIN64) // 64-bit
+      #pragma comment(linker, "/INCLUDE:_mi_crt_callback_init")
+      #pragma const_seg(".CRT$XIU")
+      extern const mi_crt_callback_t _mi_crt_callback_init[];
+      const mi_crt_callback_t _mi_crt_callback_init[] = { &mi_crt_init };
+      #pragma const_seg()
+    #else // 32-bit
+      #pragma comment(linker, "/INCLUDE:__mi_crt_callback_init")
+      #pragma data_seg(".CRT$XIU")
+      mi_crt_callback_t _mi_crt_callback_init[] = { &mi_crt_init };
+      #pragma data_seg()    
+    #endif  
+    #if defined(__cplusplus)
+    }
+    #endif
   #endif
 
   // use the fiber api for calling `_mi_thread_done`.
