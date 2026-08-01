@@ -89,7 +89,8 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 
 ### Releases
 * 2026-08-01, `v1.9.14`, `v2.4.4`, `v3.4.4`: various bug and security fixes through Opus 5 LLM audit (#1271, by @Zoxc). 
-  (v3): use pthreads by default on macOS (#1333,#1327), fix glibc 2.44 crash (#1341). Add initial mingw support,
+  (v3): use pthreads by default on macOS (#1333,#1327), fix glibc 2.44 crash (#1341), fix alignment check for 
+  realloc_aligned. (v1,v2,v3): Add initial mingw support,
   set `errno` on allocation errors, improved double-free checks and size checks in secure mode, enable 
   build for universal windows platform and xbox (#1340), fix numa node detection when numa nodes are sparse. 
 * 2026-07-20, `v3.4.3`: revert TLS slots on macOS to 108/109 (issue #1333).
