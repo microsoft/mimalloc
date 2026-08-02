@@ -167,31 +167,26 @@ mi_heap_t* mi_heap_new(void) {
 static void mi_heap_free_theaps(mi_heap_t* heap) {
   // This can run concurrently with a thread that terminates (see `init.c:mi_thread_theaps_done`),
   // and we need to ensure we free theaps atomically.
-  // We do this in a loop where we release the theaps_lock at every potential re-iteration to unblock
-  // potential concurrent thread termination which tries to remove the theap from our theaps list.
-  bool all_freed;
-  do {
-    all_freed = true;
-    mi_theap_t* theap = NULL;
-    mi_lock(&heap->theaps_lock) {
-      theap = heap->theaps;
-      while(theap != NULL) {
-        mi_theap_t* next = theap->hnext;
-        if (!_mi_theap_free(theap, false /* dont re-acquire the heap->theaps_lock */, true /* acquire the tld->theaps_lock though */ )) {
-          all_freed = false;
-        }
-        theap = next;
-      }
+
+  // We first detach our theaps list from any thread local lists
+  _mi_heap_detach_theaps(heap);
+
+  // Now we can safely free the theaps
+  mi_lock(&heap->theaps_lock) { // paranoia
+    mi_theap_t* theap = heap->theaps;
+    heap->theaps = NULL;
+    while(theap != NULL) {
+      mi_theap_t* next = theap->hnext;
+      theap->hnext = NULL;
+      theap->hprev = NULL;
+      mi_assert_internal(theap->tld==NULL);
+      // merge stats into the owning heap stats
+      _mi_stats_merge_into(&heap->stats, &theap->stats);
+      // and free
+      _mi_theap_decref(theap);  // a cached entry can still point to the theap
+      theap = next;
     }
-    if (!all_freed) {
-      mi_heap_stat_counter_increase(heap,heaps_delete_wait,1);
-      _mi_prim_thread_yield();
-    }
-    else {
-      mi_assert_internal(heap->theaps==NULL);
-    }
-  }
-  while(!all_freed);
+  }  
 }
 
 // free the heap resources (assuming the pages are already moved/destroyed, and all theaps have been freed)
