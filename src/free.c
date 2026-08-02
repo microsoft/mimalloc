@@ -34,6 +34,11 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   // checks  
   if mi_unlikely(mi_check_is_double_free(page, block)) return;
   if (!was_guarded) { mi_check_padding(page, block); }
+  // Profiler hook fires before any page state (local_free, used) is modified,
+  // so page is fully consistent. mi_record_free may call mi_free internally,
+  // which is safe because in_profiler suppresses recursion and the page is
+  // in a valid pre-free state.
+  _mi_profiler_on_free_local(page, block);
   if (track_stats) { mi_stat_free(page, block); }
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
   if (!mi_page_is_huge(page)) {   // huge page content may be already decommitted
