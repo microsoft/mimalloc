@@ -39,13 +39,14 @@ option(MI_LOCAL_DYNAMIC_TLS "Use local-dynamic-tls, a slightly slower but dlopen
 option(MI_LIBC_MUSL         "Enable this when linking with musl libc" OFF)
 
 # advanced
+option(MI_OPT_FREE_SMALL    "Use optimized `mi_free_small` without pagemap lookup (can only be used if SECURE or GUARDED mode are off)" OFF)
 option(MI_PADDING           "Enable padding to detect heap block overflow (always on in DEBUG or SECURE mode, or with Valgrind/ASAN)" OFF)
-option(MI_SKIP_COLLECT_ON_EXIT "Skip collecting memory on program exit" OFF)
 option(MI_NO_PADDING        "Force no use of padding even in DEBUG mode etc." OFF)
-option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version" OFF)
+option(MI_SKIP_COLLECT_ON_EXIT "Skip collecting memory on program exit" OFF)
 option(MI_NO_THP            "Disable transparent huge pages support on Linux/Android for the mimalloc process only" OFF)
 option(MI_EXTRA_CPPDEFS     "Extra pre-processor definitions (use as `-DMI_EXTRA_CPPDEFS=\"opt1=val1;opt2=val2\"`)" "")
 option(MI_SEE_ASM           "Generate assembly files" OFF)
+option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead of PREFIX/lib/mimalloc-version" OFF)
 
 # negated options for vcpkg features
 option(MI_NO_USE_CXX        "Use plain C compilation (has priority over MI_USE_CXX)" OFF)
@@ -394,6 +395,18 @@ if(MI_FREE_IS_CHECKED)
 elseif(MI_OVERRIDE AND NOT MI_NO_FREE_IS_CHECKED)
   message(STATUS "Check validity of pointers passed to 'mi_free' only in the dynamic link library (MI_OVERRIDE=ON, MI_FREE_IS_CHECKED=OFF)")
   list(APPEND mi_cflags_dynamic -DMI_FREE_IS_CHECKED=1)
+endif()
+
+if(NOT MI_OPT_FREE_SMALL AND NOT MI_DEBUG AND NOT MI_GUARDED AND NOT MI_SECURE) 
+set(MI_OPT_FREE_SMALL ON)
+endif()
+if(MI_OPT_FREE_SMALL)
+    if(MI_GUARDED OR MI_SECURE)
+    message(STATUS "Cannot enable MI_OPT_FREE_SMALL in secure or guarded mode (MI_OPT_FREE_SMALL=OFF)")
+  else()
+    message(STATUS "Optimize `mi_free_small` to not need a pagemap lookup (MI_OPT_FREE_SMALL=ON)")
+    list(APPEND mi_defines MI_PAGE_META_ALIGNED_FREE_SMALL=1)
+  endif()
 endif()
 
 if(MI_XMALLOC)
