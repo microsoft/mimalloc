@@ -142,6 +142,7 @@ static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc, mi_subproc_t* parent
 }
 
 mi_subproc_id_t mi_subproc_new(void) {
+  mi_thread_init();
   mi_subproc_t* const parent = _mi_subproc();
   mi_memid_t memid;
   mi_subproc_t* const subproc = (mi_subproc_t*)_mi_meta_zalloc(parent, sizeof(mi_subproc_t), &memid);

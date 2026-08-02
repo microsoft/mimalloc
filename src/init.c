@@ -108,8 +108,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   &mi_tld_detached,       // tld
   MI_ATOMIC_VAR_INIT(NULL), // heap
   MI_ATOMIC_VAR_INIT(NULL), // subproc
-  MI_ATOMIC_VAR_INIT(1),  // refcount
-  MI_ATOMIC_VAR_INIT(0),  // freed
+  MI_ATOMIC_VAR_INIT(1),  // refcount  
   0,                      // heartbeat
   0,                      // cookie
   { {0}, {0}, 0, true },  // random
@@ -384,32 +383,26 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
   _mi_theap_default_set((mi_theap_t*)&_mi_theap_empty);
   _mi_theap_cached_set((mi_theap_t*)&_mi_theap_empty);
 
-  // free the theaps of this thread.
-  // This can run concurrently with a `mi_heap_free_theaps` and we need to ensure we free theaps atomically.
-  // We do this in a loop where we release the theaps_lock at every potential re-iteration to unblock
-  // potential concurrent `mi_heap_free_theaps` which tries to remove the theap from our theaps list.
-  bool all_freed;
-  do {
-    all_freed = true;
-    mi_lock(&tld->theaps_lock) {
-      mi_theap_t* theap = tld->theaps;
-      while (theap != NULL) {
-        mi_theap_t* next = theap->tnext;
-        mi_assert_internal(theap->page_count==0);
-        if (!_mi_theap_free(theap, true /* acquire heap->theaps_lock */, false /* dont re-acquire the tld->theaps_lock*/ )) {
-          all_freed = false;
-        }
-        theap = next;
-      }
+  // We might run concurrently with a `mi_heap_free_theaps` and we need to ensure we free theaps atomically.
+  // we first detach our theaps list from any heaps
+  _mi_tld_detach_theaps(tld);
+
+  // no heaps point to our theaps anymore, free them
+  mi_lock(&tld->theaps_lock) { // paranoia
+    mi_theap_t* theap = tld->theaps;
+    tld->theaps = NULL;
+    while (theap != NULL) {
+      mi_theap_t* next = theap->tnext;
+      mi_assert_internal(theap->page_count==0);
+      mi_assert_internal(_mi_theap_heap_peek(theap)==NULL);
+      theap->tld = NULL;
+      theap->tnext = NULL;
+      theap->tprev = NULL;
+      mi_assert_internal(mi_atomic_load_relaxed(&theap->refcount) == 1); // as the cached entry is set to empty
+      _mi_theap_decref(theap);
+      theap = next;
     }
-    if (!all_freed) {
-      mi_subproc_stat_counter_increase(tld->subproc,heaps_delete_wait,1);
-      _mi_prim_thread_yield();
-    }
-    else {
-      mi_assert_internal(tld->theaps==NULL);
-    }
-  } while (!all_freed);
+  }
 
   mi_assert(_mi_theap_default()==(mi_theap_t*)&_mi_theap_empty); // careful to not re-initialize the default theap during theap_delete
   mi_assert(!mi_theap_is_initialized(_mi_theap_default()));

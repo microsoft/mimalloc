@@ -7,6 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
+#include "mimalloc/prim.h"      // _mi_prim_thread_yield
 #include "mimalloc/prim-tls.h"  // _mi_theap_default
 
 #if defined(_MSC_VER) && (_MSC_VER < 1920)
@@ -239,8 +240,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   _mi_memcpy_aligned(theap, &_mi_theap_empty, sizeof(mi_theap_t));
   theap->memid = memid;
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
-  mi_atomic_store_release(&theap->refcount,1);
-  mi_atomic_store_release(&theap->freed,0);
+  mi_atomic_store_release(&theap->refcount,1);  
   mi_atomic_store_ptr_release(mi_subproc_t,&theap->subproc,heap->subproc);
   mi_assert_internal(theap->stats.size == sizeof(mi_stats_t));
   mi_theap_options_init(theap);
@@ -366,50 +366,86 @@ void _mi_theap_decref(mi_theap_t* theap) {
   }
 }
 
+// Thread termination and heap delete/destroy might run concurrently 
+// and we need to ensure we free the memory correctly. A heap or tld
+// will first "detach" its theaps so it has a list with theaps that are
+// no longer shared, and only then free's the theaps in that list.
+// To detach we need to hold both the `heap->theaps_lock` and the `tld->theaps_lock`.
+// Due to lock-inversion we need to use `mi_lock_try_acquire` and if that fails
+// we back-off, release the outer lock, and try again until we succeed.
 
-// called from `mi_theap_delete` to free the internal theap resources.
-bool _mi_theap_free(mi_theap_t* theap, bool acquire_heap_theaps_lock, bool acquire_tld_theaps_lock) {
-  mi_assert(theap != NULL);
-  if (theap==NULL) return true;
-
-  // ensure only one thread actually frees the theap
-  const size_t freed = mi_atomic_exchange_acq_rel( &theap->freed, 1 );
-  if (freed!=0) {
-    // concurrent interaction, retry in an outer loop (as the other thread may be blocked on our lock)
-    return false;
-  }
-  else {
-    // merge stats to the owning heap
-    mi_heap_t* const heap = _mi_theap_heap(theap);
-    _mi_stats_merge_into(&heap->stats, &theap->stats);
-
-    // remove ourselves from the heap theaps list
-    mi_lock_maybe(&heap->theaps_lock, acquire_heap_theaps_lock) {
-      if (theap->hnext != NULL) { theap->hnext->hprev = theap->hprev; }
-      if (theap->hprev != NULL) { theap->hprev->hnext = theap->hnext; }
-                          else { mi_assert_internal(heap->theaps == theap); heap->theaps = theap->hnext; }
-      theap->hnext = theap->hprev = NULL;
+// Remove the theaps in this heap from any thread local tld lists.
+void _mi_heap_detach_theaps( mi_heap_t* heap ) {
+  bool all_detached;
+  do {
+    all_detached = true;
+    mi_lock(&heap->theaps_lock) {
+      mi_theap_t* theap = heap->theaps;
+      while (theap != NULL) {
+        mi_theap_t* next = theap->hnext;
+        mi_tld_t* tld = theap->tld; 
+        if (tld != NULL) {
+          if (mi_lock_try_acquire(&tld->theaps_lock)) {
+            // remove the theap from the tld theaps list
+            if (theap->tnext != NULL) { theap->tnext->tprev = theap->tprev;  }
+            if (theap->tprev != NULL) { theap->tprev->tnext = theap->tnext;  }
+                                else { mi_assert_internal(theap->tld->theaps == theap); theap->tld->theaps = theap->tnext; }
+            theap->tnext = theap->tprev = NULL;       
+            theap->tld = NULL;
+            mi_lock_release(&tld->theaps_lock);
+          }
+          else {
+            all_detached = false;
+          }
+        }
+        theap = next;
+      }
     }
-
-    // remove ourselves from the thread local theaps list
-    mi_lock_maybe(&theap->tld->theaps_lock, acquire_tld_theaps_lock) {
-      if (theap->tnext != NULL) { theap->tnext->tprev = theap->tprev;  }
-      if (theap->tprev != NULL) { theap->tprev->tnext = theap->tnext;  }
-                          else { mi_assert_internal(theap->tld->theaps == theap); theap->tld->theaps = theap->tnext; }
-      theap->tnext = theap->tprev = NULL;           
+    if (!all_detached) {
+      mi_subproc_stat_counter_increase(heap->subproc,heaps_delete_wait,1);
+      _mi_prim_thread_yield();
     }
-
-    // Set heap to NULL only after we are removed from the thread local theaps list since
-    // we may concurrently traverse it to collect (in `init.c:mi_thread_theaps_done`)
-    // (We need to set it to NULL to avoid an ABA problem where the _mi_theap_cached
-    // has a heap address that is reused for a newly allocated heap.)
-    mi_atomic_store_ptr_release(mi_heap_t, &theap->heap, NULL);
-    theap->tld = NULL;
-    // leave subproc field as is for free-ing
-    _mi_theap_decref(theap);
-    return true;
-  }
+  } while (!all_detached);
 }
+
+// Remove the theaps in this thread from the heaps that own them.
+void _mi_tld_detach_theaps( mi_tld_t* tld ) {
+  bool all_detached;
+  do {
+    all_detached = true;
+    mi_lock(&tld->theaps_lock) {
+      mi_theap_t* theap = tld->theaps;
+      while (theap != NULL) {
+        mi_theap_t* next = theap->tnext;
+        mi_assert_internal(theap->page_count==0);
+        mi_heap_t* heap = _mi_theap_heap_peek(theap); // now the heap might be NULL from an earlier iteration
+        if (heap != NULL) {
+          if (mi_lock_try_acquire(&heap->theaps_lock)) {
+            // merge stats into the owning heap stats
+            _mi_stats_merge_into(&heap->stats, &theap->stats);
+            // remove the theap from the heap list
+            if (theap->hnext != NULL) { theap->hnext->hprev = theap->hprev; }
+            if (theap->hprev != NULL) { theap->hprev->hnext = theap->hnext; }
+                                else { mi_assert_internal(heap->theaps == theap); heap->theaps = theap->hnext; }
+            theap->hnext = theap->hprev = NULL;
+            // and set `heap` to NULL
+            mi_atomic_store_ptr_release(mi_heap_t, &theap->heap, NULL);
+            mi_lock_release(&heap->theaps_lock);
+          }
+          else {
+            all_detached = false;
+          }
+        }
+        theap = next;
+      }
+    }
+    if (!all_detached) {
+      mi_subproc_stat_counter_increase(tld->subproc,heaps_delete_wait,1);
+      _mi_prim_thread_yield();
+    }
+  } while (!all_detached);
+}
+
 
 
 /* -----------------------------------------------------------
