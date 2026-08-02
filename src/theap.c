@@ -325,7 +325,7 @@ void _mi_theap_decref(mi_theap_t* theap) {
 // and we need to ensure we free the memory correctly. A heap or tld
 // will first "detach" its theaps so it has a list with theaps that are
 // no longer shared, and only then free's the theaps in that list.
-// To detach we need to hold both the `heap->theaps_lock` and the `tld->theap_lock`.
+// To detach we need to hold both the `heap->theaps_lock` and the `tld->theaps_lock`.
 // Due to lock-inversion we need to use `mi_lock_try_acquire` and if that fails
 // we back-off, release the outer lock, and try again until we succeed.
 
