@@ -88,7 +88,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   
   mi_assert_internal(page->heap!=NULL);
   mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
-  mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap);
+  mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap || mi_page_theap(page)->tld->thread_id == MI_THREADID_DETACHED);
 
   // const size_t bsize = mi_page_block_size(page);
   // uint8_t* start = mi_page_start(page);
@@ -130,7 +130,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
     //mi_assert_internal(!_mi_process_is_initialized);
     mi_assert_internal(page->heap!=NULL);
     mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
-    mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap);
+    mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap || mi_page_theap(page)->tld->thread_id == MI_THREADID_DETACHED);
     {
       mi_page_queue_t* pq = mi_page_queue_of(page);
       mi_assert_internal(mi_page_queue_contains(pq, page));
@@ -457,6 +457,28 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   _mi_page_free(page, pq);
 }
 
+
+static void mi_theap_collect_full_pages(mi_theap_t* theap) {
+  // note: normally full pages get immediately abandoned and the full queue is always empty
+  // this path is only used if abandoning is disabled due to a destroy-able theap or options
+  // set by the user.
+  mi_page_queue_t* pq = &theap->pages[MI_BIN_FULL];
+  for (mi_page_t* page = pq->first; page != NULL; ) {
+    mi_page_t* next = page->next;         // get next in case we free the page
+    _mi_page_free_collect(page, false);   // register concurrent free's
+    // no longer full?
+    if (!mi_page_is_full(page)) {
+      if (mi_page_all_free(page)) {
+        _mi_page_free(page, pq);
+      }
+      else {
+        _mi_page_unfull(page);
+      }
+    }
+    page = next;
+  }
+}
+
 // free retired pages: we don't need to look at the entire queues
 // since we only retire pages that are at the head position in a queue.
 void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {
@@ -484,30 +506,12 @@ void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {
   }
   theap->page_retired_min = min;
   theap->page_retired_max = max;
-}
-
-/*
-static void mi_theap_collect_full_pages(mi_theap_t* theap) {
-  // note: normally full pages get immediately abandoned and the full queue is always empty
-  // this path is only used if abandoning is disabled due to a destroy-able theap or options
-  // set by the user.
-  mi_page_queue_t* pq = &theap->pages[MI_BIN_FULL];
-  for (mi_page_t* page = pq->first; page != NULL; ) {
-    mi_page_t* next = page->next;         // get next in case we free the page
-    _mi_page_free_collect(page, false);   // register concurrent free's
-    // no longer full?
-    if (!mi_page_is_full(page)) {
-      if (mi_page_all_free(page)) {
-        _mi_page_free(page, pq);
-      }
-      else {
-        _mi_page_unfull(page);
-      }
-    }
-    page = next;
+  if (!theap->allow_page_abandon) {
+    mi_theap_collect_full_pages(theap);
   }
 }
-*/
+
+
 
 
 /* -----------------------------------------------------------
@@ -839,7 +843,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
 
   if (page == NULL) {
     _mi_theap_collect_retired(theap, false); // perhaps make a page available
-    page = mi_page_fresh(theap, pq);
+    page = mi_page_fresh(theap, pq);         
     mi_assert_internal(page == NULL || mi_page_immediate_available(page));
     if (page == NULL && first_try) {
       // out-of-memory _or_ an abandoned page with free blocks was reclaimed, try once again

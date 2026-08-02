@@ -611,7 +611,7 @@ void* _mi_arenas_alloc(mi_heap_t* heap, size_t size, bool commit, bool allow_lar
 static bool mi_abandoned_page_unown(mi_page_t* page, mi_theap_t* current_theap) {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
-  mi_assert_internal(_mi_thread_id()==current_theap->tld->thread_id);
+  mi_assert_internal(mi_theap_matches_thread(current_theap));
   mi_thread_free_t tf_new;
   mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
   do {
@@ -1160,7 +1160,7 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(mi_page_all_free(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(page->next==NULL && page->prev==NULL);
-  mi_assert_internal(current_theapx == NULL || _mi_thread_id()==current_theapx->tld->thread_id);
+  mi_assert_internal(mi_theap_matches_thread(current_theapx));
 
   if (current_theapx != NULL) {
     mi_theap_stat_decrease(current_theapx, page_bins[_mi_page_stats_bin(page)], 1);
@@ -1185,7 +1185,7 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theap) {
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(!mi_page_all_free(page));
   mi_assert_internal(page->next==NULL && page->prev == NULL);
-  mi_assert_internal(_mi_thread_id()==current_theap->tld->thread_id);
+  mi_assert_internal(mi_theap_matches_thread(current_theap));
   // mi_assert_internal(current_theap == _mi_page_associated_theap(page));
 
   // add to abandoned?
@@ -1267,7 +1267,7 @@ void _mi_arenas_page_unabandon(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
-  mi_assert_internal(current_theapx==NULL || _mi_thread_id()==current_theapx->tld->thread_id);
+  mi_assert_internal(mi_theap_matches_thread(current_theapx));
 
   mi_heap_t* const heap = mi_page_heap(page);
   if (mi_page_is_abandoned_mapped(page)) {
@@ -1363,8 +1363,8 @@ void _mi_arenas_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t mem
       return;
     };
   }
-  else if (memid.memkind == MI_MEM_META) {
-    _mi_meta_free(subproc, p, size, memid);
+  else if (memid.memkind == MI_MEM_MALLOC) {
+    _mi_free_subproc_safe(p);
   }
   else {
     // arena was none, external, or static; nothing to do
@@ -1859,7 +1859,8 @@ static size_t mi_debug_show_page_bfield(char* buf, size_t* k, mi_arena_t* arena,
       bit_set_count++;
       c = 'p';
       color = MI_GRAY;
-      if (mi_page_is_singleton(page)) { c = 's'; }
+      if (_mi_meta_is_meta_page(arena->subproc,page))  { c = 'm'; }
+      else if (mi_page_is_singleton(page)) { c = 's'; }
       else if (mi_page_is_full(page)) { c = 'f'; }
       if (!mi_page_is_abandoned(page)) { c = _mi_toupper(c); }
       int commit_usage = mi_page_commit_usage(page);
@@ -1872,7 +1873,7 @@ static size_t mi_debug_show_page_bfield(char* buf, size_t* k, mi_arena_t* arena,
     else {
       c = '?';
       if (bit_of_page > 0) { c = '-'; }
-      else if (_mi_meta_is_meta_page(arena->subproc,start)) { c = 'm'; color = MI_GRAY; }
+      // else if (_mi_meta_is_meta_page(arena->subproc,start)) { c = 'm'; color = MI_GRAY; }
       else if (slice_index + bit < arena->info_slices) { c = 'i'; color = MI_GRAY; }
       // else if (mi_bitmap_is_setN(arena->pages_purge, slice_index + bit, NULL)) { c = '*'; }
       else if (mi_bbitmap_is_setN(arena->slices_free, slice_index+bit,1)) {
@@ -2001,7 +2002,7 @@ static void mi_debug_show_arenas_ex(mi_heap_t* heap, bool show_pages, bool narro
       // mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena);
       // if (arena_pages != NULL)
       {
-        const char* header1 = "chunks (p:page, f:full, s:singleton, P,F,S:not abandoned, i:arena-info, m:meta-data, ~:free-purgable, _:free-committed, .:free-reserved)";
+        const char* header1 = "chunks (p:page, f:full, s:single, m:meta-data, i:arena-info, P,F,S,M:not abandoned, ~:free-purgable, _:free-committed, .:free-reserved)";
         const char* header2 = (narrow ? "\n       " : " ");
         const char* header3 = "(chunk bin: S:small, M : medium, L : large, X : other)";
         page_total += mi_debug_show_chunks(header1, header2, header3, arena->slice_count,

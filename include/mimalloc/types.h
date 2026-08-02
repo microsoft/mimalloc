@@ -252,15 +252,14 @@ typedef struct mi_subproc_s mi_subproc_t;
 // Memory can reside in arena's, direct OS allocated, meta-data pages, or statically allocated.
 // The memid keeps track of this.
 typedef enum mi_memkind_e {
-  MI_MEM_NONE,      // not allocated
+  MI_MEM_NONE,      // not allocated (or static)
   MI_MEM_EXTERNAL,  // not owned by mimalloc but provided externally (via `mi_manage_os_memory` for example)
   MI_MEM_STATIC,    // allocated in a static area and should not be freed (the initial main theap data for example (`init.c`))
-  MI_MEM_META,      // allocated with the meta data allocator (`arena-meta.c`)
   MI_MEM_OS,        // allocated from the OS
   MI_MEM_OS_HUGE,   // allocated as huge OS pages (usually 1GiB, pinned to physical memory)
   MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
   MI_MEM_ARENA,     // allocated from an arena (the usual case) (`arena.c`)
-  MI_MEM_HEAP_MAIN  // allocated in the main heap (for theaps)
+  MI_MEM_MALLOC     // allocated with mi_malloc
 } mi_memkind_t;
 
 static inline bool mi_memkind_is_os(mi_memkind_t memkind) {
@@ -285,17 +284,16 @@ typedef struct mi_memid_arena_info {
   uint32_t      slice_count;        // allocated slices
 } mi_memid_arena_info_t;
 
-typedef struct mi_memid_meta_info {
-  mi_meta_page_t* meta_page;        // meta-page that contains the block
-  uint32_t        block_index;      // block index in the meta-data page
-  uint32_t        block_count;      // allocated blocks
-} mi_memid_meta_info_t;
+typedef struct mi_memid_malloc_info {
+  void*         base;               // returned pointer
+  size_t        size;               // allocated size
+} mi_memid_malloc_info_t;
 
 typedef struct mi_memid_s {
   union {
-    mi_memid_os_info_t    os;       // only used for MI_MEM_OS
-    mi_memid_arena_info_t arena;    // only used for MI_MEM_ARENA
-    mi_memid_meta_info_t  meta;     // only used for MI_MEM_META
+    mi_memid_os_info_t     os;       // only used for MI_MEM_OS(_HUGE/_REMAP)
+    mi_memid_arena_info_t  arena;    // only used for MI_MEM_ARENA
+    mi_memid_malloc_info_t malloc;   // only used for MI_MEM_MALLOC
   } mem;
   mi_memkind_t  memkind;
   bool          is_pinned;          // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large (2Mib) or huge (1GiB) OS pages)
@@ -340,6 +338,7 @@ typedef struct mi_block_s {
 #define MI_PAGE_IN_FULL_QUEUE           MI_ZU(0x01)
 #define MI_PAGE_HAS_INTERIOR_POINTERS   MI_ZU(0x02)
 #define MI_PAGE_FLAG_MASK               MI_ZU(0x03)
+#define MI_PAGE_FLAG_BITS               (2)
 typedef size_t mi_page_flags_t;
 
 // There are two special threadid's: 0 for pages that are abandoned (and not in a theap queue),
@@ -347,7 +346,8 @@ typedef size_t mi_page_flags_t;
 // in an arena (in `mi_heap_t.arena_pages.pages_abandoned`) so these can be quickly found for reuse.
 // Abandoning partially used pages allows for sharing of this memory between threads (in particular if threads are blocked)
 #define MI_THREADID_ABANDONED           MI_ZU(0)
-#define MI_THREADID_ABANDONED_MAPPED    (MI_PAGE_FLAG_MASK + 1)
+#define MI_THREADID_ABANDONED_MAPPED    (MI_ZU(1) << MI_PAGE_FLAG_BITS)
+#define MI_THREADID_DETACHED            (MI_ZU(2) << MI_PAGE_FLAG_BITS)
 
 // Thread free list.
 // Points to a list of blocks that are freed by other threads.
@@ -540,6 +540,7 @@ struct mi_theap_s {
   long                  page_full_retain;                    // how many full pages can be retained per queue (before abandoning them)
   bool                  allow_page_reclaim;                  // `true` if this theap can reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this theap can abandon pages to reduce memory footprint
+  bool                  is_detached;                         // `true` if `tld->thread_id == MI_THREADID_DETACHED`
   #if MI_GUARDED
   size_t                guarded_size_min;                    // minimal size for guarded objects
   size_t                guarded_size_max;                    // maximal size for guarded objects
@@ -589,7 +590,7 @@ typedef struct mi_heap_s {
 
   _Atomic(mi_arena_pages_t*) arena_pages[MI_MAX_ARENAS]; // track owned and abandoned pages in the arenas (entries can be NULL)
   mi_lock_t             arena_pages_lock;                // lock to update the arena_pages array
-
+  mi_memid_t            memid;                           // provenance of the heap memory
   mi_stats_t            stats;                           // statistics for this heap; periodically updated by merging from each theap
 } mi_heap_t;
 
@@ -618,6 +619,9 @@ struct mi_subproc_s {
   _Atomic(mi_heap_t*)   heap_main;                      // main heap for this sub process
   mi_heap_t*            heaps;                          // heaps belonging to this sub-process
   mi_lock_t             heaps_lock;
+
+  mi_theap_t*           theap_meta;                     // detached theap for allocating meta-data
+  mi_lock_t             theap_meta_lock;                // all allocations in theap_meta need a lock
 
   _Atomic(size_t)       thread_count;                   // current threads associated with this sub-process
   _Atomic(size_t)       thread_total_count;             // total created threads associated with this sub-process

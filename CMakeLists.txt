@@ -77,7 +77,6 @@ set(mi_sources
     src/alloc-aligned.c
     src/alloc-posix.c
     src/arena.c
-    src/arena-meta.c
     src/bitmap.c
     src/heap.c
     src/init.c
@@ -88,9 +87,11 @@ set(mi_sources
     src/page-map.c
     src/random.c
     src/stats.c
+    src/subproc.c
     src/theap.c
     src/threadlocal.c
-    src/prim/prim.c)
+    src/prim/prim.c
+    src/prim/prim-tls.c)
 
 set(mi_cflags "")
 set(mi_cflags_static "")            # extra flags for a static library build
@@ -173,6 +174,10 @@ if(MI_NO_OPT_ARCH)
   set(MI_OPT_ARCH "OFF")
 elseif(MI_ARCH STREQUAL "arm64")
   set(MI_OPT_ARCH "ON")  # enable armv8.1-a by default on arm64 unless MI_NO_OPT_ARCH is set
+endif()
+
+if(DEFINED ENV{MI_TEST_LIGHT})
+  list(APPEND mi_defines MI_TEST_LIGHT=1)  # to lighten test load in test integration
 endif()
 
 # -----------------------------------------------------------------------------
