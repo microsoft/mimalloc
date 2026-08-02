@@ -344,10 +344,11 @@ uintptr_t _mi_theap_random_next(mi_theap_t* theap) {
 
 static void mi_theap_free_mem(mi_theap_t* theap) {
   if (theap!=NULL) {
+    mi_subproc_t* const subproc = mi_atomic_load_ptr_relaxed(mi_subproc_t,&theap->subproc);      
     if (!theap->is_detached) {
-      mi_subproc_stat_decrease(_mi_theap_subproc(theap),theaps,1);  
+      mi_subproc_stat_decrease(subproc,theaps,1);  
     }
-    _mi_meta_free(_mi_theap_subproc(theap), theap, theap->memid);
+    _mi_meta_free(subproc, theap, theap->memid);
   }
 }
 
