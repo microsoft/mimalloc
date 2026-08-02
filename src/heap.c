@@ -156,6 +156,13 @@ mi_heap_t* _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusi
 }
 
 mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t exclusive_arena_id) {
+  // `mi_heap_new` may be the very first mimalloc call in a process, in which case the
+  // main heap does not exist yet and `_mi_heap_new_for_subproc` would allocate from a
+  // NULL `subproc->heap_main`. On platforms with a library constructor something has
+  // always initialized it earlier, which is why this only shows up on Windows.
+  // `mi_thread_init` is the same idempotent bootstrap the allocation path performs
+  // (it calls `mi_process_init` in turn).
+  mi_thread_init();
   return _mi_heap_new_for_subproc(_mi_subproc(), exclusive_arena_id, false);
 }
 
