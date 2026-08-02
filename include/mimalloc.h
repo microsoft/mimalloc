@@ -391,7 +391,7 @@ mi_decl_nodiscard mi_decl_export                  void* mi_theap_realloc(mi_thea
 mi_decl_nodiscard mi_decl_export                  void* mi_theap_rezalloc(mi_theap_t* theap, void* p, size_t newsize)             mi_attr_noexcept mi_attr_alloc_size(3);
 
 // ------------------------------------------------------
-// Fastest constant size allocations.
+// Fast constant size allocations.
 // ------------------------------------------------------
 
 static inline mi_decl_restrict void* mi_malloc_csize(size_t size) mi_attr_noexcept {
