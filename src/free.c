@@ -457,7 +457,15 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
   const size_t available = _mi_usable_size(p,page);
   mi_assert(p == NULL || size <= available || available == 0 /* invalid pointer */ );
   #endif
-  mi_free(p);
+  #if MI_PAGE_META_ALIGNED_FREE_SMALL 
+  if mi_likely(size <= MI_SMALL_SIZE_MAX) {
+    mi_free_small(p); 
+  }
+  else 
+  #endif
+  {
+    mi_free(p);
+  }
 }
 
 void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept {
