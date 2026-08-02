@@ -406,7 +406,7 @@ static inline mi_decl_restrict void* mi_theap_malloc_csize(mi_theap_t* theap, si
 static inline mi_decl_restrict void* mi_theap_zalloc_csize(mi_theap_t* theap, size_t size) mi_attr_noexcept {
   if (size <= MI_SMALL_SIZE_MAX) { return mi_theap_zalloc_small(theap,size); } else { return mi_theap_malloc(theap,size); }
 }
-static inline mi_decl_restrict void mi_free_csize(void* p, size_t size) mi_attr_noexcept {
+static inline void mi_free_csize(void* p, size_t size) mi_attr_noexcept {
   if (size <= MI_SMALL_SIZE_MAX) { mi_free_small(p); } else { mi_free(p); }
 }
 
