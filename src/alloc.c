@@ -310,15 +310,15 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero,
     if (usable_post!=NULL) { *usable_post = mi_page_usable_block_size(page); }
     return p;  // reallocation still fits and not more than 50% waste
   }
-  size_t usable_new;
-  void* newp = mi_heap_umalloc(heap,newsize,&usable_new);
-  if (usable_post != NULL) { *usable_post = usable_new; }
+  // note: we don't zero allocate upfront so we only zero initialize the expanded part
+  void* const newp = mi_heap_umalloc(heap,newsize,usable_post);
   if mi_likely(newp != NULL) {
-    if (zero && newsize > size) {
+    const size_t usable = mi_usable_size(newp);
+    mi_assert_internal(usable >= newsize); // use usable for zero-ing, issue #763
+    if (zero && usable > size) {
       // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
-      const size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
-      mi_assert_internal(usable_new >= newsize); // use usable_new for zeroing, issue #763
-      _mi_memzero((uint8_t*)newp + start, usable_new - start);
+      const size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);      
+      _mi_memzero((uint8_t*)newp + start, usable - start);
     }
     else if (newsize == 0) {
       ((uint8_t*)newp)[0] = 0; // work around for applications that expect zero-reallocation to be zero initialized (issue #725)
