@@ -294,7 +294,7 @@ int _mi_prim_free(void* addr, size_t size ) {
 
 // return errno on failure
 static int unix_madvise(void* addr, size_t size, int advice) {
-  #if defined(__sun)
+  #if defined(__sun) || defined(_AIX)
   const int res = madvise((caddr_t)addr, size, advice);  // Solaris needs cast (issue #520)
   return (res==0 ? 0 : errno);
   #elif defined(__QNX__)
