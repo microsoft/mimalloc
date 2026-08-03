@@ -56,15 +56,15 @@ bool test_stl_theap_allocator4(void);
 
 static bool test_zero_aligned_first(void);
 
-bool mem_has_vals(uint8_t* p, size_t size, uint8_t val) {
+static bool mem_has_vals(const uint8_t* p, size_t size, uint8_t val) {
   if (p==NULL) return false;
   for (size_t i = 0; i < size; ++i) {
     if (p[i] != val) return false;
   }
   return true;
 }
-bool mem_is_zero(uint8_t* p, size_t size) {
-  return mem_has_vals(p,size,0);
+static bool mem_is_zero(const void* p, size_t size) {
+  return mem_has_vals((const uint8_t*)p,size,0);
 }
 
 // ---------------------------------------------------------------------------
@@ -72,21 +72,6 @@ bool mem_is_zero(uint8_t* p, size_t size) {
 // ---------------------------------------------------------------------------
 int main(void) {
   mi_option_disable(mi_option_verbose);
-
-    CHECK_BODY("rezalloc_aligned_zeros") {  // issue #763
-    size_t alignment = 1024;
-    size_t n = 1024 * 6;
-    void* ptr = mi_zalloc_aligned(n, alignment);
-    assert(mem_is_zero(ptr,n));
-    memset(ptr,123,n/2);
-    
-    ptr = mi_rezalloc_aligned(ptr, n/2, alignment);
-    assert(mem_has_vals(ptr,n/2,123));
-    
-    ptr = mi_rezalloc_aligned(ptr, n, alignment);
-    assert(mem_has_vals(ptr,n/2,123));
-    result = mem_is_zero((uint8_t*)ptr + n/2, n/2);    
-  }
 
   #if 0
   #ifdef __cplusplus
@@ -361,6 +346,20 @@ int main(void) {
     mi_free(p);
   };
 
+  CHECK_BODY("rezalloc_aligned_zeros") {  // issue #763
+    size_t alignment = 1024;
+    size_t n = 1024 * 6;
+    void* ptr = mi_zalloc_aligned(n, alignment);
+    assert(mem_is_zero(ptr,n));
+    memset(ptr,123,n/2);
+    
+    ptr = mi_rezalloc_aligned(ptr, n/2, alignment);
+    assert(mem_has_vals((uint8_t*)ptr,n/2,123));
+    
+    ptr = mi_rezalloc_aligned(ptr, n, alignment);
+    assert(mem_has_vals((uint8_t*)ptr,n/2,123));
+    result = mem_is_zero((uint8_t*)ptr + n/2, n/2);    
+  }
 
   // ---------------------------------------------------
   // Reallocation
