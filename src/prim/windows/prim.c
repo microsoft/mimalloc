@@ -612,12 +612,17 @@ void _mi_prim_out_stderr( const char* msg )
   // on windows with redirection, the C runtime cannot handle locale dependent output
   // after the main thread closes so we use direct console output.
   if (!_mi_preloading()) {
-    // _cputs(msg);  // _cputs cannot be used as it aborts when failing to lock the console
     static HANDLE hcon = INVALID_HANDLE_VALUE;
+    #if MI_WIN_DESKTOP
     static bool hconIsConsole = false;
+    #endif
     if (hcon == INVALID_HANDLE_VALUE) {
-      hcon = GetStdHandle(STD_ERROR_HANDLE); // returns NULL on error
+      hcon = GetStdHandle(STD_ERROR_HANDLE);   // returns NULL if no stderr is available
       #if MI_WIN_DESKTOP
+      if (hcon==NULL) {
+        AttachConsole(ATTACH_PARENT_PROCESS);  // if started from a parent console, try to attach to that
+        hcon = GetStdHandle(STD_ERROR_HANDLE);
+      }      
       CONSOLE_SCREEN_BUFFER_INFO sbi;
       hconIsConsole = ((hcon != NULL && hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
       #endif
@@ -625,19 +630,19 @@ void _mi_prim_out_stderr( const char* msg )
     const size_t len = _mi_strlen(msg);
     if (len > 0 && len < UINT32_MAX) {
       DWORD written = 0;
-      if (hconIsConsole) {
-        #if MI_WIN_DESKTOP
-        WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
+      if (hcon != NULL && hcon != INVALID_HANDLE_VALUE) {
+        #if MI_WIN_DESKTOP              
+        if (hconIsConsole) {
+          WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
+        }
+        else 
         #endif
+        {
+          // use direct write in case stderr was redirected
+          WriteFile(hcon, msg, (DWORD)len, &written, NULL);
+        }
       }
-      else if (hcon != NULL && hcon != INVALID_HANDLE_VALUE) {
-        // use direct write if stderr was redirected
-        WriteFile(hcon, msg, (DWORD)len, &written, NULL);
-      }
-      else {
-        // finally fall back to fputs after all
-        fputs(msg, stderr);
-      }
+      // don't fall back to fputs or _cputs as the crt can have it locked
     }
   }
 }
@@ -876,7 +881,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     #pragma data_seg(".CRT$XIB")
       mi_crt_callback_t _mi_crt_callback_init[] = { &mi_crt_init };
     #pragma data_seg()
-  #elif defined(__GCC__)  // mingw
+  #elif defined(__GNUC__)  // mingw
     extern const IMAGE_TLS_DIRECTORY _tls_used;
     __attribute__((used)) static const void* const mi_tls_used_ref = &_tls_used; // pull in the CRT tls
     __attribute__((used, section(".CRT$XLB"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_pre = &mi_tls_attach;
@@ -973,7 +978,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     #pragma data_seg(".CRT$XLY")
       PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_tls_detach };
     #pragma data_seg()
-  #elif defined(__GCC__)  // mingw
+  #elif defined(__GNUC__)  // mingw
     extern const IMAGE_TLS_DIRECTORY _tls_used;
     __attribute__((used)) static const void* const mi_tls_used_ref = &_tls_used; // pull in the CRT tls
     __attribute__((used, section(".CRT$XLB"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_pre  = &mi_tls_attach;
@@ -1047,7 +1052,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     #pragma data_seg(".CRT$XLY")
     PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_win_main_detach };
     #pragma data_seg()
-  #elif defined(__GCC__)  // mingw
+  #elif defined(__GNUC__)  // mingw
     extern const IMAGE_TLS_DIRECTORY _tls_used;
     __attribute__((used)) static const void* const mi_tls_used_ref = &_tls_used; // pull in the CRT tls
     __attribute__((used, section(".CRT$XLB"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_pre  = &mi_tls_attach;
