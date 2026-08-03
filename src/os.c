@@ -91,22 +91,6 @@ void _mi_os_init(void) {
 bool _mi_os_decommit(void* addr, size_t size);
 bool _mi_os_commit(void* addr, size_t size, bool* is_zero);
 
-static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
-  mi_assert_internal(alignment != 0);
-  uintptr_t mask = alignment - 1;
-  if ((alignment & mask) == 0) { // power of two?
-    return (sz & ~mask);
-  }
-  else {
-    return ((sz / alignment) * alignment);
-  }
-}
-
-static void* _mi_align_down_ptr(void* p, size_t alignment) {
-  return (void*)_mi_align_down((uintptr_t)p, alignment);
-}
-
-
 /* -----------------------------------------------------------
   aligned hinting
 -------------------------------------------------------------- */
