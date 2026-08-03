@@ -207,7 +207,7 @@ void mi_options_print(void) mi_attr_noexcept
   const int vermajor = MI_MALLOC_VERSION/10000;
   const int verminor = (MI_MALLOC_VERSION%10000)/100;
   const int verpatch = (MI_MALLOC_VERSION%100);
-  _mi_message("v%i.%i.%i%s%s (built on %s, %s)\n", vermajor, verminor, verpatch,
+  _mi_message("v%i.%i.%i%s%s\n", vermajor, verminor, verpatch,
       #if defined(MI_CMAKE_BUILD_TYPE)
       ", " mi_stringify(MI_CMAKE_BUILD_TYPE)
       #else
@@ -219,7 +219,7 @@ void mi_options_print(void) mi_attr_noexcept
       #else
       ""
       #endif
-      , __DATE__, __TIME__);
+      );
 
   // show options
   for (int i = 0; i < _mi_option_last; i++) {
