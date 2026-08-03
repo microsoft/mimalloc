@@ -346,10 +346,10 @@ int main(void) {
     memset(ptr,123,n/2);
     
     ptr = mi_rezalloc_aligned(ptr, n/2, alignment);
-    assert(mem_has_vals(ptr,n/2,123));
+    assert(mem_has_vals((uint8_t*)ptr,n/2,123));
     
     ptr = mi_rezalloc_aligned(ptr, n, alignment);
-    assert(mem_has_vals(ptr,n/2,123));
+    assert(mem_has_vals((uint8_t*)ptr,n/2,123));
     result = mem_is_zero((uint8_t*)ptr + n/2, n/2);    
   }
   // ---------------------------------------------------
