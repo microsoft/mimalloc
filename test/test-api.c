@@ -73,7 +73,7 @@ static bool mem_is_zero(const void* p, size_t size) {
 int main(void) {
   mi_option_disable(mi_option_verbose);
 
-  #if 0
+  #if 1
   #ifdef __cplusplus
   CHECK_BODY("c++ new-handler") {
     std::set_new_handler([]{ throw std::bad_alloc(); });
