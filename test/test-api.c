@@ -73,6 +73,21 @@ bool mem_is_zero(uint8_t* p, size_t size) {
 int main(void) {
   mi_option_disable(mi_option_verbose);
 
+    CHECK_BODY("rezalloc_aligned_zeros") {  // issue #763
+    size_t alignment = 1024;
+    size_t n = 1024 * 6;
+    void* ptr = mi_zalloc_aligned(n, alignment);
+    assert(mem_is_zero(ptr,n));
+    memset(ptr,123,n/2);
+    
+    ptr = mi_rezalloc_aligned(ptr, n/2, alignment);
+    assert(mem_has_vals(ptr,n/2,123));
+    
+    ptr = mi_rezalloc_aligned(ptr, n, alignment);
+    assert(mem_has_vals(ptr,n/2,123));
+    result = mem_is_zero((uint8_t*)ptr + n/2, n/2);    
+  }
+
   #if 0
   #ifdef __cplusplus
   CHECK_BODY("c++ new-handler") {
@@ -346,20 +361,7 @@ int main(void) {
     mi_free(p);
   };
 
-  CHECK_BODY("rezalloc_aligned_zeros") {  // issue #763
-    size_t alignment = 1024;
-    size_t n = 1024 * 6;
-    void* ptr = mi_zalloc_aligned(n, alignment);
-    assert(mem_is_zero(ptr,n));
-    memset(ptr,123,n/2);
-    
-    ptr = mi_rezalloc_aligned(ptr, n/2, alignment);
-    assert(mem_has_vals(ptr,n/2,123));
-    
-    ptr = mi_rezalloc_aligned(ptr, n, alignment);
-    assert(mem_has_vals(ptr,n/2,123));
-    result = mem_is_zero((uint8_t*)ptr + n/2, n/2);    
-  }
+
   // ---------------------------------------------------
   // Reallocation
   // ---------------------------------------------------
