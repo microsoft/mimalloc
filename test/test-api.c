@@ -54,15 +54,15 @@ bool test_stl_heap_allocator4(void);
 
 static bool test_zero_aligned_first(void);
 
-bool mem_has_vals(uint8_t* p, size_t size, uint8_t val) {
+static bool mem_has_vals(const uint8_t* p, size_t size, uint8_t val) {
   if (p==NULL) return false;
   for (size_t i = 0; i < size; ++i) {
     if (p[i] != val) return false;
   }
   return true;
 }
-bool mem_is_zero(uint8_t* p, size_t size) {
-  return mem_has_vals(p,size,0);
+static bool mem_is_zero(const void* p, size_t size) {
+  return mem_has_vals((const uint8_t*)p,size,0);
 }
 
 // ---------------------------------------------------------------------------
