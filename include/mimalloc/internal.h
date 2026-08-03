@@ -489,7 +489,7 @@ static inline bool _mi_is_aligned(const void* p, size_t alignment) {
 // Align upwards
 static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   mi_assert_internal(alignment != 0);
-  uintptr_t mask = alignment - 1;
+  const uintptr_t mask = alignment - 1;
   if ((alignment & mask) == 0) {  // power of two?
     return ((sz + mask) & ~mask);
   }
@@ -503,18 +503,19 @@ static inline void* _mi_align_up_ptr(const void* p, size_t alignment) {
   return (void*)_mi_align_up((uintptr_t)p, alignment);
 }
 
+// Align down
 static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
   mi_assert_internal(alignment != 0);
-  uintptr_t mask = alignment - 1;
-  if ((alignment & mask) == 0) { // power of two?
+  const uintptr_t mask = alignment - 1;
+  if ((alignment & mask) == 0) {  // power of two?
     return (sz & ~mask);
   }
   else {
-    return ((sz / alignment) * alignment);
+    return ((sz/alignment)*alignment);
   }
 }
 
-// align a pointer downwards
+// Align a pointer downwards
 static inline void* _mi_align_down_ptr(const void* p, size_t alignment) {
   return (void*)_mi_align_down((uintptr_t)p, alignment);
 }

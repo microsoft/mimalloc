@@ -348,17 +348,18 @@ static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t
     return p;  // reallocation still fits, is aligned and not more than 50% waste
   }
   else {
-    // note: we don't zero allocate upfront so we only zero initialize the expanded part
+    // note: we don't zero allocate upfront so we only zero initialize the expanded part (at the cost of calling mi_usable_size)
     void* const newp = mi_theap_malloc_aligned_at(theap,newsize,alignment,offset);
     if (newp != NULL) {
-      const size_t usable = mi_usable_size(newp);      
+      const size_t copy_size  = (newsize > size ? size : newsize);
+      const size_t zero_start = (copy_size >= sizeof(intptr_t) ? copy_size - sizeof(intptr_t) : 0); // also set last word in the previous allocation to zero to ensure any padding is zero-initialized    
+      const size_t usable     = mi_usable_size(newp);
       mi_assert_internal(usable >= newsize); // use usable for zero'ing, issue #763
-      const size_t to_copy    = (newsize > size ? size : newsize);
-      const size_t zero_start = (to_copy >= sizeof(intptr_t) ? to_copy - sizeof(intptr_t) : 0); // also set last word in the previous allocation to zero to ensure any padding is zero-initialized        
-      if (zero && usable > zero_start) {        
+      if (zero && usable > zero_start) {
+        // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
         _mi_memzero((uint8_t*)newp + zero_start, usable - zero_start);
       }
-      _mi_memcpy(newp, p, to_copy); // cannot be aligned due to abitrary offset... (todo: require offset to be a multiple of sizeof(void*)?)
+      _mi_memcpy(newp, p, copy_size); // cannot be aligned due to abitrary offset... (todo: require offset to be a multiple of sizeof(void*)?)
       mi_free(p); // only free if successful
     }
     return newp;
