@@ -570,7 +570,7 @@ static void mi_error_default(int err) {
     }
   #endif
   #if defined(MI_XMALLOC)
-    if (err==ENOMEM || err==EOVERFLOW || err=EINVAL) { // abort on memory allocation fails in xmalloc mode
+    if (err==ENOMEM || err==EOVERFLOW || err==EINVAL) { // abort on memory allocation fails in xmalloc mode
       abort();
     }
   #endif
