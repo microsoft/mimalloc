@@ -306,17 +306,18 @@ static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t ne
     return p;  // reallocation still fits, is aligned and not more than 50% waste
   }
   else {
-    // note: we don't zero allocate upfront so we only zero initialize the expanded part
-    void* newp = mi_heap_malloc_aligned_at(heap,newsize,alignment,offset);
+    // note: we don't zero allocate upfront so we only zero initialize the expanded part (at the cost of calling mi_usable_size)
+    void* const newp = mi_heap_malloc_aligned_at(heap,newsize,alignment,offset);
     if (newp != NULL) {
-      if (zero && newsize > size) {
+      const size_t copy_size  = (newsize > size ? size : newsize);
+      const size_t zero_start = (copy_size >= sizeof(intptr_t) ? copy_size - sizeof(intptr_t) : 0); // also set last word in the previous allocation to zero to ensure any padding is zero-initialized    
+      const size_t usable     = mi_usable_size(newp);
+      mi_assert_internal(usable >= newsize); // use usable for zero'ing, issue #763
+      if (zero && usable > zero_start) {
         // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
-        const size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
-        const size_t zsize = mi_usable_size(newp); // issue #763
-        mi_assert_internal(zsize >= newsize);
-        _mi_memzero((uint8_t*)newp + start, zsize - start);
+        _mi_memzero((uint8_t*)newp + zero_start, usable - zero_start);
       }
-      _mi_memcpy(newp, p, (newsize > size ? size : newsize)); // cannot be aligned due to abitrary offset... (todo: require offset to be a multiple of sizeof(void*)?)
+      _mi_memcpy(newp, p, copy_size); // cannot be aligned due to abitrary offset... (todo: require offset to be a multiple of sizeof(void*)?)
       mi_free(p); // only free if successful
     }
     return newp;
