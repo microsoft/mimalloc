@@ -296,7 +296,7 @@ static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t ne
   }
   if (alignment <= sizeof(uintptr_t) && offset==0) return _mi_heap_realloc_zero(heap,p,newsize,zero,NULL,NULL); 
   if (p == NULL) return mi_heap_malloc_zero_aligned_at(heap,newsize,alignment,offset,zero,NULL);
-  size_t size = mi_usable_size(p);
+  const size_t size = mi_usable_size(p);
   if (newsize <= size && newsize >= (size - (size / 2)) && (((uintptr_t)p + offset) & (alignment-1)) == 0) {
     return p;  // reallocation still fits, is aligned and not more than 50% waste
   }
@@ -306,8 +306,10 @@ static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t ne
     if (newp != NULL) {
       if (zero && newsize > size) {
         // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
-        size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
-        _mi_memzero((uint8_t*)newp + start, newsize - start);
+        const size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
+        const size_t zsize = mi_usable_size(newp); // issue #763
+        mi_assert_internal(zsize >= newsize);
+        _mi_memzero((uint8_t*)newp + start, zsize - start);
       }
       _mi_memcpy(newp, p, (newsize > size ? size : newsize)); // cannot be aligned due to abitrary offset... (todo: require offset to be a multiple of sizeof(void*)?)
       mi_free(p); // only free if successful
