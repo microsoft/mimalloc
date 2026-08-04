@@ -761,7 +761,6 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   size_t usable_size = 0;
   void* const p = mi_block_ptr_set_guarded(block, obj_size, &usable_size);
   if (p == NULL) return NULL;
-  if (usable!=NULL) { *usable = usable_size; }
   if (zero) {
     _mi_memzero(p,obj_size);  // we have to zero afterwards as padding might have written inside the block (if the `blocksize > reqsize + os_page_size`)
   }
