@@ -45,7 +45,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_align(a)        __attribute__((aligned(a)))
 #define mi_decl_noreturn        __attribute__((noreturn))
 #define mi_decl_weak            __attribute__((weak))
+#if defined(__MINGW32__)
+#define mi_decl_hidden
+#else
 #define mi_decl_hidden          __attribute__((visibility("hidden")))
+#endif
 #if (__GNUC__ >= 4) || defined(__clang__)
 #define mi_decl_cold            __attribute__((cold))
 #else
@@ -78,6 +82,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #else
 #define mi_unlikely(x)     (x)
 #define mi_likely(x)       (x)
+#endif
+
+#if (defined(__GNUC__) && (__GNUC__ >= 7)) || defined(__clang__) // includes clang and icc
+#define mi_decl_maybe_unused    __attribute__((unused))
+#elif __cplusplus >= 201703L    // c++17
+#define mi_decl_maybe_unused    [[maybe_unused]]
+#else
+#define mi_decl_maybe_unused
 #endif
 
 #ifndef __has_builtin
@@ -379,7 +391,7 @@ static inline bool _mi_is_power_of_two(uintptr_t x) {
 
 // valid alignment values are as posix memalign: <https://en.cppreference.com/c/memory/aligned_alloc#Notes>
 static inline bool mi_alignment_is_valid(size_t alignment) {
-  return ((alignment!=0) && _mi_is_power_of_two(alignment)); 
+  return ((alignment!=0) && _mi_is_power_of_two(alignment));
 }
 
 // Is a pointer aligned?
@@ -715,15 +727,15 @@ static inline bool mi_heap_malloc_use_guarded(mi_heap_t* heap, size_t size) {
     // no sample
     heap->guarded_sample_count = count;
     return false;
-  }  
-  else { 
+  }
+  else {
     // count == 0
     const size_t rate = heap->guarded_sample_rate;
     if (rate == 0) {
       return false; // don't write to an empty theap
     }
     else if (size >= heap->guarded_size_min && size <= heap->guarded_size_max) {
-      // use guarded allocation        
+      // use guarded allocation
       heap->guarded_sample_count = rate;  // reset
       return true;
     }
