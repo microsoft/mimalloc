@@ -313,13 +313,11 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero,
   // note: we don't zero allocate upfront so we only zero initialize the expanded part 
   size_t usable; // use usable for zero-ing, issue #763
   void* const newp = mi_heap_umalloc(heap,newsize,&usable);
-  if (usable_post!=NULL) { *usable_post = usable; }
   if mi_likely(newp != NULL) {
+    if (usable_post!=NULL) { *usable_post = usable; }  
     const size_t copy_size  = (newsize > size ? size : newsize);
     const size_t zero_start = _mi_align_down( (copy_size >= sizeof(intptr_t) ? copy_size - sizeof(intptr_t) : 0), sizeof(intptr_t)); // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
-    #if MI_PADDING
-    usable = mi_usable_size(newp); // avoid zero'ing padding
-    #endif
+    mi_assert_internal(usable == mi_usable_size(newp));
     mi_assert_internal(usable >= newsize); 
     if (zero && usable > zero_start) {      
       _mi_memzero_aligned((uint8_t*)newp + zero_start, usable - zero_start);
@@ -756,8 +754,8 @@ mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, boo
   const size_t req_size = _mi_align_up(bsize + os_page_size, os_page_size);
   mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(heap, req_size, false /* don't zero */, 0 /* huge_alignment */, usable);
   if (block==NULL) return NULL;
-  size_t usable_size;
-  void* const p   = mi_block_ptr_set_guarded(block, obj_size, &usable_size);
+  size_t usable_size = 0;
+  void* const p = mi_block_ptr_set_guarded(block, obj_size, &usable_size);
   if (p == NULL) return NULL;
   if (usable!=NULL) { *usable = usable_size; }
   if (zero) {
