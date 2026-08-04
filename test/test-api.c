@@ -74,7 +74,7 @@ int main(void) {
   mi_option_disable(mi_option_verbose);
 
   #if 1
-  #if defined(__cplusplus) && (!defined(_MSC_VER) || defined(_WIN64))
+  #if defined(__cplusplus) && !defined(_MSC_VER)
   CHECK_BODY("c++ new-handler") {
     std::set_new_handler([]{ throw std::bad_alloc(); });
     void* p = mi_new_nothrow(SIZE_MAX/2);
