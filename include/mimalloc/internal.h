@@ -50,7 +50,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_thread          __thread
 #define mi_decl_noreturn        __attribute__((noreturn))
 #define mi_decl_weak            __attribute__((weak))
+#if defined(__MINGW32__)
+#define mi_decl_hidden
+#else
 #define mi_decl_hidden          __attribute__((visibility("hidden")))
+#endif
 #if (__GNUC__ >= 4) || defined(__clang__)
 #define mi_decl_cold            __attribute__((cold))
 #else
@@ -409,7 +413,7 @@ static inline void* mi_pthread_key_get(pthread_key_t key) {
   #if !MI_PTHREADS_GET_INVALID_KEY_IS_NULL
   if mi_unlikely(key==MI_PTHREAD_KEY_INVALID) return NULL;
   #endif
-  return pthread_getspecific(key);  
+  return pthread_getspecific(key);
 }
 
 static inline bool mi_pthread_key_set(pthread_key_t* pkey, void* val) {
@@ -479,7 +483,7 @@ static inline bool _mi_is_power_of_two(uintptr_t x) {
 
 // valid alignment values are as posix memalign: <https://en.cppreference.com/c/memory/aligned_alloc#Notes>
 static inline bool mi_alignment_is_valid(size_t alignment) {
-  return ((alignment!=0) && _mi_is_power_of_two(alignment)); 
+  return ((alignment!=0) && _mi_is_power_of_two(alignment));
 }
 
 // Is a pointer aligned?
@@ -878,7 +882,7 @@ static inline mi_page_queue_t* mi_page_queue(const mi_theap_t* theap, size_t siz
 
 static inline size_t mi_page_min_commit_size(void) {
   const size_t psize = _mi_os_page_size();
-  return (MI_PAGE_MIN_COMMIT_SIZE >= psize ? MI_PAGE_MIN_COMMIT_SIZE : psize);  
+  return (MI_PAGE_MIN_COMMIT_SIZE >= psize ? MI_PAGE_MIN_COMMIT_SIZE : psize);
 }
 
 //-----------------------------------------------------------
@@ -1072,15 +1076,15 @@ static inline bool mi_theap_malloc_use_guarded(mi_theap_t* theap, size_t size) {
     // no sample
     theap->guarded_sample_count = count;
     return false;
-  }  
-  else { 
+  }
+  else {
     // count == 0
     const size_t rate = theap->guarded_sample_rate;
     if (rate == 0) {
       return false; // don't write to an empty theap
     }
     else if (size >= theap->guarded_size_min && size <= theap->guarded_size_max) {
-      // use guarded allocation        
+      // use guarded allocation
       theap->guarded_sample_count = rate;  // reset
       return true;
     }
