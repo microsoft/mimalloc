@@ -406,6 +406,12 @@ if(MI_LIBC_MUSL)
   list(APPEND mi_defines MI_LIBC_MUSL=1)
 endif()
 
+if(ENV{MSYSTEM} STREQUAL "UCRT64")
+  message(STATUS "Detected MSYS2 UCRT64 environment")
+  set(MI_MINGW_UCRT64 "ON")
+  list(APPEND mi_defines MI_WINGW_UCRT64=1)
+endif()
+
 if(MI_WIN_USE_FIXED_TLS)
   message(STATUS "Use fixed TLS slot on Windows to avoid extra tests in the malloc fast path (MI_WIN_USE_FIXED_TLS=ON)")
   list(APPEND mi_defines MI_WIN_USE_FIXED_TLS=1)
@@ -783,7 +789,7 @@ if (MI_BUILD_TESTS)
     if(WIN32)
       target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE "MI_LINK_VERSION=1")  # link mi_version
       target_link_libraries(mimalloc-test-stress-dynamic PRIVATE mimalloc ${mi_libraries})  # link mi_version
-      if(MINGW)
+      if(MINGW AND MI_MINGW_UCRT64)
         # mingw always links mimalloc after system libraries.
         # post-process with `minject` to make sure mimalloc is the first dll in the load order.
         add_custom_command(TARGET mimalloc-test-stress-dynamic POST_BUILD COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/bin/minject${MINJECT_SUFFIX} --postfix=${mi_libsuffix} -f -i $<TARGET_FILE:mimalloc-test-stress-dynamic>)

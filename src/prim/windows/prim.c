@@ -775,7 +775,10 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 #endif
 
 #if defined(MI_WIN_INIT_USE_CRT_TLS)
-  #define MI_PRIM_HAS_PROCESS_ATTACH  1
+  #if !defined(__MINGW32__) || !defined(MI_MINGW_UCRT64)  // on mingw without UCRT use the constructor attribute (in `src/prim/prim.c`)
+  #define MI_PRIM_HAS_PROCESS_ATTACH  1   
+  #endif
+
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) {}
   void _mi_prim_thread_done_auto_done(void) {}
