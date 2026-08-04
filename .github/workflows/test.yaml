@@ -324,7 +324,7 @@ jobs:
         run: |
           cmake . -B out/release-riscv64 -G Ninja -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_SEE_ASM=ON
           cmake --build out/release-riscv64 --parallel 4 --config Release
-        # ctest --test-dir out/release-riscv64 --verbose --timeout 240 -C Release
+          ctest --test-dir out/release-riscv64 --verbose --timeout 240 -C Release
 
       - name: Alpine risc64, asm
         if: matrix.tests == 'alpine-riscv64'
