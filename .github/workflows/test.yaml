@@ -31,6 +31,10 @@ jobs:
             tests: alpine-riscv64   # qemu
           - os: ubuntu-latest 
             tests: alpine-arm32     # qemu
+          - os: windows-latest 
+            tests: mingw-ucrt64
+          - os: windows-latest 
+            tests: mingw64 
           # - os: ubuntu-latest       # slow, so disable by default
           #   tests: freebsd-arm64    # qemu
           
@@ -218,6 +222,33 @@ jobs:
         env:
           MIMALLOC_GUARDED_SAMPLE_RATE: 100
   
+      # MSYS2 mingw64
+      - name: mingw-ucrt64 x64, Setup
+        if: matrix.tests == 'mingw-ucrt64'
+        uses: msys2/setup-msys2@v2       
+        with: 
+          msystem: UCRT64
+          install: |
+            git
+            ninja
+            cmake
+
+      - name: mingw-ucrt64 x64, Debug
+        if: matrix.tests == 'mingw-ucrt64'
+        shell: msys2 {0}
+        run: |
+          cmake . -B out/debug-mingw-ucrt64-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug-mingw-ucrt64-x64 --parallel 4 --config Debug
+          ctest --test-dir out/debug-mingw-ucrt64-x64 --verbose --timeout 240 -C Debug
+
+      - name: mingw-ucrt64 x64, Release
+        if: matrix.tests == 'mingw-ucrt64'
+        shell: msys2 {0}
+        run: |
+          cmake . -B out/release-mingw-ucrt64-x64 -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
+          cmake --build out/release-mingw-ucrt64-x64 --parallel 4 --config Release
+          ctest --test-dir out/release-mingw-ucrt64-x64 --verbose --timeout 240 -C Release
+
 
       # VM: FreeBSD (arm64 and x64)
       - name: FreeBSD arm64, Setup
@@ -412,3 +443,4 @@ jobs:
           cmake . -B out/secure-arm32 -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
           cmake --build out/secure-arm32 --parallel 4 --config Release
           ctest --test-dir out/secure-arm32 --verbose --timeout 240 -C Release
+
