@@ -160,17 +160,17 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
 
 // Free a block
 // Fast path written carefully to prevent register spilling on the stack
-static inline void mi_free_ex(void* p, size_t* usable) mi_attr_noexcept
+static inline void mi_free_ex(void* p, size_t* pblock_size) mi_attr_noexcept
 {
   mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
   if mi_unlikely(segment==NULL) {
-    if (usable!=NULL) { *usable = 0; }
+    if (pblock_size!=NULL) { *pblock_size = 0; }
     return;
   }
 
   const bool is_local = (_mi_prim_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
   mi_page_t* const page = _mi_segment_page_of(segment, p);
-  if (usable!=NULL) { *usable = mi_page_usable_block_size(page); }
+  if (pblock_size!=NULL) { *pblock_size = mi_page_block_size(page); }
   
   if mi_likely(is_local) {                        // thread-local free?
     if mi_likely(page->flags.full_aligned == 0) { // and it is not a full page (full pages need to move from the full bin), nor has aligned blocks (aligned blocks need to be unaligned)
@@ -193,8 +193,8 @@ void mi_free(void* p) mi_attr_noexcept {
   mi_free_ex(p,NULL);
 }
 
-void mi_ufree(void* p, size_t* usable) mi_attr_noexcept {
-  mi_free_ex(p,usable);
+void mi_ufree(void* p, size_t* pblock_size) mi_attr_noexcept {
+  mi_free_ex(p,pblock_size);
 }
 
 void mi_free_small(void* p) mi_attr_noexcept {
