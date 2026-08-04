@@ -390,7 +390,8 @@ typedef struct mi_page_s {
   mi_block_t*               free;              // list of available free blocks (`malloc` allocates from this list)
   uint32_t                  used;              // number of blocks in use (including blocks in `thread_free`)
   uint16_t                  capacity;          // number of blocks committed
-  uint16_t                  reserved;          // number of blocks reserved in memory
+  uint8_t                   retire_expire;     // expiration count for retired blocks
+  bool                      free_is_zero;      // `true` if the blocks in the free list are zero initialized
   
   mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   _Atomic(mi_thread_free_t) xthread_free;      // list of deferred free blocks freed by other threads (= `mi_block_t* | (1 if owned)`)
@@ -398,8 +399,7 @@ typedef struct mi_page_s {
   size_t                    block_size;        // const: size available in each block (always `>0`)
   uint32_t                  page_ma_offset;    // const: offset relative to the page (in MI_MAX_ALIGN_SIZE parts) to the start of the blocks
   uint16_t                  slice_pcommitted;  // committed size in OS page sizes relative to the first arena slice of the page data (or 0 if the page is fully committed already)
-  uint8_t                   retire_expire;     // expiration count for retired blocks
-  bool                      free_is_zero;      // `true` if the blocks in the free list are zero initialized
+  uint16_t                  reserved;          // number of blocks reserved in memory
   
   mi_theap_t*               theap;             // the theap owning this page (may not be valid or NULL for abandoned pages)
   mi_heap_t*                heap;              // const: the heap owning this page

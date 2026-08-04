@@ -21,14 +21,14 @@ const mi_page_t _mi_page_empty = {
   NULL,                   // free
   0,                      // used
   0,                      // capacity
-  0,                      // reserved capacity
+  0,                      // retire_expire
+  false,                  // is_zero
   NULL,                   // local_free
   MI_ATOMIC_VAR_INIT(0),  // xthread_free
   0,                      // block_size
   0,                      // page_ma_offset
   0,                      // slice_pcommitted
-  0,                      // retire_expire
-  false,                  // is_zero
+  0,                      // reserved capacity
   NULL,                   // theap
   NULL,                   // heap
   NULL, NULL,             // next, prev
