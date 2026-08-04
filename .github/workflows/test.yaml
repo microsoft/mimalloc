@@ -32,9 +32,7 @@ jobs:
           - os: ubuntu-latest 
             tests: alpine-arm32     # qemu
           - os: windows-latest 
-            tests: mingw-ucrt64
-          - os: windows-latest 
-            tests: mingw64 
+            tests: mingw-ucrt64          
           # - os: ubuntu-latest       # slow, so disable by default
           #   tests: freebsd-arm64    # qemu
           
@@ -230,7 +228,7 @@ jobs:
           msystem: UCRT64
           install: |
             git
-            ninja
+            make
             cmake
 
       - name: mingw-ucrt64 x64, Debug
