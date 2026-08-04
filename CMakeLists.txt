@@ -563,22 +563,27 @@ else()
   set(mi_install_cmakedir   "${CMAKE_INSTALL_LIBDIR}/cmake/mimalloc-${mi_version}") # for cmake package info
 endif()
 
-set(mi_libname "mimalloc")
+set(mi_libsuffix "")
 if(MI_SECURE)
-  set(mi_libname "${mi_libname}-secure")
+  set(mi_libsuffix "${mi_libsuffix}-secure")
 endif()
 if(MI_TRACK_VALGRIND)
-  set(mi_libname "${mi_libname}-valgrind")
+  set(mi_libsuffix "${mi_libsuffix}-valgrind")
 endif()
 if(MI_TRACK_ASAN)
-  set(mi_libname "${mi_libname}-asan")
+  set(mi_libsuffix "${mi_libsuffix}-asan")
 endif()
 string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
 list(APPEND mi_defines "MI_CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE_LC}")  #todo: multi-config project needs $<CONFIG> ?
 if(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel|none)$")
   list(APPEND mi_defines MI_BUILD_RELEASE)
 else()
-  set(mi_libname "${mi_libname}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
+  set(mi_libsuffix "${mi_libsuffix}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
+endif()
+
+set(mi_libname "mimalloc")
+if(NOT mi_libsuffix STREQUAL "")
+set(mi_libname "${mi_libname}-${mi_libsuffix}")
 endif()
 
 if(MI_BUILD_SHARED)
@@ -643,16 +648,20 @@ if(MI_BUILD_SHARED)
     # On windows, link and copy the mimalloc redirection dll too.
     if(CMAKE_GENERATOR_PLATFORM STREQUAL "arm64ec")
       set(MIMALLOC_REDIRECT_SUFFIX "-arm64ec")
+      set(MINJECT_SUFFIX "")
     elseif(MI_ARCH STREQUAL "x64")
       set(MIMALLOC_REDIRECT_SUFFIX "")
+      set(MINJECT_SUFFIX "")
       if(CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64")
         message(STATUS "Note: x64 code emulated on Windows for arm64 should use an arm64ec build of 'mimalloc.dll'")
         message(STATUS "      together with 'mimalloc-redirect-arm64ec.dll'. See the 'bin\\readme.md' for more information.")
       endif()
     elseif(MI_ARCH STREQUAL "x86")
       set(MIMALLOC_REDIRECT_SUFFIX "32")
+      set(MINJECT_SUFFIX "32")
     else()
       set(MIMALLOC_REDIRECT_SUFFIX "-${MI_ARCH}")  # -arm64 etc.
+      set(MINJECT_SUFFIX "-${MI_ARCH}")
     endif()
 
     target_link_libraries(mimalloc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.lib)  # the DLL import library
@@ -774,6 +783,10 @@ if (MI_BUILD_TESTS)
     if(WIN32)
       target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE "MI_LINK_VERSION=1")  # link mi_version
       target_link_libraries(mimalloc-test-stress-dynamic PRIVATE mimalloc ${mi_libraries})  # link mi_version
+      if(MINGW)
+      # use minject to make sure mimalloc is the first dll loaded
+      add_custom_command(TARGET mimalloc-test-stress-dynamic POST_BUILD COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/bin/minject${MINJECT_SUFFIX} --postfix=${mi_libsuffix} -f -i $<TARGET_FILE:mimalloc-test-stress-dynamic>)
+      endif()
       add_test(NAME test-stress-dynamic COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_VERBOSE=1 $<TARGET_FILE:mimalloc-test-stress-dynamic>)
     else()
       target_link_libraries(mimalloc-test-stress-dynamic PRIVATE ${mi_libraries}) # pthreads, issue 1158
