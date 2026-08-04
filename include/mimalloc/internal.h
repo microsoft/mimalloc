@@ -809,9 +809,15 @@ static inline size_t mi_page_slice_offset_of(const mi_page_t* page, size_t offse
   return (mi_page_start(page) - mi_page_slice_start(page)) + offset_relative_to_page_start;
 }
 
+// How much of the page is committed relative to the slice start? (or 0 if fully committed already)
+static inline size_t mi_page_slice_committed(const mi_page_t* page) {
+  return ((size_t)page->slice_pcommitted * _mi_os_page_size());
+}
+
 // Currently committed part of a page
 static inline size_t mi_page_committed(const mi_page_t* page) {
-  return (page->slice_committed == 0 ? mi_page_size(page) : page->slice_committed - mi_page_slice_offset_of(page,0));
+  const size_t slice_committed = mi_page_slice_committed(page);
+  return (slice_committed == 0 ? mi_page_size(page) : slice_committed - mi_page_slice_offset_of(page,0));
 }
 
 // are all blocks in a page freed?
@@ -869,6 +875,10 @@ static inline mi_page_queue_t* mi_page_queue(const mi_theap_t* theap, size_t siz
   return pq;
 }
 
+static inline size_t mi_page_min_commit_size(void) {
+  const size_t psize = _mi_os_page_size();
+  return (MI_PAGE_MIN_COMMIT_SIZE >= psize ? MI_PAGE_MIN_COMMIT_SIZE : psize);  
+}
 
 //-----------------------------------------------------------
 // Page thread id and flags
