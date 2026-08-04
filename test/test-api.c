@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2020, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2026, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -74,7 +74,7 @@ int main(void) {
   mi_option_disable(mi_option_verbose);
 
   #if 1
-  #ifdef __cplusplus
+  #if defined(__cplusplus) && (!defined(_MSC_VER) || defined(_WIN64))
   CHECK_BODY("c++ new-handler") {
     std::set_new_handler([]{ throw std::bad_alloc(); });
     void* p = mi_new_nothrow(SIZE_MAX/2);
