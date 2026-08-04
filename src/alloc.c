@@ -317,7 +317,7 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero,
     if (usable_post!=NULL) { *usable_post = usable; }  
     const size_t copy_size  = (newsize > size ? size : newsize);
     const size_t zero_start = _mi_align_down( (copy_size >= sizeof(intptr_t) ? copy_size - sizeof(intptr_t) : 0), sizeof(intptr_t)); // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
-    #if MI_PADDING
+    #if MI_PADDING || MI_GUARDED
     usable = mi_usable_size(newp); 
     #else
     mi_assert_internal(usable == mi_usable_size(newp));         
