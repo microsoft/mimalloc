@@ -50,9 +50,17 @@ jobs:
       - name: Release
         if: matrix.tests == 'basic'
         run: |
-          cmake . -B out/release -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON
+          cmake . -B out/release -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_SEE_ASM=ON
           cmake --build out/release --parallel 4 --config Release
           ctest --test-dir out/release --verbose --timeout 240 -C Release
+
+      - name: Release, x64, Upload Assembly
+        if: matrix.tests == 'basic' && runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.os }}-alloc.c.s
+          path: out/release/CMakeFiles/mimalloc.dir/src/alloc.c.s
+          
 
       - name: Secure
         if: matrix.tests == 'basic'
@@ -160,9 +168,16 @@ jobs:
       - name: Release, C++, clang++
         if: matrix.tests == 'extra' && runner.os == 'Linux'
         run: |
-          CC=clang CXX=clang++ cmake . -B out/release-clang-cxx -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_USE_CXX=ON
+          CC=clang CXX=clang++ cmake . -B out/release-clang-cxx -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_USE_CXX=ON -DMI_SEE_ASM=ON
           cmake --build out/release-clang-cxx --parallel 8 --config Release
           ctest --test-dir out/release-clang-cxx --verbose --timeout 240 -C Release
+
+      - name: Release, C++, clang++, Upload Assembly
+        if: matrix.tests == 'extra' && runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.os }}-clang-cxx-x64-alloc.s
+          path: out/release-clang-cxx/alloc.s          
 
       - name: Debug, ASAN
         if: matrix.tests == 'extra' && runner.os == 'Linux'
@@ -311,14 +326,13 @@ jobs:
           cmake --build out/release-riscv64 --parallel 4 --config Release
           ctest --test-dir out/release-riscv64 --verbose --timeout 240 -C Release
 
-      # - name: Alpine risc64, Upload assembly
-      #   if: matrix.tests == 'alpine-riscv64'
-      #   uses: actions/upload-artifact@v7
-      #   with:
-      #     name: alpine-riscv64-alloc.c.s
-      #     path: out/release-riscv64/CMakeFiles/mimalloc.dir/src/alloc.c.s
-      #     page: out/release-riscv64/alloc.s
-
+      - name: Alpine risc64, Upload assembly
+        if: matrix.tests == 'alpine-riscv64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: alpine-riscv64-alloc.c.s
+          path: out/release-riscv64/CMakeFiles/mimalloc.dir/src/alloc.c.s
+      
       - name: Alpine riscv64, Secure
         if: matrix.tests == 'alpine-riscv64'
         shell: alpine-riscv64.sh {0}
