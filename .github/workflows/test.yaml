@@ -227,11 +227,10 @@ jobs:
         with: 
           msystem: UCRT64
           install: |
-            base-devel
-            mingw-w64-ucrt-x86_64-toolchain
-            git
-            make
-            cmake
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-git
+            mingw-w64-ucrt-x86_64-make
+            mingw-w64-ucrt-x86_64-cmake
 
       - name: mingw-ucrt64 x64, Debug
         if: matrix.tests == 'mingw-ucrt64'
