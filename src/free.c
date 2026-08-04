@@ -359,8 +359,9 @@ static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg) {
   return page;
 }
 
-static inline size_t _mi_usable_size(const void* p, const mi_page_t* page) mi_attr_noexcept {
+size_t _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr_noexcept {
   if mi_unlikely(page==NULL) return 0;
+  mi_assert_internal(mi_validate_ptr_page(p,"_mi_page_usable_size") == page);
   if mi_likely(!mi_page_has_aligned(page)) {
     const mi_block_t* block = mi_validate_block_from_ptr(page,p);
     return mi_page_usable_size_of(page, block, false /* is guarded */);
@@ -373,7 +374,7 @@ static inline size_t _mi_usable_size(const void* p, const mi_page_t* page) mi_at
 
 mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
   const mi_page_t* const page = mi_validate_ptr_page(p,"mi_usable_size");
-  return _mi_usable_size(p,page);
+  return _mi_page_usable_size(page,p);
 }
 
 
@@ -385,7 +386,7 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
   MI_UNUSED_RELEASE(size);
   #if MI_DEBUG
   const mi_page_t* const page = mi_validate_ptr_page(p,"mi_free_size");  
-  const size_t available = _mi_usable_size(p,page);
+  const size_t available = _mi_page_usable_size(page,p);
   mi_assert(p == NULL || size <= available || available == 0 /* invalid pointer */ );
   #endif
   mi_free(p);
