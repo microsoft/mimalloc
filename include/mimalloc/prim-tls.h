@@ -82,7 +82,7 @@ static inline void** mi_prim_thread_pointer(void) {
 }
 #elif MI_USE_BUILTIN_THREAD_POINTER
 static inline void** mi_prim_thread_pointer(void) {
-  return __builtin_thread_pointer();
+  return (void**)__builtin_thread_pointer();
 }
 #elif defined(__GNUC__) 
   #if defined(__aarch64__)
