@@ -235,9 +235,8 @@ jobs:
       - name: mingw-ucrt64 x64, Debug
         if: matrix.tests == 'mingw-ucrt64'
         shell: msys2 {0}
-        env: 
-          MSYSTEM: UCRT64
         run: |
+          env
           cmake . -B out/debug-mingw-ucrt64-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
           cmake --build out/debug-mingw-ucrt64-x64 --parallel 4 --config Debug
           ctest --test-dir out/debug-mingw-ucrt64-x64 --verbose --timeout 240 -C Debug
