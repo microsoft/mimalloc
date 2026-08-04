@@ -59,7 +59,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.os }}-alloc.c.s
-          path: out/release/CMakeFiles/mimalloc.dir/src/alloc.c.s
+          path: out/release/CMakeFiles/mimalloc-static.dir/src/alloc.c.s
           
 
       - name: Secure
