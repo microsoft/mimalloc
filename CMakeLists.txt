@@ -862,7 +862,13 @@ if (MI_BUILD_TESTS)
     else()
       message(STATUS "cannot build TSAN tests without MI_BUILD_SHARED being enabled")
     endif()
+    if(MI_GUARDED)
+    add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_GUARDED_SAMPLE_RATE=1 $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
+    elseif(TEST_NAME STREQUAL "stress-heaps")
+    add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_ARENA_EAGER_COMMIT=0 MIMALLOC_PAGE_COMMIT_ON_DEMAND=1 $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
+    else()
     add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
+    endif()
   endforeach()
 
   # dynamic override test
