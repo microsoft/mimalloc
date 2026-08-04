@@ -463,7 +463,7 @@ if(MI_TLS_RECURSE_GUARD)
   list(APPEND mi_defines MI_TLS_RECURSE_GUARD=1)
 endif()
 
-if(ENV{MSYSTEM} STREQUAL "UCRT64")
+if("$ENV{MSYSTEM}" STREQUAL "UCRT64")
   message(STATUS "Detected MSYS2 UCRT64 environment")
   set(MI_MINGW_UCRT64 "ON")
   list(APPEND mi_defines MI_WINGW_UCRT64=1)
@@ -650,23 +650,24 @@ else()
   set(mi_install_cmakedir   "${CMAKE_INSTALL_LIBDIR}/cmake/mimalloc-${mi_version}") # for cmake package info
 endif()
 
-set(mi_libsuffix "")
+set(mi_libname "mimalloc")
 if(MI_SECURE)
-  set(mi_libsuffix "${mi_libsuffix}-secure")
+  set(mi_libname "${mi_libname}-secure")
 endif()
 if(MI_TRACK_VALGRIND)
-  set(mi_libsuffix "${mi_libsuffix}-valgrind")
+  set(mi_libname "${mi_libname}-valgrind")
 endif()
 if(MI_TRACK_ASAN)
-  set(mi_libsuffix "${mi_libsuffix}-asan")
+  set(mi_libname "${mi_libname}-asan")
 endif()
 string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
 list(APPEND mi_defines "MI_CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE_LC}")  #todo: multi-config project needs $<CONFIG> ?
 if(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel|none)$")
   list(APPEND mi_defines MI_BUILD_RELEASE)
 else()
-  set(mi_libsuffix "${mi_libsuffix}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
+  set(mi_libname "${mi_libname}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
 endif()
+string(REGEX REPLACE "^mimalloc[-]?" "" mi_libsuffix "${mi_libname}")
 
 set(mi_libname "mimalloc")
 if(NOT mi_libsuffix STREQUAL "")
