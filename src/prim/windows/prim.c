@@ -637,12 +637,17 @@ void _mi_prim_out_stderr( const char* msg )
   // on windows with redirection, the C runtime cannot handle locale dependent output
   // after the main thread closes so we use direct console output.
   if (!_mi_preloading()) {
-    // _cputs(msg);  // _cputs cannot be used as it aborts when failing to lock the console
     static HANDLE hcon = INVALID_HANDLE_VALUE;
+    #if MI_WIN_DESKTOP
     static bool hconIsConsole = false;
+    #endif
     if (hcon == INVALID_HANDLE_VALUE) {
-      hcon = GetStdHandle(STD_ERROR_HANDLE); // returns NULL on error
+      hcon = GetStdHandle(STD_ERROR_HANDLE);   // returns NULL if no stderr is available
       #if MI_WIN_DESKTOP
+      if (hcon==NULL) {
+        AttachConsole(ATTACH_PARENT_PROCESS);  // if started from a parent console, try to attach to that
+        hcon = GetStdHandle(STD_ERROR_HANDLE);
+      }      
       CONSOLE_SCREEN_BUFFER_INFO sbi;
       hconIsConsole = ((hcon != NULL && hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
       #endif
@@ -650,19 +655,19 @@ void _mi_prim_out_stderr( const char* msg )
     const size_t len = _mi_strlen(msg);
     if (len > 0 && len < UINT32_MAX) {
       DWORD written = 0;
-      if (hconIsConsole) {
-        #if MI_WIN_DESKTOP
-        WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
+      if (hcon != NULL && hcon != INVALID_HANDLE_VALUE) {
+        #if MI_WIN_DESKTOP              
+        if (hconIsConsole) {
+          WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
+        }
+        else 
         #endif
+        {
+          // use direct write in case stderr was redirected
+          WriteFile(hcon, msg, (DWORD)len, &written, NULL);
+        }
       }
-      else if (hcon != NULL && hcon != INVALID_HANDLE_VALUE) {
-        // use direct write if stderr was redirected
-        WriteFile(hcon, msg, (DWORD)len, &written, NULL);
-      }
-      else {
-        // finally fall back to fputs after all
-        fputs(msg, stderr);
-      }
+      // don't fall back to fputs or _cputs as the crt can have it locked
     }
   }
 }

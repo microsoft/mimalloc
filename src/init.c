@@ -23,20 +23,20 @@ static const mi_page_t mi_page_empty = {
   0,                      // used
   0,                      // capacity
   0,                      // reserved capacity
-  0,                      // retire_expire
-  false,                  // is_zero
   NULL,                   // local_free
   MI_ATOMIC_VAR_INIT(0),  // xthread_free
   0,                      // block_size
-  0,                      // page_woffset
-  MI_ARENA_SLICE_SIZE,    // page_committed
-  #if (MI_PADDING || MI_ENCODE_FREELIST)
-  { 0, 0 },               // keys
-  #endif
+  0,                      // page_ma_offset
+  0,                      // slice_pcommitted
+  0,                      // retire_expire
+  false,                  // is_zero
   NULL,                   // theap
   NULL,                   // heap
   NULL, NULL,             // next, prev
-  MI_MEMID_STATIC         // memid
+  MI_MEMID_STATIC,        // memid
+  #if (MI_PADDING || MI_ENCODE_FREELIST)
+  { 0, 0 }                // keys
+  #endif  
 };
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&mi_page_empty)

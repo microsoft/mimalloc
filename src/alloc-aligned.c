@@ -343,20 +343,23 @@ static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t
   }
   if (alignment <= sizeof(uintptr_t) && offset==0) return _mi_theap_realloc_zero(theap,p,newsize,zero,NULL,NULL);
   if (p == NULL) return mi_theap_malloc_zero_aligned_at(theap,newsize,alignment,offset,zero,NULL);
-  size_t size = mi_usable_size(p);
+  const size_t size = mi_usable_size(p);
   if (newsize <= size && newsize >= (size - (size / 2)) && (((uintptr_t)p + offset) & (alignment-1)) == 0) {
     return p;  // reallocation still fits, is aligned and not more than 50% waste
   }
   else {
-    // note: we don't zero allocate upfront so we only zero initialize the expanded part
-    void* newp = mi_theap_malloc_aligned_at(theap,newsize,alignment,offset);
+    // note: we don't zero allocate upfront so we only zero initialize the expanded part (at the cost of calling mi_usable_size)
+    void* const newp = mi_theap_malloc_aligned_at(theap,newsize,alignment,offset);
     if (newp != NULL) {
-      if (zero && newsize > size) {
+      const size_t copy_size  = (newsize > size ? size : newsize);
+      const size_t zero_start = (copy_size >= sizeof(intptr_t) ? copy_size - sizeof(intptr_t) : 0); // also set last word in the previous allocation to zero to ensure any padding is zero-initialized    
+      const size_t usable     = mi_usable_size(newp);
+      mi_assert_internal(usable >= newsize); // use usable for zero'ing, issue #763
+      if (zero && usable > zero_start) {
         // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
-        size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
-        _mi_memzero((uint8_t*)newp + start, newsize - start);
+        _mi_memzero((uint8_t*)newp + zero_start, usable - zero_start);
       }
-      _mi_memcpy(newp, p, (newsize > size ? size : newsize)); // cannot be aligned due to abitrary offset... (todo: require offset to be a multiple of sizeof(void*)?)
+      _mi_memcpy(newp, p, copy_size); // cannot be aligned due to abitrary offset... (todo: require offset to be a multiple of sizeof(void*)?)
       mi_free(p); // only free if successful
     }
     return newp;

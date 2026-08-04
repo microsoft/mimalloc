@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2020, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2026, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -56,12 +56,15 @@ bool test_stl_theap_allocator4(void);
 
 static bool test_zero_aligned_first(void);
 
-bool mem_is_zero(uint8_t* p, size_t size) {
+static bool mem_has_vals(const uint8_t* p, size_t size, uint8_t val) {
   if (p==NULL) return false;
   for (size_t i = 0; i < size; ++i) {
-    if (p[i] != 0) return false;
+    if (p[i] != val) return false;
   }
   return true;
+}
+static bool mem_is_zero(const void* p, size_t size) {
+  return mem_has_vals((const uint8_t*)p,size,0);
 }
 
 // ---------------------------------------------------------------------------
@@ -70,11 +73,11 @@ bool mem_is_zero(uint8_t* p, size_t size) {
 int main(void) {
   mi_option_disable(mi_option_verbose);
 
-  #if 0
-  #ifdef __cplusplus
+  #if 1
+  #if defined(__cplusplus) && (!defined(_MSC_VER) || defined(_WIN64))
   CHECK_BODY("c++ new-handler") {
     std::set_new_handler([]{ throw std::bad_alloc(); });
-    void* p = mi_new_nothrow(size_t(1)<<(MI_SIZE_BITS-2));
+    void* p = mi_new_nothrow(SIZE_MAX/2);
     result = (p==NULL);
   }
   CHECK_BODY("c++ new handler2") {
@@ -342,6 +345,21 @@ int main(void) {
     result = result && mem_is_zero(p, zalloc_size);
     mi_free(p);
   };
+
+  CHECK_BODY("rezalloc_aligned_zeros") {  // issue #763
+    size_t alignment = 1024;
+    size_t n = 1024 * 6;
+    void* ptr = mi_zalloc_aligned(n, alignment);
+    assert(mem_is_zero(ptr,n));
+    memset(ptr,123,n/2);
+    
+    ptr = mi_rezalloc_aligned(ptr, n/2, alignment);
+    assert(mem_has_vals((uint8_t*)ptr,n/2,123));
+    
+    ptr = mi_rezalloc_aligned(ptr, n, alignment);
+    assert(mem_has_vals((uint8_t*)ptr,n/2,123));
+    result = mem_is_zero((uint8_t*)ptr + n/2, n/2);    
+  }
 
   // ---------------------------------------------------
   // Reallocation

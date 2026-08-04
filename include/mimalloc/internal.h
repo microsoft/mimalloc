@@ -504,7 +504,7 @@ static inline bool _mi_is_aligned(const void* p, size_t alignment) {
 // Align upwards
 static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
   mi_assert_internal(alignment != 0);
-  uintptr_t mask = alignment - 1;
+  const uintptr_t mask = alignment - 1;
   if ((alignment & mask) == 0) {  // power of two?
     return ((sz + mask) & ~mask);
   }
@@ -518,18 +518,19 @@ static inline void* _mi_align_up_ptr(const void* p, size_t alignment) {
   return (void*)_mi_align_up((uintptr_t)p, alignment);
 }
 
+// Align down
 static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
   mi_assert_internal(alignment != 0);
-  uintptr_t mask = alignment - 1;
-  if ((alignment & mask) == 0) { // power of two?
+  const uintptr_t mask = alignment - 1;
+  if ((alignment & mask) == 0) {  // power of two?
     return (sz & ~mask);
   }
   else {
-    return ((sz / alignment) * alignment);
+    return ((sz/alignment)*alignment);
   }
 }
 
-// align a pointer downwards
+// Align a pointer downwards
 static inline void* _mi_align_down_ptr(const void* p, size_t alignment) {
   return (void*)_mi_align_down((uintptr_t)p, alignment);
 }
@@ -825,9 +826,15 @@ static inline size_t mi_page_slice_offset_of(const mi_page_t* page, size_t offse
   return (mi_page_start(page) - mi_page_slice_start(page)) + offset_relative_to_page_start;
 }
 
+// How much of the page is committed relative to the slice start? (or 0 if fully committed already)
+static inline size_t mi_page_slice_committed(const mi_page_t* page) {
+  return ((size_t)page->slice_pcommitted * _mi_os_page_size());
+}
+
 // Currently committed part of a page
 static inline size_t mi_page_committed(const mi_page_t* page) {
-  return (page->slice_committed == 0 ? mi_page_size(page) : page->slice_committed - mi_page_slice_offset_of(page,0));
+  const size_t slice_committed = mi_page_slice_committed(page);
+  return (slice_committed == 0 ? mi_page_size(page) : slice_committed - mi_page_slice_offset_of(page,0));
 }
 
 // are all blocks in a page freed?
@@ -885,6 +892,10 @@ static inline mi_page_queue_t* mi_page_queue(const mi_theap_t* theap, size_t siz
   return pq;
 }
 
+static inline size_t mi_page_min_commit_size(void) {
+  const size_t psize = _mi_os_page_size();
+  return (MI_PAGE_MIN_COMMIT_SIZE >= psize ? MI_PAGE_MIN_COMMIT_SIZE : psize);  
+}
 
 //-----------------------------------------------------------
 // Page thread id and flags
