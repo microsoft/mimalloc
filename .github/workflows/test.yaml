@@ -227,6 +227,7 @@ jobs:
         with: 
           msystem: UCRT64
           install: |
+            gcc
             git
             make
             cmake
