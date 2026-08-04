@@ -54,7 +54,7 @@ jobs:
           cmake --build out/release --parallel 4 --config Release
           ctest --test-dir out/release --verbose --timeout 240 -C Release
 
-      - name: Release, x64, Upload Assembly
+      - name: Release, asm
         if: matrix.tests == 'basic' && runner.os == 'Linux'
         uses: actions/upload-artifact@v7
         with:
@@ -172,11 +172,11 @@ jobs:
           cmake --build out/release-clang-cxx --parallel 8 --config Release
           ctest --test-dir out/release-clang-cxx --verbose --timeout 240 -C Release
 
-      - name: Release, C++, clang++, Upload Assembly
+      - name: Release, C++, clang++, asm
         if: matrix.tests == 'extra' && runner.os == 'Linux'
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.os }}-clang-cxx-x64-alloc.s
+          name: ${{ matrix.os }}-clang-cxx-alloc.s
           path: out/release-clang-cxx/alloc.s          
 
       - name: Debug, ASAN
@@ -326,7 +326,7 @@ jobs:
           cmake --build out/release-riscv64 --parallel 4 --config Release
           ctest --test-dir out/release-riscv64 --verbose --timeout 240 -C Release
 
-      - name: Alpine risc64, Upload assembly
+      - name: Alpine risc64, asm
         if: matrix.tests == 'alpine-riscv64'
         uses: actions/upload-artifact@v7
         with:
