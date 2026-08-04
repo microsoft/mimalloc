@@ -79,7 +79,7 @@ static PGetLargePageMinimum pGetLargePageMinimum = NULL;
 typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalMemoryInKilobytes );
 
 // Load a library
-static HMODULE mi_win_loadlibrary(const TCHAR* library) {  
+static HMODULE mi_win_loadlibrary(const TCHAR* library) {
   #if MI_WIN_DESKTOP
     return LoadLibrary(library);
   #else
@@ -91,7 +91,7 @@ static HMODULE mi_win_loadlibrary(const TCHAR* library) {
 static HMODULE mi_win_getlibrary(const TCHAR* library, bool* should_free) {
   #if MI_WIN_DESKTOP
   // avoid calling LoadLibrary for "kernel32", "ntdll", and "kernelbase" (also to avoid hitting the loader lock)
-  HMODULE mod = GetModuleHandle(library); 
+  HMODULE mod = GetModuleHandle(library);
   if (mod!=NULL) {
     *should_free = false;
     return mod;
@@ -102,7 +102,7 @@ static HMODULE mi_win_getlibrary(const TCHAR* library, bool* should_free) {
 }
 
 static void mi_win_freelibrary(HMODULE mod, bool should_free) {
-  if (should_free) { 
+  if (should_free) {
     FreeLibrary(mod);
   }
 }
@@ -622,7 +622,7 @@ void _mi_prim_out_stderr( const char* msg )
       if (hcon==NULL) {
         AttachConsole(ATTACH_PARENT_PROCESS);  // if started from a parent console, try to attach to that
         hcon = GetStdHandle(STD_ERROR_HANDLE);
-      }      
+      }
       CONSOLE_SCREEN_BUFFER_INFO sbi;
       hconIsConsole = ((hcon != NULL && hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
       #endif
@@ -631,11 +631,11 @@ void _mi_prim_out_stderr( const char* msg )
     if (len > 0 && len < UINT32_MAX) {
       DWORD written = 0;
       if (hcon != NULL && hcon != INVALID_HANDLE_VALUE) {
-        #if MI_WIN_DESKTOP              
+        #if MI_WIN_DESKTOP
         if (hconIsConsole) {
           WriteConsoleA(hcon, msg, (DWORD)len, &written, NULL);
         }
-        else 
+        else
         #endif
         {
           // use direct write in case stderr was redirected
@@ -744,6 +744,7 @@ static void mi_win_tls_init(DWORD reason) {
   }
 }
 
+mi_decl_maybe_unused
 static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   MI_UNUSED(reserved);
   MI_UNUSED(module);
@@ -766,10 +767,10 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
    both static and dynamic linkage (`MI_WIN_INIT_USE_CRT_TLS`).
 ------------------------------------------------------------------------- */
 #if !defined(MI_WIN_INIT_USE_CRT_TLS) && !defined(MI_WIN_INIT_USE_RAW_DLLMAIN) && !defined(MI_WIN_INIT_USE_TLS_DLLMAIN) && !defined(MI_WIN_INIT_USE_FLS)
-  #if defined(__GNUC__) && !defined(_MSC_VER)  /* mingw */
+  #if defined(__MINGW32__) && (MI_MALLOC_VERSION < 30000L)  /* mingw on v1/v2*/
     #define MI_WIN_INIT_USE_FLS          1     /* needed for v1/v2, see <https://github.com/zackees/mimalloc-pprof/pull/48> */
   #elif defined(__INTEL_LLVM_COMPILER) || defined(__INTEL_COMPILER)
-    #define MI_WIN_INIT_USE_TLS_DLLMAIN  1     /* needed for Intel ICX, see issue #1268 */    
+    #define MI_WIN_INIT_USE_TLS_DLLMAIN  1     /* needed for Intel ICX, see issue #1268 */
   #else
     #define MI_WIN_INIT_USE_CRT_TLS      1     /* default */
   #endif
@@ -886,7 +887,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     __attribute__((used)) static const void* const mi_tls_used_ref = &_tls_used; // pull in the CRT tls
     __attribute__((used, section(".CRT$XLB"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_pre = &mi_tls_attach;
     __attribute__((used, section(".CRT$XLY"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_post = &mi_tls_detach;
-    __attribute__((used, section(".CRT$XIB"))) mi_crt_callback_t   _mi_crt_callback_init = &mi_crt_init;  
+    __attribute__((used, section(".CRT$XIB"))) mi_crt_callback_t   _mi_crt_callback_init = &mi_crt_init;
   #endif
 
   #if defined(__cplusplus)
@@ -982,7 +983,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     extern const IMAGE_TLS_DIRECTORY _tls_used;
     __attribute__((used)) static const void* const mi_tls_used_ref = &_tls_used; // pull in the CRT tls
     __attribute__((used, section(".CRT$XLB"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_pre  = &mi_tls_attach;
-    __attribute__((used, section(".CRT$XLY"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_post = &mi_tls_detach;      
+    __attribute__((used, section(".CRT$XLY"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_post = &mi_tls_detach;
   #endif
 
   #if defined(__cplusplus)
@@ -1056,7 +1057,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     extern const IMAGE_TLS_DIRECTORY _tls_used;
     __attribute__((used)) static const void* const mi_tls_used_ref = &_tls_used; // pull in the CRT tls
     __attribute__((used, section(".CRT$XLB"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_pre  = &mi_tls_attach;
-    __attribute__((used, section(".CRT$XLY"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_post = &mi_tls_detach;    
+    __attribute__((used, section(".CRT$XLY"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_post = &mi_tls_detach;
   #endif
 
   #if defined(__cplusplus)
@@ -1097,8 +1098,8 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
       #pragma comment(linker, "/INCLUDE:__mi_crt_callback_init")
       #pragma data_seg(".CRT$XIU")
       mi_crt_callback_t _mi_crt_callback_init[] = { &mi_crt_init };
-      #pragma data_seg()    
-    #endif  
+      #pragma data_seg()
+    #endif
     #if defined(__cplusplus)
     }
     #endif
