@@ -370,7 +370,7 @@ void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
   #endif
 }
 
-void* _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool zero, size_t* pblock_size_pre, size_t* pblock_size_post) mi_attr_noexcept {
+static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, void* p, size_t newsize, bool zero, size_t* pblock_size_pre, size_t* pblock_size_post) mi_attr_noexcept {
   // if p == NULL then behave as malloc.
   // else if size == 0 then reallocate to a zero-sized block (and don't return NULL, just as mi_malloc(0)).
   // (this means that returning NULL always indicates an error, and `p` will not have been freed in that case.)
@@ -432,8 +432,18 @@ void* _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool ze
   return newp;
 }
 
+void* _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool zero) mi_attr_noexcept {
+  return mi_theap_realloc_zero_ex(theap,p,newsize,zero,NULL,NULL);
+}
+
 mi_decl_nodiscard void* mi_theap_realloc(mi_theap_t* theap, void* p, size_t newsize) mi_attr_noexcept {
-  return _mi_theap_realloc_zero(theap, p, newsize, false, NULL, NULL);
+  // optimize p==NULL 
+  if (p==NULL) {
+    return mi_theap_malloc(theap,newsize);
+  }
+  else {
+    return _mi_theap_realloc_zero(theap, p, newsize, false);
+  }
 }
 
 static void* mi_theap_reallocn(mi_theap_t* theap, void* p, size_t count, size_t size) mi_attr_noexcept {
@@ -451,7 +461,13 @@ static void* mi_theap_reallocf(mi_theap_t* theap, void* p, size_t newsize) mi_at
 }
 
 static void* mi_theap_rezalloc(mi_theap_t* theap, void* p, size_t newsize) mi_attr_noexcept {
-  return _mi_theap_realloc_zero(theap, p, newsize, true, NULL, NULL);
+  // optimize p==NULL 
+  if (p==NULL) {
+    return mi_theap_zalloc(theap,newsize);
+  }
+  else {
+    return _mi_theap_realloc_zero(theap, p, newsize, true);
+  }
 }
 
 static void* mi_theap_recalloc(mi_theap_t* theap, void* p, size_t count, size_t size) mi_attr_noexcept {
@@ -470,7 +486,7 @@ mi_decl_nodiscard void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_
 }
 
 mi_decl_nodiscard void* mi_urealloc(void* p, size_t newsize, size_t* pblock_size_pre, size_t* pblock_size_post) mi_attr_noexcept {
-  return _mi_theap_realloc_zero(_mi_theap_default(),p,newsize, false, pblock_size_pre, pblock_size_post);
+  return mi_theap_realloc_zero_ex(_mi_theap_default(),p,newsize, false, pblock_size_pre, pblock_size_post);
 }
 
 // Reallocate but free `p` on errors

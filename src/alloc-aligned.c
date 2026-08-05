@@ -349,7 +349,7 @@ static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t
   if mi_unlikely(!mi_alignment_is_valid(alignment)) { // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
     return mi_error_bad_alignment(newsize,alignment,offset);
   }
-  if (alignment <= sizeof(uintptr_t) && offset==0) return _mi_theap_realloc_zero(theap,p,newsize,zero,NULL,NULL);
+  if (alignment <= sizeof(uintptr_t) && offset==0) return _mi_theap_realloc_zero(theap,p,newsize,zero);
   if (p == NULL) return mi_theap_malloc_zero_aligned_at(theap,newsize,alignment,offset,zero,NULL);
   const size_t size = mi_usable_size(p);
   if (newsize <= size && newsize >= (size - (size / 2)) && (((uintptr_t)p + offset) & (alignment-1)) == 0) {
@@ -377,7 +377,7 @@ static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t
 
 static void* mi_theap_realloc_zero_aligned(mi_theap_t* theap, void* p, size_t newsize, size_t alignment, bool zero) mi_attr_noexcept {
   mi_assert(alignment > 0);
-  if (alignment <= sizeof(uintptr_t)) return _mi_theap_realloc_zero(theap,p,newsize,zero,NULL,NULL);
+  if (alignment <= sizeof(uintptr_t)) return _mi_theap_realloc_zero(theap,p,newsize,zero);
   return mi_theap_realloc_zero_aligned_at(theap,p,newsize,alignment,0,zero);
 }
 

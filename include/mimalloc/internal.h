@@ -311,7 +311,7 @@ mi_msecs_t    _mi_clock_start(void);
 void*         _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept;                  // called from `_mi_theap_malloc_aligned`
 void*         _mi_theap_malloc_zero(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept;
 void*         _mi_theap_malloc_zero_ex(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage) mi_attr_noexcept;     // called from `_mi_theap_malloc_aligned`
-void*         _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool zero, size_t* pblock_size_pre, size_t* pblock_size_post) mi_attr_noexcept;
+void*         _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool zero) mi_attr_noexcept;
 mi_block_t*   _mi_page_ptr_unalign(const mi_page_t* page, const void* p);
 void          _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size);
 
