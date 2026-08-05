@@ -406,6 +406,12 @@ if(MI_LIBC_MUSL)
   list(APPEND mi_defines MI_LIBC_MUSL=1)
 endif()
 
+if("$ENV{MSYSTEM}" STREQUAL "UCRT64")
+  message(STATUS "Detected MSYS2 UCRT64 environment")
+  set(MI_MINGW_UCRT64 "ON")
+  list(APPEND mi_defines MI_WINGW_UCRT64=1)
+endif()
+
 if(MI_WIN_USE_FIXED_TLS)
   message(STATUS "Use fixed TLS slot on Windows to avoid extra tests in the malloc fast path (MI_WIN_USE_FIXED_TLS=ON)")
   list(APPEND mi_defines MI_WIN_USE_FIXED_TLS=1)
@@ -563,23 +569,24 @@ else()
   set(mi_install_cmakedir   "${CMAKE_INSTALL_LIBDIR}/cmake/mimalloc-${mi_version}") # for cmake package info
 endif()
 
-set(mi_libsuffix "")
+set(mi_libname "mimalloc")
 if(MI_SECURE)
-  set(mi_libsuffix "${mi_libsuffix}-secure")
+  set(mi_libname "${mi_libname}-secure")
 endif()
 if(MI_TRACK_VALGRIND)
-  set(mi_libsuffix "${mi_libsuffix}-valgrind")
+  set(mi_libname "${mi_libname}-valgrind")
 endif()
 if(MI_TRACK_ASAN)
-  set(mi_libsuffix "${mi_libsuffix}-asan")
+  set(mi_libname "${mi_libname}-asan")
 endif()
 string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
 list(APPEND mi_defines "MI_CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE_LC}")  #todo: multi-config project needs $<CONFIG> ?
 if(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel|none)$")
   list(APPEND mi_defines MI_BUILD_RELEASE)
 else()
-  set(mi_libsuffix "${mi_libsuffix}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
+  set(mi_libname "${mi_libname}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
 endif()
+string(REGEX REPLACE "^mimalloc[-]?" "" mi_libsuffix "${mi_libname}")
 
 set(mi_libname "mimalloc")
 if(NOT mi_libsuffix STREQUAL "")
@@ -783,9 +790,10 @@ if (MI_BUILD_TESTS)
     if(WIN32)
       target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE "MI_LINK_VERSION=1")  # link mi_version
       target_link_libraries(mimalloc-test-stress-dynamic PRIVATE mimalloc ${mi_libraries})  # link mi_version
-      if(MINGW)
-      # use minject to make sure mimalloc is the first dll loaded
-      add_custom_command(TARGET mimalloc-test-stress-dynamic POST_BUILD COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/bin/minject${MINJECT_SUFFIX} --postfix=${mi_libsuffix} -f -i $<TARGET_FILE:mimalloc-test-stress-dynamic>)
+      if(MINGW AND MI_MINGW_UCRT64)
+        # mingw always links mimalloc after system libraries.
+        # post-process with `minject` to make sure mimalloc is the first dll in the load order.
+        add_custom_command(TARGET mimalloc-test-stress-dynamic POST_BUILD COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/bin/minject${MINJECT_SUFFIX} --postfix=${mi_libsuffix} -f -i $<TARGET_FILE:mimalloc-test-stress-dynamic>)
       endif()
       add_test(NAME test-stress-dynamic COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_VERBOSE=1 $<TARGET_FILE:mimalloc-test-stress-dynamic>)
     else()
