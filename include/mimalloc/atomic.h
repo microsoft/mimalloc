@@ -9,12 +9,13 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ATOMIC_H
 
 // include windows.h or pthreads.h
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(__CYGWIN__)  // we use windows locks on cygwin, but otherwise treat it at unix
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#elif MI_TLS_MODEL_PTHREADS || (!defined(__wasi__) && (!defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__)))
+#endif
+#if MI_TLS_MODEL_PTHREADS || (!defined(_WIN32) && !defined(__wasi__) && (!defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__)))
 #define  MI_USE_PTHREADS        1
 #include <pthread.h>
 #endif
@@ -413,7 +414,7 @@ typedef _Atomic(uintptr_t) mi_atomic_guard_t;
 #define mi_lock_maybe(lock,acquire)    for(bool _mi_go = (acquire ? (mi_lock_acquire(lock),true) : true); _mi_go; _mi_go = (acquire ? (mi_lock_release(lock),false) : false) )
 
 
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(__CYGWIN__)
 
 typedef struct mi_lock_s {
   SRWLOCK mutex;    // slim reader-writer lock

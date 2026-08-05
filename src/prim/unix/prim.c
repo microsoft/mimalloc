@@ -453,6 +453,8 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       }
     }
   } // huge pages
+  #else
+  MI_UNUSED(large_only);
   #endif
   // regular allocation
   if (p == NULL) {
@@ -797,7 +799,7 @@ static mi_msecs_t timeval_secs(const struct timeval* tv) {
 }
 
 void _mi_prim_process_info(mi_process_info_t* pinfo)
-{  
+{
   struct rusage rusage;
   if (getrusage(RUSAGE_SELF, &rusage) == 0) {
     pinfo->utime = timeval_secs(&rusage.ru_utime);
@@ -811,20 +813,20 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
       pinfo->peak_rss = rusage.ru_maxrss * 1024;  // Linux/BSD report in KiB
     #endif
   }
-  
+
   #if defined(__HAIKU__)
     // Haiku does not have (yet?) a way to
     // get these stats per process
     thread_info tid;
     if (get_thread_info(find_thread(0), &tid) == B_OK) {
       area_info mem;
-      ssize_t c;    
+      ssize_t c;
       while (get_next_area_info(tid.team, &c, &mem) == B_OK) {
         pinfo->peak_rss += mem.ram_size;
       }
     }
     pinfo->page_faults = 0;
-  #elif defined(__APPLE__)  
+  #elif defined(__APPLE__)
     #ifdef MACH_TASK_BASIC_INFO
     struct mach_task_basic_info info;
     mach_msg_type_number_t infoCount = MACH_TASK_BASIC_INFO_COUNT;
@@ -896,7 +898,7 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
     const char* s = env[i];
     if (_mi_strnicmp(name, s, len) == 0 && s[len] == '=') { // case insensitive
       // found it
-      if (!_mi_strlcpy(result, s + len + 1, result_size)) return -1; 
+      if (!_mi_strlcpy(result, s + len + 1, result_size)) return -1;
       return 1;   // success
     }
   }
@@ -920,7 +922,7 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   }
   if (s == NULL || _mi_strnlen(s,result_size) >= result_size) return 0; // not found
   if (!_mi_strlcpy(result, s, result_size)) return -1;
-  return 1;  // success  
+  return 1;  // success
 }
 #endif  // !MI_USE_ENVIRON
 
@@ -949,7 +951,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   return true;
 }
 
-#elif defined(__APPLE__) || defined(__linux__) || defined(__HAIKU__)   // also for old apple versions < 10.7 (issue #829)
+#elif defined(__APPLE__) || defined(__linux__) || defined(__HAIKU__) || defined(__CYGWIN__)  // also for old apple versions < 10.7 (issue #829)
 
 #include <sys/types.h>
 #include <sys/stat.h>
