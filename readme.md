@@ -85,7 +85,7 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
         and has more efficient heap-walking (for the CPython GC for example).
         (release tags: `v3.x`, development branch `dev3`).
 - __v2__: stable mimalloc version. Uses thread-local segments to reduce fragmentation. (release tags: `v2.x`, development branch `dev2` and `main`)
-- __v1__: legacy version: initial design of mimalloc (release tags: `v1.9.x`, development branch `dev`). 
+- __v1__: legacy version: initial design of mimalloc (release tags: `v1.9.x`, development branch `dev`).  
         __Send PR's against this version if possible.__
 
 ### Releases
