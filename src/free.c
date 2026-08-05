@@ -174,17 +174,17 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
 
 // Free a block
 // Fast path written carefully to prevent register spilling on the stack
-static inline void mi_free_ex(void* p, size_t* usable) mi_attr_noexcept
+static inline void mi_free_ex(void* p, size_t* pblock_size) mi_attr_noexcept
 {
   mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
   if mi_unlikely(segment==NULL) {
-    if (usable!=NULL) { *usable = 0; }
+    if (pblock_size!=NULL) { *pblock_size = 0; }
     return;
   }
 
   const bool is_local = (_mi_prim_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
   mi_page_t* const page = _mi_segment_page_of(segment, p);
-  if (usable!=NULL) { *usable = mi_page_usable_block_size(page); }
+  if (pblock_size!=NULL) { *pblock_size = mi_page_block_size(page); }
   
   if mi_likely(is_local) {                        // thread-local free?
     if mi_likely(page->flags.full_aligned == 0) { // and it is not a full page (full pages need to move from the full bin), nor has aligned blocks (aligned blocks need to be unaligned)
@@ -207,8 +207,8 @@ void mi_free(void* p) mi_attr_noexcept {
   mi_free_ex(p,NULL);
 }
 
-void mi_ufree(void* p, size_t* usable) mi_attr_noexcept {
-  mi_free_ex(p,usable);
+void mi_ufree(void* p, size_t* pblock_size) mi_attr_noexcept {
+  mi_free_ex(p,pblock_size);
 }
 
 void mi_free_small(void* p) mi_attr_noexcept {
@@ -373,8 +373,9 @@ static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg) {
   return page;
 }
 
-static inline size_t _mi_usable_size(const void* p, const mi_page_t* page) mi_attr_noexcept {
+size_t _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr_noexcept {
   if mi_unlikely(page==NULL) return 0;
+  mi_assert_internal(mi_validate_ptr_page(p,"_mi_page_usable_size") == page);
   if mi_likely(!mi_page_has_aligned(page)) {
     const mi_block_t* block = mi_validate_block_from_ptr(page,p);
     return mi_page_usable_size_of(page, block, false /* is guarded */);
@@ -387,7 +388,7 @@ static inline size_t _mi_usable_size(const void* p, const mi_page_t* page) mi_at
 
 mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
   const mi_page_t* const page = mi_validate_ptr_page(p,"mi_usable_size");
-  return _mi_usable_size(p,page);
+  return _mi_page_usable_size(page,p);
 }
 
 
@@ -399,7 +400,7 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
   MI_UNUSED_RELEASE(size);
   #if MI_DEBUG
   const mi_page_t* const page = mi_validate_ptr_page(p,"mi_free_size");  
-  const size_t available = _mi_usable_size(p,page);
+  const size_t available = _mi_page_usable_size(page,p);
   mi_assert(p == NULL || size <= available || available == 0 /* invalid pointer */ );
   #endif
   mi_free(p);

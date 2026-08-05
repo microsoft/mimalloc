@@ -91,7 +91,6 @@ void _mi_os_init(void) {
 bool _mi_os_decommit(void* addr, size_t size);
 bool _mi_os_commit(void* addr, size_t size, bool* is_zero);
 
-
 /* -----------------------------------------------------------
   aligned hinting
 -------------------------------------------------------------- */
