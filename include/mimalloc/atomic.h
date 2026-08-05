@@ -73,6 +73,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_atomic_store_release(p,x)             mi_atomic(store_explicit)(p,x,mi_memory_order(release))
 #define mi_atomic_store_relaxed(p,x)             mi_atomic(store_explicit)(p,x,mi_memory_order(relaxed))
 #define mi_atomic_exchange_relaxed(p,x)          mi_atomic(exchange_explicit)(p,x,mi_memory_order(relaxed))
+#define mi_atomic_exchange_acquire(p,x)          mi_atomic(exchange_explicit)(p,x,mi_memory_order(acquire))
 #define mi_atomic_exchange_release(p,x)          mi_atomic(exchange_explicit)(p,x,mi_memory_order(release))
 #define mi_atomic_exchange_acq_rel(p,x)          mi_atomic(exchange_explicit)(p,x,mi_memory_order(acq_rel))
 #define mi_atomic_cas_weak_release(p,exp,des)    mi_atomic_cas_weak(p,exp,des,mi_memory_order(release),mi_memory_order(relaxed))
@@ -84,6 +85,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_atomic_sub_relaxed(p,x)               mi_atomic(fetch_sub_explicit)(p,x,mi_memory_order(relaxed))
 #define mi_atomic_add_acq_rel(p,x)               mi_atomic(fetch_add_explicit)(p,x,mi_memory_order(acq_rel))
 #define mi_atomic_sub_acq_rel(p,x)               mi_atomic(fetch_sub_explicit)(p,x,mi_memory_order(acq_rel))
+#define mi_atomic_and_release(p,x)               mi_atomic(fetch_and_explicit)(p,x,mi_memory_order(release))
+#define mi_atomic_or_release(p,x)                mi_atomic(fetch_or_explicit)(p,x,mi_memory_order(release))
 #define mi_atomic_and_acq_rel(p,x)               mi_atomic(fetch_and_explicit)(p,x,mi_memory_order(acq_rel))
 #define mi_atomic_or_acq_rel(p,x)                mi_atomic(fetch_or_explicit)(p,x,mi_memory_order(acq_rel))
 
@@ -388,9 +391,8 @@ typedef _Atomic(uintptr_t) mi_atomic_guard_t;
 
 // Allows only one thread to execute at a time (without blocking anyone)
 #define mi_atomic_guard(guard) \
-  uintptr_t _mi_guard_expected = 0; \
   for(bool _mi_guard_once = true; \
-      _mi_guard_once && mi_atomic_cas_strong_acq_rel(guard,&_mi_guard_expected,(uintptr_t)1); \
+      _mi_guard_once && mi_atomic_load_relaxed(guard) == 0 && mi_atomic_exchange_acquire(guard,(uintptr_t)1) == 0; \
       (mi_atomic_store_release(guard,(uintptr_t)0), _mi_guard_once = false) )
 
 
