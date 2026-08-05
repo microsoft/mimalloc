@@ -1,5 +1,5 @@
 on:
-  workflow_dispatch:   # allow running the workflow manually 
+  workflow_dispatch:   # allow running the workflow manually
   push:
     branches:
       - 'dev*'
@@ -9,7 +9,7 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true # Cancel any in-progress runs of this workflow when a new run is triggered on the same ref (branch or tag)
-  
+
 name: Test
 jobs:
   build:
@@ -21,11 +21,21 @@ jobs:
         os: [windows-latest, macos-latest, ubuntu-latest, macos-14, macos-15-intel, ubuntu-22.04-arm, windows-11-arm]
         exclude:
           - os: macos-14
-            tests: extra          
+            tests: extra
         include:
+          - os: ubuntu-latest
+            tests: freebsd-x64
+          - os: ubuntu-latest
+            tests: alpine-x64
+          - os: ubuntu-latest
+            tests: alpine-riscv64   # qemu
+          - os: ubuntu-latest
+            tests: alpine-arm32     # qemu
           - os: windows-latest
             tests: mingw-ucrt64
-        
+          # - os: ubuntu-latest       # slow, so disable by default
+          #   tests: freebsd-arm64    # qemu
+
     steps:
       # Checkout: https://github.com/actions/checkout
       - name: Checkout repository
@@ -42,9 +52,17 @@ jobs:
       - name: Release
         if: matrix.tests == 'basic'
         run: |
-          cmake . -B out/release -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON
+          cmake . -B out/release -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_SEE_ASM=ON
           cmake --build out/release --parallel 4 --config Release
           ctest --test-dir out/release --verbose --timeout 240 -C Release
+
+      - name: Release, asm
+        if: matrix.tests == 'basic' && runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.os }}-alloc.c.s
+          path: out/release/CMakeFiles/mimalloc-static.dir/src/alloc.c.s
+
 
       - name: Secure
         if: matrix.tests == 'basic'
@@ -68,7 +86,7 @@ jobs:
           cmake --build out/release-cxx --parallel 8 --config Release
           ctest --test-dir out/release-cxx --verbose --timeout 240 -C Release
 
-      # Extra, Windows x86 
+      # Extra, Windows x86
       - name: Debug, Win32
         if: matrix.tests == 'extra' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
         run: |
@@ -95,7 +113,7 @@ jobs:
         run: |
           cmake . -B out/release-clang -DCMAKE_BUILD_TYPE=Release -A Win32 -T ClangCl
           cmake --build out/release-clang --parallel 4 --config Release
-          ctest --test-dir out/release-clang --verbose --timeout 240 -C Release          
+          ctest --test-dir out/release-clang --verbose --timeout 240 -C Release
 
       # Extra, macOS fixed TLS
       - name: Debug, TLS fixed
@@ -152,9 +170,16 @@ jobs:
       - name: Release, C++, clang++
         if: matrix.tests == 'extra' && runner.os == 'Linux'
         run: |
-          CC=clang CXX=clang++ cmake . -B out/release-clang-cxx -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_USE_CXX=ON
+          CC=clang CXX=clang++ cmake . -B out/release-clang-cxx -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_USE_CXX=ON -DMI_SEE_ASM=ON
           cmake --build out/release-clang-cxx --parallel 8 --config Release
           ctest --test-dir out/release-clang-cxx --verbose --timeout 240 -C Release
+
+      - name: Release, C++, clang++, asm
+        if: matrix.tests == 'extra' && runner.os == 'Linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.os }}-clang-cxx-alloc.s
+          path: out/release-clang-cxx/alloc.s
 
       - name: Debug, ASAN
         if: matrix.tests == 'extra' && runner.os == 'Linux'
@@ -195,11 +220,11 @@ jobs:
         env:
           MIMALLOC_GUARDED_SAMPLE_RATE: 100
 
-      # MSYS2 mingw64 UCRT64
+      # MSYS2 mingw64
       - name: mingw-ucrt64 x64, Setup
         if: matrix.tests == 'mingw-ucrt64'
-        uses: msys2/setup-msys2@v2       
-        with: 
+        uses: msys2/setup-msys2@v2
+        with:
           msystem: UCRT64
           install: |
             mingw-w64-ucrt-x86_64-gcc
@@ -223,4 +248,199 @@ jobs:
           cmake . -B out/release-mingw-ucrt64-x64 -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
           cmake --build out/release-mingw-ucrt64-x64 --parallel 4 --config Release
           ctest --test-dir out/release-mingw-ucrt64-x64 --verbose --timeout 240 -C Release
+
+
+      # VM: FreeBSD (arm64 and x64)
+      - name: FreeBSD arm64, Setup
+        if: matrix.tests == 'freebsd-arm64'
+        uses: vmactions/freebsd-vm@v1
+        with:
+          arch: arm64
+          custom-shell-name: freebsd-arm64
+          cache-after-prepare: true
+          prepare: |
+            uname -a
+            pkg install -y cmake
+
+      - name: FreeBSD arm64, Debug
+        if: matrix.tests == 'freebsd-arm64'
+        shell: freebsd-arm64 {0}
+        run: |
+          export MI_TEST_LIGHT=1
+          cmake . -B out/debug-arm64 -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug-arm64 --parallel 4 --config Debug
+          ctest --test-dir out/debug-arm64 --verbose --timeout 240 -C Debug
+
+      - name: FreeBSD arm64, Release
+        if: matrix.tests == 'freebsd-arm64'
+        shell: freebsd-arm64 {0}
+        run: |
+          export MI_TEST_LIGHT=1
+          cmake . -B out/release-arm64 -G Ninja -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
+          cmake --build out/release-arm64 --parallel 4 --config Release
+          ctest --test-dir out/release-arm64 --verbose --timeout 240 -C Release
+
+      - name: FreeBSD arm64, Secure
+        if: matrix.tests == 'freebsd-arm64'
+        shell: freebsd-arm64 {0}
+        run: |
+          export MI_TEST_LIGHT=1
+          cmake . -B out/secure-arm64 -G Ninja -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
+          cmake --build out/secure-arm64 --parallel 4 --config Release
+          ctest --test-dir out/secure-arm64 --verbose --timeout 240 -C Release
+
+
+      - name: FreeBSD x64, Setup
+        if: matrix.tests == 'freebsd-x64'
+        uses: vmactions/freebsd-vm@v1
+        with:
+          arch: x86_64
+          usesh: true
+          custom-shell-name: freebsd-x64
+          cache-after-prepare: true
+          prepare: |
+            pkg install -y cmake
+
+      - name: FreeBSD x64, Debug
+        if: matrix.tests == 'freebsd-x64'
+        shell: freebsd-x64 {0}
+        run: |
+          cmake . -B out/debug-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug-x64 --parallel 4 --config Debug
+          ctest --test-dir out/debug-x64 --verbose --timeout 240 -C Debug
+
+      - name: FreeBSD x64, Release
+        if: matrix.tests == 'freebsd-x64'
+        shell: freebsd-x64 {0}
+        run: |
+          cmake . -B out/release-x64 -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
+          cmake --build out/release-x64 --parallel 4 --config Release
+          ctest --test-dir out/release-x64 --verbose --timeout 240 -C Release
+
+      - name: FreeBSD x64, Secure
+        if: matrix.tests == 'freebsd-x64'
+        shell: freebsd-x64 {0}
+        run: |
+          cmake . -B out/secure-x64 -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
+          cmake --build out/secure-x64 --parallel 4 --config Release
+          ctest --test-dir out/secure-x64 --verbose --timeout 240 -C Release
+
+
+      # VM: Alpine Linux with MUSL libc (riscv64 and x64)
+      - name: Alpine riscv64, Setup
+        if: matrix.tests == 'alpine-riscv64'
+        uses: jirutka/setup-alpine@v1
+        with:
+          arch: riscv64
+          shell-name: alpine-riscv64.sh
+          packages: |
+            build-base
+            cmake
+            ninja
+
+      - name: Alpine riscv64, Debug
+        if: matrix.tests == 'alpine-riscv64'
+        shell: alpine-riscv64.sh {0}
+        env:
+          MI_TEST_LIGHT: 1
+        run: |
+          uname -m
+          cmake . -B out/debug-riscv64 -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug-riscv64 --parallel 4 --config Debug
+          ctest --test-dir out/debug-riscv64 --verbose --timeout 240 -C Debug
+
+      - name: Alpine riscv64, Release
+        if: matrix.tests == 'alpine-riscv64'
+        shell: alpine-riscv64.sh {0}
+        run: |
+          cmake . -B out/release-riscv64 -G Ninja -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_SEE_ASM=ON
+          cmake --build out/release-riscv64 --parallel 4 --config Release
+          ctest --test-dir out/release-riscv64 --verbose --timeout 240 -C Release
+
+      - name: Alpine risc64, asm
+        if: matrix.tests == 'alpine-riscv64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: alpine-riscv64-alloc.c.s
+          path: out/release-riscv64/CMakeFiles/mimalloc.dir/src/alloc.c.s
+
+      - name: Alpine riscv64, Secure
+        if: matrix.tests == 'alpine-riscv64'
+        shell: alpine-riscv64.sh {0}
+        run: |
+          cmake . -B out/secure-riscv64 -G Ninja -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
+          cmake --build out/secure-riscv64 --parallel 4 --config Release
+          ctest --test-dir out/secure-riscv64 --verbose --timeout 240 -C Release
+
+
+      - name: Alpine x64, Setup
+        if: matrix.tests == 'alpine-x64'
+        uses: jirutka/setup-alpine@v1
+        with:
+          arch: x86_64
+          shell-name: alpine-x64.sh
+          packages: |
+            build-base
+            cmake
+
+      - name: Alpine x64, Debug
+        if: matrix.tests == 'alpine-x64'
+        shell: alpine-x64.sh {0}
+        run: |
+          cmake . -B out/debug-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug-x64 --parallel 4 --config Debug
+          ctest --test-dir out/debug-x64 --verbose --timeout 240 -C Debug
+
+      - name: Alpine x64, Release
+        if: matrix.tests == 'alpine-x64'
+        shell: alpine-x64.sh {0}
+        run: |
+          cmake . -B out/release-x64 -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
+          cmake --build out/release-x64 --parallel 4 --config Release
+          ctest --test-dir out/release-x64 --verbose --timeout 240 -C Release
+
+      - name: Alpine x64, Secure
+        if: matrix.tests == 'alpine-x64'
+        shell: alpine-x64.sh {0}
+        run: |
+          cmake . -B out/secure-x64 -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
+          cmake --build out/secure-x64 --parallel 4 --config Release
+          ctest --test-dir out/secure-x64 --verbose --timeout 240 -C Release
+
+      - name: Alpine arm32, Setup
+        if: matrix.tests == 'alpine-arm32'
+        uses: jirutka/setup-alpine@v1
+        with:
+          arch: armv7  # or armhf for arm-v6 with hard float
+          shell-name: alpine-arm32.sh
+          packages: |
+            build-base
+            cmake
+
+      - name: Alpine arm32, Debug
+        if: matrix.tests == 'alpine-arm32'
+        shell: alpine-arm32.sh {0}
+        env:
+          MI_TEST_LIGHT: 1
+        run: |
+          uname -m
+          cmake . -B out/debug-arm32 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake --build out/debug-arm32 --parallel 4 --config Debug
+          ctest --test-dir out/debug-arm32 --verbose --timeout 240 -C Debug
+
+      - name: Alpine arm32, Release
+        if: matrix.tests == 'alpine-arm32'
+        shell: alpine-arm32.sh {0}
+        run: |
+          cmake . -B out/release-arm32 -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON
+          cmake --build out/release-arm32 --parallel 4 --config Release
+          ctest --test-dir out/release-arm32 --verbose --timeout 240 -C Release
+
+      - name: Alpine arm32, Secure
+        if: matrix.tests == 'alpine-arm32'
+        shell: alpine-arm32.sh {0}
+        run: |
+          cmake . -B out/secure-arm32 -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
+          cmake --build out/secure-arm32 --parallel 4 --config Release
+          ctest --test-dir out/secure-arm32 --verbose --timeout 240 -C Release
 

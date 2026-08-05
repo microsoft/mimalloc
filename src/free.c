@@ -458,7 +458,15 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
   const size_t available = _mi_page_usable_size(page,p);
   mi_assert(p == NULL || size <= available || available == 0 /* invalid pointer */ );
   #endif
-  mi_free(p);
+  #if MI_PAGE_META_ALIGNED_FREE_SMALL 
+  if mi_likely(size <= MI_SMALL_SIZE_MAX) {
+    mi_free_small(p); 
+  }
+  else 
+  #endif
+  {
+    mi_free(p);
+  }
 }
 
 void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept {
@@ -650,9 +658,18 @@ static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
 // only maintain stats for smaller objects if requested
 #if (MI_STAT>0)
 static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
-  MI_UNUSED(block);
-  mi_theap_t* const theap = _mi_theap_default();
-  if (!mi_theap_is_initialized(theap)) return; // (for now) skip statistics if free'd after thread_done was called (usually a thread cleanup call by the OS)
+  MI_UNUSED(block);  
+  mi_theap_t* theap = _mi_theap_default();
+  mi_lock_t* lock = NULL;
+  mi_subproc_t* const subproc = mi_page_subproc(page);
+  mi_theap_t* const theap_meta = subproc->theap_meta;
+  if mi_unlikely(!mi_theap_is_initialized(theap) || // can happen if free'd after thread_done was called (usually a thread cleanup call by the OS)
+                  // page->theap == subproc->theap_meta  .. but we cannot read `theap` if we don't own the page
+                  (theap_meta != NULL && mi_page_thread_id(page) == theap_meta->tld->thread_id)) { 
+    theap = theap_meta;
+    lock = &subproc->theap_meta_lock;
+    mi_lock_acquire(lock);
+  }
 
   const size_t bsize = mi_page_usable_block_size(page);
   // #if (MI_STAT>1)
@@ -668,6 +685,10 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   else {
     const size_t bpsize = mi_page_block_size(page);  // match stat in page.c:mi_huge_page_alloc
     mi_theap_stat_decrease(theap, malloc_huge, bpsize);
+  }
+
+  if mi_unlikely(lock!=NULL) {
+    mi_lock_release(lock);
   }
 }
 #else

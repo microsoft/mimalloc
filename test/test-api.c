@@ -437,19 +437,30 @@ int main(void) {
 
   CHECK_BODY("heap-os2") {
     // @zoxc opus bug #3.
+    mi_collect(true);
     mi_stats_t_decl(stats0); 
     mi_stats_get(&stats0);
 
-    mi_heap_t* h = mi_heap_new();      
+    mi_heap_t* h = mi_heap_new();
+    long failed = 0;      
     for(int i = 0; i < 10; i++) {
       int* p = (int*)mi_heap_malloc_aligned(h, 1<<20, 2<<20);   // forced OS allocation
-      p[0] = 42;
+      if (p==NULL) {
+        failed++;
+      }
+      else {
+        p[0] = 42;
+      }
     }
     mi_heap_destroy(h);
 
+    mi_collect(true);
     mi_stats_t_decl(stats1); 
-    mi_stats_get(&stats1);
+    mi_stats_get(&stats1);    
     result = (stats0.pages.current == stats1.pages.current);    
+    if (!result) {
+      fprintf(stderr, "heap-os2: pages: %ld != %ld (failed: %ld)\n", (long)stats0.pages.current, (long)stats1.pages.current, failed);
+    }
   }
 
   //CHECK("theap_destroy", test_theap1());

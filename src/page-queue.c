@@ -212,7 +212,7 @@ static inline void mi_theap_queue_first_update(mi_theap_t* theap, const mi_page_
   if (size > MI_SMALL_SIZE_MAX) return;
 
   mi_page_t* page = pq->first;
-  if (pq->first == NULL) page = (mi_page_t*)&_mi_page_empty;
+  if (pq->first == NULL) page = _mi_page_empty_get();
 
   // find index in the right direct page array
   const size_t idx = _mi_wsize_from_size(size);
