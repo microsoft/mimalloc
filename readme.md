@@ -92,7 +92,7 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 
 * 2026-08-05, `v1.9.15`, `v2.4.5`, `v3.4.5`: Fix compilation with xmalloc (#1353), make the build deterministic (#1355),
   mi_zalloc_aligned fix (#763), improve support for mingw (ucrt64), fix fputs fallback on windows (#1354), (v3): use proper 
-  lock backoff for first-class heap deletion. 
+  lock backoff for first-class heap deletion, improved riscv64 codegen.
 * 2026-08-01, `v1.9.14`, `v2.4.4`, `v3.4.4`: various bug and security fixes through Opus 5 LLM audit (issue #1271, by @Zoxc). 
   (v3): use pthreads by default on macOS (issue #1333, issue #1327), fix glibc 2.44 crash (issue #1341), fix alignment check for realloc_aligned. (v1,v2,v3): Add initial mingw support,
   set `errno` on allocation errors, improved double-free checks and size checks in secure mode, enable 
