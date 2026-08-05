@@ -50,7 +50,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_thread          __thread
 #define mi_decl_noreturn        __attribute__((noreturn))
 #define mi_decl_weak            __attribute__((weak))
-#if defined(__MINGW32__)
+#if defined(__MINGW32__) || defined(__CYGWIN__)
 #define mi_decl_hidden
 #else
 #define mi_decl_hidden          __attribute__((visibility("hidden")))
