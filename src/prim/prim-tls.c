@@ -151,8 +151,8 @@ static void mi_win_tls_slot_set(size_t slot, size_t extended_slot, void* value) 
 #elif MI_TLS_MODEL_PTHREADS
 
 // only for pthreads for now
-mi_decl_hidden pthread_key_t _mi_theap_default_key = MI_PTHREAD_KEY_INVALID;
-mi_decl_hidden pthread_key_t _mi_theap_cached_key = MI_PTHREAD_KEY_INVALID;
+mi_decl_hidden _Atomic(pthread_key_t) _mi_theap_default_key = MI_ATOMIC_VAR_INIT(MI_PTHREAD_KEY_INVALID);
+mi_decl_hidden _Atomic(pthread_key_t) _mi_theap_cached_key  = MI_ATOMIC_VAR_INIT(MI_PTHREAD_KEY_INVALID);
 
 static void mi_theap_cached_key_destroy(void* theapv) {
   mi_theap_t* theap = (mi_theap_t*)theapv;
@@ -163,14 +163,17 @@ static void mi_theap_cached_key_destroy(void* theapv) {
 
 void _mi_tls_slots_init(void) {
   mi_atomic_do_once {
-    _mi_pthread_key_create(&_mi_theap_default_key,NULL,NULL);
-    _mi_pthread_key_create(&_mi_theap_cached_key,&mi_theap_cached_key_destroy,NULL);
+    pthread_key_t key;
+    if (_mi_pthread_key_create(&key,NULL,NULL)) { mi_atomic_store_release(&_mi_theap_default_key,key); }
+    if (_mi_pthread_key_create(&key,&mi_theap_cached_key_destroy,NULL)) { mi_atomic_store_release(&_mi_theap_cached_key,key); }
   }  
 }
 
 void _mi_tls_slots_done(void) {
-  mi_pthread_key_delete(&_mi_theap_default_key);
-  mi_pthread_key_delete(&_mi_theap_cached_key);
+  pthread_key_t key = mi_atomic_exchange_relaxed(&_mi_theap_default_key,MI_PTHREAD_KEY_INVALID);
+  if (key!=MI_PTHREAD_KEY_INVALID) { pthread_key_delete(key); }
+  key = mi_atomic_exchange_relaxed(&_mi_theap_cached_key,MI_PTHREAD_KEY_INVALID);
+  if (key!=MI_PTHREAD_KEY_INVALID) { pthread_key_delete(key); }
 }
 
 #elif MI_TLS_MODEL_FIXED 
@@ -215,9 +218,10 @@ void _mi_theap_cached_set(mi_theap_t* theap) {
   #elif MI_TLS_MODEL_FIXED
     mi_prim_tls_slot_set(MI_TLS_MODEL_FIXED_CACHED, theap);
   #elif MI_TLS_MODEL_WIN32
-    mi_win_tls_slot_set(_mi_theap_cached_slot, _mi_theap_cached_expansion_slot, theap);
+    mi_win_tls_slot_set(mi_atomic_load_relaxed(&_mi_theap_cached_slot), mi_atomic_load_relaxed(&_mi_theap_cached_expansion_slot), theap);
   #elif MI_TLS_MODEL_PTHREADS
-    mi_pthread_key_set(&_mi_theap_cached_key, theap);
+    pthread_key_t key = mi_atomic_load_relaxed(&_mi_theap_cached_key);
+    if (key!=MI_PTHREAD_KEY_INVALID) { pthread_setspecific(key, theap); }
   #endif
   // update refcounts (so cached theap memory keeps available until no longer cached)
   _mi_theap_incref(theap);
@@ -234,9 +238,10 @@ void _mi_theap_default_set(mi_theap_t* theap)  {
   #elif MI_TLS_MODEL_FIXED
     mi_prim_tls_slot_set(MI_TLS_MODEL_FIXED_DEFAULT, theap);
   #elif MI_TLS_MODEL_WIN32
-    mi_win_tls_slot_set(_mi_theap_default_slot, _mi_theap_default_expansion_slot, theap);
+    mi_win_tls_slot_set(mi_atomic_load_relaxed(&_mi_theap_default_slot), mi_atomic_load_relaxed(&_mi_theap_default_expansion_slot), theap);
   #elif MI_TLS_MODEL_PTHREADS
-    mi_pthread_key_set(&_mi_theap_default_key, theap);
+    pthread_key_t key = mi_atomic_load_relaxed(&_mi_theap_default_key);
+    if (key!=MI_PTHREAD_KEY_INVALID) { pthread_setspecific(key, theap); }
   #endif
 
   // set theap main if needed
