@@ -15,9 +15,9 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.4.4`  (2026-08-01) recommended.  
-Latest v2 release: `v2.4.4`  (2026-08-01) stable.  
-Latest v1 release: `v1.9.14` (2026-08-01) legacy.
+Latest release   : `v3.4.5`  (2026-08-05) recommended.  
+Latest v2 release: `v2.4.5`  (2026-08-05) stable.  
+Latest v1 release: `v1.9.15` (2026-08-05) legacy.
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -89,6 +89,9 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
         __Send PR's against this version if possible.__
 
 ### Releases
+* 2026-08-05, `v1.9.15`, `v2.4.5`, `v3.4.5`: Fix compilation with xmalloc (#1353), make the build deterministic (#1355),
+  mi_zalloc_aligned fix (#763), improve support for mingw (ucrt64), fix fputs fallback on windows (#1354), (v3): use proper 
+  lock backoff for first-class heap deletion. 
 * 2026-08-01, `v1.9.14`, `v2.4.4`, `v3.4.4`: various bug and security fixes through Opus 5 LLM audit (issue #1271, by @Zoxc). 
   (v3): use pthreads by default on macOS (issue #1333, issue #1327), fix glibc 2.44 crash (issue #1341), fix alignment check for realloc_aligned. (v1,v2,v3): Add initial mingw support,
   set `errno` on allocation errors, improved double-free checks and size checks in secure mode, enable 
