@@ -34,7 +34,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;1.8/2.1</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -122,9 +122,9 @@ $(function(){initNavTree('index.html',''); initResizable(true); });
 </ul>
 <p>There are three maintained versions of mimalloc. All versions are mostly equal except for how the OS memory is handled. New development is mostly on v3, while v1 and v2 are maintained with security and bug fixes.</p>
 <ul>
-<li><b>v1</b>: initial design of mimalloc (release tags: <code>v1.9.x</code>, development branch <code>dev</code>). Send PR's against this version if possible.</li>
-<li><b>v2</b>: main mimalloc version. Uses thread-local segments to reduce fragmentation. (release tags: <code>v2.2.x</code>, development branch <code>dev2</code>)</li>
-<li><b>v3</b>: simplifies the lock-free design of previous versions, and improves sharing of memory between threads. On certain large workloads this version may use (much) less memory. Also supports true first-class heaps (that can allocate from any thread) and has more efficient heap-walking (for the CPython GC for example). (release tags: <code>v3.2.x</code>, development branch <code>dev3</code>).</li>
+<li><b>v3</b> <b>recommended</b>: simplifies the lock-free design of previous versions, and improves sharing of memory between threads. On certain large workloads this version may use (much) less memory. Also supports true first-class heaps (that can allocate from any thread) and has more efficient heap-walking (for the CPython GC for example). (release tags: <code>v3.4.x</code>, development branch <code>dev3</code>).</li>
+<li><b>v2</b> <b>stable</b>: Uses thread-local segments to reduce fragmentation. (release tags: <code>v2.4.x</code>, development branch <code>dev2</code>)</li>
+<li><b>v1</b> <b>legacy</b>: initial design of mimalloc (release tags: <code>v1.9.x</code>, development branch <code>dev</code>). Send PR's against this version if possible.</li>
 </ul>
 <p>You can read more on the design of mimalloc in the <a href="https://www.microsoft.com/en-us/research/publication/mimalloc-free-list-sharding-in-action">technical report</a> which also has detailed benchmark results. To learn more about the internal implementation of mimalloc, see <a href="https://github.com/microsoft/mimalloc/blob/master/include/mimalloc/types.h">include/mimalloc/types.h</a>.</p>
 <p>Further information:</p>
@@ -142,12 +142,14 @@ $(function(){initNavTree('index.html',''); initResizable(true); });
 <li><a class="el" href="group__malloc.html">Basic Allocation</a></li>
 <li><a class="el" href="group__aligned.html">Aligned Allocation</a></li>
 <li><a class="el" href="group__typed.html">Typed Macros</a></li>
+<li><a class="el" href="group__constantsize.html">Constant size allocation</a></li>
 <li><a class="el" href="group__zeroinit.html">Zero initialized re-allocation</a></li>
 <li><a class="el" href="group__heap.html">Heaps</a></li>
 <li><a class="el" href="group__analysis.html">Heap Introspection</a></li>
 <li><a class="el" href="group__arenas.html">Arenas</a></li>
 <li><a class="el" href="group__subproc.html">Subprocesses</a></li>
 <li><a class="el" href="group__extended.html">Extended Functions</a></li>
+<li><a class="el" href="group__stats.html">Statistics</a></li>
 <li><a class="el" href="group__options.html">Runtime Options</a></li>
 <li><a class="el" href="group__theap.html">Thread-local heaps</a></li>
 <li><a class="el" href="group__posix.html">Posix</a></li>

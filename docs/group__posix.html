@@ -34,7 +34,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;1.8/2.1</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -116,7 +116,7 @@ $(function(){initNavTree('group__posix.html',''); initResizable(true); });
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
 <tr class="memitem:ga705dc7a64bffacfeeb0141501a5c35d7" id="r_ga705dc7a64bffacfeeb0141501a5c35d7"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga705dc7a64bffacfeeb0141501a5c35d7">mi_cfree</a> (void *p)</td></tr>
-<tr class="memdesc:ga705dc7a64bffacfeeb0141501a5c35d7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Just as <code>free</code> but also checks if the pointer <code>p</code> belongs to our heap.  <br /></td></tr>
+<tr class="memdesc:ga705dc7a64bffacfeeb0141501a5c35d7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checked <code>free</code>: just as <code>mi_free</code> but always checks if the pointer <code>p</code> belongs to our heap and is safe to use when a pointer might be invalid or allocated by another allocator.  <br /></td></tr>
 <tr class="separator:ga705dc7a64bffacfeeb0141501a5c35d7"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga66bcfeb4faedbb42b796bc680821ef84" id="r_ga66bcfeb4faedbb42b796bc680821ef84"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga66bcfeb4faedbb42b796bc680821ef84">mi__expand</a> (void *p, size_t newsize)</td></tr>
 <tr class="separator:ga66bcfeb4faedbb42b796bc680821ef84"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -157,8 +157,10 @@ Functions</h2></td></tr>
 <tr class="memitem:ga16570deddd559001b44953eedbad0084" id="r_ga16570deddd559001b44953eedbad0084"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga16570deddd559001b44953eedbad0084">mi_aligned_offset_recalloc</a> (void *p, size_t newcount, size_t size, size_t alignment, size_t offset)</td></tr>
 <tr class="separator:ga16570deddd559001b44953eedbad0084"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gae01389eedab8d67341ff52e2aad80ebb" id="r_gae01389eedab8d67341ff52e2aad80ebb"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#gae01389eedab8d67341ff52e2aad80ebb">mi_free_size</a> (void *p, size_t size)</td></tr>
+<tr class="memdesc:gae01389eedab8d67341ff52e2aad80ebb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Free an object that was allocated with a known size.  <br /></td></tr>
 <tr class="separator:gae01389eedab8d67341ff52e2aad80ebb"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga72e9d7ffb5fe94d69bc722c8506e27bc" id="r_ga72e9d7ffb5fe94d69bc722c8506e27bc"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga72e9d7ffb5fe94d69bc722c8506e27bc">mi_free_size_aligned</a> (void *p, size_t size, size_t alignment)</td></tr>
+<tr class="memdesc:ga72e9d7ffb5fe94d69bc722c8506e27bc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Free an object that was allocated aligned.  <br /></td></tr>
 <tr class="separator:ga72e9d7ffb5fe94d69bc722c8506e27bc"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga0d28d5cf61e6bfbb18c63092939fe5c9" id="r_ga0d28d5cf61e6bfbb18c63092939fe5c9"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga0d28d5cf61e6bfbb18c63092939fe5c9">mi_free_aligned</a> (void *p, size_t alignment)</td></tr>
 <tr class="separator:ga0d28d5cf61e6bfbb18c63092939fe5c9"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -316,7 +318,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Just as <code>free</code> but also checks if the pointer <code>p</code> belongs to our heap. </p>
+<p>Checked <code>free</code>: just as <code>mi_free</code> but always checks if the pointer <code>p</code> belongs to our heap and is safe to use when a pointer might be invalid or allocated by another allocator. </p>
 
 </div>
 </div>
@@ -386,6 +388,18 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
+<p>Free an object that was allocated with a known size. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">p</td><td>The pointer that was allocated with <em>size</em> bytes (or <em>NULL</em> ) </td></tr>
+    <tr><td class="paramname">size</td><td>The size in bytes. <b>v3</b>: this can improve performance for objects with a \size &lt; <a class="el" href="group__extended.html#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size allowed for small allocations in mi_malloc_small, mi_zalloc_small, mi_heap_malloc_small,...">MI_SMALL_SIZE_MAX()</a> as it will use <a class="el" href="group__extended.html#ga2a8469764c38dcaf878f36e5f50e3610" title="v3: Can be used to free an object that was allocated with mi_malloc_small() or any allocation with a ...">mi_free_small()</a> internally. Always use this if possible. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section see"><dt>See also</dt><dd>mi_free_tp() </dd>
+<dd>
+<a class="el" href="group__constantsize.html#ga7a421e302074e598527c3eb052a6a3c5" title="Free a pointer with a known constant size.">mi_free_csize()</a> </dd></dl>
+
 </div>
 </div>
 <a id="ga72e9d7ffb5fe94d69bc722c8506e27bc" name="ga72e9d7ffb5fe94d69bc722c8506e27bc"></a>
@@ -411,6 +425,16 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+
+<p>Free an object that was allocated aligned. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">p</td><td>The pointer to the object (or <em>NULL</em> ) </td></tr>
+    <tr><td class="paramname">size</td><td>The size of the object as allocated. </td></tr>
+    <tr><td class="paramname">alignment</td><td>The requested alignment at the allocation. Currently just defers to <a class="el" href="#gae01389eedab8d67341ff52e2aad80ebb" title="Free an object that was allocated with a known size.">mi_free_size()</a> </td></tr>
+  </table>
+  </dd>
+</dl>
 
 </div>
 </div>
