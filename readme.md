@@ -15,9 +15,9 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.4.4`  (2026-08-01) recommended.  
-Latest v2 release: `v2.4.4`  (2026-08-01) stable.  
-Latest v1 release: `v1.9.14` (2026-08-01) legacy.
+Latest release   : `v3.4.5`  (2026-08-05) recommended.  
+Latest v2 release: `v2.4.5`  (2026-08-05) stable.  
+Latest v1 release: `v1.9.15` (2026-08-05) legacy.
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -89,6 +89,10 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
         __Send PR's against this version if possible.__
 
 ### Releases
+
+* 2026-08-05, `v1.9.15`, `v2.4.5`, `v3.4.5`: Fix compilation with xmalloc (#1353), make the build deterministic (#1355),
+  mi_zalloc_aligned fix (#763), improve support for mingw (ucrt64), fix fputs fallback on windows (#1354), (v3): use proper 
+  lock backoff for first-class heap deletion. 
 * 2026-08-01, `v1.9.14`, `v2.4.4`, `v3.4.4`: various bug and security fixes through Opus 5 LLM audit (issue #1271, by @Zoxc). 
   (v3): use pthreads by default on macOS (issue #1333, issue #1327), fix glibc 2.44 crash (issue #1341), fix alignment check for realloc_aligned. (v1,v2,v3): Add initial mingw support,
   set `errno` on allocation errors, improved double-free checks and size checks in secure mode, enable 
@@ -127,24 +131,6 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
   v3 uses faster TLS access on Windows, and has improved performance for `mi_calloc` and aligned allocations.
   Fixed rare race condition on older v3, fixed potential buffer overflow in debug statistics, add API for returning
   allocated sizes on allocation and free.
-* 2025-06-09, `v1.9.4`, `v2.2.4`, `v3.1.4` (beta) : Some important bug fixes, including a case where OS memory
-  was not always fully released. Improved v3 performance, build on XBox, fix build on Android, support interpose 
-  for older macOS versions, use MADV_FREE_REUSABLE on macOS, always check commit success, better support for Windows 
-  fixed TLS offset, etc.
-* 2025-03-28, `v1.9.3`, `v2.2.3`, `v3.0.3` (beta) : Various small bug and build fixes, including:
-  fix arm32 pre v7 builds, fix mingw build, get runtime statistics, improve statistic commit counts, 
-  fix execution on non BMI1 x64 systems. 
-* 2025-03-06, `v1.9.2`, `v2.2.2`, `v3.0.2-beta`: Various small bug and build fixes. 
-  Add `mi_options_print`, `mi_arenas_print`, and the experimental `mi_stat_get` and `mi_stat_get_json`. 
-  Add `mi_thread_set_in_threadpool` and `mi_heap_set_numa_affinity` (v3 only). Add vcpkg portfile. 
-  Upgrade mimalloc-redirect to v1.3.2. `MI_OPT_ARCH` is off by default now but still assumes armv8.1-a on arm64
-  for fast atomic operations. Add QNX support.
-* 2025-01-03, `v1.8.9`, `v2.1.9`, `v3.0.1-alpha`: Interim release. Support Windows arm64. New [guarded](#guarded) build that can place OS 
-  guard pages behind objects to catch buffer overflows as they occur. 
-  Many small fixes: build on Windows arm64, cygwin, riscV, and dragonfly; fix Windows static library initialization to account for
-  thread local destructors (in Rust/C++); macOS tag change; macOS TLS slot fix; improve stats; 
-  consistent `mimalloc.dll` on Windows (instead of `mimalloc-override.dll`); fix mimalloc-redirect on Win11 H2; 
-  add 0-byte to canary; upstream CPython fixes; reduce .bss size; allow fixed TLS slot on Windows for improved performance.
 
 * [Older release notes](#older-release-notes)
 
@@ -927,6 +913,25 @@ provided by the bot. You will only need to do this once across all repos using o
 
 
 # Older Release Notes
+
+* 2025-06-09, `v1.9.4`, `v2.2.4`, `v3.1.4` (beta) : Some important bug fixes, including a case where OS memory
+  was not always fully released. Improved v3 performance, build on XBox, fix build on Android, support interpose 
+  for older macOS versions, use MADV_FREE_REUSABLE on macOS, always check commit success, better support for Windows 
+  fixed TLS offset, etc.
+* 2025-03-28, `v1.9.3`, `v2.2.3`, `v3.0.3` (beta) : Various small bug and build fixes, including:
+  fix arm32 pre v7 builds, fix mingw build, get runtime statistics, improve statistic commit counts, 
+  fix execution on non BMI1 x64 systems. 
+* 2025-03-06, `v1.9.2`, `v2.2.2`, `v3.0.2-beta`: Various small bug and build fixes. 
+  Add `mi_options_print`, `mi_arenas_print`, and the experimental `mi_stat_get` and `mi_stat_get_json`. 
+  Add `mi_thread_set_in_threadpool` and `mi_heap_set_numa_affinity` (v3 only). Add vcpkg portfile. 
+  Upgrade mimalloc-redirect to v1.3.2. `MI_OPT_ARCH` is off by default now but still assumes armv8.1-a on arm64
+  for fast atomic operations. Add QNX support.
+* 2025-01-03, `v1.8.9`, `v2.1.9`, `v3.0.1-alpha`: Interim release. Support Windows arm64. New [guarded](#guarded) build that can place OS 
+  guard pages behind objects to catch buffer overflows as they occur. 
+  Many small fixes: build on Windows arm64, cygwin, riscV, and dragonfly; fix Windows static library initialization to account for
+  thread local destructors (in Rust/C++); macOS tag change; macOS TLS slot fix; improve stats; 
+  consistent `mimalloc.dll` on Windows (instead of `mimalloc-override.dll`); fix mimalloc-redirect on Win11 H2; 
+  add 0-byte to canary; upstream CPython fixes; reduce .bss size; allow fixed TLS slot on Windows for improved performance.
 
 * 2024-05-21, `v1.8.7`, `v2.1.7`: Fix build issues on less common platforms. Started upstreaming patches
   from the CPython [integration](https://github.com/python/cpython/issues/113141#issuecomment-2119255217). Upstream `vcpkg` patches.
