@@ -16,12 +16,12 @@ terms of the MIT license. A copy of the license can be found in the file
 // to a thread-local theap pointer (in `alloc.c:mi_malloc`).
 //
 // For performance, we tend to use specialized code for various platforms.
-// This leads to quite a few ifdefs but it is just for performance and there 
+// This leads to quite a few ifdefs but it is just for performance and there
 // is always a portable fallback (based on regular thread local variables).
 //
 // Windows          : use NtCurrentTeB and TlsAlloc (MI_TLS_MODEL_WIN32)
-// Linux,FreeBSD    : use thread locals with the initial-exec model  (MI_TLS_MODEL_LOCAL)  
-// macOS            : use pthread locals with assembly for the thread-id  (MI_TLS_MODEL_PTHREADS) 
+// Linux,FreeBSD    : use thread locals with the initial-exec model  (MI_TLS_MODEL_LOCAL)
+// macOS            : use pthread locals with assembly for the thread-id  (MI_TLS_MODEL_PTHREADS)
 // Android,OpenBSD  : use pthread locals (MI_TLS_MODEL_PTHREADS). todo: maybe on Android MI_TLS_MODEL_LOCAL is better?
 // --------------------------------------------------------------------------
 
@@ -84,10 +84,10 @@ static inline void** mi_prim_thread_pointer(void) {
 static inline void** mi_prim_thread_pointer(void) {
   return (void**)__builtin_thread_pointer();
 }
-#elif defined(__GNUC__) 
+#elif defined(__GNUC__) && !defined(__CYGWIN__)
   #if defined(__aarch64__)
   static inline void** mi_prim_thread_pointer(void) {
-    void** tcb; 
+    void** tcb;
     #if defined(__APPLE__) // M1, issue rgb(62, 76, 62)
     __asm__ volatile ("mrs %0, tpidrro_el0\nbic %0, %0, #7" : "=r" (tcb));
     #else
@@ -97,13 +97,13 @@ static inline void** mi_prim_thread_pointer(void) {
   }
   #elif defined(__riscv)
   static inline void** mi_prim_thread_pointer(void) {
-    void** tcb; 
+    void** tcb;
     __asm__ volatile ("mv %0, tp" : "=r" (tcb));
     return tcb;
   }
   #elif defined(__arm__)
   static inline void** mi_prim_thread_pointer(void) {
-    void** tcb; 
+    void** tcb;
     __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
     return tcb;
   }
@@ -116,7 +116,7 @@ static inline void** mi_prim_thread_pointer(void) {
   #elif defined(__x86_64__)
   static inline void** mi_prim_thread_pointer(void) {
     void** tcb;
-    #if defined(__APPLE__) && defined(__x86_64__)
+    #if defined(__APPLE__)
     __asm__("movq %%gs:0, %0" : "=r" (tcb) : : );  // x86_64 macOSX uses GS
     #elif (MI_INTPTR_SIZE==4)
     __asm__("movl %%fs:0, %0" : "=r" (tcb) : : );  // x32 ABI
@@ -125,7 +125,7 @@ static inline void** mi_prim_thread_pointer(void) {
     #endif
     return tcb;
   }
-  #else 
+  #else
   #define MI_NO_THREAD_POINTER (1)
   #endif
 #elif MI_USE_PTHREADS && defined(__APPLE__)
@@ -215,7 +215,7 @@ We have 4 models:
     where the underlying TLS implementation (or the loader) will call itself `malloc`
     on a first access to a thread local (and recurse in the MI_TLS_MODEL_LOCAL).
     This goes wrong though if the OS or a library uses the same fixed slot, and also
-    prevents multiple instances of mimalloc in the same process. 
+    prevents multiple instances of mimalloc in the same process.
 
 - MI_TLS_MODEL_WIN32: use a dynamically allocated slot with TlsAlloc. (default on Windows)
     We use TlsAlloc'd slot. First tries to use one of the "direct" first 64 slots which
@@ -279,7 +279,7 @@ static inline mi_theap_t* _mi_theap_default(void) {
   if (_mi_theap_default_key == MI_PTHREAD_KEY_INVALID) return NULL;
   return (mi_theap_t*)mi_prim_tls_slot(_mi_theap_default_key);
   #else
-  return (mi_theap_t*)mi_pthread_key_get(_mi_theap_default_key);  
+  return (mi_theap_t*)mi_pthread_key_get(_mi_theap_default_key);
   #endif
 }
 
@@ -339,7 +339,7 @@ static inline mi_theap_t* _mi_theap_cached(void) {
 
 #elif MI_TLS_MODEL_FIXED
 // Fixed TLS slot. Can be the fastest approach, but does not work if there are multiple instances of
-// mimalloc in the same process. Most OS's do not have official user reserved fixed slots so this cannot be 
+// mimalloc in the same process. Most OS's do not have official user reserved fixed slots so this cannot be
 // guaranteed to work in general.
 #define MI_THEAP_INITASNULL  1
 
