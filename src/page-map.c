@@ -265,7 +265,7 @@ mi_decl_nodiscard static bool mi_page_map_ensure_committed(size_t idx, mi_submap
   return true;
 }
 
-// initialize the page map
+// initialize the page map 
 static bool mi_page_map_init_once(void) {
   size_t vbits = (size_t)mi_option_get_clamp(mi_option_max_vabits, 0, MI_MAX_VABITS);
   if (vbits == 0) {

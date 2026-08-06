@@ -107,8 +107,8 @@ static inline bool mi_bfield_atomic_clear(_Atomic(mi_bfield_t)*b, size_t idx, bo
 }
 
 // Clear a bit but only when/once it is set. This is used by concurrent free's while
-// the page is abandoned and mapped. This can incure a busy wait :-( but it should
-// happen almost never (and is accounted for in the stats)
+// the page is abandoned and mapped. This can incur a busy wait :-( but it should
+// be quite rare (and is accounted for in the stats)
 static inline void mi_bfield_atomic_clear_once_set(mi_subproc_t* subproc, _Atomic(mi_bfield_t)*b, size_t idx) {
   mi_assert_internal(idx < MI_BFIELD_BITS);
   const mi_bfield_t mask = mi_bfield_mask(1, idx);;
@@ -133,8 +133,7 @@ static inline void mi_bfield_atomic_clear_once_set(mi_subproc_t* subproc, _Atomi
 // statistics correctly).
 static inline bool mi_bfield_atomic_set_mask(_Atomic(mi_bfield_t)*b, mi_bfield_t mask, size_t* already_set) {
   mi_assert_internal(mask != 0);
-  mi_bfield_t old = mi_atomic_load_relaxed(b);
-  while (!mi_atomic_cas_weak_acq_rel(b, &old, old|mask)) {};  // try to atomically set the mask bits until success
+  const mi_bfield_t old = mi_atomic_or_acq_rel(b,mask);
   if (already_set!=NULL) { *already_set = mi_bfield_popcount(old&mask); }
   return ((old&mask) == 0);
 }
@@ -143,8 +142,7 @@ static inline bool mi_bfield_atomic_set_mask(_Atomic(mi_bfield_t)*b, mi_bfield_t
 // `all_clear` is set to `true` if the new bfield became zero.
 static inline bool mi_bfield_atomic_clear_mask(_Atomic(mi_bfield_t)*b, mi_bfield_t mask, bool* all_clear) {
   mi_assert_internal(mask != 0);
-  mi_bfield_t old = mi_atomic_load_relaxed(b);
-  while (!mi_atomic_cas_weak_acq_rel(b, &old, old&~mask)) {};  // try to atomically clear the mask bits until success
+  const mi_bfield_t old = mi_atomic_and_acq_rel(b,~mask);  
   if (all_clear != NULL) { *all_clear = ((old&~mask)==0); }
   return ((old&mask) == mask);
 }
@@ -155,44 +153,38 @@ static inline bool mi_bfield_atomic_setX(_Atomic(mi_bfield_t)*b, size_t* already
   return (old==0);
 }
 
-// static inline bool mi_bfield_atomic_clearX(_Atomic(mi_bfield_t)*b, bool* all_clear) {
-//   const mi_bfield_t old = mi_atomic_exchange_release(b, mi_bfield_zero());
-//   if (all_clear!=NULL) { *all_clear = true; }
-//   return (~old==0);
-// }
 
 // ------- mi_bfield_atomic_try_clear ---------------------------------------
 
-
 // Tries to clear a mask atomically, and returns true if the mask bits atomically transitioned from mask to 0
-// and false otherwise (leaving the bit field as is).
+// and false otherwise (leaving the bit field as is). Returns the acquired value back in `expect` (regardless of success).
 // `all_clear` is set to `true` if the new bfield became zero.
-static inline bool mi_bfield_atomic_try_clear_mask_of(_Atomic(mi_bfield_t)*b, mi_bfield_t mask, mi_bfield_t expect, bool* all_clear) {
+static inline bool mi_bfield_atomic_try_clear_mask_of(_Atomic(mi_bfield_t)*b, mi_bfield_t mask, mi_bfield_t* expect, bool* all_clear) {
   mi_assert_internal(mask != 0);
   // try to atomically clear the mask bits
   do {
-    if ((expect & mask) != mask) {  // are all bits still set?
+    if ((*expect & mask) != mask) {  // are all bits still set?
       if (all_clear != NULL) { *all_clear = (expect == 0); }
       return false;
     }
-  } while (!mi_atomic_cas_weak_acq_rel(b, &expect, expect & ~mask));
-  if (all_clear != NULL) { *all_clear = ((expect & ~mask) == 0);  }
+  } while (!mi_atomic_cas_weak_acq_rel(b, expect, *expect & ~mask));
+  if (all_clear != NULL) { *all_clear = ((*expect & ~mask) == 0);  }
   return true;
 }
 
 static inline bool mi_bfield_atomic_try_clear_mask(_Atomic(mi_bfield_t)* b, mi_bfield_t mask, bool* all_clear) {
   mi_assert_internal(mask != 0);
-  const mi_bfield_t expect = mi_atomic_load_relaxed(b);
-  return mi_bfield_atomic_try_clear_mask_of(b, mask, expect, all_clear);
+  mi_bfield_t expect = mi_atomic_load_relaxed(b);
+  return mi_bfield_atomic_try_clear_mask_of(b, mask, &expect, all_clear);
 }
 
 // Tries to clear a bit atomically. Returns `true` if the bit transitioned from 1 to 0
-// and `false` otherwise leaving the bfield `b` as-is.
+// and `false` otherwise (leaving the bfield `b` as-is).
 // `all_clear` is set to true if the new bfield became zero (and false otherwise)
 mi_decl_maybe_unused static inline bool mi_bfield_atomic_try_clear(_Atomic(mi_bfield_t)* b, size_t idx, bool* all_clear) {
   mi_assert_internal(idx < MI_BFIELD_BITS);
-  const mi_bfield_t mask = mi_bfield_one()<<idx;
-  return mi_bfield_atomic_try_clear_mask(b, mask, all_clear);
+  // for a single bit we can always just clear the bit: if it was either already clear the value is unchanged anyways.
+  return mi_bfield_atomic_clear(b,idx,all_clear);
 }
 
 // Tries to clear a byte atomically, and returns true if the byte atomically transitioned from 0xFF to 0
@@ -578,19 +570,24 @@ mi_decl_maybe_unused static inline bool mi_mm256_is_zero( __m256i vec) {
 }
 #endif
 
-static inline bool mi_bchunk_try_find_and_clear_at(mi_bchunk_t* chunk, size_t chunk_idx, size_t* pidx) {
+
+static mi_decl_forceinline bool mi_bchunk_try_find_and_clear_at(mi_bchunk_t* chunk, size_t chunk_idx, size_t* pidx) {
   mi_assert_internal(chunk_idx < MI_BCHUNK_FIELDS);
-  // note: this must be acquire (and not relaxed), or otherwise the AVX code below can loop forever
-  // as the compiler won't reload the registers vec1 and vec2 from memory again.
-  const mi_bfield_t b = mi_atomic_load_acquire(&chunk->bfields[chunk_idx]);
-  size_t idx;
-  if (mi_bfield_find_least_bit(b, &idx)) {           // find the least bit
-    if mi_likely(mi_bfield_atomic_try_clear_mask_of(&chunk->bfields[chunk_idx], mi_bfield_mask(1,idx), b, NULL)) {  // clear it atomically
-      *pidx = (chunk_idx*MI_BFIELD_BITS) + idx;
+  _Atomic(mi_bfield_t)* const bfield = &chunk->bfields[chunk_idx];
+  mi_bfield_t b = mi_atomic_load_relaxed(bfield);
+  if (b==0) return false;
+  int tries = 0;
+  do {  
+    const mi_bfield_t mask = (b & -b);        // clear all bits except the least-significant one
+    b = mi_atomic_and_acq_rel(bfield,~mask);  // clear the bit and set `b` to the previous value
+    if mi_likely((b&mask)==mask) {            // if we transitioned from 1 to 0, we actually cleared it
+      size_t bitidx = 0;
+      mi_bfield_find_least_bit(mask,&bitidx);
+      *pidx = (chunk_idx*MI_BFIELD_BITS) + bitidx;
       mi_assert_internal(*pidx < MI_BCHUNK_BITS);
       return true;
-    }
-  }
+    }    
+  } while (b!=0 && ++tries <= 4); // limit tries to reduce possible contention
   return false;
 }
 
@@ -694,22 +691,28 @@ static inline bool mi_bchunk_try_find_and_clear_1(mi_bchunk_t* chunk, size_t n, 
 }
 
 mi_decl_maybe_unused static inline bool mi_bchunk_try_find_and_clear8_at(mi_bchunk_t* chunk, size_t chunk_idx, size_t* pidx) {
-  const mi_bfield_t b = mi_atomic_load_relaxed(&chunk->bfields[chunk_idx]);
-  // has_set8 has low bit in each byte set if the byte in x == 0xFF
-  const mi_bfield_t has_set8 =
-    ((~b - MI_BFIELD_LO_BIT8) &      // high bit set if byte in x is 0xFF or < 0x7F
-     (b  & MI_BFIELD_HI_BIT8))       // high bit set if byte in x is >= 0x80
-     >> 7;                           // shift high bit to low bit
-  size_t idx;
-  if (mi_bfield_find_least_bit(has_set8, &idx)) { // find least 1-bit
-    mi_assert_internal(idx <= (MI_BFIELD_BITS - 8));
-    mi_assert_internal((idx%8)==0);
-    if mi_likely(mi_bfield_atomic_try_clear_mask_of(&chunk->bfields[chunk_idx], (mi_bfield_t)0xFF << idx, b, NULL)) {  // unset the byte atomically
-      *pidx = (chunk_idx*MI_BFIELD_BITS) + idx;
-      mi_assert_internal(*pidx + 8 <= MI_BCHUNK_BITS);
-      return true;
+  _Atomic(mi_bfield_t)* const bfield = &chunk->bfields[chunk_idx];  
+  mi_bfield_t b = mi_atomic_load_relaxed(bfield);
+  if (b==0) return false;
+  int tries = 0;
+  do {
+    // has_set8 has low bit in each byte set if the byte in x == 0xFF
+    const mi_bfield_t has_set8 =
+      ((~b - MI_BFIELD_LO_BIT8) &     // high bit set if byte in x is 0xFF or < 0x7F
+      (b  & MI_BFIELD_HI_BIT8))       // high bit set if byte in x is >= 0x80
+      >> 7;                           // shift high bit to low bit
+    size_t bitidx;
+    if (mi_bfield_find_least_bit(has_set8, &bitidx)) { // find least 1-bit
+      mi_assert_internal(bitidx <= (MI_BFIELD_BITS - 8));
+      mi_assert_internal((bitidx%8)==0);
+      // note: b is updated with the previous value of *bfield
+      if mi_likely(mi_bfield_atomic_try_clear_mask_of(bfield, (mi_bfield_t)0xFF << bitidx, &b, NULL)) {  // unset the byte atomically
+        *pidx = (chunk_idx*MI_BFIELD_BITS) + bitidx;
+        mi_assert_internal(*pidx + 8 <= MI_BCHUNK_BITS);
+        return true;
+      }
     }
-  }
+  } while( b!=0 && ++tries <= 4); // limit tries to reduce possible contention
   return false;
 }
 
@@ -777,7 +780,8 @@ mi_decl_noinline static bool mi_bchunk_try_find_and_clearNX(mi_bchunk_t* chunk, 
       const size_t bmask = mask<<idx;
       mi_assert_internal(bmask>>idx == mask);
       if ((b&bmask) == bmask) { // found a match with all bits set, try clearing atomically
-        if mi_likely(mi_bfield_atomic_try_clear_mask_of(&chunk->bfields[i], bmask, b0, NULL)) {
+        // note: updates b0 with the previous value
+        if mi_likely(mi_bfield_atomic_try_clear_mask_of(&chunk->bfields[i], bmask, &b0, NULL)) {
           *pidx = (i*MI_BFIELD_BITS) + idx;
           mi_assert_internal(*pidx < MI_BCHUNK_BITS);
           mi_assert_internal(*pidx + n <= MI_BCHUNK_BITS);
@@ -785,7 +789,7 @@ mi_decl_noinline static bool mi_bchunk_try_find_and_clearNX(mi_bchunk_t* chunk, 
         }
         else {
           // if we failed to atomically commit, reload b and try again from the start
-          b = b0 = mi_atomic_load_acquire(&chunk->bfields[i]);
+          b = b0; // = mi_atomic_load_acquire(&chunk->bfields[i]);
         }
       }
       else {
