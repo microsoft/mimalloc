@@ -87,7 +87,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // Enable guard pages behind objects of a certain size (set by the MIMALLOC_GUARDED_MIN/MAX/SAMPLE_RATE options)
-#if !defined(MI_GUARDED) && MI_DEBUG && !defined(NDEBUG) && !MI_PAGE_META_ALIGNED_FREE_SMALL
+#if !defined(MI_GUARDED) && MI_DEBUG && !defined(NDEBUG) && !MI_OPT_FREE_SMALL
 #define MI_GUARDED  1
 #endif
 
@@ -135,7 +135,9 @@ terms of the MIT license. A copy of the license can be found in the file
 // We can choose to only put page info of small pages at the start of the page area.
 // This can be used to have a slightly faster `mi_free_small` function for specialized
 // cases (like language runtime systems).
-#if !defined(MI_PAGE_META_ALIGNED_FREE_SMALL)
+#if MI_OPT_FREE_SMALL && !defined(MI_PAGE_META_ALIGNED_FREE_SMALL)
+#define MI_PAGE_META_ALIGNED_FREE_SMALL   1
+#elif !defined(MI_PAGE_META_ALIGNED_FREE_SMALL)
 #define MI_PAGE_META_ALIGNED_FREE_SMALL   0
 #endif
 
@@ -144,7 +146,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "secure mode should use separated page infos"
 #endif
 #if MI_PAGE_META_ALIGNED_FREE_SMALL && MI_SECURE
-#error "secure mode cannot use MI_PAGE_META_ALIGNED_FREE_SMALL"
+#error "secure mode cannot use MI_OPT_FREE_SMALL (MI_PAGE_META_ALIGNED_FREE_SMALL)"
 #endif
 #if MI_PAGE_META_IS_SEPARATED && MI_PAGE_MAP_FLAT
 #error "cannot have a flat page map with separated page infos"

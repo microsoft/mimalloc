@@ -234,20 +234,20 @@ void mi_free_small(void* p) mi_attr_noexcept {
   // just by aligning down the pointer instead of looking it up in the page map.
   #if MI_PAGE_META_ALIGNED_FREE_SMALL 
     #if MI_GUARDED 
-    #warning "MI_PAGE_META_ALIGNED_FREE_SMALL ignored as MI_GUARDED is defined"
+    #warning "MI_OPT_FREE_SMALL (MI_PAGE_META_ALIGNED_FREE_SMALL) ignored as MI_GUARDED is defined"
     mi_free(p);
     #elif MI_ARENA_SLICE_ALIGN < MI_SMALL_PAGE_SIZE
-    #warning "MI_PAGE_META_ALIGNED_FREE_SMALL ignored as the MI_ARENA_SLICE_ALIGN is less than the small page size"
+    #warning "MI_OPT_FREE_SMALL (MI_PAGE_META_ALIGNED_FREE_SMALL) ignored as the MI_ARENA_SLICE_ALIGN is less than the small page size"
     mi_free(p);
     #else
       mi_page_t* const page = (mi_page_t*)_mi_align_down_ptr(p,MI_SMALL_PAGE_SIZE);
       mi_assert(page == mi_validate_ptr_page(p,"mi_free_small"));
       mi_assert((void*)page == _mi_align_down_ptr(mi_page_start(page),MI_SMALL_PAGE_SIZE));
-      mi_assert(page->block_size <= MI_SMALL_SIZE_MAX);  // note: not `MI_SMALL_MAX_OBJ_SIZE` as we need to match `mi_(heap_)malloc_small`
+      mi_assert(page->block_size <= mi_good_size(MI_SMALL_SIZE_MAX));  // note: not `MI_SMALL_MAX_OBJ_SIZE` as we need to match `mi_(heap_)malloc_small`
       mi_free_ex(p, NULL, page, true);
     #endif
   #else
-  mi_free(p);
+    mi_free(p);
   #endif  
 }
 
@@ -454,11 +454,22 @@ mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
 void mi_free_size(void* p, size_t size) mi_attr_noexcept {
   MI_UNUSED_RELEASE(size);
   #if MI_DEBUG
-  const mi_page_t* const page = mi_validate_ptr_page(p,"mi_free_size");  
-  const size_t available = _mi_page_usable_size(page,p);
-  mi_assert(p == NULL || size <= available || available == 0 /* invalid pointer */ );
+  const mi_page_t* const page = mi_validate_ptr_page(p,"mi_free_size");
+  if (page==NULL) return;
+  mi_assert(p!=NULL);
+  const size_t usable = _mi_page_usable_size(page,p);
+  if (size > usable) { 
+    _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the size %zu is greater than the usable size %zu\n", p, size, usable);
+    mi_free(p);
+    return;
+  }
+  else if (size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size(MI_SMALL_SIZE_MAX)) { 
+    _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n", p, size, mi_page_block_size(page));
+    mi_free(p);
+    return;
+  }
   #endif
-  #if MI_PAGE_META_ALIGNED_FREE_SMALL 
+  #if MI_OPT_FREE_SMALL
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {
     mi_free_small(p); 
   }

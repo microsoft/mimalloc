@@ -201,8 +201,8 @@ static void mi_page_thread_free_collect(mi_page_t* page)
 }
 
 // returns `true` if after collection `mi_page_immediate_available` is true.
-static bool mi_page_free_quick_collect(mi_page_t* page) {
-  if (page->free != NULL) return true;
+static inline bool mi_page_free_quick_collect(mi_page_t* page) {
+  if mi_likely(page->free != NULL) return true;
   if (page->local_free == NULL) return false;
   // move local_free to free
   page->free = page->local_free;

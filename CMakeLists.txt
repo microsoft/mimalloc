@@ -405,7 +405,7 @@ if(MI_OPT_FREE_SMALL)
     message(STATUS "Cannot enable MI_OPT_FREE_SMALL in secure or guarded mode (MI_OPT_FREE_SMALL=OFF)")
   else()
     message(STATUS "Optimize `mi_free_small` to not need a pagemap lookup (MI_OPT_FREE_SMALL=ON)")
-    list(APPEND mi_defines MI_PAGE_META_ALIGNED_FREE_SMALL=1)
+    list(APPEND mi_defines MI_OPT_FREE_SMALL=1)
   endif()
 endif()
 
