@@ -61,7 +61,7 @@ static inline size_t mi_page_queue_count(const mi_page_queue_t* pq) {
 // Returns MI_BIN_HUGE if the size is too large.
 // We use `wsize` for the size in "machine word sizes",
 // i.e. byte size == `wsize*sizeof(void*)`.
-static mi_decl_noinline size_t mi_bin(size_t size) {
+static size_t mi_bin(size_t size) {
   size_t wsize = _mi_wsize_from_size(size);
 #if defined(MI_ALIGN4W)
   if mi_likely(wsize <= 4) {
