@@ -774,8 +774,8 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clear8(mi_bchunk_t* chunk, s
     for (int i = 0; i < MI_BCHUNK_FIELDS; i++) {
       if (mi_bchunk_try_find_and_clear8_at(chunk, i, pidx)) return true;
     }
-    return false;
   #endif
+  return false;
 }
 
 static inline bool mi_bchunk_try_find_and_clear_8(mi_bchunk_t* chunk, size_t n, size_t* pidx, bool* did_temp_clear_bits) {
