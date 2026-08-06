@@ -1,6 +1,7 @@
 var group__typed =
 [
     [ "mi_calloc_tp", "group__typed.html#gae80c47c9d4cab10961fff1a8ac98fc07", null ],
+    [ "mi_free_tp", "group__typed.html#gafc80000c300f02bdd4fe695eb53ca70a", null ],
     [ "mi_heap_calloc_tp", "group__typed.html#ga953f22101bb354a8b6de2a6d6fda9b98", null ],
     [ "mi_heap_malloc_tp", "group__typed.html#ga02d3e85bf26aa3120132f2552c408a88", null ],
     [ "mi_heap_mallocn_tp", "group__typed.html#gaa58690658cc6f5dd54c99a9971d4aa7d", null ],

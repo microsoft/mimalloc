@@ -357,9 +357,19 @@ void* mi_realloc_aligned_at(void* p, size_t newsize, size_t alignment, size_t of
 /// ```
 /// int* p = mi_malloc_tp(int)
 /// ```
-///
-/// @see mi_malloc()
+/// Using this is more safe, but can also be more efficient since
+/// the allocation size is a compile-time constant.
+/// @see mi_malloc_csize()
+/// @see mi_malloc_small()
 #define mi_malloc_tp(tp)        ((tp*)mi_malloc_csize(sizeof(tp)))
+
+/// Free an object of type \a tp.
+/// @param tp The type of the object that is freed.
+/// @param p A pointer to an object of type \a tp (or \a NULL )
+/// Can be more efficient as it internally uses mi_free_csize()
+/// @see mi_free_csize()
+/// @see mi_free_small()
+#define mi_free_tp(tp,p)        (mi_free_csize(p,sizeof(tp)))
 
 /// Allocate a zero-initialized block of type \a tp.
 #define mi_zalloc_tp(tp)        ((tp*)mi_zalloc_csize(sizeof(tp)))
