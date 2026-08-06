@@ -299,7 +299,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
     mi_page_set_theap(page, NULL);
     page->theap = theap; // don't actually set theap to NULL so we can reclaim_on_free within the same theap
     _mi_arenas_page_abandon(page, theap);
-    _mi_arenas_collect(false, false, theap->tld); // allow purging
+    // _mi_arenas_collect(false, false, theap->tld); // allow purging
   }
 }
 
@@ -408,7 +408,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   mi_theap_t* theap = mi_page_theap(page); mi_assert_internal(theap!=NULL);
   mi_page_set_theap(page,NULL);
   _mi_arenas_page_free(page, theap);
-  _mi_arenas_collect(false, false, theap->tld);  // allow purging
+  // _mi_arenas_collect(false, false, theap->tld);  // allow purging
 }
 
 #define MI_RETIRE_CYCLES      (16)
@@ -1005,16 +1005,17 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
   if mi_unlikely(++theap->generic_count >= 1000) {
     theap->generic_collect_count += theap->generic_count;
     theap->generic_count = 0;
-    // call potential deferred free routines
-    _mi_deferred_free(theap, false);
-    // free retired pages
-    _mi_theap_collect_retired(theap, false);
-
-    // collect every once in a while (10000 by default)
+    
+    // do a full theap collect every once in a while (10000 by default)
     const long generic_collect = mi_option_get_clamp(mi_option_generic_collect, 1, 1000000L);
     if (theap->generic_collect_count >= generic_collect) {
       theap->generic_collect_count = 0;
       mi_theap_collect(theap, false /* force? */);
+    }
+    else {
+      // otherwise we do a mini-collect
+      _mi_deferred_free(theap, false);         // call potential deferred free routines      
+      _mi_theap_collect_retired(theap, false); // free retired pages      
     }
   }
 
