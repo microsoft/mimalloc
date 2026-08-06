@@ -48,10 +48,24 @@ void* _mi_meta_zalloc_aligned( mi_subproc_t* subproc, size_t size, size_t aligne
 
 void* _mi_meta_rezalloc( mi_subproc_t* subproc, void* oldp, size_t newsize, mi_memid_t* memid ) {
   mi_assert_internal(subproc->theap_meta != NULL);
-  void* p = NULL;
+  // note: since we take a meta lock we cannot use `mi_theap_rezalloc` as that could call `mi_free` which
+  // can call `mi_stat_free` which would try to take the meta lock again. See issue #1358.
+  void* p = NULL;  
   mi_lock(&subproc->theap_meta_lock) {
-    p = mi_theap_rezalloc(subproc->theap_meta, oldp, newsize);
-    if (memid != NULL) { *memid = (p==NULL ? _mi_memid_none() : _mi_memid_create_malloc(p,newsize,true) ); }
+    p = mi_theap_zalloc(subproc->theap_meta, newsize);
+  }
+  if (p!=NULL) {
+    if (oldp!=NULL) {
+      const size_t oldsize  = mi_usable_size(oldp);
+      const size_t copysize = (newsize < oldsize ? newsize : oldsize);
+      _mi_memcpy(p,oldp,copysize);
+      if (memid!=NULL) { _mi_meta_free(subproc,oldp,*memid); } 
+                  else { mi_free(oldp); }
+    }
+    if (memid!=NULL) { *memid = _mi_memid_create_malloc(p,newsize,true); }
+  }
+  else {
+    if (memid!=NULL) { *memid = _mi_memid_none(); }  
   }
   return p;
 }

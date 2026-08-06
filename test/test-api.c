@@ -463,6 +463,19 @@ int main(void) {
     }
   }
 
+  #define NHEAPS (1000)
+  CHECK_BODY("heap-many") {    // check creating many heaps and threadlocals, see issue #1358
+    mi_heap_t* heaps[NHEAPS];
+    for (size_t i = 0; i < NHEAPS; i++) {
+      heaps[i] = mi_heap_new();
+      if (heaps[i] == NULL) { result = false; break; };
+      if (mi_heap_malloc(heaps[i], 32) == NULL) { result = false; break; }
+    }
+    for (size_t i = 0; i < NHEAPS; i++) {
+      mi_heap_destroy(heaps[i]);
+    }  
+  }
+
   //CHECK("theap_destroy", test_theap1());
   //CHECK("theap_delete", test_theap2());
   //CHECK("theap_arena_destroy", test_theap_arena_destroy());

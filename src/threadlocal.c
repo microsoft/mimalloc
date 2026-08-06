@@ -119,8 +119,9 @@ static mi_thread_locals_t* mi_thread_locals_expand(size_t least_idx) {
     count = least_idx + 1;
   }
   if (count > MI_TLS_IDX_MAX) { return NULL; }  // too large
-  // allocate on the main heap; this is recursion safe as that uses the fast local key
-  mi_memid_t memid;
+  // allocate as meta (for secure mode)
+  // we could also allocate on the main heap; this is recursion safe as that uses the fast local key
+  mi_memid_t memid = (tls_old==NULL ? _mi_memid_none() : tls_old->memid);
   mi_thread_locals_t* tls = (mi_thread_locals_t*)_mi_meta_rezalloc(_mi_subproc(), tls_old, sizeof(mi_thread_locals_t) + count*sizeof(mi_tls_slot_t), &memid);
   if mi_unlikely(tls==NULL) return NULL;
   tls->memid = memid;
