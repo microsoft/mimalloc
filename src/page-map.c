@@ -244,7 +244,6 @@ mi_decl_nodiscard static inline bool mi_page_map_is_committed(size_t idx, size_t
 }
 
 mi_decl_nodiscard static mi_decl_noinline bool mi_page_map_commit_entries(size_t bit_idx) {
-  mi_assert_internal(submap!=NULL && *submap==NULL);
   const size_t entries_per_cbit = mi_atomic_load_relaxed(&mi_page_map_entries_per_cbit);
   uint8_t* start = (uint8_t*)&_mi_page_map[bit_idx * entries_per_cbit];
   // note: we rely on uncommitted memory to be zero initialized on the first commit (and further concurrent commits leave the memory as is).
