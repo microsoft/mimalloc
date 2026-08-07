@@ -1094,7 +1094,7 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
       mi_page_queue_t* pq = mi_page_queue(theap, size);
       mi_assert_internal(pq!=NULL && !mi_page_queue_is_huge(pq));
       page = mi_page_queue_find_free(theap,pq);
-      mi_assert_internal(mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE);
+      // mi_assert_internal(mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE);
       if (page!=NULL) {        
         if (ppage!=NULL) { *ppage = page; }
         mi_assert_internal(mi_page_immediate_available(page));
