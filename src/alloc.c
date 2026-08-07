@@ -235,7 +235,7 @@ extern mi_decl_forceinline void* _mi_theap_malloc_zero_ex(mi_theap_t* theap, siz
   }
 }
 
-void* _mi_theap_malloc_zero(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept {
+inline void* _mi_theap_malloc_zero(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept {
   return _mi_theap_malloc_zero_ex(theap, size, zero, 0, ppage);
 }
 
@@ -243,7 +243,7 @@ void* _mi_theap_malloc_zero(mi_theap_t* theap, size_t size, bool zero, mi_page_t
 // Main allocation functions
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_malloc(mi_theap_t* theap, size_t size) mi_attr_noexcept {
-  return _mi_theap_malloc_zero(theap, size, false, NULL);
+  return _mi_theap_malloc_zero_ex(theap, size, false, 0, NULL);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_malloc(size_t size) mi_attr_noexcept {
