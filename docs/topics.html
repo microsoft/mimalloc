@@ -34,7 +34,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;1.8/2.1</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -112,17 +112,18 @@ $(function(){initNavTree('topics.html',''); initResizable(true); });
 <tr id="row_0_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__malloc.html" target="_self">Basic Allocation</a></td><td class="desc">The basic allocation interface </td></tr>
 <tr id="row_1_" class="odd"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__aligned.html" target="_self">Aligned Allocation</a></td><td class="desc">Allocating aligned memory blocks </td></tr>
 <tr id="row_2_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__typed.html" target="_self">Typed Macros</a></td><td class="desc">Typed allocation macros </td></tr>
-<tr id="row_3_" class="odd"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__zeroinit.html" target="_self">Zero initialized re-allocation</a></td><td class="desc">Re-allocation of zero initialized blocks </td></tr>
-<tr id="row_4_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__heap.html" target="_self">Heaps</a></td><td class="desc">First-class heaps </td></tr>
-<tr id="row_5_" class="odd"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__analysis.html" target="_self">Heap Introspection</a></td><td class="desc">Walk areas and blocks of the heap at runtime </td></tr>
-<tr id="row_6_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__arenas.html" target="_self">Arenas</a></td><td class="desc">Arenas are large memory areas (usually 1GiB+) from which mimalloc allocates memory </td></tr>
-<tr id="row_7_" class="odd"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__subproc.html" target="_self">Subprocesses</a></td><td class="desc">A sub-process contains its own arena's and heaps that are fully separate from the main (sub) process </td></tr>
-<tr id="row_8_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__extended.html" target="_self">Extended Functions</a></td><td class="desc">Internal functionality </td></tr>
-<tr id="row_9_" class="odd"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__stats.html" target="_self">Statistics</a></td><td class="desc">Print out allocation statistics </td></tr>
-<tr id="row_10_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__options.html" target="_self">Runtime Options</a></td><td class="desc">Set runtime parameters </td></tr>
-<tr id="row_11_" class="odd"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__theap.html" target="_self">Thread-local heaps</a></td><td class="desc"><b>v3</b>: Thread local heaps </td></tr>
-<tr id="row_12_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__posix.html" target="_self">Posix</a></td><td class="desc"><code>mi_</code> prefixed implementations of various Posix, Unix, and C++ allocation functions. Defined for convenience as all redirect to the regular mimalloc API </td></tr>
-<tr id="row_13_" class="odd"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__cpp.html" target="_self">C++ wrappers</a></td><td class="desc"><code>mi_</code> prefixed implementations of various C++ allocation functions </td></tr>
+<tr id="row_3_" class="odd"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__constantsize.html" target="_self">Constant size allocation</a></td><td class="desc">Constant size allocation and freeing For example: </td></tr>
+<tr id="row_4_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__zeroinit.html" target="_self">Zero initialized re-allocation</a></td><td class="desc">Re-allocation of zero initialized blocks </td></tr>
+<tr id="row_5_" class="odd"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__heap.html" target="_self">Heaps</a></td><td class="desc">First-class heaps </td></tr>
+<tr id="row_6_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__analysis.html" target="_self">Heap Introspection</a></td><td class="desc">Walk areas and blocks of the heap at runtime </td></tr>
+<tr id="row_7_" class="odd"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__arenas.html" target="_self">Arenas</a></td><td class="desc">Arenas are large memory areas (usually 1GiB+) from which mimalloc allocates memory </td></tr>
+<tr id="row_8_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__subproc.html" target="_self">Subprocesses</a></td><td class="desc">A sub-process contains its own arena's and heaps that are fully separate from the main (sub) process </td></tr>
+<tr id="row_9_" class="odd"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__extended.html" target="_self">Extended Functions</a></td><td class="desc">Internal functionality </td></tr>
+<tr id="row_10_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__stats.html" target="_self">Statistics</a></td><td class="desc">Print out allocation statistics </td></tr>
+<tr id="row_11_" class="odd"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__options.html" target="_self">Runtime Options</a></td><td class="desc">Set runtime parameters </td></tr>
+<tr id="row_12_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__theap.html" target="_self">Thread-local heaps</a></td><td class="desc"><b>v3</b>: Thread local heaps </td></tr>
+<tr id="row_13_" class="odd"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__posix.html" target="_self">Posix</a></td><td class="desc"><code>mi_</code> prefixed implementations of various Posix, Unix, and C++ allocation functions. Defined for convenience as all redirect to the regular mimalloc API </td></tr>
+<tr id="row_14_" class="even"><td class="entry"><span style="width:16px;display:inline-block;">&#160;</span><a class="el" href="group__cpp.html" target="_self">C++ wrappers</a></td><td class="desc"><code>mi_</code> prefixed implementations of various C++ allocation functions </td></tr>
 </table>
 </div><!-- directory -->
 </div><!-- contents -->

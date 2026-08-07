@@ -418,6 +418,7 @@ void* _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t offse
     void* const p = (uint8_t*)start + extra;
     mi_assert(_mi_is_aligned((uint8_t*)p + offset, alignment));
     // decommit the overallocation at the start
+    // note: this double counts the decommit when freeing `memid`. Should we keep commit size in the memid as well?
     if (commit && extra >= _mi_os_page_size()) {
       _mi_os_decommit(start, extra);
     }
