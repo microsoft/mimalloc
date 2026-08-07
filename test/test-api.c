@@ -404,7 +404,7 @@ int main(void) {
   CHECK_BODY("free_small1") {
     for(size_t n = 1; n < MI_SMALL_SIZE_MAX; n *=2) {
       const size_t size = n*sizeof(int);
-      int* p = mi_zalloc(size);
+      int* p = (int*)mi_zalloc(size);
       p[n-1] = 42;
       mi_free_size(p,size);
     }
@@ -413,9 +413,9 @@ int main(void) {
   CHECK_BODY("free_small2") {
     for(size_t n = 1; n < MI_SMALL_SIZE_MAX; n *=2) {
       const size_t size = n*sizeof(int);
-      int* p = mi_zalloc(size);
+      int* p = (int*)mi_zalloc(size);
       p[n-1] = 42;
-      p = mi_rezalloc(p, size + MI_SMALL_SIZE_MAX);
+      p = (int*)mi_rezalloc(p, size + MI_SMALL_SIZE_MAX);
       mi_free_size(p,size + MI_SMALL_SIZE_MAX);
     }
   }
