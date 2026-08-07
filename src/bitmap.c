@@ -760,7 +760,7 @@ static mi_decl_noinline bool mi_bchunk_try_find_and_clear8(mi_bchunk_t* chunk, s
     const size_t chunk_idx = bidx / 8;
     const size_t idx = (bidx % 8)*8;
     mi_assert_internal(chunk_idx < MI_BCHUNK_FIELDS);
-    if mi_likely(mi_bfield_atomic_try_clear8_optimistic(&chunk->bfields[chunk_idx], idx, NULL, did_temp_clear_bits) {  // clear it atomically
+    if mi_likely(mi_bfield_atomic_try_clear8_optimistic(&chunk->bfields[chunk_idx], idx, NULL, did_temp_clear_bits)) {  // clear it atomically
       *pidx = (chunk_idx*MI_BFIELD_BITS) + idx;
       mi_assert_internal(*pidx + 8 <= MI_BCHUNK_BITS);
       return true;
