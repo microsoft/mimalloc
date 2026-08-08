@@ -598,7 +598,7 @@ static inline bool mi_bchunk_try_find_and_clear_at(mi_bchunk_t* chunk, size_t ch
   if (b==0) return false;
   int tries = 0;
   do {  
-    const mi_bfield_t mask = (b & -b);        // clear all bits except the least-significant one
+    const mi_bfield_t mask = (b & (~b+1));    // == (b & -b) but avoids a compiler warning -- clear all bits except the least-significant one
     b = mi_atomic_and_acq_rel(bfield,~mask);  // clear the bit and set `b` to the previous value
     if mi_likely((b&mask)==mask) {            // if we transitioned from 1 to 0, we actually cleared it
       size_t bitidx = 0;
