@@ -321,8 +321,8 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
   const size_t full_block_size = (pq == NULL || mi_page_is_huge(page) ? mi_page_block_size(page) : block_size); // see also: mi_segment_huge_page_alloc
   mi_assert_internal(full_block_size >= block_size);
   mi_page_init(heap, page, full_block_size, heap->tld);
-  mi_heap_stat_increase(heap, pages, 1);
-  mi_heap_stat_increase(heap, page_bins[_mi_page_stats_bin(page)], 1);
+  _mi_stat_increase(&heap->tld->stats.pages, 1);
+  _mi_stat_increase(&heap->tld->stats.page_bins[_mi_page_stats_bin(page)], 1);
   if (pq != NULL) { mi_page_queue_push(heap, pq, page); }
   mi_assert_expensive(_mi_page_is_valid(page));
   return page;
@@ -701,7 +701,7 @@ static bool mi_page_extend_free(mi_heap_t* heap, mi_page_t* page, mi_tld_t* tld)
   }
   // enable the new free list
   page->capacity += (uint16_t)extend;
-  mi_stat_increase(tld->stats.page_committed, extend * bsize);
+  _mi_stat_increase(&tld->stats.page_committed, extend * bsize);
   mi_assert_expensive(mi_page_is_valid_init(page));
   return true;
 }
