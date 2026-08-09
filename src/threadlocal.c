@@ -55,7 +55,7 @@ static mi_thread_locals_t mi_thread_locals_empty = mi_init_struct_zero;
 #define mi_define_thread_local(tp,name,initval) \
   static mi_decl_thread tp __##name = initval; \
   static inline tp   name##_peek(void)    { return __##name; } \
-  static inline tp   name##_get(void)     { return __##name; } \
+  static inline tp   name##_get(void)     { tp result = __##name; return (result!=NULL ? result : initval); } \
   static inline bool name##_set(tp val)   { __##name = val; return true; } \
   static inline void name##_delete(void)  {  }
 #endif
