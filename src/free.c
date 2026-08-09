@@ -500,6 +500,17 @@ void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
   mi_free(p);
 }
 
+// checked free
+void mi_cfree(void* p) mi_attr_noexcept {
+  mi_page_t* const page = _mi_checked_ptr_page(p);
+  if mi_likely(page!=NULL) {
+    _mi_free_in_page(p,page);
+  }
+  // if (mi_is_in_heap_region(p)) {
+  //   mi_free(p);
+  // }
+}
+
 
 // ------------------------------------------------------
 // Check for double free in secure and debug mode
