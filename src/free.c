@@ -187,7 +187,7 @@ static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg)
 
 // Free a block
 // Fast path written carefully to prevent register spilling on the stack
-static mi_decl_forceinline void mi_free_ex(void* p, size_t* pblock_size, mi_page_t* page, bool allow_collect)  
+static mi_decl_forceinline void mi_free_ex(void* p, mi_page_t* page, size_t* pblock_size, bool allow_collect)  
 {
   if mi_unlikely(page==NULL) { // page will be NULL if p==NULL
     if (pblock_size!=NULL) { *pblock_size = 0; }
@@ -218,14 +218,18 @@ static mi_decl_forceinline void mi_free_ex(void* p, size_t* pblock_size, mi_page
   }
 }
 
+void _mi_free_in_page(void* p, mi_page_t* page) mi_attr_noexcept {
+  mi_free_ex(p, page, NULL, true);
+}
+
 void mi_free(void* p) mi_attr_noexcept {
   mi_page_t* const page = mi_validate_ptr_page(p,"mi_free");  
-  mi_free_ex(p, NULL, page, true);
+  mi_free_ex(p, page, NULL, true);
 }
 
 void mi_ufree(void* p, size_t* pblock_size) mi_attr_noexcept {
   mi_page_t* const page = mi_validate_ptr_page(p,"mi_ufree");  
-  mi_free_ex(p, pblock_size, page, true);
+  mi_free_ex(p, page, pblock_size, true);
 }
 
 void mi_free_small(void* p) mi_attr_noexcept {
@@ -244,17 +248,21 @@ void mi_free_small(void* p) mi_attr_noexcept {
       mi_assert(page == mi_validate_ptr_page(p,"mi_free_small"));
       mi_assert((void*)page == _mi_align_down_ptr(mi_page_start(page),MI_SMALL_PAGE_SIZE));
       mi_assert(page->block_size <= mi_good_size(MI_SMALL_SIZE_MAX));  // note: not `MI_SMALL_MAX_OBJ_SIZE` as we need to match `mi_(heap_)malloc_small`
-      mi_free_ex(p, NULL, page, true);
+      mi_free_ex(p, page, NULL, true);
     #endif
   #else
     mi_free(p);
   #endif  
 }
 
+void _mi_free_subproc_safe_in_page(void* p, mi_page_t* page) mi_attr_noexcept {
+  mi_free_ex(p, page, NULL, false);
+}
+
 // Free a pointer that is potentially allocated in a different sub-process
-void _mi_free_subproc_safe(void* p) {
+void _mi_free_subproc_safe(void* p) mi_attr_noexcept {
   mi_page_t* const page = mi_validate_ptr_page(p,"_mi_free_subproc_safe");  
-  mi_free_ex(p, NULL, page, false);
+  mi_free_ex(p, page, NULL, false);
 }
 
 

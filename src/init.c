@@ -12,10 +12,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <string.h>  // memcpy, memset
 #include <stdlib.h>  // atexit
 
-
-#define MI_MEMID_INIT(kind)   {{{NULL,0}}, kind, true /* pinned */, true /* committed */, false /* zero */ }
-#define MI_MEMID_STATIC       MI_MEMID_INIT(MI_MEM_STATIC)
-
 // Empty page used to initialize the small free pages array
 static const mi_page_t mi_page_empty = {
   MI_ATOMIC_VAR_INIT(0),  // xthread_id

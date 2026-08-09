@@ -303,6 +303,8 @@ typedef struct mi_memid_s {
   bool          initially_zero;     // `true` if the memory was originally zero initialized
 } mi_memid_t;
 
+#define MI_MEMID_INIT(kind)   {{{NULL,0}}, kind, true /* pinned */, true /* committed */, false /* zero */ }
+#define MI_MEMID_STATIC       MI_MEMID_INIT(MI_MEM_STATIC)
 
 static inline bool mi_memid_is_os(mi_memid_t memid) {
   return mi_memkind_is_os(memid.memkind);

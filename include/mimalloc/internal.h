@@ -331,7 +331,9 @@ mi_block_t*   _mi_page_ptr_unalign(const mi_page_t* page, const void* p);
 void          _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size);
 
 // "free.c"
-void          _mi_free_subproc_safe(void* p);
+void          _mi_free_in_page(void* p, mi_page_t* page) mi_attr_noexcept;
+void          _mi_free_subproc_safe_in_page(void* p, mi_page_t* page) mi_attr_noexcept;
+void          _mi_free_subproc_safe(void* p) mi_attr_noexcept;
 void          _mi_page_unguard_all(mi_page_t* page);
 size_t        _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr_noexcept;
 
@@ -715,8 +717,15 @@ static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
 #define MI_PAGE_MAP_SHIFT         (MI_MAX_VABITS - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT)
 
 typedef mi_page_t**   mi_submap_t;
-extern mi_decl_hidden _Atomic(mi_submap_t)* _mi_page_map;
-extern mi_decl_hidden _Atomic(void*) _mi_page_map_max_address;
+typedef struct mi_page_map_s {  
+  _Atomic(size_t)      committed_count;  // currently committed entries
+  size_t               reserved_size;    // full reserved size (mi_page_map_t + submaps)
+  mi_memid_t           memid;            // provenance
+  mi_lock_t            lock;             // used when allocating new submaps
+  mi_decl_cache_align _Atomic(mi_submap_t) submaps[1];
+} mi_page_map_t;
+
+extern mi_decl_hidden _Atomic(mi_page_map_t*) __mi_page_map;
 
 static inline size_t _mi_page_map_index(const void* p, size_t* sub_idx) {
   const size_t u = (size_t)((uintptr_t)p / MI_ARENA_SLICE_SIZE);
@@ -724,25 +733,28 @@ static inline size_t _mi_page_map_index(const void* p, size_t* sub_idx) {
   return (u / MI_PAGE_MAP_SUB_COUNT);
 }
 
-static inline mi_submap_t _mi_page_map_at(size_t idx) {
-  return mi_atomic_load_ptr_relaxed(mi_page_t*, &_mi_page_map[idx]);
+static inline mi_page_map_t* _mi_page_map(void) {
+  return mi_atomic_load_ptr_relaxed(mi_page_map_t,&__mi_page_map);
+}
+
+static inline mi_submap_t _mi_page_map_at(const mi_page_map_t* pmap, size_t idx) {
+  return mi_atomic_load_ptr_relaxed(mi_page_t*, &pmap->submaps[idx]);
 }
 
 static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
+  const mi_page_map_t* pmap = _mi_page_map();
   size_t sub_idx;
   const size_t idx = _mi_page_map_index(p, &sub_idx);
-  return (_mi_page_map_at(idx))[sub_idx];  // NULL if p==NULL
+  return _mi_page_map_at(pmap,idx)[sub_idx];  // NULL if p==NULL
 }
 
 static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
-  #if MI_MIN_VABITS < MI_INTPTR_BITS
-  if mi_unlikely(((uintptr_t)p >> MI_MIN_VABITS) != 0) {
-    if (p > mi_atomic_load_ptr_relaxed(void, &_mi_page_map_max_address)) return NULL;
-  }
-  #endif
+  const mi_page_map_t* pmap = _mi_page_map();
+  const size_t committed_count = mi_atomic_load_relaxed(&pmap->committed_count);
   size_t sub_idx;
   const size_t idx = _mi_page_map_index(p, &sub_idx);
-  mi_submap_t const sub = _mi_page_map_at(idx);
+  if mi_unlikely(idx > committed_count) return NULL;
+  mi_submap_t const sub = _mi_page_map_at(pmap,idx);
   if mi_unlikely(sub == NULL) return NULL;
   return sub[sub_idx];
 }

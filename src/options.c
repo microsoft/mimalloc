@@ -85,7 +85,7 @@ int mi_version(void) {
 #endif
 
 #ifndef MI_DEFAULT_PAGEMAP_COMMIT
-#if defined(__APPLE__)  // when overloading malloc, we still get mixed pointers sometimes on macOS; this avoids a bad access
+#if defined(__APPLE__) && MI_PAGE_MAP_FLAT  // when overloading malloc, we still get mixed pointers sometimes on macOS; this avoids a bad access
 #define MI_DEFAULT_PAGEMAP_COMMIT 1
 #else
 #define MI_DEFAULT_PAGEMAP_COMMIT 0
