@@ -399,8 +399,8 @@ elseif(MI_OVERRIDE AND NOT MI_NO_FREE_IS_CHECKED)
 endif()
 
 if(MI_OPT_FREE)  
-  if("$CMAKE_SYSTEM_NAME" STREQUAL "WASI")  # todo: also test for EMSCRIPTEN? or any 32-bit host?
-    message(STATUS "Disregarding MI_OPT_FREE as the host does not support large alignment well (WASI) (MI_OPT_FREE=OFF)")
+  if(CMAKE_SYSTEM_NAME STREQUAL "WASI")  # todo: also test for EMSCRIPTEN? or any 32-bit host?
+    message(STATUS "Disregarding MI_OPT_FREE as the target does not support large alignment well (WASI) (MI_OPT_FREE=OFF)")
   elseif(MI_SECURE)
     message(STATUS "Cannot enable MI_OPT_FREE in secure mode (MI_OPT_FREE=OFF)")
   else()
@@ -591,6 +591,8 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
       set(MI_OPT_ARCH_FLAGS "-march=haswell;-mavx2")    # fast bit scan (since 2013)
     elseif(MI_ARCH STREQUAL "arm64")
       set(MI_OPT_ARCH_FLAGS "-march=armv8.1-a")         # fast atomics (since 2016)
+    elseif(MI_ARCH STREQUAL "riscv64")
+      set(MI_OPT_ARCH_FLAGS "-march=rv64gc_zacas")      # fast atomics (since 2023)
     endif()
   endif()
 endif()
