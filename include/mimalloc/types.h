@@ -123,7 +123,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Place page meta info at the start of the page area or keep it separate?
 // Separate keeps the page info at the arena start (default) which is more secure
 // and reduces wasted space due to alignment and block sizes.
-// (but also reserves more memory up front (about 2MiB per GiB))
+// (but if MI_OPT_FREE is false, also reserves more memory up front (about 2MiB per GiB))
 #if !defined(MI_PAGE_META_IS_SEPARATED)
 #if MI_PAGE_MAP_FLAT
 #define MI_PAGE_META_IS_SEPARATED    0
@@ -132,11 +132,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
-#define MI_OPT_META_ALIGNED   1
-#if MI_OPT_META_ALIGNED && MI_PAGE_META_IS_SEPARATED
+// We can choose to page meta info aligned at the start of every MI_PAGE_META_CHUNKS
+// This can be used to have a faster `mi_free(_small)` as we can avoid a page_map lookup.
+// This only works if valid pointers are passed to `mi_free` though. However, checked
+// free `mi_cfree` can still uses the page map to validate pointers.
+#if MI_OPT_FREE
+#if MI_PAGE_META_IS_SEPARATED
 #define MI_PAGE_META_ALIGNED_FREE_SMALL 0
-#define MI_PAGE_META_ALIGNED  1
-#define MI_PAGE_META_CHUNKS   8
+#define MI_PAGE_META_IS_ALIGNED         1        
+#define MI_PAGE_META_CHUNKS             MI_INTPTR_SIZE
+#else
+#warning "cannot optimize free with alignment since the page meta data is not separated (due to MI_PAGE_MAP_FLAT?)"
+#endif
 #endif
 
 // We can choose to only put page info of small pages at the start of the page area.
@@ -225,9 +232,9 @@ terms of the MIT license. A copy of the license can be found in the file
 // Minimal commit for a page on-demand commit 
 #define MI_PAGE_MIN_COMMIT_SIZE   (16*MI_KiB) /* MI_ARENA_SLICE_SIZE */
 
-#if MI_PAGE_META_ALIGNED
+#if MI_PAGE_META_IS_ALIGNED
 #define MI_PAGE_META_COUNT        (MI_PAGE_META_CHUNKS * MI_BCHUNK_BITS)
-#define MI_PAGE_META_ALIGN        (MI_PAGE_META_COUNT * MI_ARENA_SLICE_SIZE)
+#define MI_PAGE_META_ALIGN        (MI_PAGE_META_COUNT * MI_ARENA_SLICE_SIZE)  // 256 MiB (32 MiB on 32-bit)
 #define MI_ARENA_ALIGN            MI_PAGE_META_ALIGN
 #else
 #define MI_ARENA_ALIGN            MI_ARENA_SLICE_ALIGN
@@ -404,7 +411,7 @@ typedef uintptr_t mi_thread_free_t;
 // - Using `uint16_t` does not seem to slow things down
 
 typedef struct mi_page_s {  
-  #if (MI_PAGE_META_ALIGNED)
+  #if (MI_PAGE_META_IS_ALIGNED)
   _Atomic(struct mi_page_s*) self;
   #endif
   _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= `theap->thread_id (or 0 or 4 if abandoned) | page_flags`)
@@ -433,7 +440,7 @@ typedef struct mi_page_s {
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   uintptr_t                 keys[2];           // const: two random keys to encode the free lists (see `_mi_block_next`) or padding canary
   #endif 
-  #if (MI_PAGE_META_ALIGNED && MI_INTPTR_SIZE==8)
+  #if (MI_PAGE_META_IS_ALIGNED && MI_INTPTR_SIZE==8)
   uintptr_t                 padding;
   #endif
 } mi_page_t;

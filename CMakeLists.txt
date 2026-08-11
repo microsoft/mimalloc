@@ -39,7 +39,7 @@ option(MI_LOCAL_DYNAMIC_TLS "Use local-dynamic-tls, a slightly slower but dlopen
 option(MI_LIBC_MUSL         "Enable this when linking with musl libc" OFF)
 
 # advanced
-option(MI_OPT_FREE_SMALL    "Use optimized `mi_free_small` without pagemap lookup (can only be used if SECURE or GUARDED mode are off)" OFF)
+option(MI_OPT_FREE          "Use aligned `mi_free(_small)` without pagemap lookup (can only be used if SECURE mode is off)" ON)
 option(MI_PADDING           "Enable padding to detect heap block overflow (always on in DEBUG or SECURE mode, or with Valgrind/ASAN)" OFF)
 option(MI_NO_PADDING        "Force no use of padding even in DEBUG mode etc." OFF)
 option(MI_SKIP_COLLECT_ON_EXIT "Skip collecting memory on program exit" OFF)
@@ -67,6 +67,7 @@ option(MI_TLS_RECURSE_GUARD  "Force a recursion check on thread local access (fo
 option(MI_WIN_USE_FLS       "Use Fiber local storage on Windows to detect thread termination (deprecated)" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 option(MI_USE_LIBATOMIC     "Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
+option(MI_OPT_FREE_SMALL    "Deprecated: Use aligned `mi_free_small` without pagemap lookup (can only be used if SECURE or GUARDED mode are off)" OFF)
 
 include(CheckLinkerFlag)    # requires cmake 3.18
 include(CheckIncludeFiles)
@@ -397,14 +398,27 @@ elseif(MI_OVERRIDE AND NOT MI_NO_FREE_IS_CHECKED)
   list(APPEND mi_cflags_dynamic -DMI_FREE_IS_CHECKED=1)
 endif()
 
-if(NOT MI_OPT_FREE_SMALL AND NOT MI_DEBUG AND NOT MI_GUARDED AND NOT MI_SECURE) 
+if(MI_OPT_FREE)  
+  if("$CMAKE_SYSTEM_NAME" STREQUAL "WASI")  # todo: also test for EMSCRIPTEN? or any 32-bit host?
+    message(STATUS "Disregarding MI_OPT_FREE as the host does not support large alignment well (WASI) (MI_OPT_FREE=OFF)")
+  elseif(MI_SECURE)
+    message(STATUS "Cannot enable MI_OPT_FREE in secure mode (MI_OPT_FREE=OFF)")
+  else()
+    message(STATUS "Use aligned `mi_free(_small)` to avoid a pagemap lookup (MI_OPT_FREE=ON)")
+    list(APPEND mi_defines MI_OPT_FREE=1) 
+  endif()
+endif()
+
+if(NOT MI_OPT_FREE_SMALL AND NOT MI_DEBUG AND NOT MI_GUARDED AND NOT MI_SECURE AND NOT MI_OPT_FREE) 
 set(MI_OPT_FREE_SMALL ON)
 endif()
 if(MI_OPT_FREE_SMALL)
-    if(MI_GUARDED OR MI_SECURE)
+  if(MI_GUARDED OR MI_SECURE)
     message(STATUS "Cannot enable MI_OPT_FREE_SMALL in secure or guarded mode (MI_OPT_FREE_SMALL=OFF)")
+  elseif(MI_OPT_FREE)
+    message(STATUS "Cannot enable MI_OPT_FREE_SMALL with MI_OPT_FREE (MI_OPT_FREE_SMALL=OFF)")
   else()
-    message(STATUS "Optimize `mi_free_small` to not need a pagemap lookup (MI_OPT_FREE_SMALL=ON)")
+    message(STATUS "Use aligned `mi_free_small` to avoid a pagemap lookup (MI_OPT_FREE_SMALL=ON)")
     list(APPEND mi_defines MI_OPT_FREE_SMALL=1)
   endif()
 endif()

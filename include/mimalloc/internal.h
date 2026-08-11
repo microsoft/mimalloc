@@ -761,7 +761,7 @@ static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
 
 #endif
 
-#if MI_PAGE_META_ALIGNED
+#if MI_PAGE_META_IS_ALIGNED
 static inline mi_page_t* _mi_ptr_page_align0(const void* p) {
   mi_page_t* const page_metas = (mi_page_t*)_mi_align_down_ptr(p,MI_PAGE_META_ALIGN);
   const ptrdiff_t page_idx = ((uint8_t*)p - (uint8_t*)page_metas)/MI_ARENA_SLICE_SIZE;
@@ -779,7 +779,7 @@ static inline mi_page_t* _mi_ptr_page(const void* p) {
   mi_assert_internal(p==NULL || mi_is_in_heap_region(p));
   #if MI_SECURE // || MI_FREE_IS_CHECKED
     return _mi_checked_ptr_page(p);
-  #elif MI_PAGE_META_ALIGNED 
+  #elif MI_PAGE_META_IS_ALIGNED 
     mi_page_t* const page = _mi_ptr_page_align(p);
     #if MI_DEBUG
     mi_page_t* const cpage = _mi_checked_ptr_page(p);
@@ -843,7 +843,7 @@ static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
 }
 
 static inline bool mi_page_meta_is_separated(const mi_page_t* page) {
-  #if MI_PAGE_META_ALIGNED
+  #if MI_PAGE_META_IS_ALIGNED
   MI_UNUSED_RELEASE(page);
   mi_assert_internal(page != _mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));  
   return true;

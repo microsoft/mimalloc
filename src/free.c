@@ -229,15 +229,19 @@ void _mi_free_in_page(void* p, mi_page_t* page) mi_attr_noexcept {
 }
 
 void mi_free(void* p) mi_attr_noexcept {  
-  #if MI_PAGE_META_ALIGNED
-  mi_page_t* page = _mi_ptr_page_align0(p);
-  if mi_unlikely(page==NULL) return;
-  page = mi_atomic_load_ptr_relaxed(mi_page_t,&page->self);
-  mi_assert_internal(page == _mi_safe_ptr_page(p));
-  mi_free_nonnull(p, page, NULL, true);
+  #if MI_PAGE_META_IS_ALIGNED
+    mi_page_t* page = _mi_ptr_page_align0(p);
+    if mi_unlikely(page==NULL) return;
+    #if MI_DEBUG
+      mi_page_t* const cpage = _mi_safe_ptr_page(p);
+      mi_assert_internal(cpage!=NULL);
+    #endif
+    page = mi_atomic_load_ptr_relaxed(mi_page_t,&page->self);
+    mi_assert_internal(page == cpage);
+    mi_free_nonnull(p, page, NULL, true);
   #else
-  mi_page_t* const page = mi_validate_ptr_page(p,"mi_free");    
-  mi_free_ex(p, page, NULL, true);
+    mi_page_t* const page = mi_validate_ptr_page(p,"mi_free");    
+    mi_free_ex(p, page, NULL, true);
   #endif
 }
 
@@ -250,7 +254,7 @@ void mi_free_small(void* p) mi_attr_noexcept {
   // We can only call `mi_free_small` for pointers allocated with `mi_(heap_)malloc_small`.
   // If we keep page info in front of the page area for small objects, we can find the info
   // just by aligning down the pointer instead of looking it up in the page map.
-  #if !MI_PAGE_META_ALIGNED && MI_PAGE_META_ALIGNED_FREE_SMALL 
+  #if !MI_PAGE_META_IS_ALIGNED && MI_PAGE_META_ALIGNED_FREE_SMALL 
     #if MI_GUARDED 
     #warning "MI_OPT_FREE_SMALL (MI_PAGE_META_ALIGNED_FREE_SMALL) ignored as MI_GUARDED is defined"
     mi_free(p);
@@ -491,7 +495,7 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
       return;
     }
   #endif
-  #if MI_OPT_FREE_SMALL && !MI_PAGE_META_ALIGNED
+  #if MI_OPT_FREE_SMALL && !MI_OPT_FREE
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {
     mi_free_small(p); 
   }

@@ -14,7 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Empty page used to initialize the small free pages array
 static const mi_page_t mi_page_empty = {
-  #if MI_PAGE_META_ALIGNED
+  #if MI_PAGE_META_IS_ALIGNED
   MI_ATOMIC_VAR_INIT(NULL),  // self
   #endif
   MI_ATOMIC_VAR_INIT(0),  // xthread_id
@@ -36,7 +36,7 @@ static const mi_page_t mi_page_empty = {
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   { 0, 0 },               // keys
   #endif
-  #if (MI_PAGE_META_ALIGNED && MI_INTPTR_SIZE==8)
+  #if (MI_PAGE_META_IS_ALIGNED && MI_INTPTR_SIZE==8)
   0,                      // padding 
   #endif
 };
@@ -576,7 +576,7 @@ static void mi_process_init_once(void) {
     }
   }
 
-  #if MI_PAGE_META_ALIGNED
+  #if MI_PAGE_META_IS_ALIGNED
   mi_assert_internal((sizeof(mi_page_t)%MI_MAX_ALIGN_SIZE) == 0);  // or page->ma_offset might not work
   #endif
 }

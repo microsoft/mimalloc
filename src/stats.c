@@ -416,12 +416,13 @@ void _mi_stats_print(const char* name, size_t id, const mi_stats_t* stats, mi_ou
     mi_stat_print_ex(&stats->heaps, "heaps", 0, out, arg, "");
     mi_stat_counter_print(&stats->heaps_delete_wait, "heap waits", out, arg);
     _mi_fprintf(out, arg, "\n");
-
-    mi_print_header("process", out, arg);
-    mi_stat_print_ex(&stats->threads, "threads", 0, out, arg, "");
-    _mi_fprintf(out, arg, "  %-10s: %5i\n", "numa nodes", _mi_os_numa_node_count());
-    mi_process_info_print_out(out, arg);
   }
+
+  mi_print_header("process", out, arg);
+  mi_stat_print_ex(&stats->threads, "threads", 0, out, arg, "");
+  _mi_fprintf(out, arg, "  %-10s: %5i\n", "numa nodes", _mi_os_numa_node_count());
+  mi_process_info_print_out(out, arg);
+  
   _mi_fprintf(out, arg, "\n");
 }
 
