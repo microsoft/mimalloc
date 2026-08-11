@@ -36,10 +36,12 @@ static const mi_page_t mi_page_empty = {
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   { 0, 0 },               // keys
   #endif
-  #if (MI_INTPTR_SIZE==4 && !MI_ENCODE_FREELIST && !MI_PADDING)
+  #if MI_PAGE_META_IS_ALIGNED
+  #if MI_INTPTR_SIZE==8 || (MI_INTPTR_SIZE==4 && !MI_ENCODE_FREELIST && !MI_PADDING)
   { 0 },                  // padding 
-  #elif (MI_INTPTR_SIZE==4)
+  #elif MI_INTPTR_SIZE==4
   { 0, 0, 0 },
+  #endif
   #endif
 };
 

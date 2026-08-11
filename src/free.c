@@ -107,7 +107,10 @@ mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
 
   const size_t diff = (uint8_t*)p - mi_page_start(page);
   const size_t block_size = mi_page_block_size(page);
-  const size_t adjust = (_mi_is_power_of_two(block_size) ? diff & (block_size - 1) : diff % block_size);
+  size_t adjust = diff & (block_size - 1); 
+  if mi_unlikely(!_mi_is_power_of_two(block_size)) {
+    adjust = diff % block_size;     
+  }
   return (mi_block_t*)((uintptr_t)p - adjust);
 }
 
