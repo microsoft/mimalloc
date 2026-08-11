@@ -462,6 +462,8 @@ int main(int argc, char** argv) {
   //  fputs(json,stderr);
   //  mi_free(json);
   //}
+  #else
+  mi_debug_show_arenas();  
   #endif
   mi_collect(true);
   mi_stats_print(NULL);

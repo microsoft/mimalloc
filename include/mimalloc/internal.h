@@ -843,7 +843,11 @@ static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
 }
 
 static inline bool mi_page_meta_is_separated(const mi_page_t* page) {
-  #if MI_PAGE_META_IS_SEPARATED
+  #if MI_PAGE_META_ALIGNED
+  MI_UNUSED_RELEASE(page);
+  mi_assert_internal(page != _mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));  
+  return true;
+  #elif MI_PAGE_META_IS_SEPARATED
   // usually separated but can still be in front for direct OS allocations (due to size or alignment) or due to MI_PAGE_META_ALIGNED_FREE_SMALL
   return (page->memid.memkind == MI_MEM_ARENA && page != _mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));
   #else

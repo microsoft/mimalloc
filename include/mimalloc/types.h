@@ -432,7 +432,7 @@ typedef struct mi_page_s {
   
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   uintptr_t                 keys[2];           // const: two random keys to encode the free lists (see `_mi_block_next`) or padding canary
-  #endif
+  #endif 
   #if (MI_PAGE_META_ALIGNED && MI_INTPTR_SIZE==8)
   uintptr_t                 padding;
   #endif

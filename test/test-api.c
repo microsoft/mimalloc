@@ -110,7 +110,7 @@ int main(void) {
   };
   #if MI_INTPTR_BITS > 32
   CHECK_BODY("malloc-free-invalid-low") {
-    mi_free((void*)(MI_ZU(0x0000000003990080))); // issue #1087
+    mi_cfree((void*)(MI_ZU(0x0000000003990080))); // issue #1087
   };
   #endif
   CHECK_BODY("calloc-overflow") {
@@ -240,7 +240,7 @@ int main(void) {
     void* p[8];
     const int max_align_shift =
       #if SIZE_MAX > UINT32_MAX
-      28
+      28  /* up to 64 MiB alignment */
       #else
       20
       #endif

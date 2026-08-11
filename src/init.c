@@ -37,7 +37,7 @@ static const mi_page_t mi_page_empty = {
   { 0, 0 },               // keys
   #endif
   #if (MI_PAGE_META_ALIGNED && MI_INTPTR_SIZE==8)
-  0,
+  0,                      // padding 
   #endif
 };
 
@@ -575,6 +575,10 @@ static void mi_process_init_once(void) {
       mi_reserve_os_memory((size_t)ksize*MI_KiB, true, true);
     }
   }
+
+  #if MI_PAGE_META_ALIGNED
+  mi_assert_internal((sizeof(mi_page_t)%MI_MAX_ALIGN_SIZE) == 0);  // or page->ma_offset might not work
+  #endif
 }
 
 // Initialize the process; called by thread_init or the process loader
@@ -636,7 +640,7 @@ static void mi_process_done_once(void) {
   _mi_tls_slots_done();
   _mi_subproc_main_done();
   _mi_allocator_done();
-  _mi_verbose_message("process done\n"); // : 0x%zx\n", mi_process_tld_main.thread_id);
+  _mi_verbose_message("process done %zu\n", sizeof(mi_page_t)); // : 0x%zx\n", mi_process_tld_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore
 }
 
