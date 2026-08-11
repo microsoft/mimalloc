@@ -761,12 +761,38 @@ static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
 
 #endif
 
+#if MI_PAGE_META_ALIGNED
+static inline mi_page_t* _mi_ptr_page_align0(const void* p) {
+  mi_page_t* const page_metas = (mi_page_t*)_mi_align_down_ptr(p,MI_PAGE_META_ALIGN);
+  const ptrdiff_t page_idx = ((uint8_t*)p - (uint8_t*)page_metas)/MI_ARENA_SLICE_SIZE;
+  mi_assert_internal(page_idx >= 0 && page_idx <= MI_PAGE_META_COUNT);
+  return &page_metas[page_idx];
+}
+
+static inline mi_page_t* _mi_ptr_page_align(const void* p) {
+  mi_page_t* const page = _mi_ptr_page_align0(p);
+  return (page==NULL ? NULL : mi_atomic_load_relaxed(&page->self));
+}
+#endif
+
 static inline mi_page_t* _mi_ptr_page(const void* p) {
   mi_assert_internal(p==NULL || mi_is_in_heap_region(p));
-  #if MI_DEBUG || MI_SECURE || MI_FREE_IS_CHECKED
-  return _mi_checked_ptr_page(p);
-  #else
-  return _mi_unchecked_ptr_page(p);
+  #if MI_SECURE // || MI_FREE_IS_CHECKED
+    return _mi_checked_ptr_page(p);
+  #elif MI_PAGE_META_ALIGNED 
+    mi_page_t* const page = _mi_ptr_page_align(p);
+    #if MI_DEBUG
+    mi_page_t* const cpage = _mi_checked_ptr_page(p);
+    if (cpage!=page) {
+      mi_assert(page == cpage);
+    }
+    #endif
+    // mi_assert_internal(page->block_size != 0);
+    return page;
+  #elif MI_DEBUG
+    return _mi_checked_ptr_page(p);
+  #else  
+    return _mi_unchecked_ptr_page(p);
   #endif
 }
 

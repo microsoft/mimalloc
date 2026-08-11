@@ -132,6 +132,13 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
+#define MI_OPT_META_ALIGNED   1
+#if MI_OPT_META_ALIGNED && MI_PAGE_META_IS_SEPARATED
+#define MI_PAGE_META_ALIGNED_FREE_SMALL 0
+#define MI_PAGE_META_ALIGNED  1
+#define MI_PAGE_META_CHUNKS   8
+#endif
+
 // We can choose to only put page info of small pages at the start of the page area.
 // This can be used to have a slightly faster `mi_free_small` function for specialized
 // cases (like language runtime systems).
@@ -188,6 +195,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_BCHUNK_BITS                    (1 << MI_BCHUNK_BITS_SHIFT)         // sub-bitmaps in arena's are "bchunks" of 512 bits
 #define MI_ARENA_SLICE_SIZE               (MI_ZU(1) << MI_ARENA_SLICE_SHIFT)  // arena's allocate in slices of 64 KiB
 #define MI_ARENA_SLICE_ALIGN              (MI_ARENA_SLICE_SIZE)
+#define MI_ARENA_CHUNK_SIZE               (MI_BCHUNK_BITS * MI_ARENA_SLICE_SIZE)               
 
 #define MI_ARENA_MIN_OBJ_SLICES           (1)
 #define MI_ARENA_MAX_CHUNK_OBJ_SLICES     (MI_BCHUNK_BITS)                    // 32 MiB (or 8 MiB on 32-bit)
@@ -212,11 +220,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_BIN_COUNT (MI_BIN_FULL+1)
 
 // We never allocate more than PTRDIFF_MAX (see also <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
-#define MI_MAX_ALLOC_SIZE        PTRDIFF_MAX
+#define MI_MAX_ALLOC_SIZE         PTRDIFF_MAX
 
 // Minimal commit for a page on-demand commit 
-#define MI_PAGE_MIN_COMMIT_SIZE  (16*MI_KiB) /* MI_ARENA_SLICE_SIZE */
+#define MI_PAGE_MIN_COMMIT_SIZE   (16*MI_KiB) /* MI_ARENA_SLICE_SIZE */
 
+#if MI_PAGE_META_ALIGNED
+#define MI_PAGE_META_COUNT        (MI_PAGE_META_CHUNKS * MI_BCHUNK_BITS)
+#define MI_PAGE_META_ALIGN        (MI_PAGE_META_COUNT * MI_ARENA_SLICE_SIZE)
+#define MI_ARENA_ALIGN            MI_PAGE_META_ALIGN
+#else
+#define MI_ARENA_ALIGN            MI_ARENA_SLICE_ALIGN
+#endif
 
 // ------------------------------------------------------
 // Arena's are large reserved areas of memory allocated from
@@ -388,7 +403,10 @@ typedef uintptr_t mi_thread_free_t;
 // - The layout is optimized for `free.c:mi_free` and `alloc.c:mi_page_alloc`
 // - Using `uint16_t` does not seem to slow things down
 
-typedef struct mi_page_s {
+typedef struct mi_page_s {  
+  #if (MI_PAGE_META_ALIGNED)
+  _Atomic(struct mi_page_s*) self;
+  #endif
   _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= `theap->thread_id (or 0 or 4 if abandoned) | page_flags`)
 
   mi_block_t*               free;              // list of available free blocks (`malloc` allocates from this list)
@@ -411,9 +429,12 @@ typedef struct mi_page_s {
   struct mi_page_s*         next;              // next page owned by the theap with the same `block_size`
   struct mi_page_s*         prev;              // previous page owned by the theap with the same `block_size`
   mi_memid_t                memid;             // const: provenance of the page memory
-
+  
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   uintptr_t                 keys[2];           // const: two random keys to encode the free lists (see `_mi_block_next`) or padding canary
+  #endif
+  #if (MI_PAGE_META_ALIGNED && MI_INTPTR_SIZE==8)
+  uintptr_t                 padding;
   #endif
 } mi_page_t;
 
@@ -422,7 +443,7 @@ typedef struct mi_page_s {
 // Object sizes
 // ------------------------------------------------------
 
-#define MI_PAGE_ALIGN                     MI_ARENA_SLICE_ALIGN      // pages must be aligned on this for the page map.
+#define MI_PAGE_ALIGN                     MI_ARENA_SLICE_ALIGN      // page area's must be aligned on this for the page map.
 #define MI_PAGE_MIN_START_BLOCK_ALIGN     MI_MAX_ALIGN_SIZE         // minimal block alignment for the first block in a page (16b)
 #define MI_PAGE_MAX_START_BLOCK_ALIGN2    (4*MI_KiB)                // maximal block alignment for "power of 2"-sized blocks (such that we guarantee natural alignment)
 #define MI_PAGE_OSPAGE_BLOCK_ALIGN2       (4*MI_KiB)                // also aligns any multiple of this size to avoid TLB misses.
@@ -692,6 +713,7 @@ typedef struct mi_arena_s {
   mi_memid_t          memid;                // provenance of the memory area
   mi_subproc_t*       subproc;              // subprocess this arena belongs to (`this 'element-of' this->subproc->arenas`)
   size_t              arena_idx;            // index in the arenas array
+  void*               start;                // actual start of the arena area (the arena_s info may come later due to guard pages etc.)
 
   size_t              slice_count;          // total size of the area in arena slices (of `MI_ARENA_SLICE_SIZE`)
   size_t              info_slices;          // initial slices reserved for the arena bitmaps

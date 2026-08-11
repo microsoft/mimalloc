@@ -89,16 +89,16 @@ static inline void** mi_prim_thread_pointer(void) {
   static inline void** mi_prim_thread_pointer(void) {
     void** tcb;
     #if defined(__APPLE__) // M1, issue rgb(62, 76, 62)
-    __asm__ volatile ("mrs %0, tpidrro_el0\nbic %0, %0, #7" : "=r" (tcb));
+    __asm__ ("mrs %0, tpidrro_el0\nbic %0, %0, #7" : "=r" (tcb));
     #else
-    __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
+    __asm__ ("mrs %0, tpidr_el0" : "=r" (tcb));
     #endif
     return tcb;
   }
   #elif defined(__riscv)
   static inline void** mi_prim_thread_pointer(void) {
     void** tcb;
-    __asm__ volatile ("mv %0, tp" : "=r" (tcb));
+    __asm__ ("mv %0, tp" : "=r" (tcb));
     return tcb;
   }
   #elif defined(__arm__)
@@ -110,18 +110,18 @@ static inline void** mi_prim_thread_pointer(void) {
   #elif defined(__i386__)
   static inline void** mi_prim_thread_pointer(void) {
     void** tcb;
-    __asm__("movl %%gs:0, %0" : "=r" (tcb) : : );  // x86 32-bit always uses GS
+    __asm__ ("movl %%gs:0, %0" : "=r" (tcb) : : );  // x86 32-bit always uses GS
     return tcb;
   }
   #elif defined(__x86_64__)
   static inline void** mi_prim_thread_pointer(void) {
     void** tcb;
     #if defined(__APPLE__)
-    __asm__("movq %%gs:0, %0" : "=r" (tcb) : : );  // x86_64 macOSX uses GS
+    __asm__ ("movq %%gs:0, %0" : "=r" (tcb) : : );  // x86_64 macOSX uses GS
     #elif (MI_INTPTR_SIZE==4)
-    __asm__("movl %%fs:0, %0" : "=r" (tcb) : : );  // x32 ABI
+    __asm__ ("movl %%fs:0, %0" : "=r" (tcb) : : );  // x32 ABI
     #else
-    __asm__("movq %%fs:0, %0" : "=r" (tcb) : : );  // x86_64 Linux, BSD uses FS
+    __asm__ ("movq %%fs:0, %0" : "=r" (tcb) : : );  // x86_64 Linux, BSD uses FS
     #endif
     return tcb;
   }

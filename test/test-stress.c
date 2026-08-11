@@ -309,7 +309,7 @@ static void test_stress(mi_subproc_id_t subproc) {
     if ((n + 1) % 10 == 0) {
       printf("- iterations left: %3d\n", ITER - (n + 1));
       #ifndef USE_STD_MALLOC
-      // mi_debug_show_arenas();
+      mi_debug_show_arenas();
       #endif
       //mi_collect(true);
       //mi_debug_show_arenas();

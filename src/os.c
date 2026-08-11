@@ -140,7 +140,7 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
   uintptr_t hint = mi_atomic_add_acq_rel(&aligned_base, size);
   if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
     uintptr_t init = MI_HINT_BASE;
-    #if (MI_SECURE>=1 || defined(NDEBUG))  // security: randomize start of aligned allocations unless in debug mode
+    #if (MI_SECURE>=1 || !defined(NDEBUG))  // security: randomize start of aligned allocations unless in debug mode
     mi_theap_t* const theap = _mi_theap_default();     // don't use `mi_theap_get_default()` as that can cause allocation recursively (issue #1267)
     if (!mi_theap_is_initialized(theap)) return NULL;  // no hint as we lack randomness at this point
     const uintptr_t r = _mi_theap_random_next(theap);
