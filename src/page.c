@@ -440,9 +440,7 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   if mi_likely( /* bsize < MI_MAX_RETIRE_SIZE && */ !mi_page_queue_is_special(pq)) {  // not full or huge queue?
     if (pq->last==page && pq->first==page) { // the only page in the queue?
       mi_theap_t* theap = mi_page_theap(page);
-      #if MI_STAT>0
       mi_theap_stat_counter_increase(theap, pages_retire, 1);
-      #endif
       page->retire_expire = (bsize <= MI_SMALL_MAX_OBJ_SIZE ? MI_RETIRE_CYCLES : MI_RETIRE_CYCLES/4);
       mi_assert_internal(pq >= theap->pages);
       const size_t index = pq - theap->pages;
@@ -609,7 +607,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
   Page initialize and extend the capacity
 ----------------------------------------------------------- */
 
-#define MI_MAX_EXTEND_SIZE    (4*1024)      // heuristic, one OS page seems to work well.
+#define MI_MAX_EXTEND_SIZE    (8*1024)      // heuristic, one or two OS pages seems to work well.
 #if (MI_SECURE>=2)
 #define MI_MIN_EXTEND         (8*MI_SECURE) // extend at least by this many
 #else

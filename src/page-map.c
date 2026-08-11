@@ -297,8 +297,8 @@ static bool mi_page_map_init_once(void) {
   #if MI_SECURE 
   const bool commit = true;  // the whole page map is valid and we can reliably check any pointer
   #else
-  const bool commit = false; // reserve_size <= 256*MI_KiB ||  // 40 virtual address bits
-                      // mi_option_is_enabled(mi_option_pagemap_commit) || _mi_os_has_overcommit();
+  const bool commit = reserve_size <= 256*MI_KiB ||  // 40 virtual address bits
+                      mi_option_is_enabled(mi_option_pagemap_commit) || _mi_os_has_overcommit();
   #endif
   mi_subproc_t* const subproc = _mi_subproc_main();
   mi_memid_t memid;
