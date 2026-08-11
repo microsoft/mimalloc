@@ -722,7 +722,7 @@ typedef struct mi_page_map_s {
   size_t               reserved_size;    // full reserved size (mi_page_map_t + submaps)
   mi_memid_t           memid;            // provenance
   mi_lock_t            lock;             // used when allocating new submaps
-  mi_decl_cache_align _Atomic(mi_submap_t) submaps[1];
+  _Atomic(mi_submap_t) submaps[1];
 } mi_page_map_t;
 
 extern mi_decl_hidden _Atomic(mi_page_map_t*) __mi_page_map;
