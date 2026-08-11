@@ -24,8 +24,8 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 #include "mimalloc/prim-tls.h"
 #include "bitmap.h"
 
-#if (MI_ARENA_MAX_SIZE > MI_MAX_ALIGN_SIZE*UINT32_MAX)
-#error "The page_t.page_ma_offset field is not large enough to cover a full arena"
+#if (MI_ARENA_MAX_SIZE > MI_SIZE_SIZE*UINT32_MAX)
+#error "The page_t.page_zoffset field is not large enough to cover a full arena"
 #endif
 
 /* -----------------------------------------------------------
@@ -1044,8 +1044,8 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   uint8_t* const start = slice_start + block_start;
   mi_assert_internal(start > (uint8_t*)page);
   const size_t offset = start - (uint8_t*)page;
-  mi_assert_internal((offset % MI_MAX_ALIGN_SIZE) == 0 && (offset / MI_MAX_ALIGN_SIZE) <= UINT32_MAX);
-  page->page_ma_offset = (uint32_t)(offset / MI_MAX_ALIGN_SIZE);
+  mi_assert_internal((offset % MI_SIZE_SIZE) == 0 && (offset / MI_SIZE_SIZE) <= UINT32_MAX);
+  page->page_zoffset = (uint32_t)(offset / MI_SIZE_SIZE);
 
   // initialize page meta-data
   page->reserved = (uint16_t)reserved;  
@@ -1803,11 +1803,11 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
   mi_assert(start!=NULL);
   if (arena_id != NULL) { *arena_id = _mi_arena_id_none(); }
   if (start==NULL) return false;
-  if (!_mi_is_aligned(start, MI_ARENA_SLICE_SIZE)) {
+  if (!_mi_is_aligned(start, MI_ARENA_ALIGN)) {
     // we can align the start since the memid tracks the real base of the memory.
-    void* const aligned_start = _mi_align_up_ptr(start, MI_ARENA_SLICE_SIZE);
+    void* const aligned_start = _mi_align_up_ptr(start, MI_ARENA_ALIGN);
     const size_t diff = (uint8_t*)aligned_start - (uint8_t*)start;
-    if (diff >= size || (size - diff) < MI_ARENA_SLICE_SIZE) {
+    if (diff >= size || (size - diff) < MI_ARENA_ALIGN) {
       _mi_warning_message("after alignment, the size of the arena becomes too small (memory at %p with size %zu)\n", start, size);
       return false;
     }

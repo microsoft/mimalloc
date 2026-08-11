@@ -711,7 +711,9 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_internal(page->reserved > 0);
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   page->keys[0] = _mi_theap_random_next(theap);
+  #if MI_PAGE_KEY_COUNT==2
   page->keys[1] = _mi_theap_random_next(theap);
+  #endif
   #endif
   #if MI_DEBUG>2
   if (page->memid.initially_zero) {
@@ -735,7 +737,9 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_internal(!mi_page_has_interior_pointers(page));
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   mi_assert_internal(page->keys[0] != 0);
+  #if MI_PAGE_KEY_COUNT==2
   mi_assert_internal(page->keys[1] != 0);
+  #endif
   #endif
   mi_assert_expensive(mi_page_is_valid_init(page));
 

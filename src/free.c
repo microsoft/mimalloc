@@ -235,7 +235,7 @@ void mi_free(void* p) mi_attr_noexcept {
   #if MI_PAGE_META_IS_ALIGNED
     mi_page_t* page = _mi_ptr_page_align0(p);
     if mi_unlikely(page==NULL) return;
-    #if MI_DEBUG
+    #if MI_DEBUG>1
       mi_page_t* const cpage = _mi_safe_ptr_page(p);
       mi_assert_internal(cpage!=NULL);
     #endif
@@ -603,7 +603,11 @@ static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* bloc
   uint32_t canary = padding->canary;
   uintptr_t keys[2];
   keys[0] = page->keys[0];
+  #if MI_PAGE_KEY_COUNT==2
   keys[1] = page->keys[1];
+  #else
+  keys[1] = keys[0];
+  #endif
   bool ok = (mi_ptr_encode_canary(page,block,keys) == canary && *delta <= *bsize);
   mi_track_mem_noaccess(padding,sizeof(mi_padding_t));
   return ok;

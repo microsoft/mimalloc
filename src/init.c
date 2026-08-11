@@ -26,7 +26,7 @@ static const mi_page_t mi_page_empty = {
   NULL,                   // local_free
   MI_ATOMIC_VAR_INIT(0),  // xthread_free
   0,                      // block_size
-  0,                      // page_ma_offset
+  0,                      // page_zoffset
   0,                      // slice_pcommitted
   0,                      // reserved capacity
   NULL,                   // theap
@@ -34,14 +34,13 @@ static const mi_page_t mi_page_empty = {
   NULL, NULL,             // next, prev
   MI_MEMID_STATIC,        // memid
   #if (MI_PADDING || MI_ENCODE_FREELIST)
+  #if MI_PAGE_KEY_COUNT==2
   { 0, 0 },               // keys
+  #else
+  { 0 },                  // key
   #endif
-  #if MI_PAGE_META_IS_ALIGNED
-  #if MI_INTPTR_SIZE==8 || (MI_INTPTR_SIZE==4 && !MI_ENCODE_FREELIST && !MI_PADDING)
+  #elif MI_PAGE_META_IS_ALIGNED && MI_INTPTR_SIZE==8
   { 0 },                  // padding 
-  #elif MI_INTPTR_SIZE==4
-  { 0, 0, 0 },
-  #endif
   #endif
 };
 
@@ -581,7 +580,7 @@ static void mi_process_init_once(void) {
   }
 
   #if MI_PAGE_META_IS_ALIGNED
-  mi_assert_internal((sizeof(mi_page_t)%MI_MAX_ALIGN_SIZE) == 0);  // or page->ma_offset might not work
+  mi_assert_internal((sizeof(mi_page_t)%MI_SIZE_SIZE) == 0);  // or page->zoffset might not work
   #endif
 }
 

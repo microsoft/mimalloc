@@ -113,6 +113,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_CHECK_DOUBLE_FREE  1
 #endif
 
+#if MI_SECURE>=5
+#define MI_PAGE_KEY_COUNT 2
+#else
+#define MI_PAGE_KEY_COUNT 1
+#endif
+
 // Enable large pages for objects between 64KiB and 512KiB.
 // This should perhaps be disabled by default as for many workloads the block sizes above 64 KiB
 // are quite random which can lead to too many partially used large pages (but see issue #1104).
@@ -141,6 +147,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_PAGE_META_ALIGNED_FREE_SMALL 0
 #define MI_PAGE_META_IS_ALIGNED         1        
 #define MI_PAGE_META_CHUNKS             MI_INTPTR_SIZE
+#define MI_PAGE_KEY2                    0
 #else
 #warning "cannot optimize free with alignment since the page meta data is not separated (due to MI_PAGE_MAP_FLAT?)"
 #endif
@@ -169,6 +176,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #warning "mimalloc assertions enabled in a release build"
 #endif
 
+#ifndef MI_PAGE_KEY2
+#define MI_PAGE_KEY2  1
+#endif
 
 // --------------------------------------------------------------
 // Sizes of internal data-structures
@@ -426,7 +436,7 @@ typedef struct mi_page_s {
   _Atomic(mi_thread_free_t) xthread_free;      // list of deferred free blocks freed by other threads (= `mi_block_t* | (1 if owned)`)
 
   size_t                    block_size;        // const: size available in each block (always `>0`)
-  uint32_t                  page_ma_offset;    // const: offset relative to the page (in MI_MAX_ALIGN_SIZE parts) to the start of the blocks
+  uint32_t                  page_zoffset;      // const: offset relative to the page (in size_t parts) to the start of the blocks
   uint16_t                  slice_pcommitted;  // committed size in OS page sizes relative to the first arena slice of the page data (or 0 if the page is fully committed already)
   uint16_t                  reserved;          // number of blocks reserved in memory
   
@@ -438,15 +448,9 @@ typedef struct mi_page_s {
   mi_memid_t                memid;             // const: provenance of the page memory
   
   #if (MI_ENCODE_FREELIST || MI_PADDING)
-  uintptr_t                 keys[2];           // const: two random keys to encode the free lists (see `_mi_block_next`) or padding canary
-  #endif 
-  #if MI_PAGE_META_IS_ALIGNED 
-  // with alignment (MI_OPT_FREE) we need sizeof(mi_page_t) to be a multiple of MI_MAX_ALIGN_SIZE
-  #if MI_INTPTR_SIZE==8 || (MI_INTPTR_SIZE==4 && !MI_ENCODE_FREELIST && !MI_PADDING)
-  uintptr_t                 padding[1];
-  #elif MI_INTPTR_SIZE==4
-  uintptr_t                 padding[3];
-  #endif
+  uintptr_t                 keys[MI_PAGE_KEY_COUNT]; // const: one or two random keys to encode the free lists (see `_mi_block_next`) or padding canary
+  #elif MI_PAGE_META_IS_ALIGNED && MI_INTPTR_SIZE==8 
+  uintptr_t                 padding[1];        // make it 128 bytes for best codegen in mi_ptr_page_align
   #endif
 } mi_page_t;
 

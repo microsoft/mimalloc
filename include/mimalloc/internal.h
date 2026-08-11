@@ -805,8 +805,8 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
 
 // Page start
 static inline uint8_t* mi_page_start(const mi_page_t* page) {
-  // multiplication must be done in `size_t`; in a 32-bit multiplication the offset wraps for pages whose blocks start 4 GiB or more after the page meta info
-  return (uint8_t*)page + (((size_t)page->page_ma_offset) * MI_MAX_ALIGN_SIZE);
+  // multiplication must be done in `size_t`
+  return (uint8_t*)page + (((size_t)page->page_zoffset) * MI_SIZE_SIZE);
 }
 
 static inline size_t mi_page_size(const mi_page_t* page) {
@@ -1192,13 +1192,27 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
 }
 
 static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {
-  void* p = (void*)(mi_rotr(x - keys[0], keys[0]) ^ keys[1]);
+  #if MI_PAGE_KEY_COUNT==2
+  uintptr_t k1 = keys[0];
+  uintptr_t k2 = keys[1];
+  #else
+  uintptr_t k1 = keys[0];
+  uintptr_t k2 = mi_rotr(k1,13);
+  #endif
+  void* p = (void*)(mi_rotr(x - k1, k1) ^ k2);
   return (p==null ? NULL : p);
 }
 
 static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const uintptr_t* keys) {
-  uintptr_t x = (uintptr_t)(p==NULL ? null : p);
-  return mi_rotl(x ^ keys[1], keys[0]) + keys[0];
+  #if MI_PAGE_KEY_COUNT==2
+  uintptr_t k1 = keys[0];
+  uintptr_t k2 = keys[1];
+  #else
+  uintptr_t k1 = keys[0];
+  uintptr_t k2 = mi_rotr(k1,13);
+  #endif
+  uintptr_t x = (uintptr_t)(p==NULL ? null : p);  
+  return mi_rotl(x ^ k2, k1) + k1;
 }
 
 static inline uint32_t mi_ptr_encode_canary(const void* null, const void* p, const uintptr_t* keys) {
