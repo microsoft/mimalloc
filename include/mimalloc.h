@@ -119,7 +119,7 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_realpath(const char* 
 // ------------------------------------------------------
 // Extended functionality
 // ------------------------------------------------------
-#define MI_SMALL_WSIZE_MAX  (128)
+#define MI_SMALL_WSIZE_MAX  128
 #define MI_SMALL_SIZE_MAX   (MI_SMALL_WSIZE_MAX*sizeof(void*))
 
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_malloc_small(size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
