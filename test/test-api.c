@@ -442,7 +442,7 @@ int main(void) {
 
   #if (MI_INTPTR_SIZE > 4)
   CHECK_BODY("arena_reserve") {
-    result = (0==mi_reserve_os_memory(16*MI_GiB,false,true));
+    result = (0==mi_reserve_os_memory(34*MI_GiB,false,true));
   }
   #endif
 

@@ -914,6 +914,16 @@ if (MI_BUILD_TESTS)
     endif()
   endforeach()
 
+  # static override test
+  if(MI_BUILD_OBJECT AND NOT (MI_CYGWIN OR MI_TRACK_ASAN OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN))
+    add_executable(mimalloc-test-stress-static test/test-stress.c)
+    target_compile_definitions(mimalloc-test-stress-static PRIVATE ${mi_defines} "USE_STD_MALLOC=1")
+    target_compile_options(mimalloc-test-stress-static PRIVATE ${mi_cflags})
+    target_include_directories(mimalloc-test-stress-static PRIVATE include)
+    target_link_libraries(mimalloc-test-stress-static PRIVATE mimalloc-obj)  # link statically
+    add_test(NAME test-stress-static COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_VERBOSE=1 MIMALLOC_SHOW_STATS=1 $<TARGET_FILE:mimalloc-test-stress-static>)
+  endif()
+
   # dynamic override test
   if(MI_BUILD_SHARED AND NOT (MI_CYGWIN OR MI_TRACK_ASAN OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN)) # AND NOT (APPLE AND MI_USE_CXX))
     add_executable(mimalloc-test-stress-dynamic test/test-stress.c)
