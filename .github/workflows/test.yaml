@@ -461,7 +461,8 @@ jobs:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           cmake . -B out/android-arm64 -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake             
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+            -DANDROID_PLATFORM=android-27
           cmake --build out/android-arm64 --parallel 4 --config Debug
           ctest --test-dir out/android-arm64 --verbose --timeout 240 -C Debug
 
