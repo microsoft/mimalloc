@@ -113,7 +113,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_CHECK_DOUBLE_FREE  1
 #endif
 
-#if MI_SECURE>=5
+#if MI_SECURE>=4 || (MI_FREE_IS_CHECKED && !MI_OPT_FREE)
 #define MI_PAGE_KEY_COUNT 2
 #else
 #define MI_PAGE_KEY_COUNT 1
@@ -142,12 +142,11 @@ terms of the MIT license. A copy of the license can be found in the file
 // This can be used to have a faster `mi_free(_small)` as we can avoid a page_map lookup.
 // This only works if valid pointers are passed to `mi_free` though. However, checked
 // free `mi_cfree` can still uses the page map to validate pointers.
-#if MI_OPT_FREE
+#if MI_OPT_FREE && !MI_FREE_IS_CHECKED
 #if MI_PAGE_META_IS_SEPARATED
 #define MI_PAGE_META_ALIGNED_FREE_SMALL 0
 #define MI_PAGE_META_IS_ALIGNED         1        
 #define MI_PAGE_META_CHUNKS             MI_INTPTR_SIZE
-#define MI_PAGE_KEY2                    0
 #else
 #warning "cannot optimize free with alignment since the page meta data is not separated (due to MI_PAGE_MAP_FLAT?)"
 #endif
