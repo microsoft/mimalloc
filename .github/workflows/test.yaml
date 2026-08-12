@@ -449,22 +449,32 @@ jobs:
       - name: Android, Setup
         if: matrix.tests == 'android-arm64'
         id: setup-ndk
-        uses: nttld/setup-ndk@v1
+        uses: android-actions/setup-android@v2
         with:
           ndk-version: r27d
           link-to-sdk: true
           local-cache: true
 
-      - name: Android, Debug
+      - name: Android, Debug Build
         if: matrix.tests == 'android-arm64'
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           cmake . -B out/android-arm64 -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
-            -DANDROID_PLATFORM=android-27
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-27
           cmake --build out/android-arm64 --parallel 4 --config Debug
-          ctest --test-dir out/android-arm64 --verbose --timeout 240 -C Debug
+
+      - name: Android, Debug Run
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 27
+          target: default
+          arch: arm64-v8a
+          script: |
+            adb push out/android-arm64/mimalloc-test-api /data/local/tmp/
+            adb shell "/data/local/tmp/mimalloc-test-api"
+          
 
         # -DANDROID_ABI=arm64-v8a \
         # -DANDROID_PLATFORM=android-27
