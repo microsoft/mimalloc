@@ -922,7 +922,7 @@ if (MI_BUILD_TESTS)
     target_compile_definitions(mimalloc-test-stress-static PRIVATE ${mi_defines} "USE_STD_MALLOC=1")
     target_compile_options(mimalloc-test-stress-static PRIVATE ${mi_cflags})
     target_include_directories(mimalloc-test-stress-static PRIVATE include)
-    target_link_libraries(mimalloc-test-stress-static PRIVATE mimalloc-obj)  # link statically
+    target_link_libraries(mimalloc-test-stress-static PRIVATE mimalloc-obj  ${mi_libraries})  # override statically with an object file
     add_test(NAME test-stress-static COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_VERBOSE=1 MIMALLOC_SHOW_STATS=1 $<TARGET_FILE:mimalloc-test-stress-static>)
   endif()
 
