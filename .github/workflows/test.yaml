@@ -449,7 +449,7 @@ jobs:
       - name: Android, Setup
         if: matrix.tests == 'android-x64'
         id: setup-ndk
-        uses: nttld/setup-ndk@v1 # android-actions/setup-android@v2
+        uses: android-actions/setup-android@v2
         with:
           ndk-version: r27d
           link-to-sdk: true
@@ -457,12 +457,12 @@ jobs:
 
       - name: Android, Debug Build
         if: matrix.tests == 'android-x64'
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        # env:
+        #  ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           env
           cmake . -G Ninja -B out/android-x64 -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=x86_64 -DANDROID_PLATFORM=android-27
           cmake --build out/android-x64 --parallel 4 --config Debug
 
