@@ -389,7 +389,7 @@ else()
 endif()
 
 if(MI_FREE_IS_CHECKED STREQUAL "DEFAULT")
-  if (MI_DEBUG OR MI_SECURE)
+  if (MI_SECURE)
     set(MI_FREE_IS_CHECKED "ALWAYS")
   else()
     set(MI_FREE_IS_CHECKED "NEVER")
