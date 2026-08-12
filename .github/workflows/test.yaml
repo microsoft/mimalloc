@@ -466,6 +466,7 @@ jobs:
           cmake --build out/android-arm64 --parallel 4 --config Debug
 
       - name: Android, Debug Run
+        if: matrix.tests == 'android-arm64'
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 27
