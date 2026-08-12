@@ -289,17 +289,14 @@ static bool mi_page_map_init_once(void) {
 
   // Allocate the page map and commit bits
   mi_assert(MI_MAX_VABITS >= vbits);
-  const size_t reserve_count = (MI_ZU(1) << (vbits - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT));
+  mi_assert(MI_MIN_VABITS <= vbits);
+  const size_t reserve_count    = (MI_ZU(1) << (vbits - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT));
   const size_t os_page_size  = _mi_os_page_size();
   const size_t reserve_size  = _mi_align_up( sizeof(mi_page_map_t) + ((reserve_count - 1) * sizeof(mi_submap_t)), os_page_size);
   const size_t submap_size   = MI_PAGE_MAP_SUB_SIZE;
   const size_t extra_reserve_size  = reserve_size + submap_size;
-  #if MI_SECURE 
-  const bool commit = true;  // the whole page map is valid and we can reliably check any pointer
-  #else
-  const bool commit = reserve_size <= 256*MI_KiB ||  // 40 virtual address bits
-                      mi_option_is_enabled(mi_option_pagemap_commit) || _mi_os_has_overcommit();
-  #endif
+  const bool commit = (vbits == MI_MIN_VABITS) || (reserve_size <= 64*MI_KiB) || // 42 virtual address bits
+                      mi_option_is_enabled(mi_option_pagemap_commit); // || _mi_os_has_overcommit();
   mi_subproc_t* const subproc = _mi_subproc_main();
   mi_memid_t memid;
   mi_page_map_t* const pmap = (mi_page_map_t*)_mi_os_alloc_aligned(subproc, extra_reserve_size, 1, commit, true /* allow large */, &memid);
@@ -319,15 +316,19 @@ static bool mi_page_map_init_once(void) {
     commit_count = mi_page_map_count_of_size(reserve_size);
   }
   else {
-    // commit first page
+    // commit first entries up to MI_MIN_VABITS entries
+    const size_t min_commit_count = (MI_ZU(1) << (MI_MIN_VABITS - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT));  
+    const size_t min_commit_size = _mi_align_up( sizeof(mi_page_map_t) + ((min_commit_count-1) * sizeof(mi_submap_t)), os_page_size);
+    mi_assert_internal(min_commit_size <= reserve_size);
     bool is_zero;
-    if (!_mi_os_commit(subproc,pmap,os_page_size,&is_zero)) {
+    if (!_mi_os_commit(subproc,pmap,min_commit_size,&is_zero)) {
       mi_page_map_cannot_commit();
       _mi_os_free(subproc,pmap,extra_reserve_size,memid);
       return false;
     };
     mi_assert_internal(is_zero || memid.initially_zero);
-    commit_count = mi_page_map_count_of_size(os_page_size);
+    commit_count = mi_page_map_count_of_size(min_commit_size);
+    mi_assert_internal(commit_count >= min_commit_count);
   }
   
   // ensure there is a submap for the NULL address

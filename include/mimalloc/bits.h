@@ -127,10 +127,10 @@ typedef int32_t  mi_ssize_t;
 #define MI_MAX_VABITS     (32)
 #endif
 
-// the MI_MIN_VABITS determine how many bits of the address are always mapped in the page_map
+// the MI_MIN_VABITS determine how many bits of the address space are always committed in the page_map
 #if MI_MAX_VABITS <= 32
 #define MI_MIN_VABITS     (32)
-#elif MI_MAX_VABITS <= 43
+#elif MI_MAX_VABITS <= 42
 #define MI_MIN_VABITS     MI_MAX_VABITS
 #else
 #define MI_MIN_VABITS     (43)    /* 8 TiB */
