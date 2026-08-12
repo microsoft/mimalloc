@@ -34,7 +34,7 @@ jobs:
           - os: windows-latest
             tests: mingw-ucrt64
           - os: ubuntu-latest
-            tests: android-arm64
+            tests: android-x64
           # - os: ubuntu-latest       # slow, so disable by default
           #   tests: freebsd-arm64    # qemu
 
@@ -447,7 +447,7 @@ jobs:
           ctest --test-dir out/secure-arm32 --verbose --timeout 240 -C Release
 
       - name: Android, Setup
-        if: matrix.tests == 'android-arm64'
+        if: matrix.tests == 'android-x64'
         id: setup-ndk
         uses: nttld/setup-ndk@v1 # android-actions/setup-android@v2
         with:
@@ -456,25 +456,25 @@ jobs:
           local-cache: true
 
       - name: Android, Debug Build
-        if: matrix.tests == 'android-arm64'
+        if: matrix.tests == 'android-x64'
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           env
-          cmake . -G Ninja -B out/android-arm64 -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+          cmake . -G Ninja -B out/android-x64 -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=x86_64 -DANDROID_PLATFORM=android-27
-          cmake --build out/android-arm64 --parallel 4 --config Debug
+          cmake --build out/android-x64 --parallel 4 --config Debug
 
       - name: Android, Debug Run
-        if: matrix.tests == 'android-arm64'
+        if: matrix.tests == 'android-x64'
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 27
           target: default
           arch: x86_64
           script: |
-            adb push out/android-arm64/mimalloc-test-api /data/local/tmp/
+            adb push out/android-x64/mimalloc-test-api /data/local/tmp/
             adb shell "/data/local/tmp/mimalloc-test-api"
           
 
