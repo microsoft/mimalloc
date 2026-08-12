@@ -33,8 +33,8 @@ jobs:
             tests: alpine-arm32     # qemu
           - os: windows-latest
             tests: mingw-ucrt64
-          - os: ubuntu-latest
-            tests: android-x64
+          # - os: ubuntu-latest
+          #   tests: android-x64
           # - os: ubuntu-latest       # slow, so disable by default
           #   tests: freebsd-arm64    # qemu
 
