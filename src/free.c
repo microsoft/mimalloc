@@ -233,15 +233,15 @@ void _mi_free_in_page(void* p, mi_page_t* page) mi_attr_noexcept {
 
 void mi_free(void* p) mi_attr_noexcept {  
   #if MI_PAGE_META_IS_ALIGNED
-    mi_page_t* page = _mi_ptr_page_align0(p);
-    if mi_unlikely(page==NULL) return;
-    #if MI_DEBUG>1
-      mi_page_t* const cpage = _mi_safe_ptr_page(p);
-      mi_assert_internal(cpage!=NULL);
+    mi_page_t* const page0 = _mi_aligned_ptr_page0(p);
+    if mi_unlikely(page0==NULL) return;
+    #if MI_DEBUG
+      mi_page_t* const cpage = mi_validate_ptr_page(p,"mi_free");
     #endif
-    page = mi_atomic_load_ptr_relaxed(mi_page_t,&page->self);
-    mi_assert_internal(page == cpage);
-    mi_free_nonnull(p, page, NULL, true);
+    mi_page_t* const page = mi_atomic_load_ptr_relaxed(mi_page_t,&page0->self);
+    mi_assert(cpage==page);
+    mi_assert_internal(page != NULL);
+    mi_free_nonnull(p,page,NULL,true);
   #else
     mi_page_t* const page = mi_validate_ptr_page(p,"mi_free");    
     mi_free_ex(p, page, NULL, true);
@@ -254,15 +254,25 @@ void mi_ufree(void* p, size_t* pblock_size) mi_attr_noexcept {
 }
 
 void mi_free_small(void* p) mi_attr_noexcept {
-  // We can only call `mi_free_small` for pointers allocated with `mi_(heap_)malloc_small`.
-  // If we keep page info in front of the page area for small objects, we can find the info
-  // just by aligning down the pointer instead of looking it up in the page map.
-  #if !MI_PAGE_META_IS_ALIGNED && MI_PAGE_META_ALIGNED_FREE_SMALL 
+  #if MI_PAGE_META_IS_ALIGNED && MI_SMALL_PAGE_SIZE == MI_ARENA_SLICE_SIZE
+    mi_page_t* const page0 = _mi_aligned_ptr_page0(p);
+    if mi_unlikely(page0==NULL) return;
+    #if MI_DEBUG
+      mi_assert(page0 == _mi_checked_ptr_page(p));
+      mi_page_t* const page = mi_atomic_load_ptr_relaxed(mi_page_t,&page0->self);
+      mi_assert(page==page0);  // for small pages, page0 is the right one
+      mi_assert_internal(page->block_size <= mi_good_size(MI_SMALL_SIZE_MAX));
+    #endif
+    mi_free_nonnull(p,page0,NULL,true);
+  #elif MI_PAGE_META_SMALL_IS_ALIGNED 
+    // deprecated: We can only call `mi_free_small` for pointers allocated with `mi_(heap_)malloc_small`.
+    // If we keep page info in front of the page area for small objects, we can find the info
+    // just by aligning down the pointer instead of looking it up in the page map.    
     #if MI_GUARDED 
-    #warning "MI_OPT_FREE_SMALL (MI_PAGE_META_ALIGNED_FREE_SMALL) ignored as MI_GUARDED is defined"
+    #warning "MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED) ignored as MI_GUARDED is defined"
     mi_free(p);
     #elif MI_ARENA_SLICE_ALIGN < MI_SMALL_PAGE_SIZE
-    #warning "MI_OPT_FREE_SMALL (MI_PAGE_META_ALIGNED_FREE_SMALL) ignored as the MI_ARENA_SLICE_ALIGN is less than the small page size"
+    #warning "MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED) ignored as the MI_ARENA_SLICE_ALIGN is less than the small page size"
     mi_free(p);
     #else
       mi_page_t* const page = (mi_page_t*)_mi_align_down_ptr(p,MI_SMALL_PAGE_SIZE);
@@ -284,6 +294,59 @@ void _mi_free_subproc_safe_in_page(void* p, mi_page_t* page) mi_attr_noexcept {
 void _mi_free_subproc_safe(void* p) mi_attr_noexcept {
   mi_page_t* const page = mi_validate_ptr_page(p,"_mi_free_subproc_safe");  
   mi_free_ex(p, page, NULL, false);
+}
+
+// ------------------------------------------------------
+// Free variants
+// ------------------------------------------------------
+
+void mi_free_size(void* p, size_t size) mi_attr_noexcept {
+  MI_UNUSED_RELEASE(size);
+  #if MI_DEBUG
+    const mi_page_t* const page = mi_validate_ptr_page(p,"mi_free_size");
+    if (page==NULL) return;
+    mi_assert(p!=NULL);
+    const size_t usable = _mi_page_usable_size(page,p);
+    if (size > usable) { 
+      _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the size %zu is greater than the usable size %zu\n", p, size, usable);
+      mi_free(p);
+      return;
+    }
+    else if (size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size(MI_SMALL_SIZE_MAX)) { 
+      _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n", p, size, mi_page_block_size(page));
+      mi_free(p);
+      return;
+    }
+  #endif
+  #if MI_PAGE_META_SMALL_IS_ALIGNED
+  if mi_likely(size <= MI_SMALL_SIZE_MAX) {
+    mi_free_small(p); 
+  }
+  else 
+  #endif
+  {
+    mi_free(p);
+  }
+}
+
+void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept {
+  MI_UNUSED_RELEASE(alignment);
+  mi_assert(((uintptr_t)p % alignment) == 0);
+  mi_free_size(p,size);
+}
+
+void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
+  MI_UNUSED_RELEASE(alignment);
+  mi_assert(((uintptr_t)p % alignment) == 0);
+  mi_free(p);
+}
+
+// checked free
+void mi_cfree(void* p) mi_attr_noexcept {
+  mi_page_t* const page = _mi_checked_ptr_page(p);
+  if mi_likely(page!=NULL) {
+    _mi_free_in_page(p,page);
+  }
 }
 
 
@@ -473,60 +536,6 @@ size_t _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr_noexce
 mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
   const mi_page_t* const page = mi_validate_ptr_page(p,"mi_usable_size");
   return _mi_page_usable_size(page,p);
-}
-
-
-// ------------------------------------------------------
-// Free variants
-// ------------------------------------------------------
-
-void mi_free_size(void* p, size_t size) mi_attr_noexcept {
-  MI_UNUSED_RELEASE(size);
-  #if MI_DEBUG
-    const mi_page_t* const page = mi_validate_ptr_page(p,"mi_free_size");
-    if (page==NULL) return;
-    mi_assert(p!=NULL);
-    const size_t usable = _mi_page_usable_size(page,p);
-    if (size > usable) { 
-      _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the size %zu is greater than the usable size %zu\n", p, size, usable);
-      mi_free(p);
-      return;
-    }
-    else if (size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size(MI_SMALL_SIZE_MAX)) { 
-      _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n", p, size, mi_page_block_size(page));
-      mi_free(p);
-      return;
-    }
-  #endif
-  #if MI_OPT_FREE_SMALL && !MI_OPT_FREE
-  if mi_likely(size <= MI_SMALL_SIZE_MAX) {
-    mi_free_small(p); 
-  }
-  else 
-  #endif
-  {
-    mi_free(p);
-  }
-}
-
-void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept {
-  MI_UNUSED_RELEASE(alignment);
-  mi_assert(((uintptr_t)p % alignment) == 0);
-  mi_free_size(p,size);
-}
-
-void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
-  MI_UNUSED_RELEASE(alignment);
-  mi_assert(((uintptr_t)p % alignment) == 0);
-  mi_free(p);
-}
-
-// checked free
-void mi_cfree(void* p) mi_attr_noexcept {
-  mi_page_t* const page = _mi_checked_ptr_page(p);
-  if mi_likely(page!=NULL) {
-    _mi_free_in_page(p,page);
-  }
 }
 
 

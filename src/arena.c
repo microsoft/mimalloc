@@ -90,7 +90,7 @@ static bool mi_heap_has_page(mi_heap_t* heap, mi_arena_t* arena, mi_page_t* page
 #endif
 
 size_t mi_arena_min_alignment(void) {
-  return MI_ARENA_ALIGN;
+  return MI_ARENA_ALIGNMENT;
 }
 
 size_t mi_arena_min_size(void) {
@@ -150,19 +150,19 @@ uint8_t* mi_arena_slice_start(mi_arena_t* arena, size_t slice_index) {
 mi_page_t* mi_arena_page_at_slice(mi_arena_t* arena, size_t slice_index) {
   mi_assert_internal(slice_index < arena->slice_count);
   #if MI_PAGE_META_IS_ALIGNED
-  mi_page_t* const page = _mi_ptr_page_align(mi_arena_slice_start(arena,slice_index)); // todo: optimize?
+  mi_page_t* const page = _mi_aligned_ptr_page(mi_arena_slice_start(arena,slice_index)); // todo: optimize?
   return page;
   #else
   if (arena->pages_meta != NULL) {
     mi_page_t* const page = &arena->pages_meta[slice_index];
-    #if MI_PAGE_META_ALIGNED_FREE_SMALL
+    #if MI_PAGE_META_SMALL_IS_ALIGNED
     // pages with small blocks still have the page at the start of the slice (and set the `block_size` in pages_meta to 0)
     if (page->block_size>0) return page;
     #else
     return page;
     #endif
   }  
-  // fall through (for MI_PAGE_META_ALIGNED_FREE_SMALL)
+  // fall through (for MI_PAGE_META_SMALL_IS_ALIGNED)
   return (mi_page_t*)mi_arena_slice_start(arena,slice_index);
   #endif
 }
@@ -219,7 +219,7 @@ static size_t mi_page_full_size(mi_page_t* page) {
 
 static size_t mi_arena_page_meta_slices(void) {
   #if MI_PAGE_META_IS_ALIGNED
-  return _mi_divide_up(MI_PAGE_META_COUNT * sizeof(mi_page_t), MI_ARENA_SLICE_SIZE);
+  return _mi_divide_up(MI_PAGE_META_ALIGNED_COUNT * sizeof(mi_page_t), MI_ARENA_SLICE_SIZE);
   #else
   return 0;
   #endif
@@ -813,18 +813,18 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
     #if MI_PAGE_META_IS_ALIGNED
     size_t page_offset;      // offset in the block for the page area
     uint8_t* os_start;
-    if (block_alignment < MI_PAGE_META_ALIGN) {          
+    if (block_alignment < MI_PAGE_META_ALIGNMENT) {          
       page_offset = (block_alignment < MI_PAGE_ALIGN ? MI_PAGE_ALIGN : block_alignment);
-      os_start = (uint8_t*)mi_arena_os_alloc_aligned(heap->subproc, alloc_size + page_offset, MI_PAGE_META_ALIGN, 0 /* align offset */, false /* commit */, false /* allow large */, req_arena, memid);
+      os_start = (uint8_t*)mi_arena_os_alloc_aligned(heap->subproc, alloc_size + page_offset, MI_PAGE_META_ALIGNMENT, 0 /* align offset */, false /* commit */, false /* allow large */, req_arena, memid);
     }
     else {
-      // if we allow alignment >= MI_PAGE_META_ALIGN we need to substract 1 from a pointer
-      // in _mi_ptr_page_align (and test for (intptr_t)p < 0 instead of NULL). We avoid this by limiting the max alignment.
+      // if we allow alignment >= MI_PAGE_META_ALIGNMENT we need to substract 1 from a pointer
+      // in _mi_aligned_ptr_page (and test for (intptr_t)p < 0 instead of NULL). We avoid this by limiting the max alignment.
       _mi_warning_message("requested alignment is too large (%zu KiB)\n", block_alignment / MI_KiB);
       errno = EINVAL;
       return NULL;
-      // page_offset = MI_PAGE_META_ALIGN;
-      // os_start = (uint8_t*)mi_arena_os_alloc_aligned(heap->subproc, alloc_size + page_offset, block_alignment, MI_PAGE_META_ALIGN /* align offset */, false /* commit */, false /* allow large */, req_arena, memid);
+      // page_offset = MI_PAGE_META_ALIGNMENT;
+      // os_start = (uint8_t*)mi_arena_os_alloc_aligned(heap->subproc, alloc_size + page_offset, block_alignment, MI_PAGE_META_ALIGNMENT /* align offset */, false /* commit */, false /* allow large */, req_arena, memid);
     }
     if (os_start==NULL) return NULL;
     // commit page info and page
@@ -841,9 +841,9 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
     }
     start = os_start + page_offset;
     mi_assert_internal(_mi_is_aligned(start,block_alignment));
-    mi_assert_internal(_mi_is_aligned(os_start,MI_PAGE_META_ALIGN));
-    mi_assert_internal(_mi_align_down_ptr(start-1,MI_PAGE_META_ALIGN) == os_start);
-    mi_assert_internal((uint8_t*)_mi_ptr_page_align0(start) < os_start + min_page_meta);
+    mi_assert_internal(_mi_is_aligned(os_start,MI_PAGE_META_ALIGNMENT));
+    mi_assert_internal(_mi_align_down_ptr(start-1,MI_PAGE_META_ALIGNMENT) == os_start);
+    mi_assert_internal((uint8_t*)_mi_aligned_ptr_page0(start) < os_start + min_page_meta);
     memid->initially_committed = true; // so we don't commit again
     #else
     if (os_align) {
@@ -906,7 +906,7 @@ static mi_page_t* mi_arena_page_meta(mi_memid_t memid_slice, const void* slice_s
     // ensure the meta data is committed
     if (memid_slice.memkind == MI_MEM_ARENA) {
       mi_arena_t* const arena    = memid_slice.mem.arena.arena;
-      uint8_t* const meta_slices = (uint8_t*)_mi_align_down_ptr(slice_start,MI_PAGE_META_ALIGN);
+      uint8_t* const meta_slices = (uint8_t*)_mi_align_down_ptr(slice_start,MI_PAGE_META_ALIGNMENT);
       mi_assert_internal(meta_slices >= mi_arena_start(arena));
       const size_t meta_slice_index  = (meta_slices - mi_arena_start(arena)) / MI_ARENA_SLICE_SIZE;
       if mi_unlikely(mi_bitmap_is_clear(arena->slices_committed, meta_slice_index)) {
@@ -921,7 +921,7 @@ static mi_page_t* mi_arena_page_meta(mi_memid_t memid_slice, const void* slice_s
         mi_bitmap_setN(arena->slices_committed, meta_slice_index, meta_slice_count, NULL);
       }
     }
-    mi_page_t* const page_meta = _mi_ptr_page_align0(slice_start);
+    mi_page_t* const page_meta = _mi_aligned_ptr_page0(slice_start);
     return page_meta;
   }
   #else
@@ -964,7 +964,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   mi_page_t* const page_meta = mi_arena_page_meta(memid,slice_start);
   if (page_meta!=NULL) {
     mi_assert_internal(page_meta->block_size == 0);
-    #if MI_PAGE_META_ALIGNED_FREE_SMALL
+    #if MI_PAGE_META_SMALL_IS_ALIGNED
     // if `block_size <= MI_SMALL_SIZE_MAX` we put the page info in front of the slice,
     // (note: it is important that `page_meta->block_size == 0` for `mi_arena_page_at_slice`)
     if (block_size > MI_SMALL_SIZE_MAX)
@@ -1073,10 +1073,10 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
     }
   }
   #if MI_DEBUG>1
-  mi_page_t* pstart = _mi_ptr_page_align0(slice_start);
+  mi_page_t* pstart = _mi_aligned_ptr_page0(slice_start);
   mi_assert_internal(pstart->self==page);
   if (reserved>1) {
-    mi_page_t* pend = _mi_ptr_page_align0(slice_start + (slice_count*MI_ARENA_SLICE_SIZE) - 1);
+    mi_page_t* pend = _mi_aligned_ptr_page0(slice_start + (slice_count*MI_ARENA_SLICE_SIZE) - 1);
     mi_assert_internal(pend->self==page);
   }
   #endif
@@ -1683,7 +1683,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
                                         int numa_node, bool exclusive,
                                         mi_memid_t memid, mi_commit_fun_t* commit_fun, void* commit_fun_arg, mi_arena_id_t* arena_id)
 {
-  mi_assert_internal(_mi_is_aligned(start,MI_ARENA_ALIGN));
+  mi_assert_internal(_mi_is_aligned(start,MI_ARENA_ALIGNMENT));
   mi_assert_internal(mi_size_of_slices(slice_count)>=MI_ARENA_MIN_SIZE);
 
   if (slice_count > MI_BITMAP_MAX_BIT_COUNT) {  // 16 GiB for now
@@ -1769,11 +1769,11 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
 
   // reserve our meta info (and reserve slices outside the memory area)
   #if MI_PAGE_META_IS_ALIGNED
-  for(size_t i = 0; i < arena->slice_count; i += MI_PAGE_META_COUNT) {
+  for(size_t i = 0; i < arena->slice_count; i += MI_PAGE_META_ALIGNED_COUNT) {
     // set all free slices (and skip the slices reserved for the page meta info)
     const size_t meta_slices = (i==0 ? info_slices : mi_arena_page_meta_slices());
     const size_t start_idx = (i + meta_slices);
-    size_t count = MI_PAGE_META_COUNT - meta_slices;
+    size_t count = MI_PAGE_META_ALIGNED_COUNT - meta_slices;
     if (start_idx < arena->slice_count) {
       if (count + start_idx > arena->slice_count) { 
         count = arena->slice_count - start_idx;
@@ -1803,11 +1803,11 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
   mi_assert(start!=NULL);
   if (arena_id != NULL) { *arena_id = _mi_arena_id_none(); }
   if (start==NULL) return false;
-  if (!_mi_is_aligned(start, MI_ARENA_ALIGN)) {
+  if (!_mi_is_aligned(start, MI_ARENA_ALIGNMENT)) {
     // we can align the start since the memid tracks the real base of the memory.
-    void* const aligned_start = _mi_align_up_ptr(start, MI_ARENA_ALIGN);
+    void* const aligned_start = _mi_align_up_ptr(start, MI_ARENA_ALIGNMENT);
     const size_t diff = (uint8_t*)aligned_start - (uint8_t*)start;
-    if (diff >= size || (size - diff) < MI_ARENA_ALIGN) {
+    if (diff >= size || (size - diff) < MI_ARENA_ALIGNMENT) {
       _mi_warning_message("after alignment, the size of the arena becomes too small (memory at %p with size %zu)\n", start, size);
       return false;
     }
@@ -1898,7 +1898,7 @@ static int mi_reserve_os_memory_ex2(mi_subproc_t* subproc, size_t size, bool com
     return ENOMEM;
   }
   mi_memid_t memid;
-  void* start = _mi_os_alloc_aligned(subproc, size, MI_ARENA_ALIGN, commit, allow_large, &memid);
+  void* start = _mi_os_alloc_aligned(subproc, size, MI_ARENA_ALIGNMENT, commit, allow_large, &memid);
   if (start == NULL) return ENOMEM;
   if (!mi_manage_os_memory_ex2(subproc, start, size, -1 /* numa node */, exclusive, memid, NULL, NULL, arena_id)) {
     _mi_os_free_ex(subproc, start, size, commit, memid);
@@ -2014,7 +2014,7 @@ static size_t mi_debug_show_page_bfield(char* buf, size_t* k, mi_arena_t* arena,
       // else if (_mi_meta_is_meta_page(arena->subproc,start)) { c = 'm'; color = MI_GRAY; }
       else if (slice_index + bit < arena->info_slices) { c = 'i'; color = MI_GRAY; }
       #if MI_PAGE_META_IS_ALIGNED
-      else if ((slice_index % MI_PAGE_META_COUNT) == 0 && (size_t)bit <= mi_arena_page_meta_slices()) {
+      else if ((slice_index % MI_PAGE_META_ALIGNED_COUNT) == 0 && (size_t)bit <= mi_arena_page_meta_slices()) {
         { c = 'i'; color = MI_GRAY; }
       }
       #endif

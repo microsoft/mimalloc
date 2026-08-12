@@ -764,15 +764,15 @@ static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
 #if MI_PAGE_META_IS_ALIGNED
 // if the page meta data is aligned in front of pages we can find it efficiently
 // without needing to go through the page map (for valid pointers).
-static inline mi_page_t* _mi_ptr_page_align0(const void* p) {
-  mi_page_t* const page_metas = (mi_page_t*)_mi_align_down_ptr(p,MI_PAGE_META_ALIGN);
+static inline mi_page_t* _mi_aligned_ptr_page0(const void* p) {
+  mi_page_t* const page_metas = (mi_page_t*)_mi_align_down_ptr(p,MI_PAGE_META_ALIGNMENT);
   const ptrdiff_t page_idx = ((uint8_t*)p - (uint8_t*)page_metas)/MI_ARENA_SLICE_SIZE;
-  mi_assert_internal(page_idx >= 0 && page_idx <= MI_PAGE_META_COUNT);
+  mi_assert_internal(page_idx >= 0 && page_idx <= MI_PAGE_META_ALIGNED_COUNT);
   return &page_metas[page_idx];
 }
 
-static inline mi_page_t* _mi_ptr_page_align(const void* p) {
-  mi_page_t* const page = _mi_ptr_page_align0(p);
+static inline mi_page_t* _mi_aligned_ptr_page(const void* p) {
+  mi_page_t* const page = _mi_aligned_ptr_page0(p);
   if mi_unlikely(page==NULL) return NULL;
   return mi_atomic_load_relaxed(&page->self);
 }
@@ -782,13 +782,8 @@ static inline mi_page_t* _mi_ptr_page(const void* p) {
   mi_assert_internal(p==NULL || mi_is_in_heap_region(p));
   #if MI_SECURE || MI_FREE_IS_CHECKED
     return _mi_checked_ptr_page(p);
-  #elif MI_PAGE_META_IS_ALIGNED 
-    mi_page_t* const page = _mi_ptr_page_align(p);
-    #if MI_DEBUG
-    mi_page_t* const cpage = _mi_checked_ptr_page(p);
-    if (cpage!=page) { mi_assert(page == cpage); }
-    #endif
-    return page;
+  #elif MI_PAGE_META_IS_ALIGNED
+    return _mi_aligned_ptr_page(p);
   #elif MI_DEBUG
     return _mi_checked_ptr_page(p);
   #else  
@@ -848,7 +843,7 @@ static inline bool mi_page_meta_is_separated(const mi_page_t* page) {
   mi_assert_internal(page != _mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));  
   return true;
   #elif MI_PAGE_META_IS_SEPARATED
-  // usually separated but can still be in front for direct OS allocations (due to size or alignment) or due to MI_PAGE_META_ALIGNED_FREE_SMALL
+  // usually separated but can still be in front for direct OS allocations (due to size or alignment) or due to MI_PAGE_META_SMALL_IS_ALIGNED
   return (page->memid.memkind == MI_MEM_ARENA && page != _mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));
   #else
   MI_UNUSED(page);
@@ -1192,26 +1187,24 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
 }
 
 static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {
+  const uintptr_t k1 = keys[0];
   #if MI_PAGE_KEY_COUNT==2
-  uintptr_t k1 = keys[0];
-  uintptr_t k2 = keys[1];
+  const uintptr_t k2 = keys[1];
   #else
-  uintptr_t k1 = keys[0];
-  uintptr_t k2 = mi_rotr(k1,13);
+  const uintptr_t k2 = mi_rotr(k1,13);
   #endif
   void* p = (void*)(mi_rotr(x - k1, k1) ^ k2);
   return (p==null ? NULL : p);
 }
 
 static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const uintptr_t* keys) {
+  const uintptr_t k1 = keys[0];
   #if MI_PAGE_KEY_COUNT==2
-  uintptr_t k1 = keys[0];
-  uintptr_t k2 = keys[1];
+  const uintptr_t k2 = keys[1];
   #else
-  uintptr_t k1 = keys[0];
-  uintptr_t k2 = mi_rotr(k1,13);
+  const uintptr_t k2 = mi_rotr(k1,13);
   #endif
-  uintptr_t x = (uintptr_t)(p==NULL ? null : p);  
+  const uintptr_t x = (uintptr_t)(p==NULL ? null : p);  
   return mi_rotl(x ^ k2, k1) + k1;
 }
 
@@ -1249,14 +1242,15 @@ static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
 }
 
+mi_block_t* _mi_block_next_is_corrupted(const mi_page_t* page, const mi_block_t* block, const mi_block_t* next); // in options.c
+
 static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t* block) {
   #if MI_ENCODE_FREELIST
   mi_block_t* next = mi_block_nextx(page,block,page->keys);
   // check for free list corruption: is `next` at least in the same page?
   // todo: check if `next` is `page->block_size` aligned?
   if mi_unlikely(next!=NULL && !mi_is_in_same_page(block, next)) {
-    _mi_error_message(EFAULT, "corrupted free list entry of size %zub at %p: value 0x%zx\n", mi_page_block_size(page), block, (uintptr_t)next);
-    next = NULL;
+    return _mi_block_next_is_corrupted(page,block,next); // returns NULL
   }
   return next;
   #else

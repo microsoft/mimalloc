@@ -113,7 +113,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_CHECK_DOUBLE_FREE  1
 #endif
 
-#if MI_SECURE>=4 || (MI_FREE_IS_CHECKED && !MI_OPT_FREE)
+#if MI_SECURE>=4 || (MI_FREE_IS_CHECKED && MI_FREE_USE_PAGEMAP)
 #define MI_PAGE_KEY_COUNT 2
 #else
 #define MI_PAGE_KEY_COUNT 1
@@ -129,7 +129,6 @@ terms of the MIT license. A copy of the license can be found in the file
 // Place page meta info at the start of the page area or keep it separate?
 // Separate keeps the page info at the arena start (default) which is more secure
 // and reduces wasted space due to alignment and block sizes.
-// (but if MI_OPT_FREE is false, also reserves more memory up front (about 2MiB per GiB))
 #if !defined(MI_PAGE_META_IS_SEPARATED)
 #if MI_PAGE_MAP_FLAT
 #define MI_PAGE_META_IS_SEPARATED    0
@@ -138,45 +137,45 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
-// We can choose to page meta info aligned at the start of every MI_PAGE_META_CHUNKS
+// We can choose to page meta info aligned at the start of every MI_PAGE_META_ALIGNED_CHUNKS
 // This can be used to have a faster `mi_free(_small)` as we can avoid a page_map lookup.
 // This only works if valid pointers are passed to `mi_free` though. However, checked
 // free `mi_cfree` can still uses the page map to validate pointers.
-#if MI_OPT_FREE && !MI_FREE_IS_CHECKED
+#if !MI_FREE_IS_CHECKED && !MI_FREE_USE_PAGEMAP
 #if MI_PAGE_META_IS_SEPARATED
-#define MI_PAGE_META_ALIGNED_FREE_SMALL 0
 #define MI_PAGE_META_IS_ALIGNED         1        
-#define MI_PAGE_META_CHUNKS             MI_INTPTR_SIZE
+#define MI_PAGE_META_ALIGNED_CHUNKS     MI_INTPTR_SIZE
+#ifdef MI_PAGE_META_SMALL_IS_ALIGNED
+#undef MI_PAGE_META_SMALL_IS_ALIGNED
+#endif
 #else
 #warning "cannot optimize free with alignment since the page meta data is not separated (due to MI_PAGE_MAP_FLAT?)"
 #endif
 #endif
 
-// We can choose to only put page info of small pages at the start of the page area.
+// Deprecated: We can choose to only put page info of small pages at the start of the page area.
 // This can be used to have a slightly faster `mi_free_small` function for specialized
 // cases (like language runtime systems).
-#if MI_OPT_FREE_SMALL && !defined(MI_PAGE_META_ALIGNED_FREE_SMALL)
-#define MI_PAGE_META_ALIGNED_FREE_SMALL   1
-#elif !defined(MI_PAGE_META_ALIGNED_FREE_SMALL)
-#define MI_PAGE_META_ALIGNED_FREE_SMALL   0
+#if !MI_PAGE_META_IS_ALIGNED
+#if MI_OPT_FREE_SMALL && !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
+#define MI_PAGE_META_SMALL_IS_ALIGNED   1
+#elif !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
+#define MI_PAGE_META_SMALL_IS_ALIGNED   0
+#endif
 #endif
 
 // Configuration checks
 #if !MI_PAGE_META_IS_SEPARATED && MI_SECURE
 #error "secure mode should use separated page infos"
 #endif
-#if MI_PAGE_META_ALIGNED_FREE_SMALL && MI_SECURE
-#error "secure mode cannot use MI_OPT_FREE_SMALL (MI_PAGE_META_ALIGNED_FREE_SMALL)"
+#if MI_PAGE_META_SMALL_IS_ALIGNED && MI_SECURE
+#error "secure mode cannot use MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED)"
 #endif
 #if MI_PAGE_META_IS_SEPARATED && MI_PAGE_MAP_FLAT
 #error "cannot have a flat page map with separated page infos"
 #endif
 #if MI_DEBUG && NDEBUG
 #warning "mimalloc assertions enabled in a release build"
-#endif
-
-#ifndef MI_PAGE_KEY2
-#define MI_PAGE_KEY2  1
 #endif
 
 // --------------------------------------------------------------
@@ -242,11 +241,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_PAGE_MIN_COMMIT_SIZE   (16*MI_KiB) /* MI_ARENA_SLICE_SIZE */
 
 #if MI_PAGE_META_IS_ALIGNED
-#define MI_PAGE_META_COUNT        (MI_PAGE_META_CHUNKS * MI_BCHUNK_BITS)
-#define MI_PAGE_META_ALIGN        (MI_PAGE_META_COUNT * MI_ARENA_SLICE_SIZE)  // 256 MiB (32 MiB on 32-bit)
-#define MI_ARENA_ALIGN            MI_PAGE_META_ALIGN
+#define MI_PAGE_META_ALIGNED_COUNT    (MI_PAGE_META_ALIGNED_CHUNKS * MI_BCHUNK_BITS)
+#define MI_PAGE_META_ALIGNMENT        (MI_PAGE_META_ALIGNED_COUNT * MI_ARENA_SLICE_SIZE)  // 256 MiB (32 MiB on 32-bit)
+#define MI_ARENA_ALIGNMENT            MI_PAGE_META_ALIGNMENT
 #else
-#define MI_ARENA_ALIGN            MI_ARENA_SLICE_ALIGN
+#define MI_ARENA_ALIGNMENT            MI_ARENA_SLICE_ALIGN
 #endif
 
 // ------------------------------------------------------
