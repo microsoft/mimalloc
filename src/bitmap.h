@@ -96,7 +96,7 @@ typedef mi_bchunk_t mi_bchunkmap_t;
 #define MI_BITMAP_MAX_CHUNK_COUNT     (MI_BCHUNKMAP_BITS)
 #define MI_BITMAP_MIN_CHUNK_COUNT     (1)
 #if MI_SIZE_BITS > 32
-#define MI_BITMAP_DEFAULT_CHUNK_COUNT     (64)  // 2 GiB on 64-bit -- this is for the page map
+#define MI_BITMAP_DEFAULT_CHUNK_COUNT    (128)  // 4 GiB on 64-bit -- this is for the page map
 #else
 #define MI_BITMAP_DEFAULT_CHUNK_COUNT      (1)
 #endif
