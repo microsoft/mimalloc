@@ -55,11 +55,11 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_STAT 1
 
 // Define MI_SECURE to enable security mitigations
-// #define MI_SECURE 1  // guard pages around meta data, randomize arena allocation addresses (like ASLR), abort on detected meta data corruption
-// #define MI_SECURE 2  // randomize relative allocation addresses (within mimalloc pages)
-// #define MI_SECURE 3  // encode free lists (detect corrupted free list (buffer overflow), and invalid pointer free)
-// #define MI_SECURE 4  // checks for double free (may be more expensive) (`-DMI_SECURE=ON`)
-// #define MI_SECURE 5  // guard page at the end of each mimalloc page (expensive!) (`-DMI_SECURE_FULL=ON`)
+// #define MI_SECURE 1  // check invalid pointer free, guard pages around meta data, randomize arena allocation addresses (like ASLR), abort on detected meta data corruption
+// #define MI_SECURE 2  // randomize relative allocation addresses within mimalloc pages
+// #define MI_SECURE 3  // check buffer overflow, check double free, encode free lists (and detect corrupted free lists) 
+// #define MI_SECURE 4  // same as level 3 for now (`-DMI_SECURE=ON`)
+// #define MI_SECURE 5  // guard page at the end of each mimalloc page (expensive!) (`-DMI_SECURE_FULL=ON`), and byte-precise buffer overflow checks.
 
 #if !defined(MI_SECURE)
 #define MI_SECURE 0
@@ -92,14 +92,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // Reserve extra padding at the end of each block to be more resilient against theap block overflows.
-// The padding can detect buffer overflow on free.
+// The padding can detect heap-block overflow on free, and provides byte-precise `mi_usable_size`.
 #if !defined(MI_PADDING) && (MI_SECURE>=3 || MI_DEBUG>=1 || (MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_TRACK_ETW))
 #define MI_PADDING  1
 #endif
 
-// Check padding bytes; allows byte-precise buffer overflow detection
-#if !defined(MI_PADDING_CHECK) && MI_PADDING && (MI_SECURE>=3 || MI_DEBUG>=1)
-#define MI_PADDING_CHECK 1
+// Check for byte-precise buffer overflow?
+#if !defined(MI_PADDING_CHECK_BYTES) && MI_PADDING && (MI_SECURE>=5 || MI_DEBUG>=1)
+#define MI_PADDING_CHECK_BYTES 1
 #endif
 
 
@@ -109,11 +109,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ENCODE_FREELIST  1
 #endif
 
-#if (MI_ENCODE_FREELIST && (MI_SECURE>=4 || MI_DEBUG!=0))
-#define MI_CHECK_DOUBLE_FREE  1
-#endif
+// Deprecated (checked with padding)
+// #if (MI_ENCODE_FREELIST && (MI_SECURE>=4 || MI_DEBUG!=0))
+// #define MI_CHECK_DOUBLE_FREE  1
+// #endif
 
-#if MI_SECURE>=4 || (MI_FREE_IS_CHECKED && MI_FREE_USE_PAGEMAP)
+#if MI_SECURE>=4 || MI_PADDING || (MI_FREE_IS_CHECKED && MI_FREE_USE_PAGEMAP)
 #define MI_PAGE_KEY_COUNT 2
 #else
 #define MI_PAGE_KEY_COUNT 1

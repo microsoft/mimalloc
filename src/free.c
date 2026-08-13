@@ -13,10 +13,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // forward declarations
-static void   mi_check_padding(const mi_page_t* page, const mi_block_t* block);
-static bool   mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block);
+mi_decl_nodiscard static bool mi_check_padding_on_free(const mi_page_t* page, const mi_block_t* block, bool is_guarded, size_t* usable_size);
 static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block, bool was_guarded);
 static void   mi_stat_free(const mi_page_t* page, const mi_block_t* block);
+// static bool   mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block);
 
 
 // ------------------------------------------------------
@@ -27,18 +27,20 @@ static void   mi_stat_free(const mi_page_t* page, const mi_block_t* block);
 // fast path written carefully to prevent spilling on the stack
 static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool was_guarded, bool track_stats, bool check_full)
 {
-  MI_UNUSED(was_guarded);
   // checks  
-  if mi_unlikely(mi_check_is_double_free(page, block)) return;
-  if (!was_guarded) { mi_check_padding(page, block); }
-  if (track_stats) { mi_stat_free(page, block); }
+  size_t usable_size;
+  if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return; 
+  // if mi_unlikely(!mi_check_is_double_free(page,block)) return;  // checked with padding
+
+  if (track_stats) { 
+    mi_stat_free(page, block);    
+    mi_track_free_size(block, usable_size); 
+  }
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
-  size_t dbgsize = mi_page_block_size(page);
-  if (dbgsize > 1*MI_MiB) { dbgsize = 1*MI_MiB; }
+  const size_t dbgsize = (usable_size > MI_MiB ? MI_MiB : usable_size);
   _mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);  
   #endif
-  if (track_stats) { mi_track_free_size(block, mi_page_usable_size_of(page, block, was_guarded)); } // faster then mi_usable_size as we already know the page and that p is unaligned
-
+  
   // actual free: push on the local free list
   mi_block_set_next(page, block, page->local_free);
   page->local_free = block;
@@ -63,17 +65,17 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
 // Free a block multi-threaded
 static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool allow_collect) mi_attr_noexcept
 {
-  // todo: we cannot safely check for double free in _mt -- should check when collecting the thread_free list
-  if (!was_guarded) { mi_check_padding(page, block); }   // checking padding is safe for mt
+  size_t usable_size;
+  if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return;    // checking padding is safe for mt
+  
   // adjust stats (after padding check )
   mi_stat_free(page, block);    // stat_free may access the padding
-  mi_track_free_size(block, mi_page_usable_size_of(page, block, was_guarded));
+  mi_track_free_size(block, usable_size);
 
   // _mi_padding_shrink(page, block, sizeof(mi_block_t));
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
   if (!was_guarded) {
-    size_t dbgsize = mi_usable_size(block);
-    if (dbgsize > 1*MI_MiB) { dbgsize = 1*MI_MiB; }
+    const size_t dbgsize = (usable_size > MI_MiB ? MI_MiB : usable_size);
     _mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);
   }
   #endif
@@ -540,11 +542,12 @@ mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
 
 
 // ------------------------------------------------------
+// Deprecated: double free is checked with padding now.
 // Check for double free in secure and debug mode
 // This is somewhat expensive so only enabled for secure mode 4
 // ------------------------------------------------------
 
-#if MI_CHECK_DOUBLE_FREE
+#if MI_CHECK_DOUBLE_FREE      
 // linear check if the free list contains a specific element
 static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, const mi_block_t* elem, const char* list_kind) {
   const size_t max_count = page->capacity;      // can never hold more blocks than the capacity
@@ -576,8 +579,8 @@ static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, con
 // Used for double free checking to avoid checking free lists too frequently
 static inline bool mi_block_could_be_double_free(const mi_page_t* page, const mi_block_t* block) {
   mi_block_t* n = mi_block_nextx(page,block,page->keys);
-  return (((uintptr_t)n & (MI_INTPTR_SIZE-1))==0 &&  // quick check: aligned pointer?
-          (n==NULL || mi_is_in_same_page(block,n))); // quick check: in the same page or NULL?  
+  return (((uintptr_t)n & (MI_INTPTR_SIZE-1))==0 &&       // quick check: aligned pointer?
+          (n==NULL || mi_page_contains_address(page,n))); // quick check: in the same page or NULL?  
 }
 
 // check if `block` was free'd before
@@ -604,20 +607,17 @@ static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block
 // ---------------------------------------------------------------------------
 
 #if MI_PADDING // && !MI_TRACK_ENABLED
-static bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* block, size_t* delta, size_t* bsize) {
+static inline bool mi_page_decode_padding(const mi_page_t* page, const mi_block_t* block, size_t* delta, size_t* bsize, bool* double_free) {
   *bsize = mi_page_usable_block_size(page);
-  const mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + *bsize);
+  mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + *bsize);
   mi_track_mem_defined(padding,sizeof(mi_padding_t));
   *delta = padding->delta;
-  uint32_t canary = padding->canary;
-  uintptr_t keys[2];
-  keys[0] = page->keys[0];
-  #if MI_PAGE_KEY_COUNT==2
-  keys[1] = page->keys[1];
-  #else
-  keys[1] = keys[0];
-  #endif
-  bool ok = (mi_ptr_encode_canary(page,block,keys) == canary && *delta <= *bsize);
+  const uint32_t canary = padding->canary;
+  const bool ok = (mi_ptr_encode_canary(page,block,page->keys) == canary && *delta <= *bsize);
+  if (double_free!=NULL) {
+    if mi_unlikely(!ok) { *double_free = mi_ptr_decode_canary_is_freed(canary); }   // double free?
+                   else { padding->canary = mi_ptr_encode_canary_freed(); }         // mark as freed
+  }
   mi_track_mem_noaccess(padding,sizeof(mi_padding_t));
   return ok;
 }
@@ -631,7 +631,7 @@ static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* bl
   else {
     size_t bsize;
     size_t delta;
-    bool ok = mi_page_decode_padding(page, block, &delta, &bsize);
+    bool ok = mi_page_decode_padding(page, block, &delta, &bsize, NULL);
     mi_assert_internal(ok); mi_assert_internal(delta <= bsize);
     return (ok ? bsize - delta : 0);
   }
@@ -644,7 +644,7 @@ static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* bl
 void _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size) {
   size_t bsize;
   size_t delta;
-  bool ok = mi_page_decode_padding(page, block, &delta, &bsize);
+  bool ok = mi_page_decode_padding(page, block, &delta, &bsize, NULL);
   mi_assert_internal(ok);
   if (!ok || (bsize - delta) >= min_size) return;  // usually already enough space
   mi_assert_internal(bsize >= min_size);
@@ -673,16 +673,17 @@ void _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const si
 }
 #endif
 
-#if MI_PADDING && MI_PADDING_CHECK
+#if MI_PADDING
 
-static bool mi_verify_padding(const mi_page_t* page, const mi_block_t* block, size_t* size, size_t* wrong) {
+static bool mi_verify_padding(const mi_page_t* page, const mi_block_t* block, size_t* size, size_t* wrong, bool* is_double_free) {
   size_t bsize;
   size_t delta;
-  bool ok = mi_page_decode_padding(page, block, &delta, &bsize);
+  bool ok = mi_page_decode_padding(page, block, &delta, &bsize, is_double_free );
   *size = *wrong = bsize;
   if (!ok) return false;
   mi_assert_internal(bsize >= delta);
   *size = bsize - delta;
+  #if MI_PADDING_CHECK_BYTES
   if (!mi_page_is_huge(page)) {
     uint8_t* fill = (uint8_t*)block + bsize - delta;
     const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // check at most the first N padding bytes
@@ -696,22 +697,37 @@ static bool mi_verify_padding(const mi_page_t* page, const mi_block_t* block, si
     }
     mi_track_mem_noaccess(fill, maxpad);
   }
+  #endif
   return ok;
 }
 
-static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
-  size_t size;
-  size_t wrong;
-  if (!mi_verify_padding(page,block,&size,&wrong)) {
-    _mi_error_message(EFAULT, "buffer overflow in theap block %p of size %zu: write after %zu bytes\n", block, size, wrong );
+mi_decl_nodiscard static bool mi_check_padding_on_free(const mi_page_t* page, const mi_block_t* block, bool is_guarded, size_t* usable_size) {
+  if mi_unlikely(is_guarded) {
+    const size_t bsize = mi_page_block_size(page);
+    *usable_size = (bsize - _mi_os_page_size());
+    return true;
+  }
+  else {
+    size_t wrong;
+    bool is_double_free;
+    if mi_unlikely(!mi_verify_padding(page,block,usable_size,&wrong,&is_double_free)) {
+      if (is_double_free) {
+        _mi_error_message(EAGAIN, "double free detected of heap block %p with size %zu\n", block, *usable_size);
+      }
+      else {
+        _mi_error_message(EFAULT, "buffer overflow in heap block %p of size %zu: write after %zu bytes\n", block, *usable_size, wrong );
+      }
+      return false;  
+    }
+    return true;
   }
 }
 
 #else
 
-static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
-  MI_UNUSED(page);
-  MI_UNUSED(block);
+mi_decl_nodiscard static bool mi_check_padding_on_free(const mi_page_t* page, const mi_block_t* block, bool is_guarded, size_t* usable_size) {
+  *usable_size = mi_page_usable_size_of(page,block,is_guarded);
+  return true;
 }
 
 #endif

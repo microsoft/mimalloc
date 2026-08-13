@@ -103,7 +103,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
     mi_track_mem_defined(padding,sizeof(mi_padding_t));  // note: re-enable since mi_page_usable_block_size may set noaccess
     padding->canary = mi_ptr_encode_canary(page,block,page->keys);
     padding->delta  = (uint32_t)(delta);
-    #if MI_PADDING_CHECK
+    #if MI_PADDING_CHECK_BYTES
     if (!mi_page_is_huge(page)) {
       uint8_t* fill = (uint8_t*)padding - delta;
       const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes

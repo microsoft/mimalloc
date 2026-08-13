@@ -1217,11 +1217,20 @@ static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const 
 static inline uint32_t mi_ptr_encode_canary(const void* null, const void* p, const uintptr_t* keys) {
   const uint32_t x = (uint32_t)(mi_ptr_encode(null,p,keys));
   // make the lowest byte 0 to prevent spurious read overflows which could be a security issue (issue #951)
+  // also clear bit 9 which we set only when a block is freed.
   #if MI_BIG_ENDIAN
-  return (x & 0x00FFFFFF);
+  return (x & 0x00FFFEFF);
   #else
-  return (x & 0xFFFFFF00);
+  return (x & 0xFFFFFE00);
   #endif
+}
+
+static inline uint32_t mi_ptr_encode_canary_freed(void) {
+  return (0x00DEAD00);  // set bit 9 so it is different from any valid canary
+}
+
+static inline bool mi_ptr_decode_canary_is_freed(uint32_t canary) {
+  return (canary == mi_ptr_encode_canary_freed());
 }
 
 static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, const uintptr_t* keys ) {
@@ -1255,7 +1264,7 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
   mi_block_t* next = mi_block_nextx(page,block,page->keys);
   // check for free list corruption: is `next` at least in the same page?
   // todo: check if `next` is `page->block_size` aligned?
-  if mi_unlikely(next!=NULL && !mi_is_in_same_page(block, next)) {
+  if mi_unlikely(next!=NULL && !mi_page_contains_address(page,next)) {
     return _mi_block_next_is_corrupted(page,block,next); // returns NULL
   }
   return next;
