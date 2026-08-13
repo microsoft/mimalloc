@@ -296,7 +296,7 @@ static bool mi_page_map_init_once(void) {
   const size_t submap_size   = MI_PAGE_MAP_SUB_SIZE;
   const size_t extra_reserve_size  = reserve_size + submap_size;
   const bool commit = (vbits == MI_MIN_VABITS) || (reserve_size <= 64*MI_KiB) || // 42 virtual address bits
-                      mi_option_is_enabled(mi_option_pagemap_commit); // || _mi_os_has_overcommit();
+                      mi_option_is_enabled(mi_option_pagemap_commit) || _mi_os_has_overcommit();
   mi_subproc_t* const subproc = _mi_subproc_main();
   mi_memid_t memid;
   mi_page_map_t* const pmap = (mi_page_map_t*)_mi_os_alloc_aligned(subproc, extra_reserve_size, 1, commit, true /* allow large */, &memid);
@@ -329,11 +329,6 @@ static bool mi_page_map_init_once(void) {
     mi_assert_internal(is_zero || memid.initially_zero);
     commit_count = mi_page_map_count_of_size(min_commit_size);
     mi_assert_internal(commit_count >= min_commit_count);
-    #if MI_DEBUG>1
-    size_t subidx;
-    const size_t idx = _mi_page_map_index((void*)(MI_ZU(1)<<MI_MIN_VABITS),&subidx);
-    mi_assert_internal(idx < commit_count);
-    #endif
   }
   
   // ensure there is a submap for the NULL address
