@@ -97,14 +97,33 @@ size_t mi_arena_min_size(void) {
   return MI_ARENA_MIN_SIZE;
 }
 
-static size_t mi_arena_max_object_size(void) {
+// slices reserved for page meta info at the start of aligned chunks
+static size_t mi_arena_page_meta_aligned_slice_count(void) {
+  #if MI_PAGE_META_IS_ALIGNED
+  return _mi_divide_up(MI_PAGE_META_ALIGNED_COUNT * sizeof(mi_page_t), MI_ARENA_SLICE_SIZE);
+  #else
+  return 0;
+  #endif
+}
+
+// fixed limit for the maximum object size in an arena
+static size_t mi_arena_max_fixed_object_size(void) {
+  #if MI_PAGE_META_IS_ALIGNED
+  return (MI_PAGE_META_ALIGNMENT - mi_arena_page_meta_aligned_slice_count());
+  #else
+  return (MI_ARENA_MAX_SIZE - MI_ARENA_CHUNK_SIZE); // minus an initial chunk to accommodate meta info
+  #endif
+}
+
+// Maximum object size allowed to be allocated in an arena
+size_t mi_arena_max_object_size(void) {
   size_t max_size = mi_option_get_size(mi_option_arena_max_object_size);
   max_size = _mi_align_up(max_size, MI_ARENA_SLICE_SIZE);
   if (max_size <= MI_ARENA_MIN_OBJ_SIZE) {
     return MI_ARENA_MIN_OBJ_SIZE;
   }
-  else if (max_size >= MI_ARENA_MAX_SIZE - (MI_BCHUNK_BITS*MI_ARENA_SLICE_SIZE)) {  // minus an initial chunk to accommodate meta info
-    return (MI_ARENA_MAX_SIZE - (MI_BCHUNK_BITS*MI_ARENA_SLICE_SIZE));
+  else if (max_size >= mi_arena_max_fixed_object_size()) {
+    return mi_arena_max_fixed_object_size();
   }
   else {
     return max_size;
@@ -215,14 +234,6 @@ static size_t mi_page_full_size(mi_page_t* page) {
   else {
     return 0;
   }
-}
-
-static size_t mi_arena_page_meta_slices(void) {
-  #if MI_PAGE_META_IS_ALIGNED
-  return _mi_divide_up(MI_PAGE_META_ALIGNED_COUNT * sizeof(mi_page_t), MI_ARENA_SLICE_SIZE);
-  #else
-  return 0;
-  #endif
 }
 
 /* -----------------------------------------------------------
@@ -911,7 +922,7 @@ static mi_page_t* mi_arena_page_meta(mi_memid_t memid_slice, const void* slice_s
       const size_t meta_slice_index  = (meta_slices - mi_arena_start(arena)) / MI_ARENA_SLICE_SIZE;
       if mi_unlikely(mi_bitmap_is_clear(arena->slices_committed, meta_slice_index)) {
         // try to commit now
-        const size_t meta_slice_count = mi_arena_page_meta_slices();
+        const size_t meta_slice_count = mi_arena_page_meta_aligned_slice_count();
         const size_t commit_size = meta_slice_count * MI_ARENA_SLICE_SIZE;
         if (!mi_arena_commit(arena->subproc, arena, meta_slices, commit_size, NULL, commit_size /* dont count? */)) {
           // if the commit fails return NULL
@@ -1627,13 +1638,13 @@ static size_t mi_arena_pages_size(size_t slice_count, size_t* bitmap_base) {
 }
 
 static mi_arena_t* mi_arena_info(void* area) {
-  return (mi_arena_t*)((uint8_t*)area + mi_size_of_slices(mi_arena_page_meta_slices()));
+  return (mi_arena_t*)((uint8_t*)area + mi_size_of_slices(mi_arena_page_meta_aligned_slice_count()));
 }
 
 static size_t mi_arena_info_slices_needed(size_t slice_count, size_t* bitmap_base) {
   if (slice_count == 0) slice_count = MI_BCHUNK_BITS;
   mi_assert_internal((slice_count % MI_BCHUNK_BITS) == 0);
-  const size_t base_size = mi_size_of_slices(mi_arena_page_meta_slices()) + _mi_align_up(sizeof(mi_arena_t), MI_BCHUNK_SIZE);
+  const size_t base_size = mi_size_of_slices(mi_arena_page_meta_aligned_slice_count()) + _mi_align_up(sizeof(mi_arena_t), MI_BCHUNK_SIZE);
   const size_t bitmaps_count = 4 + MI_ARENA_BIN_COUNT; // commit, dirty, purge, pages, and abandoned
   const size_t bitmaps_size = bitmaps_count * mi_bitmap_size(slice_count, NULL) + mi_bbitmap_size(slice_count, NULL); // + free
   #if MI_PAGE_META_IS_SEPARATED && !MI_PAGE_META_IS_ALIGNED
@@ -1771,7 +1782,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
   #if MI_PAGE_META_IS_ALIGNED
   for(size_t i = 0; i < arena->slice_count; i += MI_PAGE_META_ALIGNED_COUNT) {
     // set all free slices (and skip the slices reserved for the page meta info)
-    const size_t meta_slices = (i==0 ? info_slices : mi_arena_page_meta_slices());
+    const size_t meta_slices = (i==0 ? info_slices : mi_arena_page_meta_aligned_slice_count());
     const size_t start_idx = (i + meta_slices);
     size_t count = MI_PAGE_META_ALIGNED_COUNT - meta_slices;
     if (start_idx < arena->slice_count) {
@@ -2014,7 +2025,7 @@ static size_t mi_debug_show_page_bfield(char* buf, size_t* k, mi_arena_t* arena,
       // else if (_mi_meta_is_meta_page(arena->subproc,start)) { c = 'm'; color = MI_GRAY; }
       else if (slice_index + bit < arena->info_slices) { c = 'i'; color = MI_GRAY; }
       #if MI_PAGE_META_IS_ALIGNED
-      else if ((slice_index % MI_PAGE_META_ALIGNED_COUNT) == 0 && (size_t)bit <= mi_arena_page_meta_slices()) {
+      else if ((slice_index % MI_PAGE_META_ALIGNED_COUNT) == 0 && (size_t)bit <= mi_arena_page_meta_aligned_slice_count()) {
         { c = 'i'; color = MI_GRAY; }
       }
       #endif
