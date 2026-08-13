@@ -748,23 +748,18 @@ static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
   return _mi_page_map_at(pmap,idx)[sub_idx];  // NULL if p==NULL
 }
 
-#include <stdio.h>
 static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
   const mi_page_map_t* pmap = _mi_page_map();
   size_t sub_idx;
   const size_t idx = _mi_page_map_index(p, &sub_idx);
-  #if MI_MIN_VABITS < MI_INTPTR_BITS
   const size_t committed_count = mi_atomic_load_relaxed(&pmap->committed_count);    
-  if mi_unlikely(((uintptr_t)p >> MI_MIN_VABITS) != 0) {  
-    if mi_unlikely(idx >= committed_count) {
-      return NULL;
-    }
-  }   
-  if mi_unlikely(idx >= committed_count) {
-    fprintf(stderr,"invalid pointer %p, idx: %zu, committed count: %zu, min_vabits: %d\n", p, idx, committed_count, MI_MIN_VABITS);
-  }
-  #endif
-  mi_assert_internal(idx < mi_atomic_load_relaxed(&pmap->committed_count));
+  if mi_unlikely(idx >= committed_count) return NULL;
+  // #if MI_MIN_VABITS < MI_INTPTR_BITS   // is still invalid if free is called before the pagemap is initialized
+  // if mi_unlikely(((uintptr_t)p >> MI_MIN_VABITS) != 0) {  
+  //   const size_t committed_count = mi_atomic_load_relaxed(&pmap->committed_count);      
+  //   if mi_unlikely(idx >= committed_count) return NULL;
+  // }   
+  // #endif
   mi_submap_t const sub = _mi_page_map_at(pmap,idx);
   if mi_unlikely(sub == NULL) return NULL;
   return sub[sub_idx];
