@@ -329,6 +329,11 @@ static bool mi_page_map_init_once(void) {
     mi_assert_internal(is_zero || memid.initially_zero);
     commit_count = mi_page_map_count_of_size(min_commit_size);
     mi_assert_internal(commit_count >= min_commit_count);
+    #if MI_DEBUG>1
+    size_t subidx;
+    const size_t idx = _mi_page_map_index((void*)(MI_ZU(1)<<MI_MIN_VABITS),&subidx);
+    mi_assert_internal(idx < commit_count);
+    #endif
   }
   
   // ensure there is a submap for the NULL address
