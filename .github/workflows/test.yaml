@@ -49,6 +49,7 @@ jobs:
       - name: Debug
         if: matrix.tests == 'basic'
         run: |
+          env
           cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
           cmake --build out/debug --parallel 4 --config Debug
           ctest --test-dir out/debug --verbose --timeout 240 -C Debug
