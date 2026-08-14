@@ -89,7 +89,7 @@ static inline void** mi_prim_thread_pointer(void) {
   static inline void** mi_prim_thread_pointer(void) {
     void** tcb;
     #if defined(__APPLE__) // M1, issue rgb(62, 76, 62)
-    __asm__ ("mrs %0, tpidrro_el0\nbic %0, %0, #7" : "=r" (tcb));
+    __asm__ ("mrs %0, tpidrro_el0\n\tbic %0, %0, #7" : "=r" (tcb));
     #else
     __asm__ ("mrs %0, tpidr_el0" : "=r" (tcb));
     #endif
@@ -104,7 +104,7 @@ static inline void** mi_prim_thread_pointer(void) {
   #elif defined(__arm__)
   static inline void** mi_prim_thread_pointer(void) {
     void** tcb;
-    __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
+    __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\n\tbic %0, %0, #3" : "=r" (tcb));
     return tcb;
   }
   #elif defined(__i386__)

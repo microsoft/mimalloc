@@ -74,13 +74,13 @@ static void zone_free(malloc_zone_t* zone, void* p) {
   mi_page_t* const page = _mi_checked_ptr_page(p);  
   if mi_likely(page!=NULL) {
     mi_assert_internal(_mi_thread_is_initialized());  
-    _mi_free_in_page(p,page);
+    _mi_free_in_page_nonnull(p,page);
     // if mi_likely(_mi_thread_is_initialized()) {
-    //   _mi_free_in_page(p,page);
+    //   _mi_free_in_page_nonnull(p,page);
     // }
     // else {
     //   // during thread shutdown `_pthread_tsd_cleanup` may call `zone_free` on a pointer that was allocated in another subproc.
-    //   _mi_free_subproc_safe_in_page(p,page); 
+    //   _mi_free_subproc_safe_in_page_nonnull(p,page); 
     // }
   }
   else if (!is_mimalloc_zone(zone)) {  // can happen due to interpose
