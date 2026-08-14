@@ -139,7 +139,6 @@ jobs:
       - name: Debug, TLS pthreads
         if: matrix.tests == 'extra' && runner.os == 'linux'
         run: |
-          env
           cmake . -B out/debug-tls-pthreads -DCMAKE_BUILD_TYPE=Debug -DMI_TLS_MODEL_PTHREADS=ON
           cmake --build out/debug-tls-pthreads --parallel 4 --config Debug
           ctest --test-dir out/debug-tls-pthreads --verbose --timeout 240 -C Debug
