@@ -109,7 +109,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ENCODE_FREELIST  1
 #endif
 
-// Deprecated (checked with padding)
+// Deprecated (double-free is now checked with padding)
 // #if (MI_ENCODE_FREELIST && (MI_SECURE>=4 || MI_DEBUG!=0))
 // #define MI_CHECK_DOUBLE_FREE  1
 // #endif
@@ -141,7 +141,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // We can choose to page meta info aligned at the start of every MI_PAGE_META_ALIGNED_CHUNKS
 // This can be used to have a faster `mi_free(_small)` as we can avoid a page_map lookup.
 // This only works if valid pointers are passed to `mi_free` though. However, checked
-// free `mi_cfree` can still uses the page map to validate pointers.
+// free `mi_cfree` can still use the page map to validate pointers.
 #if !MI_FREE_IS_CHECKED && !MI_FREE_USE_PAGEMAP
 #if MI_PAGE_META_IS_SEPARATED
 #define MI_PAGE_META_IS_ALIGNED         1        
@@ -154,7 +154,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
-// Deprecated: We can choose to only put page info of small pages at the start of the page area.
+// Deprecated (in favor of MI_PAGE_META_IS_ALIGNED): 
+// We can choose to only put page info of small pages at the start of the page area.
 // This can be used to have a slightly faster `mi_free_small` function for specialized
 // cases (like language runtime systems).
 #if !MI_PAGE_META_IS_ALIGNED

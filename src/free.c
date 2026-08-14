@@ -191,6 +191,7 @@ static inline bool mi_validate_ptr_page_nonnull(const void* p, const char* msg, 
     #endif
     
     #if MI_SMALL_PAGE_SIZE == MI_ARENA_SLICE_SIZE
+    // for mi_free_small we can avoid a load-acquire
     if (free_small) { mi_assert_internal(page == mi_atomic_load_ptr_acquire(mi_page_t,&page->self)); } 
                else { page = mi_atomic_load_ptr_acquire(mi_page_t,&page->self); }
     #else
@@ -291,7 +292,7 @@ void mi_free_small(void* p) mi_attr_noexcept {
     #endif
   #else
     mi_page_t* page; 
-    if mi_likely(mi_validate_ptr_page_nonnull(p,"mi_free_small",true,&page)) {    
+    if mi_likely(mi_validate_ptr_page_nonnull(p,"mi_free_small",true /* is_small? */,&page)) {    
       mi_free_nonnull(p, page, NULL, true /* allow collect? */);
     }  
   #endif  
