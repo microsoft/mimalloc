@@ -235,7 +235,7 @@ bool _mi_os_secure_guard_page_reset_before(mi_subproc_t* subproc, void* addr, mi
 
 static void mi_os_free_huge_os_pages(mi_subproc_t* subproc, void* p, size_t size);
 
-static void mi_os_prim_free(mi_subproc_t* subproc, void* addr, size_t size, size_t commit_size) {
+static void mi_os_prim_free(mi_subproc_t* subproc, void* addr, size_t size, size_t commit_size, bool adjust) {
   mi_assert_internal(subproc!=NULL);
   mi_assert_internal((size % _mi_os_page_size()) == 0);
   if (addr == NULL) return; // || _mi_os_is_huge_reserved(addr)
@@ -243,10 +243,14 @@ static void mi_os_prim_free(mi_subproc_t* subproc, void* addr, size_t size, size
   if (err != 0) {
     _mi_warning_message("unable to free OS memory (error: %d (0x%x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
   }
-  if (commit_size > 0) {
-    mi_subproc_stat_decrease(subproc, committed, commit_size);
+  if (adjust) {
+    if (commit_size>0) { mi_subproc_stat_adjust_decrease(subproc, committed, commit_size); }
+    mi_subproc_stat_adjust_decrease(subproc, reserved, size);
   }
-  mi_subproc_stat_decrease(subproc, reserved, size);
+  else {
+    if (commit_size>0) { mi_subproc_stat_decrease(subproc, committed, commit_size); }
+    mi_subproc_stat_decrease(subproc, reserved, size);
+  }
 }
 
 void _mi_os_free_ex(mi_subproc_t* subproc, void* addr, size_t size, bool still_committed, mi_memid_t memid) {
@@ -274,7 +278,7 @@ void _mi_os_free_ex(mi_subproc_t* subproc, void* addr, size_t size, bool still_c
       mi_os_free_huge_os_pages(subproc, base, csize);
     }
     else {
-      mi_os_prim_free(subproc, base, csize, (still_committed ? commit_size : 0));
+      mi_os_prim_free(subproc, base, csize, (still_committed ? commit_size : 0), false);
     }
   }
   else {
@@ -369,7 +373,7 @@ static void* mi_os_prim_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t
       _mi_warning_message("unable to allocate aligned OS memory directly, fall back to over-allocation (size: 0x%zx bytes, address: %p, alignment: 0x%zx, commit: %d)\n", size, p, alignment, commit);
     }
     #endif
-    if (p != NULL) { mi_os_prim_free(subproc, p, size, (commit ? size : 0)); }
+    if (p != NULL) { mi_os_prim_free(subproc, p, size, (commit ? size : 0), true /* adjust so we "forget" the previous reservation */); }
     if (size >= (SIZE_MAX - alignment)) return NULL; // overflow
     const size_t over_size = size + alignment;
 
@@ -388,14 +392,15 @@ static void* mi_os_prim_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t
       // explicitly commit only the aligned part
       if (commit) {
         if (!_mi_os_commit(subproc, p, size, NULL)) {
-          mi_os_prim_free(subproc, os_base, over_size, 0);
+          mi_os_prim_free(subproc, os_base, over_size, 0, true);
           return NULL;
         }
       }
     }
     else  { // mmap can free inside an allocation
       // overallocate...
-      p = mi_os_prim_alloc(subproc, over_size, 1, commit, false, &os_is_large, &os_is_zero);
+      // note: we keep `allow_large` but this only works if we can partially free any large OS pages later on. This seems to be the case though.
+      p = mi_os_prim_alloc(subproc, over_size, 1, commit, allow_large /* or false? */, &os_is_large, &os_is_zero);
       if (p == NULL) return NULL;
 
       // and selectively unmap parts around the over-allocated area.
@@ -404,8 +409,8 @@ static void* mi_os_prim_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t
       const size_t mid_size = _mi_align_up(size, _mi_os_page_size());
       const size_t post_size = over_size - pre_size - mid_size;
       mi_assert_internal(pre_size < over_size&& post_size < over_size&& mid_size >= size);
-      if (pre_size > 0)  { mi_os_prim_free(subproc, p, pre_size, (commit ? pre_size : 0)); }
-      if (post_size > 0) { mi_os_prim_free(subproc, (uint8_t*)aligned_p + mid_size, post_size, (commit ? post_size : 0)); }
+      if (pre_size > 0)  { mi_os_prim_free(subproc, p, pre_size, (commit ? pre_size : 0), true /* adjust */); }
+      if (post_size > 0) { mi_os_prim_free(subproc, (uint8_t*)aligned_p + mid_size, post_size, (commit ? post_size : 0), true /* adjust */); }
       // we can return the aligned pointer on `mmap` systems
       p = aligned_p;
       os_base = aligned_p; // since we freed the pre part, `*base == p`.
@@ -787,7 +792,7 @@ void* _mi_os_alloc_huge_os_pages(mi_subproc_t* subproc, size_t pages, int numa_n
       // no success, issue a warning and break
       if (p != NULL) {
         _mi_warning_message("could not allocate contiguous huge OS page %zu at %p\n", page, addr);
-        mi_os_prim_free(subproc, p, MI_HUGE_OS_PAGE_SIZE, MI_HUGE_OS_PAGE_SIZE);
+        mi_os_prim_free(subproc, p, MI_HUGE_OS_PAGE_SIZE, MI_HUGE_OS_PAGE_SIZE, true /* adjust */);
       }
       break;
     }
@@ -834,7 +839,7 @@ static void mi_os_free_huge_os_pages(mi_subproc_t* subproc, void* p, size_t size
   if (p==NULL || size==0) return;
   uint8_t* base = (uint8_t*)p;
   while (size >= MI_HUGE_OS_PAGE_SIZE) {
-    mi_os_prim_free(subproc, base, MI_HUGE_OS_PAGE_SIZE, MI_HUGE_OS_PAGE_SIZE);
+    mi_os_prim_free(subproc, base, MI_HUGE_OS_PAGE_SIZE, MI_HUGE_OS_PAGE_SIZE, false /* adjust? */);
     size -= MI_HUGE_OS_PAGE_SIZE;
     base += MI_HUGE_OS_PAGE_SIZE;
   }

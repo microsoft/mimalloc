@@ -411,7 +411,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   // _mi_arenas_collect(false, false, theap->tld);  // allow purging
 }
 
-#define MI_RETIRE_CYCLES      (16)      /* keep a retired page around for about 16 "cycles" before free'ing it */
+#define MI_RETIRE_CYCLES      (16)      /* keep a retired page around for about 16 "admin cycles" before free'ing it */
 #define MI_RETIRE_MAX_PAGES   (3)       /* keep at most N pages per size bin as retired */
 
 // Retire a page with no more used blocks
@@ -438,8 +438,8 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   mi_page_queue_t* pq = mi_page_queue_of(page);
   #if MI_RETIRE_CYCLES > 0
   const size_t bsize = mi_page_block_size(page);
-  if mi_likely( /* bsize < MI_MAX_RETIRE_SIZE && */ !mi_page_queue_is_special(pq)) {  // not full or huge queue?
-    if (pq->count <= MI_RETIRE_MAX_PAGES) { // at most N pages left?  // pq->last==page && pq->first==page) { // the only page in the queue?
+  if mi_likely( pq->count <= MI_RETIRE_MAX_PAGES && !mi_page_queue_is_special(pq)) {  // not full or huge queue?
+    if (pq->count==1 || bsize < MI_SMALL_SIZE_MAX) {
       mi_theap_t* theap = mi_page_theap(page);
       mi_theap_stat_counter_increase(theap, pages_retire, 1);
       page->retire_expire = (bsize <= MI_SMALL_MAX_OBJ_SIZE ? MI_RETIRE_CYCLES : MI_RETIRE_CYCLES/4);
@@ -450,7 +450,7 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
       if (index > theap->page_retired_max) theap->page_retired_max = index;
       mi_assert_internal(mi_page_all_free(page));
       return; // don't free after all
-    }
+    }  
   }
   #endif
   _mi_page_free(page, pq);
@@ -479,6 +479,7 @@ static void mi_theap_collect_full_pages(mi_theap_t* theap) {
 }
 
 static void mi_page_try_retire(mi_page_queue_t* pq, mi_page_t* page, size_t bin, bool force, size_t* min, size_t* max) {    
+  mi_assert_internal(page!=NULL && page->retire_expire!=0);
   if (mi_page_all_free(page)) {
     page->retire_expire--;
     if (page->retire_expire == 0 || force) {

@@ -201,6 +201,7 @@ static inline bool mi_validate_ptr_page_nonnull(const void* p, const char* msg, 
     mi_assert_internal(page!=NULL);
     mi_assert(cpage==page /* page_map lookup should be the same as aligned lookup */ );  
   #else
+    MI_UNUSED(free_small);
     page = _mi_ptr_page(p);
     if mi_unlikely(page==NULL) {
       #if MI_DEBUG
