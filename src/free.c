@@ -191,11 +191,11 @@ static inline bool mi_validate_ptr_page_nonnull(const void* p, const char* msg, 
     #endif
     
     #if MI_SMALL_PAGE_SIZE == MI_ARENA_SLICE_SIZE
-    if (free_small) { mi_assert_internal(page == mi_atomic_load_ptr_relaxed(mi_page_t,&page->self)); } 
-               else { page = mi_atomic_load_ptr_relaxed(mi_page_t,&page->self); }
+    if (free_small) { mi_assert_internal(page == mi_atomic_load_ptr_acquire(mi_page_t,&page->self)); } 
+               else { page = mi_atomic_load_ptr_acquire(mi_page_t,&page->self); }
     #else
     MI_UNUSED(free_small);
-    page = mi_atomic_load_ptr_relaxed(mi_page_t,&page->self);
+    page = mi_atomic_load_ptr_acquire(mi_page_t,&page->self);
     #endif
 
     mi_assert_internal(page!=NULL);
@@ -256,7 +256,7 @@ void _mi_free_in_page_nonnull(void* p, mi_page_t* page) mi_attr_noexcept {
 void mi_free(void* p) mi_attr_noexcept {  
   mi_page_t* page; 
   if mi_likely(mi_validate_ptr_page_nonnull(p,"mi_free",false,&page)) {    
-    _mi_free_in_page_nonnull(p, page);
+    mi_free_nonnull(p, page, NULL, true /* allow collect? */);
   }
 }
 
@@ -291,7 +291,7 @@ void mi_free_small(void* p) mi_attr_noexcept {
   #else
     mi_page_t* page; 
     if mi_likely(mi_validate_ptr_page_nonnull(p,"mi_free_small",true,&page)) {    
-      _mi_free_in_page_nonnull(p, page);
+      mi_free_nonnull(p, page, NULL, true /* allow collect? */);
     }  
   #endif  
 }
@@ -304,7 +304,7 @@ void _mi_free_subproc_safe_in_page_nonnull(void* p, mi_page_t* page) mi_attr_noe
 void _mi_free_subproc_safe(void* p) mi_attr_noexcept {
   mi_page_t* page; 
   if mi_likely(mi_validate_ptr_page_nonnull(p,"_mi_free_subproc_safe",false,&page)) {    
-    _mi_free_subproc_safe_in_page_nonnull(p, page);
+    mi_free_nonnull(p, page, NULL, false /* allow collect? */);
   }
 }
 
@@ -357,7 +357,7 @@ void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
 void mi_cfree(void* p) mi_attr_noexcept {
   mi_page_t* const page = _mi_checked_ptr_page(p);
   if mi_likely(page!=NULL) {
-    _mi_free_in_page_nonnull(p,page);
+    mi_free_nonnull(p, page, NULL, true /* allow collect? */);
   }
 }
 

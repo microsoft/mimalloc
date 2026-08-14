@@ -738,7 +738,7 @@ static inline mi_page_map_t* _mi_page_map(void) {
 }
 
 static inline mi_submap_t _mi_page_map_at(const mi_page_map_t* pmap, size_t idx) {
-  return mi_atomic_load_ptr_relaxed(mi_page_t*, &pmap->submaps[idx]);
+  return mi_atomic_load_ptr_acquire(mi_page_t*, &pmap->submaps[idx]);
 }
 
 static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
@@ -780,7 +780,7 @@ static inline mi_page_t* _mi_aligned_ptr_page0(const void* p) {
 static inline mi_page_t* _mi_aligned_ptr_page(const void* p) {
   mi_page_t* const page = _mi_aligned_ptr_page0(p);
   if mi_unlikely(page==NULL) return NULL;
-  return mi_atomic_load_relaxed(&page->self);
+  return mi_atomic_load_acquire(&page->self);
 }
 #endif
 

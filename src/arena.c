@@ -1085,10 +1085,10 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   }
   #if MI_DEBUG>1
   mi_page_t* pstart = _mi_aligned_ptr_page0(slice_start);
-  mi_assert_internal(pstart->self==page);
+  mi_assert_internal(mi_atomic_load_ptr_acquire(mi_page_t,&pstart->self)==page);
   if (reserved>1) {
     mi_page_t* pend = _mi_aligned_ptr_page0(slice_start + (slice_count*MI_ARENA_SLICE_SIZE) - 1);
-    mi_assert_internal(pend->self==page);
+    mi_assert_internal(mi_atomic_load_ptr_acquire(mi_page_t,&pend->self)==page);
   }
   #endif
   #endif

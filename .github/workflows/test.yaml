@@ -60,12 +60,12 @@ jobs:
           cmake --build out/release --parallel 4 --config Release
           ctest --test-dir out/release --verbose --timeout 240 -C Release
 
-      - name: Release, asm
+      - name: Release, Asm
         if: matrix.tests == 'basic' && runner.os == 'Linux'
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.os }}-alloc.c.s
-          path: out/release/CMakeFiles/mimalloc-static.dir/src/alloc.c.s
+          name: ${{ matrix.os }}-asm
+          path: out/release/CMakeFiles/mimalloc-static.dir/src/*.c.s
 
 
       - name: Secure
@@ -178,12 +178,12 @@ jobs:
           cmake --build out/release-clang-cxx --parallel 8 --config Release
           ctest --test-dir out/release-clang-cxx --verbose --timeout 240 -C Release
 
-      - name: Release, C++, clang++, asm
+      - name: Release, C++, clang++, Asm
         if: matrix.tests == 'extra' && runner.os == 'Linux'
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.os }}-clang-cxx-alloc.s
-          path: out/release-clang-cxx/alloc.s
+          name: ${{ matrix.os }}-clang-cxx-asm
+          path: out/release-clang-cxx/*.s
 
       - name: Debug, ASAN
         if: matrix.tests == 'extra' && runner.os == 'Linux'
@@ -361,12 +361,12 @@ jobs:
           cmake --build out/release-riscv64 --parallel 4 --config Release
           ctest --test-dir out/release-riscv64 --verbose --timeout 240 -C Release
 
-      - name: Alpine risc64, asm
+      - name: Alpine risc64, Asm
         if: matrix.tests == 'alpine-riscv64'
         uses: actions/upload-artifact@v7
         with:
-          name: alpine-riscv64-alloc.c.s
-          path: out/release-riscv64/CMakeFiles/mimalloc.dir/src/alloc.c.s
+          name: alpine-riscv64-asm
+          path: out/release-riscv64/CMakeFiles/mimalloc.dir/src/*.c.s
 
       - name: Alpine riscv64, Secure
         if: matrix.tests == 'alpine-riscv64'

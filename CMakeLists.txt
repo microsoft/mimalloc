@@ -12,7 +12,7 @@ option(MI_XMALLOC           "Enable abort() call on memory allocation failure by
 option(MI_SHOW_ERRORS       "Show error and warning messages by default (only enabled by default in DEBUG mode)" OFF)
 option(MI_GUARDED           "Build with guard pages behind certain object allocations (enabled by default in a debug build)" OFF)
 option(MI_USE_CXX           "Use the C++ compiler to compile the library (instead of the C compiler)" OFF)
-option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell;-mavx2' (2013), for arm64: '-march=armv8.1-a' (2016))" OFF)
+option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell;-mavx2' (2013), for arm64: '-march=armv8.3-a' (2016), for riscV: '-march=rva22_zacas' (2024))" OFF)
 option(MI_OPT_SIMD          "Use SIMD instructions (requires MI_OPT_ARCH to be enabled)" OFF)
 
 set(MI_FREE_IS_CHECKED "DEFAULT" CACHE STRING "Check for invalid pointers in 'mi_free': OFF, SHARED, ON, DEFAULT. 'SHARED' enables it only for the dynamic/shared library when MI_OVERRIDE is ON")
@@ -50,7 +50,7 @@ option(MI_SEE_ASM           "Generate assembly files" OFF)
 
 # negated options for vcpkg features
 option(MI_NO_USE_CXX        "Use plain C compilation (has priority over MI_USE_CXX)" OFF)
-option(MI_NO_OPT_ARCH       "Do not use architecture specific optimizations (like '-march=armv8.1-a' for example) (has priority over MI_OPT_ARCH)" OFF)
+option(MI_NO_OPT_ARCH       "Do not use architecture specific optimizations (like '-march=armv8.3-a' for example) (has priority over MI_OPT_ARCH)" OFF)
 option(MI_NO_DEBUG          "Disable all assertion checks even in debug builds" OFF)
 
 # experimental
@@ -188,7 +188,7 @@ endif()
 if(MI_NO_OPT_ARCH)
   set(MI_OPT_ARCH "OFF")
 elseif(MI_ARCH STREQUAL "arm64")
-  set(MI_OPT_ARCH "ON")  # enable armv8.1-a by default on arm64 unless MI_NO_OPT_ARCH is set
+  set(MI_OPT_ARCH "ON")  # enable armv8.3-a by default (has LDAPR) on arm64 unless MI_NO_OPT_ARCH is set
 endif()
 
 if(DEFINED ENV{MI_TEST_LIGHT})
@@ -647,7 +647,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
   if(MI_OPT_ARCH)
     if(APPLE AND CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang" AND CMAKE_OSX_ARCHITECTURES)   # to support multi-arch binaries (#999)
       if("arm64" IN_LIST CMAKE_OSX_ARCHITECTURES)
-        list(APPEND MI_OPT_ARCH_FLAGS "-Xarch_arm64;-march=armv8.1-a")
+        list(APPEND MI_OPT_ARCH_FLAGS "-Xarch_arm64;-march=armv8.3-a")
       endif()
       if("x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES)
         list(APPEND MI_OPT_ARCH_FLAGS "-Xarch_x86_64;-march=haswell;-Xarch_x86_64;-mavx2")
@@ -655,9 +655,9 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
     elseif(MI_ARCH STREQUAL "x64")
       set(MI_OPT_ARCH_FLAGS "-march=haswell;-mavx2")    # fast bit scan (since 2013)
     elseif(MI_ARCH STREQUAL "arm64")
-      set(MI_OPT_ARCH_FLAGS "-march=armv8.1-a")         # fast atomics (since 2016)
+      set(MI_OPT_ARCH_FLAGS "-march=armv8.3-a")         # fast atomics (since 2016)
     elseif(MI_ARCH STREQUAL "riscv64")
-      set(MI_OPT_ARCH_FLAGS "-march=rv64gc_zacas")      # fast atomics (since 2023)
+      set(MI_OPT_ARCH_FLAGS "-march=rva22_zacas")       # fast bit scan and atomics (since 2023)
     endif()
   endif()
 endif()
@@ -668,7 +668,7 @@ if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914) # vs2017+
     if(MI_ARCH STREQUAL "x64")
       set(MI_OPT_ARCH_FLAGS "/arch:AVX2")
     elseif(MI_ARCH STREQUAL "arm64")
-      set(MI_OPT_ARCH_FLAGS "/arch:armv8.1")           # fast atomics (LSE)
+      set(MI_OPT_ARCH_FLAGS "/arch:armv8.3")           # fast atomics (LDAPR)
     endif()
   endif()
 endif()
