@@ -434,12 +434,14 @@ else()
   message(STATUS "Invalid value for MI_FREE_IS_CHECKED: ${MI_FREE_IS_CHECKED} (expecting: DEFAULT, OFF, SHARED, or ON)")
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
+  message(STATUS "Enabling MI_FREE_USE_PAGEMAP since the target (WASI) does not support large OS aligned allocations well")
+  set(MI_FREE_USE_PAGEMAP ON)
+endif()
 if(MI_FREE_USE_PAGEMAP)
   message(STATUS "Always use the pagemap in mi_free (MI_FREE_USE_PAGEMAP=ON)")
-elseif(CMAKE_SYSTEM_NAME STREQUAL "WASI")
-  message(STATUS "Always use the pagemap in mi_free since the target (WASI) does not support large OS aligned allocations well (MI_FREE_USE_PAGEMAP=ON)")
   list(APPEND mi_defines MI_FREE_USE_PAGEMAP=1)
-endif()
+endif()  
 
 # deprecated
 if(MI_OPT_FREE_SMALL)
