@@ -659,7 +659,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
     elseif(MI_ARCH STREQUAL "riscv64")
       set(MI_OPT_ARCH_FLAGS "-march=rv64gcb_zacas_zalasr -menable-experimental-extensions")     # fast bit scan and atomics (since 2023)
     elseif(MI_ARCH STREQUAL "riscv32")
-      set(MI_OPT_ARCH_FLAGS "-march=rv32gcb_zacas_zalars -menable-experimental-extensions")     # fast bit scan and atomics (since 2023)
+      set(MI_OPT_ARCH_FLAGS "-march=rv32gcb_zacas_zalasr -menable-experimental-extensions")     # fast bit scan and atomics (since 2023)
     endif()
   endif()
 endif()
