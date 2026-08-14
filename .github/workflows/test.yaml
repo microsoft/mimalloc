@@ -50,7 +50,7 @@ jobs:
         if: matrix.tests == 'basic'
         run: |
           env
-          cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake . -B out/debug -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL
           cmake --build out/debug --parallel 4 --config Debug
           ctest --test-dir out/debug --verbose --timeout 240 -C Debug
 
@@ -80,7 +80,7 @@ jobs:
       - name: Debug, C++
         if: matrix.tests == 'basic' && runner.os != 'Windows'   # windows already uses C++ by default
         run: |
-          cmake . -B out/debug-cxx -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_USE_CXX=ON
+          cmake . -B out/debug-cxx -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_USE_CXX=ON
           cmake --build out/debug-cxx --parallel 8 --config Debug
           ctest --test-dir out/debug-cxx --verbose --timeout 240 -C Debug
 
@@ -176,7 +176,7 @@ jobs:
       - name: Debug, C++, clang++
         if: matrix.tests == 'extra' && runner.os == 'Linux'
         run: |
-          CC=clang CXX=clang++ cmake . -B out/debug-clang-cxx -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_USE_CXX=ON
+          CC=clang CXX=clang++ cmake . -B out/debug-clang-cxx -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_USE_CXX=ON
           cmake --build out/debug-clang-cxx --parallel 8 --config Debug
           ctest --test-dir out/debug-clang-cxx --verbose --timeout 240 -C Debug
 
@@ -197,32 +197,32 @@ jobs:
       - name: Debug, ASAN
         if: matrix.tests == 'extra' && runner.os == 'Linux'
         run: |
-          CC=clang CXX=clang++ cmake . -B out/debug-asan -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_TRACK_ASAN=ON
+          CC=clang CXX=clang++ cmake . -B out/debug-asan -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_TRACK=ASAN
           cmake --build out/debug-asan --parallel 8 --config Debug
           ctest --test-dir out/debug-asan --verbose --timeout 240 -C Debug
 
       - name: Debug, UBSAN
         if: matrix.tests == 'extra' && runner.os == 'Linux'
         run: |
-          CC=clang CXX=clang++ cmake . -B out/debug-ubsan -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_DEBUG_UBSAN=ON
+          CC=clang CXX=clang++ cmake . -B out/debug-ubsan -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_DEBUG_UBSAN=ON
           cmake --build out/debug-ubsan --parallel 8 --config Debug
           ctest --test-dir out/debug-ubsan --verbose --timeout 240 -C Debug
 
       - name: Debug, TSAN
         if: matrix.tests == 'extra' && runner.os == 'Linux'
         run: |
-          CC=clang CXX=clang++ cmake . -B out/debug-tsan -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_DEBUG_TSAN=ON
+          CC=clang CXX=clang++ cmake . -B out/debug-tsan -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_DEBUG_TSAN=ON
           cmake --build out/debug-tsan --parallel 8 --config Debug
           ctest --test-dir out/debug-tsan --verbose --timeout 240 -C Debug
 
       - name: Debug, Guarded
         if: matrix.tests == 'extra' && runner.os != 'macOS'
         run: |
-          cmake . -B out/debug-guarded -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON -DMI_GUARDED=ON
+          cmake . -B out/debug-guarded -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_GUARDED=ON
           cmake --build out/debug-guarded --parallel 8 --config Debug
           ctest --test-dir out/debug-guarded --verbose --timeout 240 -C Debug
         env:
-          MIMALLOC_GUARDED_SAMPLE_RATE: 100
+          MIMALLOC_GUARDED_SAMPLE_RATE: 10
 
       - name: Release, Guarded
         if: matrix.tests == 'extra' && runner.os == 'Linux' && startsWith(github.ref_name,'dev3')
@@ -231,7 +231,14 @@ jobs:
           cmake --build out/release-guarded --parallel 8 --config Release
           ctest --test-dir out/release-guarded --verbose --timeout 240 -C Release
         env:
-          MIMALLOC_GUARDED_SAMPLE_RATE: 100
+          MIMALLOC_GUARDED_SAMPLE_RATE: 10
+
+      - name: Debug, Secure Full
+        if: matrix.tests == 'extra' && runner.os != 'macOS'
+        run: |
+          cmake . -B out/debug-secure-full -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_SECURE=FULL
+          cmake --build out/debug-secure-full --parallel 8 --config Debug
+          ctest --test-dir out/debug-secure-full --verbose --timeout 240 -C Debug        
 
       # MSYS2 mingw64
       - name: mingw-ucrt64 x64, Setup
@@ -250,7 +257,7 @@ jobs:
         shell: msys2 {0}
         run: |
           env
-          cmake . -B out/debug-mingw-ucrt64-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake . -B out/debug-mingw-ucrt64-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL
           cmake --build out/debug-mingw-ucrt64-x64 --parallel 4 --config Debug
           ctest --test-dir out/debug-mingw-ucrt64-x64 --verbose --timeout 240 -C Debug
 
@@ -280,7 +287,7 @@ jobs:
         shell: freebsd-arm64 {0}
         run: |
           export MI_TEST_LIGHT=1
-          cmake . -B out/debug-arm64 -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake . -B out/debug-arm64 -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL
           cmake --build out/debug-arm64 --parallel 4 --config Debug
           ctest --test-dir out/debug-arm64 --verbose --timeout 240 -C Debug
 
@@ -318,7 +325,7 @@ jobs:
         if: matrix.tests == 'freebsd-x64'
         shell: freebsd-x64 {0}
         run: |
-          cmake . -B out/debug-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake . -B out/debug-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL
           cmake --build out/debug-x64 --parallel 4 --config Debug
           ctest --test-dir out/debug-x64 --verbose --timeout 240 -C Debug
 
@@ -358,7 +365,7 @@ jobs:
           MI_TEST_LIGHT: 1
         run: |
           uname -m
-          cmake . -B out/debug-riscv64 -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake . -B out/debug-riscv64 -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL
           cmake --build out/debug-riscv64 --parallel 4 --config Debug
           ctest --test-dir out/debug-riscv64 --verbose --timeout 240 -C Debug
 
@@ -400,7 +407,7 @@ jobs:
         if: matrix.tests == 'alpine-x64'
         shell: alpine-x64.sh {0}
         run: |
-          cmake . -B out/debug-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake . -B out/debug-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL
           cmake --build out/debug-x64 --parallel 4 --config Debug
           ctest --test-dir out/debug-x64 --verbose --timeout 240 -C Debug
 
@@ -437,7 +444,7 @@ jobs:
           MI_TEST_LIGHT: 1
         run: |
           uname -m
-          cmake . -B out/debug-arm32 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG_FULL=ON
+          cmake . -B out/debug-arm32 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL
           cmake --build out/debug-arm32 --parallel 4 --config Debug
           ctest --test-dir out/debug-arm32 --verbose --timeout 240 -C Debug
 
