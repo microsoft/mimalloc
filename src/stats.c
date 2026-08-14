@@ -464,6 +464,10 @@ static const mi_stats_t* mi_heap_get_stats(mi_heap_t* heap) {
               else return mi_stats_merge_theap_to_heap(theap);
 }
 
+static const mi_stats_t* mi_theap_get_stats(mi_theap_t* theap) {
+  return &theap->stats;
+}
+
 // deprecated
 void mi_stats_reset(void) mi_attr_noexcept {
   if (!mi_theap_is_initialized(_mi_theap_default())) return;
@@ -623,6 +627,9 @@ bool mi_heap_stats_get(mi_heap_t* heap, mi_stats_t* stats) mi_attr_noexcept {
   return mi_stats_copy(stats, mi_heap_get_stats(heap));
 }
 
+bool mi_theap_stats_get(mi_theap_t* theap, mi_stats_t* stats) mi_attr_noexcept {
+  return mi_stats_copy(stats, mi_theap_get_stats(theap));
+}
 
 static bool mi_cdecl mi_heap_aggregate_visitor(mi_heap_t* heap, void* arg) {
   mi_stats_t* stats = (mi_stats_t*)arg;
