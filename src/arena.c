@@ -2382,10 +2382,8 @@ static int mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
 
   // expired yet?
   mi_msecs_t expire = mi_atomic_loadi64_relaxed(&arena->purge_expire);
-  if (!force) {
-    if (expire==0) return -1;
-    if (expire > now) return 0;
-  }
+  if (expire==0) return -1;
+  if (!force && expire > now) return 0;
 
   // reset expire
   mi_atomic_storei64_release(&arena->purge_expire, (mi_msecs_t)0);

@@ -399,7 +399,7 @@ int main(int argc, char** argv) {
   #endif  
   #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
     mi_option_set(mi_option_arena_reserve, (long)(mi_arena_min_size()/1024) /* in KiB ! */);
-    mi_option_set(mi_option_purge_delay,1);
+    // mi_option_set(mi_option_purge_delay,1);
   #endif
   #if defined(NDEBUG) && !defined(USE_STD_MALLOC)
     // mi_option_set(mi_option_purge_delay,-1);
@@ -463,7 +463,7 @@ int main(int argc, char** argv) {
   //  mi_free(json);
   //}
   #endif
-  mi_collect(true);
+  // mi_collect(true);
   mi_stats_print(NULL);
 #endif
   //bench_end_program();

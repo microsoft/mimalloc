@@ -146,7 +146,7 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { 10,  MI_OPTION_UNINIT, MI_OPTION(deprecated_max_segment_reclaim)},       // max. percentage of the abandoned segments to be reclaimed per try.
   { 0,   MI_OPTION_UNINIT, MI_OPTION(destroy_on_exit)},           // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
   { MI_DEFAULT_ARENA_RESERVE, MI_OPTION_UNINIT, MI_OPTION(arena_reserve) }, // reserve memory N KiB at a time (=1GiB) (use `option_get_size`)
-  { 1,   MI_OPTION_UNINIT, MI_OPTION(arena_purge_mult) },         // purge delay multiplier for arena's
+  { 4,   MI_OPTION_UNINIT, MI_OPTION(arena_purge_mult) },         // purge delay multiplier for arena's
   { 1,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(deprecated_purge_extend_delay, decommit_extend_delay) },
   { MI_DEFAULT_DISALLOW_ARENA_ALLOC,   MI_OPTION_UNINIT, MI_OPTION(disallow_arena_alloc) }, // 1 = do not use arena's for allocation (except if using specific arena id's)
   { 400, MI_OPTION_UNINIT, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.

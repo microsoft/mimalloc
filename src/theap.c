@@ -139,7 +139,9 @@ static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
 
   // collect arenas (this is program wide so don't force purges on abandonment of threads)
   //mi_atomic_storei64_release(&theap->tld->subproc->purge_expire, 1);
-  _mi_arenas_collect(collect == MI_FORCE /* force purge? */, collect >= MI_FORCE /* visit all? */, theap->tld);
+  if (collect != MI_ABANDON) {
+    _mi_arenas_collect(collect == MI_FORCE /* force purge? */, collect >= MI_FORCE /* visit all? */, theap->tld);
+  }
 
   // merge statistics
   _mi_theap_merge_stats(theap);
