@@ -109,7 +109,7 @@ static size_t mi_arena_page_meta_aligned_slice_count(void) {
 // fixed limit for the maximum object size in an arena
 static size_t mi_arena_max_fixed_object_size(void) {
   #if MI_PAGE_META_IS_ALIGNED
-  return (MI_PAGE_META_ALIGNMENT - mi_arena_page_meta_aligned_slice_count());
+  return (MI_PAGE_META_ALIGNMENT - _mi_align_up(MI_PAGE_META_ALIGNED_COUNT * sizeof(mi_page_t), MI_ARENA_SLICE_SIZE));
   #else
   return (MI_ARENA_MAX_SIZE - MI_ARENA_CHUNK_SIZE); // minus an initial chunk to accommodate meta info
   #endif
