@@ -146,9 +146,17 @@ jobs:
       - name: Release, TLS pthreads
         if: matrix.tests == 'extra' && runner.os == 'linux'
         run: |
-          cmake . -B out/release-tls-pthreads -DCMAKE_BUILD_TYPE=Release -DMI_TLS_MODEL_PTHREADS=ON
+          cmake . -B out/release-tls-pthreads -DCMAKE_BUILD_TYPE=Release -DMI_TLS_MODEL_PTHREADS=ON -DMI_SEE_ASM=ON
           cmake --build out/release-tls-pthreads --parallel 4 --config Release
           ctest --test-dir out/release-tls-pthreads --verbose --timeout 240 -C Release
+
+      - name: Release, TLS pthreads, Asm
+        if: matrix.tests == 'extra' && runner.os == 'linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.os }}-pthreads-asm
+          path: out/release-tls-pthreads/CMakeFiles/mimalloc-static.dir/src/*.c.s
+
 
       # Extra
       - name: Release, SIMD

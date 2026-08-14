@@ -118,6 +118,7 @@ static mi_decl_cache_align mi_tld_t mi_tld_detached = {
 };
 
 mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
+  MI_SMALL_PAGES_EMPTY,   // direct small pages  
   &mi_tld_detached,       // tld
   MI_ATOMIC_VAR_INIT(NULL), // heap
   MI_ATOMIC_VAR_INIT(NULL), // subproc
@@ -138,7 +139,6 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   #if MI_GUARDED
   0, 0, 0, 1,             // rate is 0 and count is 1 so we never write to it (see `internal.h:mi_heap_malloc_use_guarded`)
   #endif
-  MI_SMALL_PAGES_EMPTY,
   MI_PAGE_QUEUES_EMPTY,
   MI_MEMID_STATIC,
   MI_STATS_NULL,          // stats

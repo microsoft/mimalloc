@@ -558,6 +558,9 @@ typedef struct mi_padding_s {
 
 // A thread-local heap ("theap") owns a set of thread-local pages.
 struct mi_theap_s {
+  // put in front for fast small allocations
+  mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
+
   mi_tld_t*             tld;                                 // thread-local data
   _Atomic(mi_heap_t*)   heap;                                // the heap this theap belongs to.
   _Atomic(mi_subproc_t*)subproc;                             // subproc this belongs too (always `subproc == heap->subproc` but needed for safe destruction)
@@ -588,7 +591,6 @@ struct mi_theap_s {
   size_t                guarded_sample_rate;                 // sample rate (set to 0 to disable guarded pages)
   size_t                guarded_sample_count;                // current sample count (counting down to 0)
   #endif
-  mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
   mi_page_queue_t       pages[MI_BIN_COUNT];                 // queue of pages for each size class (or "bin")
   mi_memid_t            memid;                               // provenance of the theap struct itself (meta or os)
   mi_stats_t            stats;                               // thread-local statistics
