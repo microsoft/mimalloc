@@ -188,6 +188,7 @@ static inline bool mi_validate_ptr_page_nonnull(const void* p, const char* msg, 
     if mi_unlikely(page==NULL) return false; // p==NULL => page==NULL    
     #if MI_DEBUG
     mi_page_t* const cpage = _mi_checked_ptr_page(p);
+    if mi_unlikely(cpage==NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
     #endif
     
     #if MI_SMALL_PAGE_SIZE == MI_ARENA_SLICE_SIZE
