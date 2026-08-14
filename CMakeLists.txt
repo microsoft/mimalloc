@@ -12,7 +12,7 @@ option(MI_XMALLOC           "Enable abort() call on memory allocation failure by
 option(MI_SHOW_ERRORS       "Show error and warning messages by default (only enabled by default in DEBUG mode)" OFF)
 option(MI_GUARDED           "Build with guard pages behind certain object allocations (enabled by default in a debug build)" OFF)
 option(MI_USE_CXX           "Use the C++ compiler to compile the library (instead of the C compiler)" OFF)
-option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell;-mavx2' (2013), for arm64: '-march=armv8.3-a' (2016), for riscV: '-march=rv64gcb_zacas_zalasr' (2024))" OFF)
+option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell;-mavx2' (2013), for arm64: '-march=armv8.3-a' (2016), for riscV: '-march=rv64gcb_zacas' (2023))" OFF)
 option(MI_OPT_SIMD          "Use SIMD instructions (requires MI_OPT_ARCH to be enabled)" OFF)
 
 set(MI_FREE_IS_CHECKED "DEFAULT" CACHE STRING "Check for invalid pointers in 'mi_free': OFF, SHARED, ON, DEFAULT. 'SHARED' enables it only for the dynamic/shared library when MI_OVERRIDE is ON")
@@ -657,9 +657,9 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
     elseif(MI_ARCH STREQUAL "arm64")
       set(MI_OPT_ARCH_FLAGS "-march=armv8.3-a")         # fast atomics (since 2016)
     elseif(MI_ARCH STREQUAL "riscv64")
-      set(MI_OPT_ARCH_FLAGS "-menable-experimental-extensions;-march=rv64gcb_zacas_zalasr")     # fast bit scan and atomics (since 2023)
+      set(MI_OPT_ARCH_FLAGS "-march=rv64gcb_zacas")     # fast bit scan and atomics (since 2023) TODO: add zalasr (2025) when possible.
     elseif(MI_ARCH STREQUAL "riscv32")
-      set(MI_OPT_ARCH_FLAGS "-menable-experimental-extensions;-march=rv32gcb_zacas_zalasr")     # fast bit scan and atomics (since 2023)
+      set(MI_OPT_ARCH_FLAGS "-march=rv32gcb_zacas")     # fast bit scan and atomics (since 2023)
     endif()
   endif()
 endif()
