@@ -112,47 +112,49 @@ bool _mi_os_commit(mi_subproc_t* subproc, void* addr, size_t size, bool* is_zero
 // space (64TiB) we use this technique. (but see issue #939)
 #if (MI_INTPTR_SIZE >= 8) && !defined(MI_NO_ALIGNED_HINT) // && !defined(WIN32) && !defined(ANDROID)
 
-// Return a MI_HINT_ALIGN (4MiB) aligned address that is probably available.
+// Return a `try_alignment` aligned address that is probably available.
 // If this returns NULL, the OS will determine the address but on some OS's that may not be
 // properly aligned which can be more costly as it needs to be adjusted afterwards.
 // In secure mode, for a size > 16GiB this always returns NULL in order to guarantee good ASLR randomization;
 // (otherwise an initial large allocation of say 2TiB has a 50% chance to include (known) addresses
 //  in the middle of the 2TiB - 6TiB address range (see issue #372))
 
-#define MI_HINT_ALIGN ((uintptr_t)4 << 20)  // 4MiB alignment
 #define MI_HINT_BASE  ((uintptr_t)2 << 40)  // 2TiB start
 #define MI_HINT_AREA  ((uintptr_t)4 << 40)  // upto (2+4) 6TiB  (since before win8 there is "only" 8TiB available to processes)
 #define MI_HINT_MAX   ((uintptr_t)30 << 40) // wrap after 30TiB (area after 32TiB is used for huge OS pages)
 
-void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size)
+void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
 {
   static mi_decl_cache_align _Atomic(uintptr_t) aligned_base; // = 0
 
   // todo: perhaps only do alignment hints if THP is enabled?
-  if (try_alignment <= mi_os_mem_config.alloc_granularity || try_alignment > MI_HINT_ALIGN) return NULL;
+  if (try_alignment <= mi_os_mem_config.alloc_granularity || try_alignment > 16*MI_GiB) return NULL;
   if (mi_os_mem_config.virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
-  size = _mi_align_up(size, MI_HINT_ALIGN);
+  
+  size_t req_size = sze + _mi_os_page_size(); // always reserve a bit more to create virtual gaps between hinted blocks.
+  req_size += (try_alignment - 1);      // ensure we can align in the requested size
+  req_size = _mi_align_up(req_size, _mi_os_large_page_size());
   #if (MI_SECURE>=1)
-  if (size > 16*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(MI_HINT_AREA / 1<<34) = 1/256
+  if (req_size > 32*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(MI_HINT_AREA / 1<<34) = 1/256
   #endif
-  size += MI_HINT_ALIGN;              // put in virtual gaps between hinted blocks; this splits VLA's but increases guarded areas.
-
-  uintptr_t hint = mi_atomic_add_acq_rel(&aligned_base, size);
+  
+  uintptr_t hint = mi_atomic_add_acq_rel(&aligned_base, req_size);
   if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
     uintptr_t init = MI_HINT_BASE;
-    #if (MI_SECURE>=1 || !defined(NDEBUG))  // security: randomize start of aligned allocations unless in debug mode
+    #if (MI_SECURE>=1 || !MI_DEBUG)  // security: randomize start of aligned allocations unless in debug mode
     mi_theap_t* const theap = _mi_theap_default();     // don't use `mi_theap_get_default()` as that can cause allocation recursively (issue #1267)
     if (!mi_theap_is_initialized(theap)) return NULL;  // no hint as we lack randomness at this point
     const uintptr_t r = _mi_theap_random_next(theap);
-    init = init + ((MI_HINT_ALIGN * ((r>>17) & 0xFFFFF)) % MI_HINT_AREA);  // (randomly 20 bits)*4MiB == 0 to 4TiB
+    init = init + ((MI_MiB * ((r>>17) & 0x3FFFFF)) % MI_HINT_AREA);  // (randomly 22 bits)* 1MiB == 0 to 4TiB
     #endif
-    uintptr_t expected = hint + size;
+    uintptr_t expected = hint + req_size;
     mi_atomic_cas_strong_acq_rel(&aligned_base, &expected, init);
-    hint = mi_atomic_add_acq_rel(&aligned_base, size); // this may still give 0 or > MI_HINT_MAX but that is ok, it is a hint after all
+    hint = mi_atomic_add_acq_rel(&aligned_base, req_size); // this may still give 0 or > MI_HINT_MAX but that is ok, it is a hint after all
+    if (hint==0) return NULL;
   }
-  mi_assert_internal(hint%MI_HINT_ALIGN == 0);
-  if (hint%try_alignment != 0) return NULL;
-  return (void*)hint;
+  const uintptr_t hint_align = _mi_align_up(hint,try_alignment);
+  mi_assert_internal(hint_align + sze < hint + req_size);
+  return (void*)hint_align;
 }
 #else
 void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
@@ -350,8 +352,12 @@ static void* mi_os_prim_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t
   if (!(alignment >= _mi_os_page_size() && ((alignment & (alignment - 1)) == 0))) return NULL;
   size = _mi_align_up(size, _mi_os_page_size());
 
+  #if MI_INTPTR_SIZE >= 8
+  const bool try_direct_alloc = true;
+  #else
   // try a direct allocation if the alignment is below the default, or less than or equal to 1/4 fraction of the size.
   const bool try_direct_alloc = (alignment <= mi_os_mem_config.alloc_granularity || alignment <= size/4);
+  #endif
 
   bool os_is_large = false;
   bool os_is_zero = false;
