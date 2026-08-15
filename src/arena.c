@@ -781,8 +781,8 @@ static mi_page_t* mi_arenas_page_try_find_abandoned(mi_theap_t* theap, size_t sl
   return NULL;
 }
 
-static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_count, size_t block_size, size_t block_alignment, bool os_align, bool commit, mi_memid_t* memid, mi_arena_pages_t** parena_pages ) {
-  MI_UNUSED(block_size);
+static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_count, size_t max_page_meta_count, size_t block_alignment, bool os_align, bool commit, mi_memid_t* memid, mi_arena_pages_t** parena_pages ) {
+  MI_UNUSED(max_page_meta_count);
   mi_assert_internal(parena_pages!=NULL);
 
   *parena_pages = NULL;
@@ -839,8 +839,9 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
     }
     if (os_start==NULL) return NULL;
     // commit page info and page
-    const size_t min_page_count = _mi_divide_up(page_offset + MI_ARENA_SLICE_SIZE,MI_ARENA_SLICE_SIZE) + 1;
+    const size_t min_page_count = _mi_divide_up(page_offset + MI_ARENA_SLICE_SIZE,MI_ARENA_SLICE_SIZE) + max_page_meta_count;
     const size_t min_page_meta  = min_page_count * sizeof(mi_page_t);
+    mi_assert_internal(min_page_meta < page_offset);
     bool is_zero;
     bool ok = mi_arena_commit(heap->subproc,req_arena,os_start,min_page_meta,&is_zero,min_page_meta /* don't count in stats? */);
     if (ok && commit) {
@@ -921,7 +922,7 @@ static mi_page_t* mi_arena_page_meta(mi_memid_t memid_slice, const void* slice_s
       mi_assert_internal(meta_slices >= mi_arena_start(arena));
       const size_t meta_slice_index  = (meta_slices - mi_arena_start(arena)) / MI_ARENA_SLICE_SIZE;
       if mi_unlikely(mi_bitmap_is_clear(arena->slices_committed, meta_slice_index)) {
-        // try to commit now
+        // try to commit all page meta slices now
         const size_t meta_slice_count = mi_arena_page_meta_aligned_slice_count();
         const size_t commit_size = meta_slice_count * MI_ARENA_SLICE_SIZE;
         if (!mi_arena_commit(arena->subproc, arena, meta_slices, commit_size, NULL, commit_size /* dont count? */)) {
@@ -952,10 +953,13 @@ static mi_page_t* mi_arena_page_meta(mi_memid_t memid_slice, const void* slice_s
 static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_count, size_t block_size, size_t block_alignment, bool commit)
 {
   const bool os_align           = (block_alignment > MI_PAGE_MAX_OVERALLOC_ALIGN);
+  const bool singleton          = (os_align || block_size > MI_LARGE_MAX_OBJ_SIZE);
+  const size_t max_page_meta_count = (singleton && slice_count > 2 ? 2 : slice_count); 
+      
   const size_t alloc_size       = mi_size_of_slices(slice_count);
   mi_memid_t memid              = _mi_memid_none();
   mi_arena_pages_t* arena_pages = NULL;
-  uint8_t* const slice_start    = mi_arenas_page_alloc_fresh_area(theap,slice_count,block_size,block_alignment,os_align,commit,&memid,&arena_pages);
+  uint8_t* const slice_start    = mi_arenas_page_alloc_fresh_area(theap,slice_count,max_page_meta_count,block_alignment,os_align,commit,&memid,&arena_pages);
   if (!slice_start) return NULL;
 
   // guard page at the end of mimalloc page?
@@ -1076,8 +1080,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   if (page_meta_is_separate) {
     if (slice_count > 1) {
       // at least two for large singleton blocks as guard pages can have a large offset beyond a single slice
-      const size_t max_page_count = (reserved==1 && slice_count > 2 ? 2 : slice_count); 
-      for(size_t i = 1; i < max_page_count; i++) {
+      for(size_t i = 1; i < max_page_meta_count; i++) {
         mi_assert_internal(page[i].block_size == 0);
         mi_atomic_store_ptr_release(mi_page_t,&page[i].self,page);
       }
