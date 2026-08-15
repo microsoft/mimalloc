@@ -780,6 +780,13 @@ static inline mi_page_t* _mi_aligned_ptr_page0(const void* p) {
 static inline mi_page_t* _mi_aligned_ptr_page(const void* p) {
   mi_page_t* const page = _mi_aligned_ptr_page0(p);
   if mi_unlikely(page==NULL) return NULL;
+  #if MI_DEBUG
+    mi_page_t* const cpage = _mi_checked_ptr_page(p);
+    if mi_unlikely(cpage==NULL) { 
+      _mi_error_message(EINVAL, "_mi_aligned_ptr_page: invalid pointer: %p\n", p); 
+      return NULL;
+    }
+  #endif
   return mi_atomic_load_acquire(&page->self);
 }
 #endif
