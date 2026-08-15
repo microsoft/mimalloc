@@ -676,7 +676,7 @@ size_t _mi_prim_numa_node(void) {
 
 size_t _mi_prim_numa_node_count(void) {
   char buf[128];
-  unsigned last_found = 1;
+  unsigned last_found = 0;
   for(unsigned node = 1; node < 256; node++) {
     // enumerate node entries -- todo: it there a more efficient way to do this? (but ensure there is no allocation)
     _mi_snprintf(buf, 127, "/sys/devices/system/node/node%u", node);
@@ -685,7 +685,7 @@ size_t _mi_prim_numa_node_count(void) {
     }
     else { last_found = node; }         // highest found node
   }
-  return last_found;
+  return last_found + 1;
 }
 
 #elif defined(__FreeBSD__) && __FreeBSD_version >= 1200000
