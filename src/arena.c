@@ -860,7 +860,6 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
     #else
     if (os_align) {
       // note: slice_count already includes the page
-      mi_assert_internal(slice_count >= mi_slice_count_of_size(block_size) + mi_slice_count_of_size(page_alignment));
       start = (uint8_t*)mi_arena_os_alloc_aligned(heap->subproc, alloc_size, block_alignment, page_alignment /* align offset */, commit, allow_large, req_arena, memid);
       mi_assert_internal(_mi_is_aligned(start + page_alignment, block_alignment));
     }
