@@ -555,7 +555,8 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
   return mi_os_page_align_areax(true, addr, size, newsize);
 }
 
-bool _mi_os_commit_ex(mi_subproc_t* subproc, void* addr, size_t size, bool* is_zero, size_t stat_size) {
+bool _mi_os_commit_ex(mi_subproc_t* subproc, void* addr, size_t size, bool* is_zero, size_t stat_already_committed) {
+  mi_assert_internal(size >= stat_already_committed);
   if (is_zero != NULL) { *is_zero = false; }
   mi_subproc_stat_counter_increase(subproc, commit_calls, 1);
 
@@ -580,12 +581,12 @@ bool _mi_os_commit_ex(mi_subproc_t* subproc, void* addr, size_t size, bool* is_z
   if (os_is_zero) { mi_track_mem_defined(start,csize); }
              else { mi_track_mem_undefined(start,csize); }
   #endif
-  mi_subproc_stat_increase(subproc, committed, stat_size);  // use size for precise commit vs. decommit
+  mi_subproc_stat_increase(subproc, committed, size - stat_already_committed);  // for precise commit vs. decommit
   return true;
 }
 
 bool _mi_os_commit(mi_subproc_t* subproc, void* addr, size_t size, bool* is_zero) {
-  return _mi_os_commit_ex(subproc, addr, size, is_zero, size);
+  return _mi_os_commit_ex(subproc, addr, size, is_zero, 0);
 }
 
 static bool mi_os_decommit_ex(mi_subproc_t* subproc, void* addr, size_t size, bool* needs_recommit, size_t stat_size) {

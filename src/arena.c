@@ -130,13 +130,13 @@ size_t mi_arena_max_object_size(void) {
   }
 }
 
-mi_decl_nodiscard static bool mi_arena_commit(mi_subproc_t* subproc, mi_arena_t* arena, void* start, size_t size, bool* is_zero, size_t already_committed) {
+mi_decl_nodiscard static bool mi_arena_commit(mi_subproc_t* subproc, mi_arena_t* arena, void* start, size_t size, bool* is_zero, size_t stat_already_committed) {
   mi_assert_internal(subproc!=NULL);
   if (arena != NULL && arena->commit_fun != NULL) {
     return (*arena->commit_fun)(true, start, size, is_zero, arena->commit_fun_arg);
   }
-  else if (already_committed > 0) {
-    return _mi_os_commit_ex(subproc, start, size, is_zero, already_committed);
+  else if (stat_already_committed > 0) {
+    return _mi_os_commit_ex(subproc, start, size, is_zero, stat_already_committed);
   }
   else {
     return _mi_os_commit(subproc, start, size, is_zero);
@@ -273,7 +273,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
     if (already_committed < slice_count) {
       // not all committed, try to commit now
       bool commit_zero = false;
-      if (!mi_arena_commit(arena->subproc, arena, p, mi_size_of_slices(slice_count), &commit_zero, mi_size_of_slices(slice_count - already_committed))) {
+      if (!mi_arena_commit(arena->subproc, arena, p, mi_size_of_slices(slice_count), &commit_zero, mi_size_of_slices(already_committed))) {
         // if the commit fails, release ownership, and return NULL;
         // note: this does not roll back dirty bits but that is ok.
         mi_bbitmap_setN(arena->slices_free, slice_index, slice_count);
@@ -921,10 +921,12 @@ static mi_page_t* mi_arena_page_meta(mi_memid_t memid_slice, const void* slice_s
       mi_assert_internal(meta_slices >= mi_arena_start(arena));
       const size_t meta_slice_index  = (meta_slices - mi_arena_start(arena)) / MI_ARENA_SLICE_SIZE;
       if mi_unlikely(mi_bitmap_is_clear(arena->slices_committed, meta_slice_index)) {
-        // try to commit all page meta slices now
+        // try to commit all page meta slices now        
         const size_t meta_slice_count = mi_arena_page_meta_aligned_slice_count();
+        // the following assertion does not hold in a concurrent setting..
+        // mi_assert_internal(mi_bitmap_is_clearN(arena->slices_committed, meta_slice_index, meta_slice_count));
         const size_t commit_size = meta_slice_count * MI_ARENA_SLICE_SIZE;
-        if (!mi_arena_commit(arena->subproc, arena, meta_slices, commit_size, NULL, commit_size /* dont count? */)) {
+        if (!mi_arena_commit(arena->subproc, arena, meta_slices, commit_size, NULL, 0)) {
           // if the commit fails return NULL
           return NULL;
         }
