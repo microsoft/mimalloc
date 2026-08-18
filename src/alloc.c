@@ -40,8 +40,8 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   // check the free list
   mi_block_t* const block = page->free;
   const mi_used_t used = page->used;
-  #if defined(__GNUC__) && MI_ARCH_ARM64
-  __asm("" : : : "memory");  // induce ldp instruction on aarch64
+  #if defined(__GNUC__) 
+  __asm("" : : : "memory");  // alway load used before the test
   #endif  
   if (block == NULL) {
     return _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage);

@@ -22,7 +22,7 @@ static const mi_page_t mi_page_empty = {
   0,                      // used
   NULL,                   // local_free
   0,                      // block_size
-  0,                      // page_zoffset
+  0,                      // page_offset
   0,                      // capacity
   0,                      // reserved capacity
   0,                      // slice_pcommitted
