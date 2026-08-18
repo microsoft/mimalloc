@@ -24,9 +24,6 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 #include "mimalloc/prim-tls.h"
 #include "bitmap.h"
 
-#if (MI_ARENA_MAX_SIZE - MI_SIZE_SIZE > MI_SIZE_SIZE*UINT32_MAX)
-#error "The page_t.page_zoffset field is not large enough to cover a full arena"
-#endif
 
 /* -----------------------------------------------------------
   Arena id's
@@ -1059,10 +1056,8 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   // initialize the page start
   uint8_t* const start = slice_start + block_start;
   mi_assert_internal(start > (uint8_t*)page);
-  const size_t offset = start - (uint8_t*)page;
-  mi_assert_internal((offset % MI_SIZE_SIZE) == 0 && (offset / MI_SIZE_SIZE) <= UINT32_MAX);
-  page->page_zoffset = (uint32_t)(offset / MI_SIZE_SIZE);
-
+  page->page_offset = start - (uint8_t*)page;
+  
   // initialize page meta-data
   page->reserved = (uint16_t)reserved;  
   page->block_size = block_size;

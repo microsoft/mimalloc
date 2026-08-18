@@ -814,7 +814,7 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
 // Page start
 static inline uint8_t* mi_page_start(const mi_page_t* page) {
   // multiplication must be done in `size_t`
-  return (uint8_t*)page + (((size_t)page->page_zoffset) * MI_SIZE_SIZE);
+  return (uint8_t*)page + page->page_offset;
 }
 
 static inline size_t mi_page_size(const mi_page_t* page) {

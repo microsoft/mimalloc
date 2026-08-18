@@ -432,7 +432,7 @@ typedef struct mi_page_s {
   mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
  
   size_t                    block_size;        // const: size available in each block (always `>0`)
-  size_t                    page_zoffset;      // const: relative offset from the page (in size_t parts) to the start of the blocks
+  size_t                    page_offset;       // const: relative offset from the page to the start of the blocks
   uint16_t                  capacity;          // number of blocks committed
   uint16_t                  reserved;          // number of blocks reserved in memory
   uint16_t                  slice_pcommitted;  // committed size in OS page sizes relative to the first arena slice of the page data (or 0 if the page is fully committed already)
