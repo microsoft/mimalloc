@@ -73,7 +73,9 @@ static void* zone_valloc(malloc_zone_t* zone, size_t size) {
 static void zone_free(malloc_zone_t* zone, void* p) {
   mi_page_t* const page = _mi_checked_ptr_page(p);  
   if mi_likely(page!=NULL) {
-    mi_assert_internal(_mi_thread_is_initialized());  
+    // during C++ thread shutdown `_pthread_tsd_cleanup` may call `zone_free` 
+    // after mimalloc mi_thread_done, and also on a pointer that was allocated in another subproc.
+    // mi_assert_internal(_mi_thread_is_initialized());  
     _mi_free_in_page_nonnull(p,page);
     // if mi_likely(_mi_thread_is_initialized()) {
     //   _mi_free_in_page_nonnull(p,page);
