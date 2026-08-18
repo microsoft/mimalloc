@@ -51,6 +51,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
 
   // pop from the free list
   mi_block_t* next = mi_block_next(page,block);
+  mi_track_mem_undefined(block,sizeof(*block));
   block->next = 0;  // don't leak internal data
   page->free = next;
   page->used = used+1;
