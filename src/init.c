@@ -20,15 +20,15 @@ static const mi_page_t mi_page_empty = {
   MI_ATOMIC_VAR_INIT(0),  // xthread_id
   NULL,                   // free
   0,                      // used
-  0,                      // capacity
-  0,                      // retire_expire
-  false,                  // is_zero
   NULL,                   // local_free
-  MI_ATOMIC_VAR_INIT(0),  // xthread_free
   0,                      // block_size
   0,                      // page_zoffset
-  0,                      // slice_pcommitted
+  0,                      // capacity
   0,                      // reserved capacity
+  0,                      // slice_pcommitted
+  0,                      // retire_expire
+  false,                  // is_zero
+  MI_ATOMIC_VAR_INIT(0),  // xthread_free
   NULL,                   // theap
   NULL,                   // heap
   NULL, NULL,             // next, prev
@@ -39,8 +39,8 @@ static const mi_page_t mi_page_empty = {
   #else
   { 0 },                  // key
   #endif
-  #elif MI_PAGE_META_IS_ALIGNED && MI_INTPTR_SIZE==8
-  { 0 },                  // padding 
+  // #elif MI_PAGE_META_IS_ALIGNED && MI_INTPTR_SIZE==8
+  // { 0 },                  // padding 
   #endif
 };
 

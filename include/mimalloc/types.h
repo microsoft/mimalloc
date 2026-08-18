@@ -392,6 +392,9 @@ typedef size_t mi_page_flags_t;
 // This way we can push a block on the thread free list and try to claim ownership atomically in `free.c:mi_free_block_mt`.
 typedef uintptr_t mi_thread_free_t;
 
+// Convenience
+typedef size_t mi_used_t;
+
 // A page contains blocks of one specific size (`block_size`).
 // Each page has three list of free blocks:
 // `free` for blocks that can be allocated,
@@ -417,29 +420,27 @@ typedef uintptr_t mi_thread_free_t;
 //   that case the `xthreadid` is 0 or 4 (4 is for abandoned pages that
 //   are in the `pages_abandoned` lists of an arena, these are called "mapped" abandoned pages).
 // - page flags are in the bottom 3 bits of `xthread_id` for the fast path in `mi_free`.
-// - The layout is optimized for `free.c:mi_free` and `alloc.c:mi_page_alloc`
-// - Using `uint16_t` does not seem to slow things down
+// - The layout below is optimized for `free.c:mi_free` and `alloc.c:mi_page_alloc`
 
 typedef struct mi_page_s {  
   #if (MI_PAGE_META_IS_ALIGNED)
-  _Atomic(struct mi_page_s*) self;
+  _Atomic(struct mi_page_s*) self;             // points to the actual page info (for pages that span multiple slices)
   #endif
   _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= `theap->thread_id (or 0 or 4 if abandoned) | page_flags`)
-
   mi_block_t*               free;              // list of available free blocks (`malloc` allocates from this list)
-  uint32_t                  used;              // number of blocks in use (including blocks in `thread_free`)
+  mi_used_t                 used;              // number of blocks in use (including blocks in `thread_free`)
+  mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
+ 
+  size_t                    block_size;        // const: size available in each block (always `>0`)
+  size_t                    page_zoffset;      // const: relative offset from the page (in size_t parts) to the start of the blocks
   uint16_t                  capacity;          // number of blocks committed
+  uint16_t                  reserved;          // number of blocks reserved in memory
+  uint16_t                  slice_pcommitted;  // committed size in OS page sizes relative to the first arena slice of the page data (or 0 if the page is fully committed already)
   uint8_t                   retire_expire;     // expiration count for retired blocks
   bool                      free_is_zero;      // `true` if the blocks in the free list are zero initialized
-  
-  mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
+ 
+  // next cache line
   _Atomic(mi_thread_free_t) xthread_free;      // list of deferred free blocks freed by other threads (= `mi_block_t* | (1 if owned)`)
-
-  size_t                    block_size;        // const: size available in each block (always `>0`)
-  uint32_t                  page_zoffset;      // const: offset relative to the page (in size_t parts) to the start of the blocks
-  uint16_t                  slice_pcommitted;  // committed size in OS page sizes relative to the first arena slice of the page data (or 0 if the page is fully committed already)
-  uint16_t                  reserved;          // number of blocks reserved in memory
-  
   mi_theap_t*               theap;             // the theap owning this page (may not be valid or NULL for abandoned pages)
   mi_heap_t*                heap;              // const: the heap owning this page
 
@@ -449,8 +450,8 @@ typedef struct mi_page_s {
   
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   uintptr_t                 keys[MI_PAGE_KEY_COUNT]; // const: one or two random keys to encode the free lists (see `_mi_block_next`) or padding canary
-  #elif MI_PAGE_META_IS_ALIGNED && MI_INTPTR_SIZE==8 
-  uintptr_t                 padding[1];        // make it 128 bytes for best codegen in mi_ptr_page_align
+  // #elif MI_PAGE_META_IS_ALIGNED && MI_INTPTR_SIZE==8 
+  // uintptr_t                 padding[1];        // make it 128 bytes for best codegen in mi_ptr_page_align
   #endif
 } mi_page_t;
 

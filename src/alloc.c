@@ -39,15 +39,21 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
 
   // check the free list
   mi_block_t* const block = page->free;
-  if mi_unlikely(block == NULL) {
+  const mi_used_t used = page->used;
+  #if defined(__GNUC__) && MI_ARCH_ARM64
+  __asm("" : : : "memory");  // induce ldp instruction on aarch64
+  #endif  
+  if (block == NULL) {
     return _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage);
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   if (ppage != NULL) { *ppage = page; };
 
   // pop from the free list
-  page->free = mi_block_next(page, block);
-  page->used++;
+  mi_block_t* next = mi_block_next(page,block);
+  block->next = 0;  // don't leak internal data
+  page->free = next;
+  page->used = used+1;
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
   mi_assert_internal(page->block_size < MI_MAX_ALIGN_SIZE || _mi_is_aligned(block, MI_MAX_ALIGN_SIZE));
 
@@ -78,7 +84,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   // zero the block? note: we need to zero the full block size (issue #63)
   if mi_likely(!zero) {
     // #if MI_SECURE
-    block->next = 0;  // don't leak internal data
+    // block->next = 0;  // don't leak internal data
     // #endif
     #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
       if (!mi_page_is_huge(page)) { memset(block, MI_DEBUG_UNINIT, bsize); }
