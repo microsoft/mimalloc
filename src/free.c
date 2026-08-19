@@ -183,7 +183,7 @@ static inline bool mi_validate_ptr_page_nonnull(const void* p, const char* msg, 
   #if MI_PAGE_META_IS_ALIGNED
     page = _mi_aligned_ptr_page0(p);
     if mi_unlikely(page==NULL) return false; // p==NULL => page==NULL    
-    #if MI_DEBUG
+    #if MI_DEBUG 
     mi_page_t* const cpage = _mi_checked_ptr_page(p);
     if mi_unlikely(cpage==NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
     #endif
@@ -248,11 +248,6 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
   }
 }
 
-void _mi_free_in_page_nonnull(void* p, mi_page_t* page) mi_attr_noexcept {
-  mi_assert_internal(p!=NULL && page!=NULL);
-  mi_free_nonnull(p, page, NULL, true /* allow collect? */);
-}
-
 void mi_free(void* p) mi_attr_noexcept {  
   mi_page_t* page; 
   if mi_likely(mi_validate_ptr_page_nonnull(p,"mi_free",false,&page)) {    
@@ -296,9 +291,9 @@ void mi_free_small(void* p) mi_attr_noexcept {
   #endif  
 }
 
-void _mi_free_subproc_safe_in_page_nonnull(void* p, mi_page_t* page) mi_attr_noexcept {
-  mi_free_nonnull(p, page, NULL, false /* allow collect? */);
-}
+// void _mi_free_subproc_safe_in_page_nonnull(void* p, mi_page_t* page) mi_attr_noexcept {
+//   mi_free_nonnull(p, page, NULL, false /* allow collect? */);
+// }
 
 // Free a pointer that is potentially allocated in a different sub-process
 void _mi_free_subproc_safe(void* p) mi_attr_noexcept {
@@ -319,12 +314,12 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
     if (page==NULL) return;
     mi_assert(p!=NULL);
     const size_t usable = _mi_page_usable_size(page,p);
-    if (size > usable) { 
+    if mi_unlikely(size > usable) { 
       _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the size %zu is greater than the usable size %zu\n", p, size, usable);
       mi_free(p);
       return;
     }
-    else if (size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size(MI_SMALL_SIZE_MAX)) { 
+    else if mi_unlikely(size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size(MI_SMALL_SIZE_MAX)) { 
       _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n", p, size, mi_page_block_size(page));
       mi_free(p);
       return;
@@ -354,10 +349,14 @@ void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
 }
 
 // checked free
-void mi_cfree(void* p) mi_attr_noexcept {
+bool mi_cfree(void* p) mi_attr_noexcept {
   mi_page_t* const page = _mi_checked_ptr_page(p);
   if mi_likely(page!=NULL) {
     mi_free_nonnull(p, page, NULL, true /* allow collect? */);
+    return true;
+  }
+  else {
+    return false;
   }
 }
 

@@ -331,8 +331,6 @@ mi_block_t*   _mi_page_ptr_unalign(const mi_page_t* page, const void* p);
 void          _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size);
 
 // "free.c"
-void          _mi_free_in_page_nonnull(void* p, mi_page_t* page) mi_attr_noexcept;
-void          _mi_free_subproc_safe_in_page_nonnull(void* p, mi_page_t* page) mi_attr_noexcept;
 void          _mi_free_subproc_safe(void* p) mi_attr_noexcept;
 void          _mi_page_unguard_all(mi_page_t* page);
 size_t        _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr_noexcept;
