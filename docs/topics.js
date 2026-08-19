@@ -3,6 +3,7 @@ var topics =
     [ "Basic Allocation", "group__malloc.html", "group__malloc" ],
     [ "Aligned Allocation", "group__aligned.html", "group__aligned" ],
     [ "Typed Macros", "group__typed.html", "group__typed" ],
+    [ "Constant size allocation", "group__constantsize.html", "group__constantsize" ],
     [ "Zero initialized re-allocation", "group__zeroinit.html", "group__zeroinit" ],
     [ "Heaps", "group__heap.html", "group__heap" ],
     [ "Heap Introspection", "group__analysis.html", "group__analysis" ],
