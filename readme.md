@@ -90,7 +90,7 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 
 ### Releases
 
-* 2026-08-18, `v1.15.0`, `v2.5.0`, `v3.5.0`: (v3) Increased performance for `free`
+* 2026-08-18, `v1.15.0`, `v2.5.0`, `v3.5.0`: (v3) slightly better performance for `free`
   using aligned chunks, cleanup cmake options, require armv8.3 (with MI_OPT_ARCH) for 
   faster load-acquire, increase retired page count from 1 to 3, faster double free 
   detection in secure mode, use faster atomics for the arena bitmaps (thank you Alan 
