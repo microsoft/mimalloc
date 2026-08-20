@@ -43,7 +43,7 @@ jobs:
     steps:
       # Checkout: https://github.com/actions/checkout
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # Basic
       - name: Debug
@@ -63,7 +63,7 @@ jobs:
 
       - name: Release, Asm
         if: matrix.tests == 'basic' && runner.os == 'Linux'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.os }}-asm
           path: out/release/CMakeFiles/mimalloc-static.dir/src/*.c.s
@@ -152,7 +152,7 @@ jobs:
 
       - name: Release, TLS pthreads, Asm
         if: matrix.tests == 'extra' && runner.os == 'linux'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.os }}-pthreads-asm
           path: out/release-tls-pthreads/CMakeFiles/mimalloc-static.dir/src/*.c.s
@@ -189,7 +189,7 @@ jobs:
 
       - name: Release, C++, clang++, Asm
         if: matrix.tests == 'extra' && runner.os == 'Linux'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.os }}-clang-cxx-asm
           path: out/release-clang-cxx/*.s
@@ -243,8 +243,8 @@ jobs:
       # MSYS2 mingw64
       - name: mingw-ucrt64 x64, Setup
         if: matrix.tests == 'mingw-ucrt64'
-        uses: msys2/setup-msys2@v2
-        with:
+        uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0     
+        with: 
           msystem: UCRT64
           install: |
             mingw-w64-ucrt-x86_64-gcc
@@ -273,7 +273,7 @@ jobs:
       # VM: FreeBSD (arm64 and x64)
       - name: FreeBSD arm64, Setup
         if: matrix.tests == 'freebsd-arm64'
-        uses: vmactions/freebsd-vm@v1
+        uses: vmactions/freebsd-vm@83b151f58c6047089f4c80eb5ba2039d158ce093 # v1.5.3
         with:
           arch: arm64
           custom-shell-name: freebsd-arm64
@@ -312,7 +312,7 @@ jobs:
 
       - name: FreeBSD x64, Setup
         if: matrix.tests == 'freebsd-x64'
-        uses: vmactions/freebsd-vm@v1
+        uses: vmactions/freebsd-vm@83b151f58c6047089f4c80eb5ba2039d158ce093 # v1.5.3
         with:
           arch: x86_64
           usesh: true
@@ -349,7 +349,7 @@ jobs:
       # VM: Alpine Linux with MUSL libc (riscv64 and x64)
       - name: Alpine riscv64, Setup
         if: matrix.tests == 'alpine-riscv64'
-        uses: jirutka/setup-alpine@v1
+        uses: jirutka/setup-alpine@ae3b3ddba35054804fc4a3507b519fa7e8152050 # v1.4.1
         with:
           arch: riscv64
           shell-name: alpine-riscv64.sh
@@ -379,7 +379,7 @@ jobs:
 
       - name: Alpine risc64, Asm
         if: matrix.tests == 'alpine-riscv64'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: alpine-riscv64-asm
           path: out/release-riscv64/CMakeFiles/mimalloc.dir/src/*.c.s
@@ -395,7 +395,7 @@ jobs:
 
       - name: Alpine x64, Setup
         if: matrix.tests == 'alpine-x64'
-        uses: jirutka/setup-alpine@v1
+        uses: jirutka/setup-alpine@ae3b3ddba35054804fc4a3507b519fa7e8152050 # v1.4.1
         with:
           arch: x86_64
           shell-name: alpine-x64.sh
@@ -429,7 +429,7 @@ jobs:
 
       - name: Alpine arm32, Setup
         if: matrix.tests == 'alpine-arm32'
-        uses: jirutka/setup-alpine@v1
+        uses: jirutka/setup-alpine@ae3b3ddba35054804fc4a3507b519fa7e8152050 # v1.4.1
         with:
           arch: armv7  # or armhf for arm-v6 with hard float
           shell-name: alpine-arm32.sh

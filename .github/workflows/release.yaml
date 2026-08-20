@@ -26,7 +26,7 @@ jobs:
     steps:
       # Checkout: https://github.com/actions/checkout
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ matrix.branch }}
           fetch-tags: true
@@ -45,7 +45,7 @@ jobs:
                 
       # Create a release: https://github.com/softprops/action-gh-release (MIT license)
       - name: Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         if: ${{ env.RELEASE != '' && env.RELEASE != 'no' }} 
         with:
           name: ${{ env.RELEASE }}
