@@ -91,7 +91,7 @@ jobs:
           cmake --build out/release-cxx --parallel 8 --config Release
           ctest --test-dir out/release-cxx --verbose --timeout 240 -C Release
 
-      # Extra, Windows x86
+      # Extra Windows: x86, clang-cl, and clang
       - name: Debug, Win32
         if: matrix.tests == 'extra' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
         run: |
@@ -109,16 +109,30 @@ jobs:
       - name: Debug, clang-cl
         if: matrix.tests == 'extra' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
         run: |
-          cmake . -B out/debug-clang -DCMAKE_BUILD_TYPE=Debug -A Win32 -T ClangCl
-          cmake --build out/debug-clang --parallel 4 --config Debug
-          ctest --test-dir out/debug-clang --verbose --timeout 240 -C Debug
+          cmake . -B out/debug-clang-cl -DCMAKE_BUILD_TYPE=Debug -A Win32 -T ClangCl
+          cmake --build out/debug-clang-cl --parallel 4 --config Debug
+          ctest --test-dir out/debug-clang-cl --verbose --timeout 240 -C Debug
 
       - name: Release, clang-cl
         if: matrix.tests == 'extra' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
         run: |
-          cmake . -B out/release-clang -DCMAKE_BUILD_TYPE=Release -A Win32 -T ClangCl
+          cmake . -B out/release-clang-cl -DCMAKE_BUILD_TYPE=Release -A Win32 -T ClangCl
+          cmake --build out/release-clang-cl --parallel 4 --config Release
+          ctest --test-dir out/release-clang-cl --verbose --timeout 240 -C Release
+
+      - name: Debug, Win32, clang
+        if: matrix.tests == 'extra' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
+        run: |
+          cmake . -B out/debug-clang -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang
+          cmake --build out/debug-clang --parallel 4 --config Debug
+          ctest --test-dir out/debug-clang --verbose --timeout 240 -C Debug
+
+      - name: Release, Win32, clang
+        if: matrix.tests == 'extra' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
+        run: |
+          cmake . -B out/release-clang -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang
           cmake --build out/release-clang --parallel 4 --config Release
-          ctest --test-dir out/release-clang --verbose --timeout 240 -C Release
+          ctest --test-dir out/release-clang --verbose --timeout 240 -C Release          
 
       # Extra, macOS fixed TLS
       - name: Debug, TLS fixed
