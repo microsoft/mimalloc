@@ -404,7 +404,7 @@ static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, voi
     if (theap!=NULL)
     #endif
     {
-      if (mi_page_heap(page)==_mi_theap_heap(theap)) {  // and within the same heap
+      if (mi_page_heap(page)==_mi_theap_heap_peek(theap)) {  // and within the same heap
         mi_assert_internal(p!=NULL);
         // todo: do not track as the usable size is still the same in the free; adjust potential padding?
         // mi_track_resize(p,size,newsize)
