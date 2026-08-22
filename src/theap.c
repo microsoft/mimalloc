@@ -286,7 +286,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   else {
     _mi_random_split(&head_random, &theap->random); // &theap->random is used as nonce so it is ok if threads capture the same head->random
   }
-  theap->cookie = _mi_theap_random_next(theap) | 1;
+  // theap->cookie = _mi_theap_random_next(theap) | 1;
   mi_theap_guarded_init(theap); // needs theap->random
   if (!theap->is_detached) {
     mi_subproc_stat_increase(_mi_theap_subproc(theap),theaps,1);  // on subproc to match theap_free_mem

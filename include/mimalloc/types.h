@@ -568,7 +568,6 @@ struct mi_theap_s {
   _Atomic(size_t)       refcount;                            // reference count
   
   unsigned long long    heartbeat;                           // monotonic heartbeat count
-  uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
   mi_random_ctx_t       random;                              // random number context used for secure allocation
   size_t                page_count;                          // total number of pages in the `pages` queues.
   size_t                page_retired_min;                    // smallest retired index (retired pages are fully free, but still in the page queues)

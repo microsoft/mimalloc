@@ -66,7 +66,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.os }}-asm
-          path: out/release/CMakeFiles/mimalloc-static.dir/src/*.c.s
+          path: out/release/CMakeFiles/mimalloc-static.dir/src/*.s
 
 
       - name: Secure
@@ -168,8 +168,8 @@ jobs:
         if: matrix.tests == 'extra' && runner.os == 'linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ matrix.os }}-pthreads-asm
-          path: out/release-tls-pthreads/CMakeFiles/mimalloc-static.dir/src/*.c.s
+          name: ${{ matrix.os }}-pthreads-asm          
+          path: out/release-tls-pthreads/CMakeFiles/mimalloc-static.dir/src/*.s
 
 
       # Extra
@@ -206,7 +206,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.os }}-clang-cxx-asm
-          path: out/release-clang-cxx/*.s
+          path: out/release-clang-cxx/CMakeFiles/mimalloc-static.dir/src/*.s
 
       - name: Debug, ASAN
         if: matrix.tests == 'extra' && runner.os == 'Linux'
@@ -396,7 +396,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: alpine-riscv64-asm
-          path: out/release-riscv64/CMakeFiles/mimalloc.dir/src/*.c.s
+          path: out/release-riscv64/CMakeFiles/mimalloc-static.dir/src/*.s
 
       - name: Alpine riscv64, Secure
         if: matrix.tests == 'alpine-riscv64'

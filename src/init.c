@@ -124,7 +124,6 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   MI_ATOMIC_VAR_INIT(NULL), // subproc
   MI_ATOMIC_VAR_INIT(1),  // refcount
   0,                      // heartbeat
-  0,                      // cookie
   { {0}, {0}, 0, true },  // random
   0,                      // page count
   MI_BIN_FULL, 0,         // page retired min/max
@@ -578,10 +577,6 @@ static void mi_process_init_once(void) {
       mi_reserve_os_memory((size_t)ksize*MI_KiB, true, true);
     }
   }
-
-  #if MI_PAGE_META_IS_ALIGNED
-  mi_assert_internal((sizeof(mi_page_t)%MI_SIZE_SIZE) == 0);  // or page->zoffset might not work
-  #endif
 }
 
 // Initialize the process; called by thread_init or the process loader
