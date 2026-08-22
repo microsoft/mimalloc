@@ -993,11 +993,13 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
           _mi_is_power_of_two(block_size)) 
       {
         if (block_size < 64) {
-          block_start += mi_page_info_size() + 3*block_size; 
+          block_start += sizeof(mi_page_t) + 3*block_size; 
         }
         else {
-          block_start += _mi_align_up(mi_page_info_size(), block_size);
+          block_start += sizeof(mi_page_t);
         }
+        block_start = _mi_align_up(block_start, MI_MAX_ALIGN_SIZE);
+        block_start = _mi_align_up(block_start, block_size); // to maintain natural alignment
       }
       mi_assert_internal(page->block_size == 0);
       _mi_memzero_aligned(page, sizeof(*page));
