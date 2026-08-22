@@ -65,6 +65,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SECURE 0
 #endif
 
+#define MI_PADDING 0
+
 // Define MI_DEBUG for assertion and invariant checking
 // #define MI_DEBUG 1  // basic assertion checks and statistics, check double free, corrupted free list, and invalid pointer free. (cmake -DMI_DEBUG=ON)
 // #define MI_DEBUG 2  // + internal assertion checks (cmake -DMI_DEBUG_INTERNAL=ON)

@@ -14,9 +14,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // forward declarations
 mi_decl_nodiscard static bool mi_check_padding_on_free(const mi_page_t* page, const mi_block_t* block, bool is_guarded, size_t* usable_size);
+mi_decl_nodiscard static bool mi_check_double_free(const mi_page_t* page, const mi_block_t* block);
 static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block, bool was_guarded);
 static void   mi_stat_free(const mi_page_t* page, const mi_block_t* block);
-// static bool   mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block);
 
 
 // ------------------------------------------------------
@@ -30,7 +30,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   // checks  
   size_t usable_size;
   if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return; 
-  // if mi_unlikely(!mi_check_is_double_free(page,block)) return;  // checked with padding
+  if mi_unlikely(!mi_check_double_free(page,block)) return;  // usually checked with padding
 
   if (track_stats) { 
     mi_stat_free(page, block);    
@@ -551,12 +551,13 @@ mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
 
 
 // ------------------------------------------------------
-// Deprecated: double free is checked with padding now.
+// Deprecated: double free is usually checked with padding now
+// as that is faster and works better for cross-thread free'ing.
 // Check for double free in secure and debug mode
 // This is somewhat expensive so only enabled for secure mode 4
 // ------------------------------------------------------
 
-#if MI_CHECK_DOUBLE_FREE      
+#if MI_SECURE>=3 && !MI_PADDING   
 // linear check if the free list contains a specific element
 static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, const mi_block_t* elem, const char* list_kind) {
   const size_t max_count = page->capacity;      // can never hold more blocks than the capacity
@@ -572,7 +573,7 @@ static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, cons
   return false;
 }
 
-static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, const mi_block_t* block) {
+static mi_decl_noinline bool mi_check_double_freex(const mi_page_t* page, const mi_block_t* block) {
   // The decoded value is in the same page (or NULL).
   // Walk the free lists to verify positively if it is already freed
   if (mi_list_contains(page, page->free, block, "free") ||
@@ -580,9 +581,9 @@ static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, con
       mi_list_contains(page, mi_page_thread_free(page), block, "thread free"))
   {
     _mi_error_message(EAGAIN, "double free detected of block %p with size %zu\n", block, mi_page_block_size(page));
-    return true;
+    return false;
   }
-  return false;
+  return true;
 }
 
 // Used for double free checking to avoid checking free lists too frequently
@@ -593,20 +594,20 @@ static inline bool mi_block_could_be_double_free(const mi_page_t* page, const mi
 }
 
 // check if `block` was free'd before
-static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block) {
+static inline bool mi_check_double_free(const mi_page_t* page, const mi_block_t* block) {
   if mi_unlikely(mi_block_could_be_double_free(page,block))  // quick check: next field is aligned in the same page or NULL?
   {
     // Suspicious: decoded value a in block is in the same page (or NULL) -- maybe a double free?
     // (continue in separate function to improve code generation)
-    return mi_check_is_double_freex(page, block);
+    return mi_check_double_freex(page, block);
   }
-  else return false;
+  else return true;
 }
 #else
-static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block) {
+static inline bool mi_check_double_free(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(page);
   MI_UNUSED(block);
-  return false;
+  return true;
 }
 #endif
 
