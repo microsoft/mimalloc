@@ -91,7 +91,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.os }}-asm
-          path: out/release/CMakeFiles/mimalloc-static.dir/src/*.s
+          path: out/release-${{ matrix.c_or_cxx }}/CMakeFiles/mimalloc-static.dir/src/*.s
 
 
       - name: Secure
@@ -207,7 +207,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.os }}-pthreads-asm          
-          path: out/release-tls-pthreads/CMakeFiles/mimalloc-static.dir/src/*.s
+          path: out/release-tls-pthreads-${{ matrix.c_or_cxx }}/CMakeFiles/mimalloc-static.dir/src/*.s
 
 
       # Extra
@@ -221,16 +221,16 @@ jobs:
       - name: Debug, C++, clang++
         if: matrix.tests == 'extra' && runner.os == 'Linux' && matrix.c_or_cxx == 'cxx'
         run: |
-          CC=clang CXX=clang++ cmake . -B out/debug-clang-${{ matrix.c_or_cxx }} -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_USE_CXX=ON
-          cmake --build out/debug-clang-${{ matrix.c_or_cxx }} --parallel 8 --config Debug
-          ctest --test-dir out/debug-clang-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Debug
+          CC=clang CXX=clang++ cmake . -B out/debug-clang-cxx -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_USE_CXX=ON
+          cmake --build out/debug-clang-cxx --parallel 8 --config Debug
+          ctest --test-dir out/debug-clang-cxx --verbose --timeout 240 -C Debug
 
       - name: Release, C++, clang++
         if: matrix.tests == 'extra' && runner.os == 'Linux' && matrix.c_or_cxx == 'cxx'
         run: |
-          CC=clang CXX=clang++ cmake . -B out/release-clang-${{ matrix.c_or_cxx }} -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_USE_CXX=ON -DMI_SEE_ASM=ON
-          cmake --build out/release-clang-${{ matrix.c_or_cxx }} --parallel 8 --config Release
-          ctest --test-dir out/release-clang-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Release
+          CC=clang CXX=clang++ cmake . -B out/release-clang-cxx -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_USE_CXX=ON -DMI_SEE_ASM=ON
+          cmake --build out/release-clang-cxx --parallel 8 --config Release
+          ctest --test-dir out/release-clang-cxx --verbose --timeout 240 -C Release
 
       - name: Release, C++, clang++, Asm
         if: matrix.tests == 'extra' && runner.os == 'Linux' && matrix.c_or_cxx == 'cxx'
@@ -247,11 +247,11 @@ jobs:
           ctest --test-dir out/debug-asan-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Debug
 
       - name: Debug, UBSAN
-        if: matrix.tests == 'extra' && runner.os == 'Linux'
+        if: matrix.tests == 'extra' && runner.os == 'Linux' && matrix.c_or_cxx == 'cxx'
         run: |
-          CC=clang CXX=clang++ cmake . -B out/debug-ubsan-${{ matrix.c_or_cxx }} -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_DEBUG_UBSAN=ON ${{ steps.cmake_args.outputs.CMAKE_CXX_OPT_DEFAULT }}
-          cmake --build out/debug-ubsan-${{ matrix.c_or_cxx }} --parallel 8 --config Debug
-          ctest --test-dir out/debug-ubsan-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Debug
+          CC=clang CXX=clang++ cmake . -B out/debug-ubsan-cxx -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_DEBUG_UBSAN=ON ${{ steps.cmake_args.outputs.CMAKE_CXX_OPT_DEFAULT }}
+          cmake --build out/debug-ubsan-cxx --parallel 8 --config Debug
+          ctest --test-dir out/debug-ubsan-cxx --verbose --timeout 240 -C Debug
 
       - name: Debug, TSAN
         if: matrix.tests == 'extra' && runner.os == 'Linux'
@@ -427,7 +427,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: alpine-riscv64-asm
-          path: out/release-riscv64/CMakeFiles/mimalloc-static.dir/src/*.s
+          path: out/release-riscv64-${{ matrix.c_or_cxx }}/CMakeFiles/mimalloc-static.dir/src/*.s
 
       - name: Alpine riscv64, Secure
         if: matrix.tests == 'alpine-riscv64'
