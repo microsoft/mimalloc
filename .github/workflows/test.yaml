@@ -134,31 +134,59 @@ jobs:
           cmake --build out/release-x86-nocxx --parallel 4 --config Release
           ctest --test-dir out/release-x86-nocxx --verbose --timeout 240 -C Release
 
+      - name: Debug, Win32, clang-cl
+        if: matrix.tests == 'extra' && runner.os == 'Windows'
+        run: |
+          cmake . -B out/debug-x86-clang-cl -DCMAKE_BUILD_TYPE=Debug -A Win32 -T ClangCl
+          cmake --build out/debug-x86-clang-cl --parallel 4 --config Debug
+          ctest --test-dir out/debug-x86-clang-cl --verbose --timeout 240 -C Debug
+
+      - name: Debug, Win32, clang-cl, MI_NO_USE_CXX
+        if: matrix.tests == 'extra' && runner.os == 'Windows'
+        run: |
+          cmake . -B out/debug-x86-clang-cl-nocxx -DCMAKE_BUILD_TYPE=Debug -DMI_NO_USE_CXX=ON -A Win32 -T ClangCl
+          cmake --build out/debug-x86-clang-cl-nocxx --parallel 4 --config Debug
+          ctest --test-dir out/debug-x86-clang-cl-nocxx --verbose --timeout 240 -C Debug
+
+      - name: Release, Win32, clang-cl
+        if: matrix.tests == 'extra' && runner.os == 'Windows'
+        run: |
+          cmake . -B out/release-x86-clang-cl -DCMAKE_BUILD_TYPE=Release -A Win32 -T ClangCl
+          cmake --build out/release-x86-clang-cl --parallel 4 --config Release
+          ctest --test-dir out/release-x86-clang-cl --verbose --timeout 240 -C Release
+
+      - name: Release, Win32, clang-cl, MI_NO_USE_CXX
+        if: matrix.tests == 'extra' && runner.os == 'Windows'
+        run: |
+          cmake . -B out/release-x86-clang-cl-nocxx -DCMAKE_BUILD_TYPE=Release -DMI_NO_USE_CXX=ON -A Win32 -T ClangCl
+          cmake --build out/release-x86-clang-cl-nocxx --parallel 4 --config Release
+          ctest --test-dir out/release-x86-clang-cl-nocxx --verbose --timeout 240 -C Release
+
       - name: Debug, Windows, clang-cl
         if: matrix.tests == 'extra' && runner.os == 'Windows'
         run: |
-          cmake . -B out/debug-clang-cl -DCMAKE_BUILD_TYPE=Debug -A Win32 -T ClangCl
+          cmake . -B out/debug-clang-cl -DCMAKE_BUILD_TYPE=Debug -T ClangCl
           cmake --build out/debug-clang-cl --parallel 4 --config Debug
           ctest --test-dir out/debug-clang-cl --verbose --timeout 240 -C Debug
 
       - name: Debug, Windows, clang-cl, MI_NO_USE_CXX
         if: matrix.tests == 'extra' && runner.os == 'Windows'
         run: |
-          cmake . -B out/debug-clang-cl-nocxx -DCMAKE_BUILD_TYPE=Debug -DMI_NO_USE_CXX=ON -A Win32 -T ClangCl
+          cmake . -B out/debug-clang-cl-nocxx -DCMAKE_BUILD_TYPE=Debug -DMI_NO_USE_CXX=ON -T ClangCl
           cmake --build out/debug-clang-cl-nocxx --parallel 4 --config Debug
           ctest --test-dir out/debug-clang-cl-nocxx --verbose --timeout 240 -C Debug
 
       - name: Release, Windows, clang-cl
         if: matrix.tests == 'extra' && runner.os == 'Windows'
         run: |
-          cmake . -B out/release-clang-cl -DCMAKE_BUILD_TYPE=Release -A Win32 -T ClangCl
+          cmake . -B out/release-clang-cl -DCMAKE_BUILD_TYPE=Release -T ClangCl
           cmake --build out/release-clang-cl --parallel 4 --config Release
           ctest --test-dir out/release-clang-cl --verbose --timeout 240 -C Release
 
       - name: Release, Windows, clang-cl, MI_NO_USE_CXX
         if: matrix.tests == 'extra' && runner.os == 'Windows'
         run: |
-          cmake . -B out/release-clang-cl-nocxx -DCMAKE_BUILD_TYPE=Release -DMI_NO_USE_CXX=ON -A Win32 -T ClangCl
+          cmake . -B out/release-clang-cl-nocxx -DCMAKE_BUILD_TYPE=Release -DMI_NO_USE_CXX=ON -T ClangCl
           cmake --build out/release-clang-cl-nocxx --parallel 4 --config Release
           ctest --test-dir out/release-clang-cl-nocxx --verbose --timeout 240 -C Release
 
