@@ -148,22 +148,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #if MI_PAGE_META_IS_SEPARATED
 #define MI_PAGE_META_IS_ALIGNED         1        
 #define MI_PAGE_META_ALIGNED_CHUNKS     MI_INTPTR_SIZE
-#ifdef MI_PAGE_META_SMALL_IS_ALIGNED
-#undef MI_PAGE_META_SMALL_IS_ALIGNED
-#endif
 #else
 #warning "cannot optimize free with alignment since the page meta data is not separated (due to MI_PAGE_MAP_FLAT?)"
 #endif
 #endif
 
-// Deprecated (in favor of MI_PAGE_META_IS_ALIGNED): 
 // We can choose to only put page info of small pages at the start of the page area.
 // This can be used to have a slightly faster `mi_free_small` function for specialized
 // cases (like language runtime systems).
-#if !MI_PAGE_META_IS_ALIGNED
-#if MI_OPT_FREE_SMALL && !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
+#if !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
+#if (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED) && !MI_SECURE && !MI_GUARDED
 #define MI_PAGE_META_SMALL_IS_ALIGNED   1
-#elif !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
+#else
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0
 #endif
 #endif

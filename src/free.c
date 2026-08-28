@@ -267,7 +267,7 @@ void mi_ufree(void* p, size_t* pblock_size) mi_attr_noexcept {
 
 void mi_free_small(void* p) mi_attr_noexcept {
   #if MI_PAGE_META_SMALL_IS_ALIGNED 
-    // deprecated: We can only call `mi_free_small` for pointers allocated with `mi_(heap_)malloc_small`.
+    // We can only call `mi_free_small` for pointers allocated with `mi_(heap_)malloc_small`.
     // If we keep page info in front of the page area for small objects, we can find the info
     // just by aligning down the pointer instead of looking it up in the page map.    
     #if MI_GUARDED 

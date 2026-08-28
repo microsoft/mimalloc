@@ -871,7 +871,6 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
   return start;
 }
 
-#if !MI_PAGE_META_IS_ALIGNED
 // Only used for non-separate pages
 static size_t mi_page_block_start(size_t block_size, bool os_align)
 {
@@ -903,7 +902,6 @@ static size_t mi_page_block_start(size_t block_size, bool os_align)
   }
   return _mi_align_up(offset,MI_MAX_ALIGN_SIZE);
 }
-#endif
 
 // Free a page without modifying page_bin stats
 static void mi_arenas_page_free_prim(mi_page_t* page);
@@ -980,11 +978,16 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
     #if MI_PAGE_META_SMALL_IS_ALIGNED
     // if `block_size <= MI_SMALL_SIZE_MAX` we put the page info in front of the slice,
     // (note: it is important that `page_meta->block_size == 0` for `mi_arena_page_at_slice`)
-    if (block_size > MI_SMALL_SIZE_MAX)
+    if (block_size <= MI_SMALL_SIZE_MAX) {
+      // put page info in front of the slice
+      page = (mi_page_t*)slice_start;
+      block_start = mi_page_block_start(block_size, os_align);
+    }
+    else
     #endif
     {
-      page = page_meta;
       page_meta_is_separate = true;
+      page = page_meta;
       block_start = 0;
       #if !defined(MI_PAGE_BLOCK_START_MAX_OFFSET)
       #define MI_PAGE_BLOCK_START_MAX_OFFSET  (8*MI_INTPTR_BITS) /* 512 */
@@ -1081,14 +1084,13 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   // mi_assert_internal(mi_page_theap(page) == _mi_heap_theap_peek(page->heap))
 
   #if MI_PAGE_META_IS_ALIGNED
-  mi_atomic_store_ptr_release(mi_page_t,&page->self,page);
-  if (page_meta_is_separate) {
-    if (slice_count > 1) {
-      // at least two for large singleton blocks as guard pages can have a large offset beyond a single slice
-      for(size_t i = 1; i < max_page_meta_count; i++) {
-        mi_assert_internal(page[i].block_size == 0);
-        mi_atomic_store_ptr_release(mi_page_t,&page[i].self,page);
-      }
+  mi_assert_internal(page_meta!=NULL);
+  mi_atomic_store_ptr_release(mi_page_t,&page_meta->self,page);
+  if (slice_count > 1) {
+    // at least two for large singleton blocks as guard pages can have a large offset beyond a single slice
+    for(size_t i = 1; i < max_page_meta_count; i++) {
+      mi_assert_internal(page_meta[i].block_size == 0);
+      mi_atomic_store_ptr_release(mi_page_t,&page_meta[i].self,page);
     }
   }
   #if MI_DEBUG>1

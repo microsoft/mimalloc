@@ -420,7 +420,23 @@ int main(void) {
     }
   }
   
+  CHECK_BODY("free_small3") {
+    for(size_t n = 1; n < MI_SMALL_SIZE_MAX/sizeof(int); n *=2) {
+      const size_t size = n*sizeof(int);
+      int* p = (int*)mi_zalloc_small(size);
+      p[n-1] = 42;
+      mi_free_small(p);
+    }
+  }
 
+  CHECK_BODY("free_small4") {
+    for(size_t n = 1; n < MI_SMALL_SIZE_MAX/sizeof(int); n *=2) {
+      const size_t size = n*sizeof(int);
+      int* p = (int*)mi_zalloc_small(size);
+      p[n-1] = 42;
+      mi_free(p);
+    }
+  }
   // ---------------------------------------------------
   // Returned block sizes
   // ---------------------------------------------------
