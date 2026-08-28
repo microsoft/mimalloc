@@ -18,6 +18,7 @@ jobs:
     env:
       MIMALLOC_SHOW_ERRORS: 1
     strategy:
+      fail-fast: false
       matrix:
         tests: [basic,extra]
         os: [windows-latest, macos-latest, ubuntu-latest, macos-14, macos-15-intel, ubuntu-22.04-arm, windows-11-arm]
@@ -71,14 +72,6 @@ jobs:
           fi
 
       # Basic
-      - name: Debug
-        if: matrix.tests == 'basic'
-        run: |
-          env
-          cmake . -B out/debug-${{ matrix.c_or_cxx }} -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL ${{ steps.cmake_args.outputs.CMAKE_CXX_OPT_DEFAULT }}
-          cmake --build out/debug-${{ matrix.c_or_cxx }} --parallel 4 --config Debug
-          ctest --test-dir out/debug-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Debug
-
       - name: Release
         if: matrix.tests == 'basic'
         run: |
@@ -93,6 +86,13 @@ jobs:
           name: ${{ matrix.os }}-asm
           path: out/release-${{ matrix.c_or_cxx }}/CMakeFiles/mimalloc-static.dir/src/*.s
 
+      - name: Debug
+        if: matrix.tests == 'basic'
+        run: |
+          env
+          cmake . -B out/debug-${{ matrix.c_or_cxx }} -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL ${{ steps.cmake_args.outputs.CMAKE_CXX_OPT_DEFAULT }}
+          cmake --build out/debug-${{ matrix.c_or_cxx }} --parallel 4 --config Debug
+          ctest --test-dir out/debug-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Debug
 
       - name: Secure
         if: matrix.tests == 'basic'
@@ -403,17 +403,6 @@ jobs:
             cmake
             ninja
 
-      - name: Alpine riscv64, Debug
-        if: matrix.tests == 'alpine-riscv64'
-        shell: alpine-riscv64.sh {0}
-        env:
-          MI_TEST_LIGHT: 1
-        run: |
-          uname -m
-          cmake . -B out/debug-riscv64-${{ matrix.c_or_cxx }} -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL ${{ steps.cmake_args.outputs.CMAKE_CXX_OPT_DEFAULT }}
-          cmake --build out/debug-riscv64-${{ matrix.c_or_cxx }} --parallel 4 --config Debug
-          ctest --test-dir out/debug-riscv64-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Debug
-
       - name: Alpine riscv64, Release
         if: matrix.tests == 'alpine-riscv64'
         shell: alpine-riscv64.sh {0}
@@ -428,6 +417,17 @@ jobs:
         with:
           name: alpine-riscv64-asm
           path: out/release-riscv64-${{ matrix.c_or_cxx }}/CMakeFiles/mimalloc-static.dir/src/*.s
+
+      - name: Alpine riscv64, Debug
+        if: matrix.tests == 'alpine-riscv64'
+        shell: alpine-riscv64.sh {0}
+        env:
+          MI_TEST_LIGHT: 1
+        run: |
+          uname -m
+          cmake . -B out/debug-riscv64-${{ matrix.c_or_cxx }} -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL ${{ steps.cmake_args.outputs.CMAKE_CXX_OPT_DEFAULT }}
+          cmake --build out/debug-riscv64-${{ matrix.c_or_cxx }} --parallel 4 --config Debug
+          ctest --test-dir out/debug-riscv64-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Debug
 
       - name: Alpine riscv64, Secure
         if: matrix.tests == 'alpine-riscv64'
