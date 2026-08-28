@@ -186,7 +186,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "Intel")
 endif()
 
 # force C++ compilation with msvc or clang-cl to use modern C++ atomics
-if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL)
+if((CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL) AND NOT MI_NO_USE_CXX)
   set(MI_USE_CXX "ON")
 endif()
 
@@ -494,7 +494,9 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
 endif()
 
 if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
-  list(APPEND mi_cflags /Zc:__cplusplus)
+  if(MI_USE_CXX)
+    list(APPEND mi_cflags /Zc:__cplusplus)
+  endif()
   if(MI_OPT_ARCH AND NOT MI_CLANG_CL)
     if(MI_ARCH STREQUAL "arm64")
       set(MI_OPT_ARCH_FLAGS "/arch:armv8.1")           # fast atomics (LSE)
