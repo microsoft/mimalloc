@@ -93,42 +93,42 @@ jobs:
 
       # Extra Windows: x86, clang-cl, and clang
       - name: Debug, Win32
-        if: matrix.tests == 'extra' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
+        if: matrix.tests == 'extra' && runner.os == 'Windows'
         run: |
           cmake . -B out/debug-x86 -DCMAKE_BUILD_TYPE=Debug -A Win32
           cmake --build out/debug-x86 --parallel 4 --config Debug
           ctest --test-dir out/debug-x86 --verbose --timeout 240 -C Debug
 
       - name: Release, Win32
-        if: matrix.tests == 'extra' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
+        if: matrix.tests == 'extra' && runner.os == 'Windows'
         run: |
           cmake . -B out/release-x86 -DCMAKE_BUILD_TYPE=Release -A Win32
           cmake --build out/release-x86 --parallel 4 --config Release
           ctest --test-dir out/release-x86 --verbose --timeout 240 -C Release
 
       - name: Debug, Windows, clang-cl
-        if: matrix.tests == 'extra' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
+        if: matrix.tests == 'extra' && runner.os == 'Windows'
         run: |
           cmake . -B out/debug-clang-cl -DCMAKE_BUILD_TYPE=Debug -A Win32 -T ClangCl
           cmake --build out/debug-clang-cl --parallel 4 --config Debug
           ctest --test-dir out/debug-clang-cl --verbose --timeout 240 -C Debug
 
       - name: Release, Windows, clang-cl
-        if: matrix.tests == 'extra' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
+        if: matrix.tests == 'extra' && runner.os == 'Windows'
         run: |
           cmake . -B out/release-clang-cl -DCMAKE_BUILD_TYPE=Release -A Win32 -T ClangCl
           cmake --build out/release-clang-cl --parallel 4 --config Release
           ctest --test-dir out/release-clang-cl --verbose --timeout 240 -C Release
 
       - name: Debug, Windows, clang
-        if: matrix.tests == 'extra' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
+        if: matrix.tests == 'extra' && runner.os == 'Windows'
         run: |
           cmake . -B out/debug-clang -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang
           cmake --build out/debug-clang --parallel 4 --config Debug
           ctest --test-dir out/debug-clang --verbose --timeout 240 -C Debug
 
       - name: Release, Windows, clang
-        if: matrix.tests == 'extra' && runner.os == 'Windows' && !endsWith(matrix.os,'arm')
+        if: matrix.tests == 'extra' && runner.os == 'Windows'
         run: |
           cmake . -B out/release-clang -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang
           cmake --build out/release-clang --parallel 4 --config Release
