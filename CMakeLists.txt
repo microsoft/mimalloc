@@ -205,7 +205,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_C_COMPILER_FRONTEND_VARIANT ST
 endif()
 
 # force C++ compilation with msvc or clang-cl to use modern C++ atomics
-if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL)
+if((CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL) AND NOT MI_NO_USE_CXX)
   set(MI_USE_CXX "ON")
 elseif(MI_DEBUG_UBSAN AND CMAKE_BUILD_TYPE MATCHES "Debug")  # ubsan needs C++
   set(MI_USE_CXX "ON")
