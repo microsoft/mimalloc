@@ -667,7 +667,9 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
 endif()
 
 if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914) # vs2017+
-  list(APPEND mi_cflags /Zc:__cplusplus)
+  if(MI_USE_CXX)
+    list(APPEND mi_cflags /Zc:__cplusplus)
+  endif()
   if(MI_OPT_ARCH AND NOT MI_CLANG_CL)
     if(MI_ARCH STREQUAL "x64")
       set(MI_OPT_ARCH_FLAGS "/arch:AVX2")
