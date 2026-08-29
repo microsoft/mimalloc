@@ -240,7 +240,7 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
 
   const mi_threadid_t ptid = mi_page_xthread_id(page);
   const mi_threadid_t xtid = (_mi_prim_thread_id() ^ ptid);
-  if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
+  if (xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // thread-local, aligned, and not a full page
     mi_block_t* const block = mi_validate_block_from_ptr(page,p);
     mi_free_block_local(page, block, false /* was guarded */, true /* track stats */, false /* no need to check if the page is full */);
