@@ -171,7 +171,7 @@ void mi_decl_noinline _mi_free_generic(mi_page_t* page, bool is_local, void* p) 
 // Does further checks in debug mode to see if this was a valid pointer.
 static inline bool mi_validate_ptr_page_nonnull(const void* p, const char* msg, bool free_small, mi_page_t** ppage)
 {
-  MI_UNUSED_RELEASE(msg);
+  MI_UNUSED_RELEASE(msg); MI_UNUSED(free_small);
   #if MI_DEBUG
   if mi_unlikely(((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0 && !mi_option_is_enabled(mi_option_guarded_precise)) {
     _mi_error_message(EINVAL, "%s: invalid (unaligned) pointer: %p\n", msg, p);
@@ -205,8 +205,8 @@ static inline bool mi_validate_ptr_page_nonnull(const void* p, const char* msg, 
     #if MI_PAGE_META_SMALL_IS_ALIGNED
     if (free_small) { mi_assert_internal(NULL == mi_atomic_load_ptr_acquire(mi_page_t,&page->self)); }    
     else
-    #elif MI_SMALL_PAGE_SIZE == MI_ARENA_SLICE_SIZE
-    // for mi_free_small we can avoid a load-acquire
+    #elif MI_SMALL_PAGE_SIZE == MI_ARENA_SLICE_SIZE && !MI_GUARDED
+    // for mi_free_small we can avoid a load-acquire (but not when guarded as that may still allocate large blocks)
     if (free_small) { mi_assert_internal(page == mi_atomic_load_ptr_acquire(mi_page_t,&page->self)); }
     else
     #endif
@@ -215,7 +215,9 @@ static inline bool mi_validate_ptr_page_nonnull(const void* p, const char* msg, 
 
   mi_assert_internal(page!=NULL);
   mi_assert(cpage==page /* page_map lookup should be the same as aligned lookup */ );      
+  #if !MI_GUARDED
   if (free_small) { mi_assert_internal(page->block_size <= mi_good_size(MI_SMALL_SIZE_MAX) /* free small should only be called on small pages */); }
+  #endif
   *ppage = page;
   return true;
 }
@@ -303,14 +305,22 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
     mi_assert(p!=NULL);
     const size_t usable = _mi_page_usable_size(page,p);
     if mi_unlikely(size > usable) { 
-      _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the size %zu is greater than the usable size %zu\n", p, size, usable);
-      mi_free(p);
-      return;
+      const mi_block_t* block = _mi_page_ptr_unalign(page, p);
+      const bool is_guarded = mi_block_ptr_is_guarded(block,p);
+      if (!is_guarded) {
+        _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the size %zu is greater than the usable size %zu\n", p, size, usable);
+        mi_free(p);
+        return;
+      }
     }
-    else if mi_unlikely(size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size(MI_SMALL_SIZE_MAX)) { 
-      _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n", p, size, mi_page_block_size(page));
-      mi_free(p);
-      return;
+    if mi_unlikely(size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size(MI_SMALL_SIZE_MAX)) { 
+      const mi_block_t* block = _mi_page_ptr_unalign(page, p);
+      const bool is_guarded = mi_block_ptr_is_guarded(block,p);
+      if (!is_guarded) {
+        _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n", p, size, mi_page_block_size(page));
+        mi_free(p);
+        return;
+      }
     }
   #endif
   #if MI_PAGE_META_SMALL_IS_ALIGNED

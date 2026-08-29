@@ -159,7 +159,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #if !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
 #if defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0
-#elif (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED) && !MI_SECURE //  && !MI_GUARDED
+#elif (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED) && !MI_SECURE && !MI_GUARDED  // cannot be guarded as that may allocate large blocks for small allocations
 #define MI_PAGE_META_SMALL_IS_ALIGNED   1
 #else
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0
