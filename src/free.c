@@ -329,7 +329,7 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
       const mi_block_t* block = _mi_page_ptr_unalign(page, p);
       const bool is_guarded = mi_block_ptr_is_guarded(block,p);
       if (!is_guarded) {
-        _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n", p, size, mi_page_block_size(page));
+        _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n  (maybe a `new[]` was matched with `delete` instead of `delete[]`?)\n", p, size, mi_page_block_size(page));
         mi_free(p);
         return;
       }
