@@ -310,7 +310,7 @@ jobs:
       - name: mingw-ucrt64 x64, Debug
         if: matrix.tests == 'mingw-ucrt64'
         shell: msys2 {0}
-        run: |
+          run: |
           env
           cmake . -B out/debug-mingw-ucrt64-x64 -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL
           cmake --build out/debug-mingw-ucrt64-x64 --parallel 4 --config Debug
@@ -401,7 +401,7 @@ jobs:
           ctest --test-dir out/secure-x64 --verbose --timeout 240 -C Release
 
 
-      # VM: Alpine Linux with MUSL libc (riscv64 and x64)
+      # VM: Alpine Linux with MUSL libc (riscv64, x64, and arm32)
       - name: Alpine riscv64, Setup
         if: matrix.tests == 'alpine-riscv64'
         uses: jirutka/setup-alpine@ae3b3ddba35054804fc4a3507b519fa7e8152050 # v1.4.1
