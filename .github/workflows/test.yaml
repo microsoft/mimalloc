@@ -80,7 +80,7 @@ jobs:
         if: matrix.tests == 'basic' && runner.os == 'Linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ matrix.os }}-asm
+          name: ${{ matrix.os }}-${{ matrix.c_or_cxx }}-asm
           path: out/release-${{ matrix.c_or_cxx }}/CMakeFiles/mimalloc-static.dir/src/*.s
 
       - name: Debug
