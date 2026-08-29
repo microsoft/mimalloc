@@ -45,7 +45,7 @@ jobs:
             tests: mingw-ucrt64
           - os: windows-latest      # clang-cl and clang
             tests: clang
-          - os: windows11-arm       # clang-cl and clang
+          - os: windows-11-arm      # clang-cl and clang
             tests: clang  
           # - os: ubuntu-latest
           #   tests: android-x64

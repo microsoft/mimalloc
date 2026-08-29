@@ -369,7 +369,7 @@ void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
   return NULL;
   #else
   if (p == NULL) return NULL;
-  const mi_page_t* const page = mi_validate_ptr_page(p,"mi_expand");  
+  const mi_page_t* const page = mi_ptr_page_validate(p,"mi_expand");  
   const size_t size = _mi_page_usable_size(page,p);
   if (newsize > size) return NULL;
   return p; // it fits
@@ -388,7 +388,7 @@ static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, voi
     if (pblock_size_pre!=NULL) { *pblock_size_pre = 0; }
   }
   else {    
-    page = mi_validate_ptr_page(p,"mi_realloc"); 
+    page = mi_ptr_page_validate(p,"mi_realloc"); 
     if mi_unlikely(page==NULL) {  // invalid pointer
       if (pblock_size_pre!=NULL) { *pblock_size_pre = 0; }
       if (pblock_size_post!=NULL) { *pblock_size_post = 0; }  

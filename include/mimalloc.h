@@ -133,12 +133,16 @@ mi_decl_nodiscard mi_decl_export void* mi_reallocf(void* p, size_t newsize)     
 mi_decl_nodiscard mi_decl_export size_t mi_usable_size(const void* p) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export size_t mi_good_size(size_t size)     mi_attr_noexcept;
 
-// `mi_free_size` can be more efficient (as at calls mi_free_small internally).
+// `mi_free_size` can be more efficient (as it calls mi_free_small internally).
 mi_decl_export void mi_free_size(void* p, size_t size) mi_attr_noexcept;
 
 // `mi_free_small` is for special applications like language runtimes.
 // it should only be used to free objects from `mi_(heap_)(m|z)alloc_small` and is potentially a tiny bit faster than `mi_free`
 mi_decl_export void mi_free_small(void* p) mi_attr_noexcept;  
+
+// As `mi_free_small` but `p` should be non-NULL.
+void mi_free_small_nonnull(void* p) mi_attr_noexcept;
+
 
 // -------------------------------------------------------------------------------------
 // Aligned allocation
