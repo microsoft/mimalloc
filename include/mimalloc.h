@@ -414,6 +414,10 @@ static inline mi_decl_restrict void* mi_theap_zalloc_csize(mi_theap_t* theap, si
 static inline void mi_free_csize(void* p, size_t size) mi_attr_noexcept {
   if (size <= MI_SMALL_SIZE_MAX) { mi_free_small(p); } else { mi_free(p); }
 }
+static inline void mi_free_csize_nonnull(void* p, size_t size) mi_attr_noexcept {
+  // assert(p!=NULL);
+  if (size <= MI_SMALL_SIZE_MAX) { mi_free_small_nonnull(p); } else { mi_free(p); }
+}
 
 // ------------------------------------------------------
 // Experimental
