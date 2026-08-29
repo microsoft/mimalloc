@@ -41,6 +41,8 @@ jobs:
             tests: alpine-arm32     # qemu
           - os: windows-latest
             tests: mingw-ucrt64
+          - os: windows-latest
+            tests: clang
           # - os: ubuntu-latest
           #   tests: android-x64
           # - os: ubuntu-latest       # slow, so disable by default
@@ -51,29 +53,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      # Choose MI_USE_CXX/MI_NO_USE_CXX values
-      - name: Compute CMake args
+      # Choose MI_USE_CXX setting
+      - name: Set default cmake options
         id: cmake_args
         shell: bash
         run: |
-          CMAKE_CXX_OPT_C="-DMI_USE_CXX=OFF -DMI_NO_USE_CXX=ON"
-          CMAKE_CXX_OPT_CXX="-DMI_USE_CXX=ON -DMI_NO_USE_CXX=OFF"
-          # On MSVC, C++ mode is default, so there C mode explicitly disables C++.
-          # Everywhere else, C mode is default, so explicitly enable C
           if [ "${{ matrix.c_or_cxx }}" = "cxx" ]; then
-            CMAKE_CXX_OPT_GCC=$CMAKE_CXX_OPT_CXX
-            CMAKE_CXX_OPT_MSVC=
+            echo "CMAKE_CXX_OPT_DEFAULT=-DMI_USE_CXX=ON"  >> $GITHUB_OUTPUT
           else # Default to C mode
-            CMAKE_CXX_OPT_GCC=
-            CMAKE_CXX_OPT_MSVC=$CMAKE_CXX_OPT_C
-          fi
-          echo "CMAKE_CXX_OPT_GCC=$CMAKE_CXX_OPT_GCC" >> $GITHUB_OUTPUT
-          echo "CMAKE_CXX_OPT_MSVC=$CMAKE_CXX_OPT_MSVC" >> $GITHUB_OUTPUT
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            echo "CMAKE_CXX_OPT_DEFAULT=$CMAKE_CXX_OPT_MSVC" >> $GITHUB_OUTPUT
-          else
-            echo "CMAKE_CXX_OPT_DEFAULT=$CMAKE_CXX_OPT_GCC" >> $GITHUB_OUTPUT
-          fi
+            echo "CMAKE_CXX_OPT_DEFAULT=-DMI_USE_CXX=OFF" >> $GITHUB_OUTPUT
+          fi          
 
       # Basic
       - name: Release
@@ -121,42 +110,42 @@ jobs:
           ctest --test-dir out/release-x86-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Release
 
       - name: Debug, Win32, clang-cl
-        if: matrix.tests == 'basic' && runner.os == 'Windows'
+        if: matrix.tests == 'clang' && runner.os == 'Windows'
         run: |
           cmake . -B out/debug-x86-clang-cl-${{ matrix.c_or_cxx }} -DCMAKE_BUILD_TYPE=Debug -A Win32 -T ClangCl ${{ steps.cmake_args.outputs.CMAKE_CXX_OPT_MSVC }}
           cmake --build out/debug-x86-clang-cl-${{ matrix.c_or_cxx }} --parallel 4 --config Debug
           ctest --test-dir out/debug-x86-clang-cl-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Debug
 
       - name: Release, Win32, clang-cl
-        if: matrix.tests == 'basic' && runner.os == 'Windows'
+        if: matrix.tests == 'clang' && runner.os == 'Windows'
         run: |
           cmake . -B out/release-x86-clang-cl-${{ matrix.c_or_cxx }} -DCMAKE_BUILD_TYPE=Release -A Win32 -T ClangCl ${{ steps.cmake_args.outputs.CMAKE_CXX_OPT_MSVC }}
           cmake --build out/release-x86-clang-cl-${{ matrix.c_or_cxx }} --parallel 4 --config Release
           ctest --test-dir out/release-x86-clang-cl-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Release
 
       - name: Debug, Windows, clang-cl
-        if: matrix.tests == 'basic' && runner.os == 'Windows'
+        if: matrix.tests == 'clang' && runner.os == 'Windows'
         run: |
           cmake . -B out/debug-clang-cl-${{ matrix.c_or_cxx }} -DCMAKE_BUILD_TYPE=Debug -T ClangCl ${{ steps.cmake_args.outputs.CMAKE_CXX_OPT_MSVC }}
           cmake --build out/debug-clang-cl-${{ matrix.c_or_cxx }} --parallel 4 --config Debug
           ctest --test-dir out/debug-clang-cl-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Debug
 
       - name: Release, Windows, clang-cl
-        if: matrix.tests == 'basic' && runner.os == 'Windows'
+        if: matrix.tests == 'clang' && runner.os == 'Windows'
         run: |
           cmake . -B out/release-clang-cl-${{ matrix.c_or_cxx }} -DCMAKE_BUILD_TYPE=Release -T ClangCl ${{ steps.cmake_args.outputs.CMAKE_CXX_OPT_MSVC }}
           cmake --build out/release-clang-cl-${{ matrix.c_or_cxx }} --parallel 4 --config Release
           ctest --test-dir out/release-clang-cl-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Release
 
       - name: Debug, Windows, clang
-        if: matrix.tests == 'basic' && runner.os == 'Windows'
+        if: matrix.tests == 'clang' && runner.os == 'Windows'
         run: |
           cmake . -B out/debug-clang-${{ matrix.c_or_cxx }} -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang ${{ steps.cmake_args.outputs.CMAKE_CXX_OPT_MSVC }}
           cmake --build out/debug-clang-${{ matrix.c_or_cxx }} --parallel 4 --config Debug
           ctest --test-dir out/debug-clang-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Debug
 
       - name: Release, Windows, clang
-        if: matrix.tests == 'basic' && runner.os == 'Windows'
+        if: matrix.tests == 'clang' && runner.os == 'Windows'
         run: |
           cmake . -B out/release-clang-${{ matrix.c_or_cxx }} -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang ${{ steps.cmake_args.outputs.CMAKE_CXX_OPT_MSVC }}
           cmake --build out/release-clang-${{ matrix.c_or_cxx }} --parallel 4 --config Release
