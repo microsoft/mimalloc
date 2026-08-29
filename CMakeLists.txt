@@ -11,7 +11,10 @@ option(MI_OVERRIDE          "Override the standard malloc interface (i.e. define
 option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
 option(MI_SHOW_ERRORS       "Show error and warning messages by default (only enabled by default in DEBUG mode)" OFF)
 option(MI_GUARDED           "Build with guard pages behind certain object allocations (enabled by default in a debug build)" OFF)
-option(MI_USE_CXX           "Use the C++ compiler to compile the library (instead of the C compiler)" OFF)
+
+set(MI_USE_CXX "DEFAULT" CACHE STRING "Use the C++ compiler to compile the library (instead of the C compiler)")
+set_property(CACHE MI_USE_CXX PROPERTY STRINGS "OFF" "ON" "DEFAULT")
+
 option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for arm64: '-march=armv8.1-a' (2016))" OFF)
 option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS" ON)
@@ -185,9 +188,13 @@ if(CMAKE_C_COMPILER_ID MATCHES "Intel")
     list(APPEND mi_cflags -Wall)
 endif()
 
-# force C++ compilation with msvc or clang-cl to use modern C++ atomics
-if((CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL) AND NOT MI_NO_USE_CXX)
-  set(MI_USE_CXX "ON")
+if(MI_USE_CXX STREQUAL "DEFAULT")
+  if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL)
+    # force C++ compilation with msvc or clang-cl to use modern C++ atomics
+    set(MI_USE_CXX "ON")
+  else()
+    set(MI_USE_CXX "OFF")
+  endif()
 endif()
 
 if(MI_OVERRIDE)
@@ -391,6 +398,8 @@ if(MI_USE_CXX)
   endif()
   if(CMAKE_CXX_COMPILER_ID MATCHES "Intel" AND NOT CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM")
     list(APPEND mi_cflags -Kc++)
+  elseif(MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
+    list(APPEND mi_cflags /Zc:__cplusplus)
   endif()
 endif()
 
@@ -494,9 +503,6 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
 endif()
 
 if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
-  if(MI_USE_CXX)
-    list(APPEND mi_cflags /Zc:__cplusplus)
-  endif()
   if(MI_OPT_ARCH AND NOT MI_CLANG_CL)
     if(MI_ARCH STREQUAL "arm64")
       set(MI_OPT_ARCH_FLAGS "/arch:armv8.1")           # fast atomics (LSE)
