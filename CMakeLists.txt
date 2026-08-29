@@ -11,7 +11,10 @@ option(MI_OVERRIDE          "Override the standard malloc interface (i.e. define
 option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
 option(MI_SHOW_ERRORS       "Show error and warning messages by default (only enabled by default in DEBUG mode)" OFF)
 option(MI_GUARDED           "Build with guard pages behind certain object allocations (enabled by default in a debug build)" OFF)
-option(MI_USE_CXX           "Use the C++ compiler to compile the library (instead of the C compiler)" OFF)
+
+set(MI_USE_CXX "DEFAULT" CACHE STRING "Use the C++ compiler to compile the library (instead of the C compiler)")
+set_property(CACHE MI_USE_CXX PROPERTY STRINGS "OFF" "ON" "DEFAULT")
+
 option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell;-mavx2' (2013), for arm64: '-march=armv8.3-a' (2016), for riscV: '-march=rv64gcb_zacas' (2023))" OFF)
 option(MI_OPT_SIMD          "Use SIMD instructions (requires MI_OPT_ARCH to be enabled)" OFF)
 
@@ -204,11 +207,15 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_C_COMPILER_FRONTEND_VARIANT ST
   set(MI_CLANG_CL "ON")
 endif()
 
-# force C++ compilation with msvc or clang-cl to use modern C++ atomics
-if((CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL) AND NOT MI_NO_USE_CXX)
-  set(MI_USE_CXX "ON")
-elseif(MI_DEBUG_UBSAN AND CMAKE_BUILD_TYPE MATCHES "Debug")  # ubsan needs C++
-  set(MI_USE_CXX "ON")
+if(MI_USE_CXX STREQUAL "DEFAULT")
+  if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL)
+    # force C++ compilation with msvc or clang-cl to use modern C++ atomics
+    set(MI_USE_CXX "ON")
+  elseif(MI_DEBUG_UBSAN AND CMAKE_BUILD_TYPE MATCHES "Debug")  # ubsan needs C++
+    set(MI_USE_CXX "ON")
+  else()
+    set(MI_USE_CXX "OFF")
+  endif()
 endif()
 
 # enable C++ ?
@@ -217,6 +224,8 @@ if(MI_USE_CXX)
   message(STATUS "Use the C++ compiler to compile (MI_USE_CXX=ON)")
   if(CMAKE_CXX_COMPILER_ID MATCHES "Intel" AND NOT CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM")
     list(APPEND mi_cflags -Kc++)
+  elseif(MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
+    list(APPEND mi_cflags /Zc:__cplusplus)  
   endif()
 endif()
 
@@ -665,9 +674,6 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
 endif()
 
 if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914) # vs2017+
-  if(MI_USE_CXX)
-    list(APPEND mi_cflags /Zc:__cplusplus)
-  endif()
   if(MI_OPT_ARCH AND NOT MI_CLANG_CL)
     if(MI_ARCH STREQUAL "x64")
       set(MI_OPT_ARCH_FLAGS "/arch:AVX2")
