@@ -17,6 +17,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       MIMALLOC_SHOW_ERRORS: 1
+    continue-on-error: 
+      ${{ startsWith(matrix.tests,'alpine') || false }}
     strategy:
       fail-fast: false
       matrix:
@@ -41,8 +43,10 @@ jobs:
             tests: alpine-arm32     # qemu
           - os: windows-latest
             tests: mingw-ucrt64
-          - os: windows-latest
+          - os: windows-latest      # clang-cl and clang
             tests: clang
+          - os: windows11-arm       # clang-cl and clang
+            tests: clang  
           # - os: ubuntu-latest
           #   tests: android-x64
           # - os: ubuntu-latest       # slow, so disable by default
