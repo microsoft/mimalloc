@@ -27,8 +27,10 @@ jobs:
           - os: macos-14
             tests: extra
           - c_or_cxx: cxx
-            tests: extra             
+            tests: extra                       
         include:
+          - os: ubuntu-latest
+            tests: tsan
           - os: ubuntu-latest
             tests: freebsd-x64
           - os: ubuntu-latest
@@ -241,7 +243,7 @@ jobs:
           ctest --test-dir out/debug-ubsan-cxx --verbose --timeout 240 -C Debug
 
       - name: Debug, TSAN
-        if: matrix.tests == 'extra' && runner.os == 'Linux'
+        if: matrix.tests == 'tsan' && runner.os == 'Linux'
         run: |
           CC=clang CXX=clang++ cmake . -B out/debug-tsan -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_DEBUG_TSAN=ON 
           cmake --build out/debug-tsan --parallel 8 --config Debug
@@ -265,12 +267,33 @@ jobs:
         env:
           MIMALLOC_GUARDED_SAMPLE_RATE: 10
 
+      - name: Debug, Use pagemap
+        if: matrix.tests == 'extra' && runner.os == 'Linux' && startsWith(github.ref_name,'dev3')
+        run: |
+          cmake . -B out/debug-guarded -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_FREE_USE_PAGEMAP=ON 
+          cmake --build out/debug-guarded --parallel 8 --config Debug
+          ctest --test-dir out/debug-guarded --verbose --timeout 240 -C Debug
+
+      - name: Release, Use pagemap
+        if: matrix.tests == 'extra' && runner.os == 'Linux' && startsWith(github.ref_name,'dev3')
+        run: |
+          cmake . -B out/release-guarded -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_FREE_USE_PAGEMAP=ON
+          cmake --build out/release-guarded --parallel 8 --config Release
+          ctest --test-dir out/release-guarded --verbose --timeout 240 -C Release
+
       - name: Debug, Secure Full
         if: matrix.tests == 'extra' && runner.os != 'macOS'
         run: |
           cmake . -B out/debug-secure-full -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_SECURE=FULL 
           cmake --build out/debug-secure-full --parallel 8 --config Debug
           ctest --test-dir out/debug-secure-full --verbose --timeout 240 -C Debug
+
+      - name: Release, Secure Full
+        if: matrix.tests == 'extra' && runner.os != 'macOS'
+        run: |
+          cmake . -B out/release-secure-full -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_SECURE=FULL
+          cmake --build out/release-secure-full --parallel 8 --config Release
+          ctest --test-dir out/release-secure-full --verbose --timeout 240 -C Release
 
       # MSYS2 mingw64
       - name: mingw-ucrt64 x64, Setup

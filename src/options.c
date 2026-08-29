@@ -249,10 +249,16 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
   #if MI_TSAN
   _mi_fprintf(out, arg, "thread santizer enabled\n");
   #endif
-  #if MI_PAGE_META_IS_ALIGNED
+  #if MI_PAGE_META_IS_ALIGNED && MI_PAGE_META_SMALL_IS_ALIGNED
+  _mi_fprintf(out, arg, "free: (small) aligned, page size: %zu\n", sizeof(mi_page_t));
+  #elif MI_PAGE_META_IS_ALIGNED
   _mi_fprintf(out, arg, "free: aligned, page size: %zu\n", sizeof(mi_page_t));
+  #elif MI_PAGE_META_SMALL_IS_ALIGNED
+  _mi_fprintf(out, arg, "free: small aligned + pagemap, page size: %zu\n", sizeof(mi_page_t));
   #elif MI_FREE_IS_CHECKED
   _mi_fprintf(out, arg, "free: checked, page size: %zu\n", sizeof(mi_page_t));
+  #else 
+  _mi_fprintf(out, arg, "free: pagemap, page size: %zu\n", sizeof(mi_page_t));
   #endif
   #if MI_ENCODE_FREELIST
   _mi_fprintf(out, arg, "free lists: encoded with %d key(s)\n", MI_PAGE_KEY_COUNT);

@@ -157,7 +157,9 @@ terms of the MIT license. A copy of the license can be found in the file
 // This can be used to have a slightly faster `mi_free_small` function for specialized
 // cases (like language runtime systems).
 #if !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
-#if (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED) && !MI_SECURE && !MI_GUARDED
+#if defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0
+#define MI_PAGE_META_SMALL_IS_ALIGNED   0
+#elif (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED) && !MI_SECURE //  && !MI_GUARDED
 #define MI_PAGE_META_SMALL_IS_ALIGNED   1
 #else
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0

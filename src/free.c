@@ -180,35 +180,42 @@ static inline bool mi_validate_ptr_page_nonnull(const void* p, const char* msg, 
   #endif
   
   mi_page_t* page;
-  #if MI_PAGE_META_IS_ALIGNED
-    page = _mi_aligned_ptr_page0(p);
-    if mi_unlikely(page==NULL) return false; // p==NULL => page==NULL    
-    #if MI_DEBUG 
-    mi_page_t* const cpage = _mi_checked_ptr_page(p);
-    if mi_unlikely(cpage==NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
-    #endif
-    
-    #if MI_SMALL_PAGE_SIZE == MI_ARENA_SLICE_SIZE
-    // for mi_free_small we can avoid a load-acquire
-    if (free_small) { mi_assert_internal(page == mi_atomic_load_ptr_acquire(mi_page_t,&page->self)); } 
-               else { page = mi_atomic_load_ptr_acquire(mi_page_t,&page->self); }
-    #else
-    MI_UNUSED(free_small);
-    page = mi_atomic_load_ptr_acquire(mi_page_t,&page->self);
-    #endif
-
-    mi_assert_internal(page!=NULL);
-    mi_assert(cpage==page /* page_map lookup should be the same as aligned lookup */ );  
-  #else
-    MI_UNUSED(free_small);
-    page = _mi_ptr_page(p);
-    if mi_unlikely(page==NULL) {
-      #if MI_DEBUG
-      if (p!=NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
-      #endif
-      return false;
-    }
+  #if MI_PAGE_META_SMALL_IS_ALIGNED 
+    if (free_small) { page = (mi_page_t*)_mi_align_down_ptr(p,MI_SMALL_PAGE_SIZE); }
+    else
   #endif
+  #if MI_PAGE_META_IS_ALIGNED
+    { page = _mi_aligned_ptr_page0(p); }
+  #else
+    { page = _mi_ptr_page(p); }
+  #endif
+  
+  if mi_unlikely(page==NULL) {
+    #if MI_DEBUG
+    if (p!=NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
+    #endif
+    return false;
+  }
+  #if MI_DEBUG
+  mi_page_t* const cpage = _mi_checked_ptr_page(p);
+  if mi_unlikely(cpage==NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
+  #endif
+    
+  #if MI_PAGE_META_IS_ALIGNED 
+    #if MI_PAGE_META_SMALL_IS_ALIGNED
+    if (free_small) { mi_assert_internal(NULL == mi_atomic_load_ptr_acquire(mi_page_t,&page->self)); }    
+    else
+    #elif MI_SMALL_PAGE_SIZE == MI_ARENA_SLICE_SIZE
+    // for mi_free_small we can avoid a load-acquire
+    if (free_small) { mi_assert_internal(page == mi_atomic_load_ptr_acquire(mi_page_t,&page->self)); }
+    else
+    #endif
+    { page = mi_atomic_load_ptr_acquire(mi_page_t,&page->self); }    
+  #endif
+
+  mi_assert_internal(page!=NULL);
+  mi_assert(cpage==page /* page_map lookup should be the same as aligned lookup */ );      
+  if (free_small) { mi_assert_internal(page->block_size <= mi_good_size(MI_SMALL_SIZE_MAX) /* free small should only be called on small pages */); }
   *ppage = page;
   return true;
 }
@@ -266,29 +273,10 @@ void mi_ufree(void* p, size_t* pblock_size) mi_attr_noexcept {
 }
 
 void mi_free_small(void* p) mi_attr_noexcept {
-  #if MI_PAGE_META_SMALL_IS_ALIGNED 
-    // We can only call `mi_free_small` for pointers allocated with `mi_(heap_)malloc_small`.
-    // If we keep page info in front of the page area for small objects, we can find the info
-    // just by aligning down the pointer instead of looking it up in the page map.    
-    #if MI_GUARDED 
-    #warning "MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED) ignored as MI_GUARDED is defined"
-    mi_free(p);
-    #elif MI_ARENA_SLICE_ALIGN < MI_SMALL_PAGE_SIZE
-    #warning "MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED) ignored as the MI_ARENA_SLICE_ALIGN is less than the small page size"
-    mi_free(p);
-    #else
-      mi_page_t* const page = (mi_page_t*)_mi_align_down_ptr(p,MI_SMALL_PAGE_SIZE);
-      mi_assert(page == mi_validate_ptr_page(p,"mi_free_small"));
-      mi_assert((void*)page == _mi_align_down_ptr(mi_page_start(page),MI_SMALL_PAGE_SIZE));
-      mi_assert(page->block_size <= mi_good_size(MI_SMALL_SIZE_MAX));  // note: not `MI_SMALL_MAX_OBJ_SIZE` as we need to match `mi_(heap_)malloc_small`
-      mi_free_nonnull(p, page, NULL, true);
-    #endif
-  #else
-    mi_page_t* page; 
-    if mi_likely(mi_validate_ptr_page_nonnull(p,"mi_free_small",true /* is_small? */,&page)) {    
-      mi_free_nonnull(p, page, NULL, true /* allow collect? */);
-    }  
-  #endif  
+  mi_page_t* page; 
+  if mi_likely(mi_validate_ptr_page_nonnull(p,"mi_free_small",true /* is_small? */,&page)) {    
+    mi_free_nonnull(p, page, NULL, true /* allow collect? */);
+  }
 }
 
 // void _mi_free_subproc_safe_in_page_nonnull(void* p, mi_page_t* page) mi_attr_noexcept {
