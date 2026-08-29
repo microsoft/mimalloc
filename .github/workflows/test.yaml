@@ -185,13 +185,6 @@ jobs:
           cmake --build out/release-tls-pthreads --parallel 4 --config Release
           ctest --test-dir out/release-tls-pthreads --verbose --timeout 240 -C Release
 
-      - name: Release, Linux, TLS pthreads, Asm
-        if: matrix.tests == 'extra' && runner.os == 'linux'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ${{ matrix.os }}-pthreads-asm          
-          path: out/release-tls-pthreads/CMakeFiles/mimalloc-static.dir/src/*.s
-
       # Extra
       - name: Release, SIMD
         if: matrix.tests == 'extra'
