@@ -15,7 +15,9 @@ option(MI_GUARDED           "Build with guard pages behind certain object alloca
 set(MI_USE_CXX "DEFAULT" CACHE STRING "Use the C++ compiler to compile the library (instead of the C compiler)")
 set_property(CACHE MI_USE_CXX PROPERTY STRINGS "OFF" "ON" "DEFAULT")
 
-option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for arm64: '-march=armv8.1-a' (2016))" OFF)
+set(MI_OPT_ARCH "DEFAULT" CACHE STRING "Only for optimized builds: turn on architecture specific optimizations (for arm64: '-march=armv8.1-a' (2016))")
+set_property(CACHE MI_OPT_ARCH PROPERTY STRINGS "OFF" "ON" "DEFAULT")
+
 option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS" ON)
 option(MI_OSX_ZONE          "Use malloc zone to override standard malloc on macOS" ON)
@@ -158,10 +160,17 @@ message(STATUS "Architecture: ${MI_ARCH}") # (${CMAKE_SYSTEM_PROCESSOR}, ${CMAKE
 if(MI_NO_USE_CXX)
   set(MI_USE_CXX "OFF")
 endif()
+
 if(MI_NO_OPT_ARCH)
   set(MI_OPT_ARCH "OFF")
-elseif(MI_ARCH STREQUAL "arm64")
-  set(MI_OPT_ARCH "ON")  # enable armv8.1-a by default on arm64 unless MI_NO_OPT_ARCH is set
+endif()
+
+if(MI_OPT_ARCH STREQUAL "DEFAULT")
+  if(MI_ARCH STREQUAL "arm64")
+    set(MI_OPT_ARCH "ON")  # enable armv8.1-a by default on arm64 unless MI_NO_OPT_ARCH is set
+  else()
+    set(MI_OPT_ARCH "OFF")
+  endif()
 endif()
 
 
