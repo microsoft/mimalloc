@@ -394,11 +394,12 @@ jobs:
         with:
           arch: riscv64
           shell-name: alpine-riscv64.sh
+          apk-tools-url: https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v3.0.7/x86_64/apk.static#!sha256!c07bf5356eacc9dd7a8c56bc537f46702f007170287403299d52a04264e74b3c
           packages: |
             build-base
             cmake
             ninja
-
+          
       - name: Alpine riscv64, Release
         if: matrix.tests == 'alpine-riscv64'
         shell: alpine-riscv64.sh {0}
@@ -432,6 +433,23 @@ jobs:
           cmake . -B out/secure-riscv64 -G Ninja -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON 
           cmake --build out/secure-riscv64 --parallel 4 --config Release
           ctest --test-dir out/secure-riscv64 --verbose --timeout 240 -C Release
+
+      - name: Alpine riscv64, Release rva23
+        if: matrix.tests == 'alpine-riscv64'
+        shell: alpine-riscv64.sh {0}
+        run: |
+          cmake . -B out/release-riscv64-rva23 -G Ninja -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=rva23 -DMI_SEE_ASM=ON 
+          cmake --build out/release-riscv64-rva23 --parallel 4 --config Release
+          ctest --test-dir out/release-riscv64-rva23 --verbose --timeout 240 -C Release
+
+      - name: Alpine risc64, Asm rva23
+        if: matrix.tests == 'alpine-riscv64'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: alpine-riscv64-rva23-asm
+          path: out/release-riscv64-rva23/CMakeFiles/mimalloc-static.dir/src/*.s
+
+
 
 
       - name: Alpine x64, Setup
