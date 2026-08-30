@@ -245,12 +245,12 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
     mi_block_t* const block = mi_validate_block_from_ptr(page,p);
     mi_free_block_local(page, block, false /* was guarded */, true /* track stats */, false /* no need to check if the page is full */);
   }
-  else if mi_likely(xtid <= MI_PAGE_FLAG_MASK) {            // `tid == mi_page_thread_id(page) && mi_page_flags(page) != 0`
+  else if (xtid <= MI_PAGE_FLAG_MASK) {            // `tid == mi_page_thread_id(page) && mi_page_flags(page) != 0`
     // page is local, but is full or contains (inner) aligned blocks; use generic path
     mi_free_generic_local(page, p);
   }
   // free-ing in a page owned by a theap in another thread, or an abandoned page (not belonging to a theap)
-  else if mi_likely((xtid & MI_PAGE_FLAG_MASK) == 0) {      // `tid != mi_page_thread_id(page) && mi_page_flags(page) == 0`
+  else if ((xtid & MI_PAGE_FLAG_MASK) == 0) {      // `tid != mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // blocks are aligned (and not a full page); push on the thread_free list
     mi_block_t* const block = mi_validate_block_from_ptr(page,p);
     mi_free_block_mt(page,block,false /* was_guarded */, allow_collect);
