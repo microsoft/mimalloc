@@ -400,21 +400,7 @@ jobs:
             cmake
             ninja
             clang
-
-      - name: Alpine riscv64, Release zalasr
-        if: matrix.tests == 'alpine-riscv64'
-        shell: alpine-riscv64.sh {0}
-        run: |
-          cmake . -B out/release-riscv64-zalasr -G Ninja -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=rv64gcb_zacas_zalasr -DMI_SEE_ASM=ON 
-          cmake --build out/release-riscv64-zalasr --parallel 4 --config Release
-          ctest --test-dir out/release-riscv64-zalasr --verbose --timeout 240 -C Release
-
-      - name: Alpine risc64, Asm zalasr
-        if: matrix.tests == 'alpine-riscv64'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: alpine-riscv64-zalasr-asm
-          path: out/release-riscv64-zalasr/CMakeFiles/mimalloc-static.dir/src/*.s
+            clang++
 
       - name: Alpine riscv64, Release clang
         if: matrix.tests == 'alpine-riscv64'
@@ -431,6 +417,21 @@ jobs:
           name: alpine-riscv64-clang-asm
           path: out/release-riscv64-clang/CMakeFiles/mimalloc-static.dir/src/*.s
             
+      - name: Alpine riscv64, Release zalasr
+        if: matrix.tests == 'alpine-riscv64'
+        shell: alpine-riscv64.sh {0}
+        run: |
+          CC=clang CXX=clang++ cmake . -B out/release-riscv64-zalasr -G Ninja -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=rv64gcb_zacas_zalasr -DMI_SEE_ASM=ON 
+          cmake --build out/release-riscv64-zalasr --parallel 4 --config Release
+          ctest --test-dir out/release-riscv64-zalasr --verbose --timeout 240 -C Release
+
+      - name: Alpine risc64, Asm zalasr
+        if: matrix.tests == 'alpine-riscv64'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: alpine-riscv64-zalasr-asm
+          path: out/release-riscv64-zalasr/CMakeFiles/mimalloc-static.dir/src/*.s
+
 
           
       - name: Alpine riscv64, Release
