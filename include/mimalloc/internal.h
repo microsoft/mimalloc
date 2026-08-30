@@ -776,7 +776,7 @@ static inline mi_page_t* _mi_aligned_ptr_page0(const void* p) {
   mi_page_t* const page_metas = (mi_page_t*)_mi_align_down_ptr(p,MI_PAGE_META_ALIGNMENT);
   // const ptrdiff_t page_idx = ((uint8_t*)p - (uint8_t*)page_metas)/MI_ARENA_SLICE_SIZE;
   const uintptr_t page_idx    = ((uintptr_t)p / MI_ARENA_SLICE_SIZE) % (MI_PAGE_META_ALIGNMENT / MI_ARENA_SLICE_SIZE);
-  mi_assert_internal(page_idx >= 0 && page_idx <= MI_PAGE_META_ALIGNED_COUNT);
+  mi_assert_internal(page_idx <= MI_PAGE_META_ALIGNED_COUNT);
   #if MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_RISCV // better code on x64/x86/riscv64
   mi_page_t* const page = (mi_page_t*)((uintptr_t)page_metas | (page_idx * sizeof(mi_page_t)));
   #else
