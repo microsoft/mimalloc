@@ -175,13 +175,13 @@ endif()
 
 
 # Determine architecture
-if(CMAKE_SIZEOF_VOID_P==16)
+if(CMAKE_SIZEOF_VOID_P EQUAL 16)
   set(MI_ARCH_BITS "128")
-elseif(CMAKE_SIZEOF_VOID_P==8)
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
   set(MI_ARCH_BITS "64")
-elseif(CMAKE_SIZEOF_VOID_P==4)
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
   set(MI_ARCH_BITS "32")
-elseif(CMAKE_SIZEOF_VOID_P==2)
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 2)
   set(MI_ARCH_BITS "16")
 else()
   set(MI_ARCH_BITS "")
@@ -202,7 +202,7 @@ else()
   set(MI_ARCH ${CMAKE_SYSTEM_PROCESSOR})
 endif()
 
-message(STATUS "Architecture: ${MI_ARCH}") # (${CMAKE_SYSTEM_PROCESSOR}, ${CMAKE_GENERATOR_PLATFORM}, ${CMAKE_GENERATOR})")
+message(STATUS "Architecture: ${MI_ARCH} (${MI_ARCH_BITS} bit)") # (${CMAKE_SYSTEM_PROCESSOR}, ${CMAKE_GENERATOR_PLATFORM}, ${CMAKE_GENERATOR})")
 
 # negative overrides (mainly to support vcpkg features)
 if(MI_NO_USE_CXX)
