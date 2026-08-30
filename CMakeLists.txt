@@ -15,8 +15,8 @@ option(MI_GUARDED           "Build with guard pages behind certain object alloca
 set(MI_USE_CXX "DEFAULT" CACHE STRING "Use the C++ compiler to compile the library (instead of the C compiler)")
 set_property(CACHE MI_USE_CXX PROPERTY STRINGS "OFF" "ON" "DEFAULT")
 
-set(MI_OPT_ARCH "DEFAULT" CACHE STRING "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell;-mavx2' (2013), for arm64: '-march=armv8.3-a' (2016), for riscV: '-march=rv64gcb_zacas' (2023))")
-set_property(CACHE MI_OPT_ARCH PROPERTY STRINGS "OFF" "ON" "DEFAULT")
+set(MI_OPT_ARCH "DEFAULT" CACHE STRING "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell;-mavx2' (2013), for arm64: '-march=armv8.1-a' (2016), for riscV: '-march=rv64gcb_zacas' (2023))")
+set_property(CACHE MI_OPT_ARCH PROPERTY STRINGS "OFF" "ON" "avx2" "armv8.1" "armv8.3" "rva22" "rva23" "rv64gcb_zacas" "DEFAULT")
 
 option(MI_OPT_SIMD          "Use SIMD instructions (requires MI_OPT_ARCH to be enabled)" OFF)
 
@@ -137,6 +137,17 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/.git/index")
   endif()
 endif()
 
+# case insensitive comparison
+function(STRIEQUAL str1 str2 is_equal)
+    string(TOUPPER "${str1}" str1_upper)
+    string(TOUPPER "${str2}" str2_upper)
+    if(str1_upper STREQUAL str2_upper)
+        set(${is_equal} TRUE PARENT_SCOPE)
+    else()
+        set(${is_equal} FALSE PARENT_SCOPE)
+    endif()
+endfunction()
+
 # -----------------------------------------------------------------------------
 # Convenience: set default build type and compiler depending on the build directory
 # -----------------------------------------------------------------------------
@@ -164,7 +175,6 @@ endif()
 
 
 # Determine architecture
-set(MI_OPT_ARCH_FLAGS "")
 set(MI_ARCH "unknown")
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86|i[3456]86)$" OR CMAKE_GENERATOR_PLATFORM MATCHES "^(x86|Win32)$")
   set(MI_ARCH "x86")
@@ -196,7 +206,7 @@ endif()
 
 if(MI_OPT_ARCH STREQUAL "DEFAULT")
   if(MI_ARCH STREQUAL "arm64")
-    set(MI_OPT_ARCH "ON")  # enable armv8.3-a by default (has LDAPR) on arm6
+    set(MI_OPT_ARCH "ON")     # enable by default for arm64 (defaults to armv8.1-a which has fast atomics)
   else()
     set(MI_OPT_ARCH "OFF")
   endif()
@@ -663,33 +673,64 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel")
 endif()
 
 # Compiler and architecture specific flags
-if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM_NAME MATCHES "Haiku")
-  if(MI_OPT_ARCH)
-    if(APPLE AND CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang" AND CMAKE_OSX_ARCHITECTURES)   # to support multi-arch binaries (#999)
-      if("arm64" IN_LIST CMAKE_OSX_ARCHITECTURES)
-        list(APPEND MI_OPT_ARCH_FLAGS "-Xarch_arm64;-march=armv8.3-a")
-      endif()
-      if("x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES)
-        list(APPEND MI_OPT_ARCH_FLAGS "-Xarch_x86_64;-march=haswell;-Xarch_x86_64;-mavx2")
-      endif()
-    elseif(MI_ARCH STREQUAL "x64")
-      set(MI_OPT_ARCH_FLAGS "-march=haswell;-mavx2")    # fast bit scan (since 2013)
-    elseif(MI_ARCH STREQUAL "arm64")
-      set(MI_OPT_ARCH_FLAGS "-march=armv8.3-a")         # fast atomics (since 2016)
-    elseif(MI_ARCH STREQUAL "riscv64")
-      set(MI_OPT_ARCH_FLAGS "-march=rv64gcb_zacas")     # fast bit scan and atomics (since 2023) TODO: add zalasr (2025) when possible.
-    elseif(MI_ARCH STREQUAL "riscv32")
-      set(MI_OPT_ARCH_FLAGS "-march=rv32gcb_zacas")     # fast bit scan and atomics (since 2023)
+if(MI_OPT_ARCH MATCHES "^(1|ON|YES|TRUE|Y)$")
+  if(APPLE AND CMAKE_OSX_ARCHITECTURES AND CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang" )  
+    set(MI_OPT_ARCH "ON")    
+  elseif(MI_ARCH STREQUAL "arm64")
+    if(APPLE)
+      set(MI_OPT_ARCH "armv8.3")      # M1+ supports arm8.3-a (which includes LDAPR (load-aquire))
+    else()
+      set(MI_OPT_ARCH "armv8.1")      # enable armv8.1-a by default (which has fast atomics)
     endif()
+  elseif(MI_ARCH STREQUAL "x64")
+    set(MI_OPT_ARCH "avx2")
+  elseif(MI_ARCH STREQUAL "riscv64")
+    # set(MI_OPT_ARCH "rva23")        # best as it has zalasr (2025)
+    set(MI_OPT_ARCH "rv64gcb_zacas")  # fast bit scan and atomics (since 2023) 
+  elseif(MI_ARCH STREQUAL "riscv32")
+    set(MI_OPT_ARCH "rv32gcb_zacas")    
   endif()
 endif()
 
-if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914) # vs2017+
-  if(MI_OPT_ARCH AND NOT MI_CLANG_CL)
-    if(MI_ARCH STREQUAL "x64")
+# Compiler and architecture specific flags
+set(MI_OPT_ARCH_FLAGS "")
+if(NOT MI_OPT_ARCH MATCHES "^(0|OFF|NO|FALSE|N)$")
+  # apple support for multi-arch binaries (#999)
+  if(APPLE AND CMAKE_OSX_ARCHITECTURES AND CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")  
+    if("arm64" IN_LIST CMAKE_OSX_ARCHITECTURES)
+      list(APPEND MI_OPT_ARCH_FLAGS "-Xarch_arm64;-march=armv8.3-a")
+    endif()
+    if("x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES)
+      list(APPEND MI_OPT_ARCH_FLAGS "-Xarch_x86_64;-march=haswell;-Xarch_x86_64;-mavx2")
+    endif()
+
+  # clang/gcc
+  elseif(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM_NAME MATCHES "Haiku")
+    if(MI_OPT_ARCH STREQUAL "avx2")
+      set(MI_OPT_ARCH_FLAGS "-march=haswell;-mavx2")      # fast bit scan (since 2013)
+    elseif(MI_OPT_ARCH MATCHES "^armv[89](\.[0-9])?$")
+      set(MI_OPT_ARCH_FLAGS "-march=${MI_OPT_ARCH}-a")    # fast atomics
+    elseif(MI_OPT_ARCH MATCHES "^rva[0-9][0-9]$")
+      if(MI_ARCH STREQUAL "riscv64")
+        set(MI_OPT_ARCH_FLAGS "-march=${MI_OPT_ARCH}u64") 
+      else()
+        set(MI_OPT_ARCH_FLAGS "-march=${MI_OPT_ARCH}u32") 
+      endif()
+    elseif(MI_OPT_ARCH MATCHES "^rv*$")
+      set(MI_OPT_ARCH_FLAGS "-march=${MI_OPT_ARCH}")
+    else()
+      set(MI_OPT_ARCH_FLAGS "-march=${MI_OPT_ARCH}")
+      message(STATUS "warning: unknown MI_OPT_ARCH=${MI_OPT_ARCH} passed as '-march=${MI_OPT_ARCH}'")
+    endif()
+
+  # msvc
+  elseif (MSVC AND MSVC_VERSION GREATER_EQUAL 1914 AND NOT MI_CLANG_CL) # vs2017+
+    if(MI_OPT_ARCH STREQUAL "avx2")
       set(MI_OPT_ARCH_FLAGS "/arch:AVX2")
-    elseif(MI_ARCH STREQUAL "arm64")
-      set(MI_OPT_ARCH_FLAGS "/arch:armv8.3")           # fast atomics (LDAPR)
+    elseif(MI_OPT_ARCH MATCHES "^armv[89](\.[0-9])?$")
+      set(MI_OPT_ARCH_FLAGS "/arch:${MI_OPT_ARCH}")       # fast atomics
+    else()
+      message(STATUS "warning: unknown MI_OPT_ARCH=${MI_OPT_ARCH} passed as '/arch:${MI_OPT_ARCH}'")
     endif()
   endif()
 endif()
@@ -700,7 +741,7 @@ endif()
 
 if(MI_OPT_ARCH_FLAGS)
   list(APPEND mi_cflags ${MI_OPT_ARCH_FLAGS})
-  message(STATUS "Architecture specific optimization is enabled (with ${MI_OPT_ARCH_FLAGS}) (MI_OPT_ARCH=ON)")
+  message(STATUS "Architecture specific optimization is enabled (with ${MI_OPT_ARCH_FLAGS}) (MI_OPT_ARCH=${MI_OPT_ARCH})")
   if (MI_OPT_SIMD)
     list(APPEND mi_defines "MI_OPT_SIMD=1")
     message(STATUS "SIMD instructions are enabled (MI_OPT_SIMD=ON)")
@@ -708,6 +749,7 @@ if(MI_OPT_ARCH_FLAGS)
 elseif(MI_OPT_SIMD)
   message(STATUS "SIMD instructions are not enabled (either MI_OPT_ARCH=OFF or this architecture has no SIMD support)")
 endif()
+
 
 # extra needed libraries
 
