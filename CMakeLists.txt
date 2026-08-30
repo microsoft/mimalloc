@@ -153,7 +153,7 @@ endfunction()
 # -----------------------------------------------------------------------------
 
 message(STATUS "")
-if(NOT CMAKE_BUILD_TYPE)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   if ("${CMAKE_BINARY_DIR}" MATCHES ".*((D|d)ebug|asan|tsan|ubsan|valgrind)$")
     message(STATUS "No build type selected, default to 'Debug'")
     set(CMAKE_BUILD_TYPE "Debug")
@@ -229,7 +229,7 @@ if(MI_USE_CXX STREQUAL "DEFAULT")
   if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL)
     # force C++ compilation with msvc or clang-cl to use modern C++ atomics
     set(MI_USE_CXX "ON")
-  elseif(MI_DEBUG_UBSAN AND CMAKE_BUILD_TYPE MATCHES "Debug")  # ubsan needs C++
+  elseif(MI_DEBUG_UBSAN AND (CMAKE_BUILD_TYPE MATCHES "Debug" OR NOT CMAKE_CONFIGURATION_TYPES))  # ubsan needs C++
     set(MI_USE_CXX "ON")
   else()
     set(MI_USE_CXX "OFF")
@@ -398,10 +398,16 @@ elseif(MI_DEBUG_INTERNAL)
 endif()
 
 if(MI_DEBUG STREQUAL "DEFAULT")
-  if(CMAKE_BUILD_TYPE MATCHES "Debug")
-    set(MI_DEBUG "INTERNAL")
+  if(CMAKE_CONFIGURATION_TYPES)
+    # Multi-config generators: Choose debug flags using generator expression
+    list(APPEND mi_defines $<IF:$<CONFIG:Debug>,MI_DEBUG=2 MI_GUARDED=1,MI_DEBUG=0>)
+    set(MI_DEBUG OFF) # don't go into further MI_DEBUG checks below...
   else()
-    set(MI_DEBUG "OFF")
+    if(CMAKE_BUILD_TYPE MATCHES "Debug")
+      set(MI_DEBUG "INTERNAL")
+    else()
+      set(MI_DEBUG "OFF")
+    endif()
   endif()
 endif()
 
@@ -829,12 +835,27 @@ endif()
 if(MI_TRACK STREQUAL "ASAN")
   set(mi_libname "${mi_libname}-asan")
 endif()
-string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
-list(APPEND mi_defines "MI_CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE_LC}")  #todo: multi-config project needs $<CONFIG> ?
-if(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel|none)$")
-  list(APPEND mi_defines MI_BUILD_RELEASE)
+if (CMAKE_CONFIGURATION_TYPES)
+  # multi-config builds
+
+  # generator expression lower-case build type
+  set(_mi_gx_build_type_lc $<STRING:TOLOWER,$<CONFIG>>)
+  # generator expression for "is this a release build?"
+  set(_mi_gx_release $<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>,$<CONFIG:none>>)
+
+  list(APPEND mi_defines "MI_CMAKE_BUILD_TYPE=${_mi_gx_build_type_lc}")
+  list(APPEND mi_defines $<${_mi_gx_release}:MI_BUILD_RELEASE>)
+  # append build type (e.g. -debug) if not a release version
+  set(mi_libname "${mi_libname}$<$<NOT:${_mi_gx_release}>:-${_mi_gx_build_type_lc}>")
 else()
-  set(mi_libname "${mi_libname}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
+  # single-config builds
+  string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
+  list(APPEND mi_defines "MI_CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE_LC}")  #todo: multi-config project needs $<CONFIG> ?
+  if(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel|none)$")
+    list(APPEND mi_defines MI_BUILD_RELEASE)
+  else()
+    set(mi_libname "${mi_libname}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
+  endif()
 endif()
 string(REGEX REPLACE "^mimalloc[-]?" "" mi_libsuffix "${mi_libname}")
 
@@ -855,7 +876,9 @@ endif()
 message(STATUS "")
 message(STATUS "Library name     : ${mi_libname}")
 message(STATUS "Version          : ${mi_version}.${mi_version_patch}")
-message(STATUS "Build type       : ${CMAKE_BUILD_TYPE_LC}")
+if(CMAKE_BUILD_TYPE_LC)
+  message(STATUS "Build type       : ${CMAKE_BUILD_TYPE_LC}")
+endif()
 if(MI_USE_CXX)
   message(STATUS "C++ Compiler     : ${CMAKE_CXX_COMPILER}")
 else()
