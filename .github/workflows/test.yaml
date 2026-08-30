@@ -400,7 +400,6 @@ jobs:
             cmake
             ninja
             clang
-            clang++
 
       - name: Alpine riscv64, Release clang
         if: matrix.tests == 'alpine-riscv64'
