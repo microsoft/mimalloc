@@ -15,7 +15,9 @@ option(MI_GUARDED           "Build with guard pages behind certain object alloca
 set(MI_USE_CXX "DEFAULT" CACHE STRING "Use the C++ compiler to compile the library (instead of the C compiler)")
 set_property(CACHE MI_USE_CXX PROPERTY STRINGS "OFF" "ON" "DEFAULT")
 
-option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell;-mavx2' (2013), for arm64: '-march=armv8.3-a' (2016), for riscV: '-march=rv64gcb_zacas' (2023))" OFF)
+set(MI_OPT_ARCH "DEFAULT" CACHE STRING "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell;-mavx2' (2013), for arm64: '-march=armv8.3-a' (2016), for riscV: '-march=rv64gcb_zacas' (2023))")
+set_property(CACHE MI_OPT_ARCH PROPERTY STRINGS "OFF" "ON" "DEFAULT")
+
 option(MI_OPT_SIMD          "Use SIMD instructions (requires MI_OPT_ARCH to be enabled)" OFF)
 
 set(MI_FREE_IS_CHECKED "DEFAULT" CACHE STRING "Check for invalid pointers in 'mi_free': OFF, SHARED, ON, DEFAULT. 'SHARED' enables it only for the dynamic/shared library when MI_OVERRIDE is ON")
@@ -190,8 +192,14 @@ endif()
 
 if(MI_NO_OPT_ARCH)
   set(MI_OPT_ARCH "OFF")
-elseif(MI_ARCH STREQUAL "arm64")
-  set(MI_OPT_ARCH "ON")  # enable armv8.3-a by default (has LDAPR) on arm64 unless MI_NO_OPT_ARCH is set
+endif()
+
+if(MI_OPT_ARCH STREQUAL "DEFAULT")
+  if(MI_ARCH STREQUAL "arm64")
+    set(MI_OPT_ARCH "ON")  # enable armv8.3-a by default (has LDAPR) on arm6
+  else()
+    set(MI_OPT_ARCH "OFF")
+  endif()
 endif()
 
 if(DEFINED ENV{MI_TEST_LIGHT})
