@@ -789,7 +789,7 @@ static inline mi_page_t* _mi_aligned_ptr_page(const void* p) {
       return NULL;
     }
   #endif
-  return mi_atomic_load_acquire(&page->self);
+  return (mi_page_t *)mi_atomic_load_acquire((const uintptr_t *)(&page->self));
 }
 #endif
 
