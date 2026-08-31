@@ -426,7 +426,7 @@ void* mi_realloc_aligned_at(void* p, size_t newsize, size_t alignment, size_t of
 /// even when the size is not constant but then there is no performance benefit.
 /// \{
 
-/// @brief Allocate a constant size object.
+/// @brief __v3__: Allocate a constant size object.
 /// @param size A (compile-time) constant size.
 /// @return A pointer to an allocated block of size \a size bytes.
 /// @see mi_free_csize()
@@ -439,7 +439,7 @@ void* mi_theap_malloc_csize(mi_theap_t* theap, size_t size);
 
 void* mi_theap_zalloc_csize(mi_theap_t* theap, size_t size);
 
-/// @brief Free a pointer with a known constant size.
+/// @brief __v3__: Free a pointer with a known constant size.
 /// @param p The pointer to the allocated block (or \a NULL )
 /// @param size The size with which the pointer was allocated.
 /// @see mi_malloc_csize()
@@ -447,7 +447,7 @@ void* mi_theap_zalloc_csize(mi_theap_t* theap, size_t size);
 /// @see mi_free_size_nonnull()
 void mi_free_csize(void* p, size_t size);
 
-/// @brief Free a non-null pointer with a known constant size.
+/// @brief __v3__: Free a non-null pointer with a known constant size.
 /// @param p The pointer to the allocated block (cannot be \a NULL !)
 /// @param size The size with which the pointer was allocated.
 /// @see mi_malloc_csize()
