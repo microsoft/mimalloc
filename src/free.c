@@ -293,10 +293,6 @@ void mi_free_small_nonnull(void* p) mi_attr_noexcept {
   }
 }
 
-// void _mi_free_subproc_safe_in_page_nonnull(void* p, mi_page_t* page) mi_attr_noexcept {
-//   mi_free_nonnull(p, page, NULL, false /* allow collect? */);
-// }
-
 // Free a pointer that is potentially allocated in a different sub-process
 void _mi_free_subproc_safe(void* p) mi_attr_noexcept {
   mi_page_t* page; 
