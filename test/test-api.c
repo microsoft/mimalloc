@@ -330,6 +330,24 @@ int main(void) {
     }
     result = ok;
   };
+  CHECK_BODY("zalloc-csize-large") {
+    // mi_theap_zalloc_csize must zero its large branch too: it used to
+    // delegate sizes above MI_SMALL_SIZE_MAX to the plain malloc path.
+    mi_theap_t* theap = mi_theap_get_default();
+    size_t size = MI_SMALL_SIZE_MAX + 64;
+    bool ok = true;
+    for (int round = 0; round < 16 && ok; round++) {
+      uint8_t* junk = (uint8_t*)mi_theap_malloc(theap, size);
+      memset(junk, 0xAB, size);
+      mi_free(junk);
+      uint8_t* z = (uint8_t*)mi_theap_zalloc_csize(theap, size);
+      for (size_t i = 0; i < size; i++) {
+        if (z[i] != 0) { ok = false; break; }
+      }
+      mi_free(z);
+    }
+    result = ok;
+  };
   CHECK_BODY("zalloc-aligned-small1") {
     size_t zalloc_size = MI_SMALL_SIZE_MAX / 2;
     uint8_t* p = (uint8_t*)mi_zalloc_aligned(zalloc_size, MI_MAX_ALIGN_SIZE * 2);
