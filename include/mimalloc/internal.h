@@ -1435,32 +1435,34 @@ static inline void mi_rep_stosb(void* dst, uint8_t val, size_t n) {
   #endif
 }
 
-static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
+static inline void* _mi_memcpy(void* dst, const void* src, size_t n) {
   if mi_likely(n <= _mi_cpu_movsb_max) {  // has fsrm && n <= 127  (todo: and maybe has erms?)
     mi_rep_movsb(dst, src, n);
+    return dst;
   }
   else {
-    memcpy(dst, src, n);
+    return memcpy(dst, src, n);
   }
 }
 
-static inline void _mi_memset(void* dst, int val, size_t n) {
+static inline void* _mi_memset(void* dst, int val, size_t n) {
   if mi_likely(n <= _mi_cpu_stosb_max) {  // has fsrs && n <= 127
     mi_rep_stosb(dst, (uint8_t)val, n);
+    return dst;
   }
   else {
-    memset(dst, val, n);
+    return memset(dst, val, n);
   }
 }
 
 #else
 
-static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
-  memcpy(dst, src, n);
+static inline void* _mi_memcpy(void* dst, const void* src, size_t n) {
+  return memcpy(dst, src, n);
 }
 
-static inline void _mi_memset(void* dst, int val, size_t n) {
-  memset(dst, val, n);
+static inline void* _mi_memset(void* dst, int val, size_t n) {
+  return memset(dst, val, n);
 }
 
 #endif
@@ -1473,42 +1475,40 @@ static inline void _mi_memset(void* dst, int val, size_t n) {
 #if (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__)
 
 // On GCC/CLang we provide a hint that the pointers are word aligned.
-static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
+static inline void* _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0));
   void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);
   const void* asrc = __builtin_assume_aligned(src, MI_INTPTR_SIZE);
-  _mi_memcpy(adst, asrc, n);
+  return _mi_memcpy(adst, asrc, n);
 }
 
-static inline void _mi_memset_aligned(void* dst, int val, size_t n) {
+static inline void* _mi_memset_aligned(void* dst, int val, size_t n) {
   mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
   void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);
-  _mi_memset(adst, val, n);
+  return _mi_memset(adst, val, n);
 }
 
 #else
 
 // Default fallback on `_mi_memcpy`
-static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
+static inline void* _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0));
-  _mi_memcpy(dst, src, n);
+  return _mi_memcpy(dst, src, n);
 }
 
-static inline void _mi_memset_aligned(void* dst, int val, size_t n) {
+static inline void* _mi_memset_aligned(void* dst, int val, size_t n) {
   mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
-  _mi_memset(dst, val, n);
+  return _mi_memset(dst, val, n);
 }
 
 #endif
 
-static inline void _mi_memzero(void* dst, size_t n) {
-  _mi_memset(dst, 0, n);
+static inline void* _mi_memzero(void* dst, size_t n) {
+  return _mi_memset(dst, 0, n);
 }
 
-static inline void _mi_memzero_aligned(void* dst, size_t n) {
-  _mi_memset_aligned(dst, 0, n);
+static inline void* _mi_memzero_aligned(void* dst, size_t n) {
+  return _mi_memset_aligned(dst, 0, n);
 }
-
-
 
 #endif  // MI_INTERNAL_H
