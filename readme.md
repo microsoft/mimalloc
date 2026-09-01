@@ -15,9 +15,9 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.5.0`  (2026-08-18) recommended.  
-Latest v2 release: `v2.5.0`  (2026-08-18) stable.  
-Latest v1 release: `v1.15.0` (2026-08-18) legacy.
+Latest release   : `v3.5.1`  (2026-09-01) recommended.  
+Latest v2 release: `v2.5.1`  (2026-09-01) stable, legacy.  
+Latest v1 release: `v1.15.1` (2026-09-01) legacy.
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -89,7 +89,10 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
         __Send PR's against this version if possible.__
 
 ### Releases
-
+* 2026-09-01, `v1.15.1`, `v2.5.1`, `v3.5.1`: (v3) Yet better performance for `free` calls.
+  (v3) Added `mi_free_small(_nonnull)` for runtimes, and `mi_free_csize(_nonnull)` for inlined constant size free-ing.
+  (v3) Improved MI_OPT_ARCH options; on arm64, defaults to armv8.3 on Apple and armv8.1 otherwise. Improved cache
+  behavior for small allocations. Improved riscV suppor, add riscV to CI. Various small build fixes.
 * 2026-08-18, `v1.15.0`, `v2.5.0`, `v3.5.0`: (v3) slightly better performance for `free`
   using aligned chunks, cleanup cmake options, require armv8.3 (with MI_OPT_ARCH) for 
   faster load-acquire, increase retired page count from 1 to 3, faster double free 
