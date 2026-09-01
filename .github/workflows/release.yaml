@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 env:
-  RELEASE: Release v3.5.0
+  RELEASE: Release v3.5.1
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   
 name: Release
@@ -19,14 +19,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        branch: [v3.5.0, v2.5.0, v1.15.0]  # [dev,dev2,dev3]
+        branch: [v3.5.1, v2.5.1, v1.15.1]  # [dev,dev2,dev3]
         # we build on the oldest ubuntu version for better binary compatibility.
         os: [windows-latest, macOS-latest, macos-15-intel, ubuntu-22.04, ubuntu-22.04-arm]  
 
     steps:
       # Checkout: https://github.com/actions/checkout
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ matrix.branch }}
           fetch-tags: true
@@ -45,7 +45,7 @@ jobs:
                 
       # Create a release: https://github.com/softprops/action-gh-release (MIT license)
       - name: Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         if: ${{ env.RELEASE != '' && env.RELEASE != 'no' }} 
         with:
           name: ${{ env.RELEASE }}

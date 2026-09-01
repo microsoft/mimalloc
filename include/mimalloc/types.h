@@ -65,6 +65,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SECURE 0
 #endif
 
+#define MI_PADDING 0
+
 // Define MI_DEBUG for assertion and invariant checking
 // #define MI_DEBUG 1  // basic assertion checks and statistics, check double free, corrupted free list, and invalid pointer free. (cmake -DMI_DEBUG=ON)
 // #define MI_DEBUG 2  // + internal assertion checks (cmake -DMI_DEBUG_INTERNAL=ON)
@@ -146,22 +148,20 @@ terms of the MIT license. A copy of the license can be found in the file
 #if MI_PAGE_META_IS_SEPARATED
 #define MI_PAGE_META_IS_ALIGNED         1        
 #define MI_PAGE_META_ALIGNED_CHUNKS     MI_INTPTR_SIZE
-#ifdef MI_PAGE_META_SMALL_IS_ALIGNED
-#undef MI_PAGE_META_SMALL_IS_ALIGNED
-#endif
 #else
 #warning "cannot optimize free with alignment since the page meta data is not separated (due to MI_PAGE_MAP_FLAT?)"
 #endif
 #endif
 
-// Deprecated (in favor of MI_PAGE_META_IS_ALIGNED): 
 // We can choose to only put page info of small pages at the start of the page area.
 // This can be used to have a slightly faster `mi_free_small` function for specialized
 // cases (like language runtime systems).
-#if !MI_PAGE_META_IS_ALIGNED
-#if MI_OPT_FREE_SMALL && !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
+#if !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
+#if defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0
+#define MI_PAGE_META_SMALL_IS_ALIGNED   0
+#elif (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED) && !MI_SECURE && !MI_GUARDED  // cannot be guarded as that may allocate large blocks for small allocations
 #define MI_PAGE_META_SMALL_IS_ALIGNED   1
-#elif !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
+#else
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0
 #endif
 #endif
@@ -568,7 +568,6 @@ struct mi_theap_s {
   _Atomic(size_t)       refcount;                            // reference count
   
   unsigned long long    heartbeat;                           // monotonic heartbeat count
-  uintptr_t             cookie;                              // random cookie to verify pointers (see `_mi_ptr_cookie`)
   mi_random_ctx_t       random;                              // random number context used for secure allocation
   size_t                page_count;                          // total number of pages in the `pages` queues.
   size_t                page_retired_min;                    // smallest retired index (retired pages are fully free, but still in the page queues)

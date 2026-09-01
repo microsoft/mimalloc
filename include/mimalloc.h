@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 30500   // major + 2 digits minor + 2 digits patch
+#define MI_MALLOC_VERSION 30501   // major + 2 digits minor + 2 digits patch
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -133,12 +133,16 @@ mi_decl_nodiscard mi_decl_export void* mi_reallocf(void* p, size_t newsize)     
 mi_decl_nodiscard mi_decl_export size_t mi_usable_size(const void* p) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export size_t mi_good_size(size_t size)     mi_attr_noexcept;
 
-// `mi_free_size` can be more efficient (as at calls mi_free_small internally).
+// `mi_free_size` can be more efficient (as it calls mi_free_small internally).
 mi_decl_export void mi_free_size(void* p, size_t size) mi_attr_noexcept;
 
 // `mi_free_small` is for special applications like language runtimes.
-// it should only be used to free objects from `mi_(heap_)(m|z)alloc_small` and is potentially a tiny bit faster than `mi_free`
+// it should only be used to free objects from `mi_*alloc_small` and is potentially a tiny bit faster than `mi_free`
 mi_decl_export void mi_free_small(void* p) mi_attr_noexcept;  
+
+// As `mi_free_small` but `p` should not be a NULL pointer.
+mi_decl_export void mi_free_small_nonnull(void* p) mi_attr_noexcept;
+
 
 // -------------------------------------------------------------------------------------
 // Aligned allocation
@@ -405,10 +409,14 @@ static inline mi_decl_restrict void* mi_theap_malloc_csize(mi_theap_t* theap, si
   if (size <= MI_SMALL_SIZE_MAX) { return mi_theap_malloc_small(theap,size); } else { return mi_theap_malloc(theap,size); }
 }
 static inline mi_decl_restrict void* mi_theap_zalloc_csize(mi_theap_t* theap, size_t size) mi_attr_noexcept {
-  if (size <= MI_SMALL_SIZE_MAX) { return mi_theap_zalloc_small(theap,size); } else { return mi_theap_malloc(theap,size); }
+  if (size <= MI_SMALL_SIZE_MAX) { return mi_theap_zalloc_small(theap,size); } else { return mi_theap_zalloc(theap,size); }
 }
 static inline void mi_free_csize(void* p, size_t size) mi_attr_noexcept {
   if (size <= MI_SMALL_SIZE_MAX) { mi_free_small(p); } else { mi_free(p); }
+}
+static inline void mi_free_csize_nonnull(void* p, size_t size) mi_attr_noexcept {
+  // assert(p!=NULL);
+  if (size <= MI_SMALL_SIZE_MAX) { mi_free_small_nonnull(p); } else { mi_free(p); }
 }
 
 // ------------------------------------------------------

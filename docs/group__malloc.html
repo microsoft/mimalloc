@@ -34,7 +34,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -118,6 +118,9 @@ Functions</h2></td></tr>
 <tr class="memitem:gaf2c7b89c327d1f60f59e68b9ea644d95" id="r_gaf2c7b89c327d1f60f59e68b9ea644d95"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#gaf2c7b89c327d1f60f59e68b9ea644d95">mi_free</a> (void *p)</td></tr>
 <tr class="memdesc:gaf2c7b89c327d1f60f59e68b9ea644d95"><td class="mdescLeft">&#160;</td><td class="mdescRight">Free previously allocated memory.  <br /></td></tr>
 <tr class="separator:gaf2c7b89c327d1f60f59e68b9ea644d95"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga705dc7a64bffacfeeb0141501a5c35d7" id="r_ga705dc7a64bffacfeeb0141501a5c35d7"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga705dc7a64bffacfeeb0141501a5c35d7">mi_cfree</a> (void *p)</td></tr>
+<tr class="memdesc:ga705dc7a64bffacfeeb0141501a5c35d7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checked <code>free</code>: just as <a class="el" href="#gaf2c7b89c327d1f60f59e68b9ea644d95" title="Free previously allocated memory.">mi_free()</a> but always checks if the pointer <code>p</code> belongs to our heap.  <br /></td></tr>
+<tr class="separator:ga705dc7a64bffacfeeb0141501a5c35d7"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gae1dd97b542420c87ae085e822b1229e8" id="r_gae1dd97b542420c87ae085e822b1229e8"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#gae1dd97b542420c87ae085e822b1229e8">mi_malloc</a> (size_t size)</td></tr>
 <tr class="memdesc:gae1dd97b542420c87ae085e822b1229e8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate <em>size</em> bytes.  <br /></td></tr>
 <tr class="separator:gae1dd97b542420c87ae085e822b1229e8"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -193,6 +196,31 @@ Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="ga705dc7a64bffacfeeb0141501a5c35d7" name="ga705dc7a64bffacfeeb0141501a5c35d7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga705dc7a64bffacfeeb0141501a5c35d7">&#9670;&#160;</a></span>mi_cfree()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_cfree </td>
+          <td>(</td>
+          <td class="paramtype">void *</td>          <td class="paramname"><span class="paramname"><em>p</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Checked <code>free</code>: just as <a class="el" href="#gaf2c7b89c327d1f60f59e68b9ea644d95" title="Free previously allocated memory.">mi_free()</a> but always checks if the pointer <code>p</code> belongs to our heap. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">p</td><td>pointer to a block that is freed, or any other arbitrary pointer. This is safe to use when a pointer might be invalid or allocated by another allocator (in which case the pointer is ignored and not freed). </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
 <a id="ga19299856216cfbb08e2628593654dfb0" name="ga19299856216cfbb08e2628593654dfb0"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ga19299856216cfbb08e2628593654dfb0">&#9670;&#160;</a></span>mi_expand()</h2>
 
@@ -242,10 +270,11 @@ Functions</h2></td></tr>
 <p>Free previously allocated memory. </p>
 <p>The pointer <code>p</code> must have been allocated before (or be <em>NULL</em>). </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">p</td><td>pointer to free, or <em>NULL</em>. </td></tr>
+    <tr><td class="paramname">p</td><td>pointer to the block that is freed, or <em>NULL</em>. See also <a class="el" href="#ga705dc7a64bffacfeeb0141501a5c35d7" title="Checked free: just as mi_free() but always checks if the pointer p belongs to our heap.">mi_cfree()</a> for a checked free that validates the pointer before free-ing. </td></tr>
   </table>
   </dd>
 </dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga705dc7a64bffacfeeb0141501a5c35d7" title="Checked free: just as mi_free() but always checks if the pointer p belongs to our heap.">mi_cfree()</a> </dd></dl>
 
 </div>
 </div>

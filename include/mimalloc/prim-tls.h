@@ -66,7 +66,7 @@ static inline mi_theap_t*   _mi_page_associated_theap_peek(mi_page_t* page); // 
     #if    (defined(__GNUC__) && (__GNUC__ >= 7)  && defined(__aarch64__)) /* aarch64 for older gcc versions (issue #851) */ \
         || (defined(__GNUC__) && (__GNUC__ >= 7)  && defined(__riscv)) \
         || (defined(__GNUC__) && (__GNUC__ >= 11) && defined(__x86_64__)) \
-        || (defined(__clang_major__) && (__clang_major__ >= 14) && (defined(__aarch64__) || defined(__x86_64__) || defined(__riscv__)))
+        || (defined(__clang_major__) && (__clang_major__ >= 14) && (defined(__aarch64__) || defined(__x86_64__) || defined(__riscv)))
       #define MI_USE_BUILTIN_THREAD_POINTER  1
     #endif
   #endif

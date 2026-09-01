@@ -206,6 +206,7 @@ size_t        _mi_os_guard_page_size(void);
 size_t        _mi_os_good_alloc_size(size_t size);
 bool          _mi_os_has_overcommit(void);
 bool          _mi_os_has_virtual_reserve(void);
+bool          _mi_os_canuse_thp(void);
 size_t        _mi_os_virtual_address_bits(void);
 size_t        _mi_os_minimal_purge_size(void);
 
@@ -774,9 +775,16 @@ static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
 // without needing to go through the page map (for valid pointers).
 static inline mi_page_t* _mi_aligned_ptr_page0(const void* p) {
   mi_page_t* const page_metas = (mi_page_t*)_mi_align_down_ptr(p,MI_PAGE_META_ALIGNMENT);
-  const ptrdiff_t page_idx = ((uint8_t*)p - (uint8_t*)page_metas)/MI_ARENA_SLICE_SIZE;
-  mi_assert_internal(page_idx >= 0 && page_idx <= MI_PAGE_META_ALIGNED_COUNT);
-  return &page_metas[page_idx];
+  // const ptrdiff_t page_idx = ((uint8_t*)p - (uint8_t*)page_metas)/MI_ARENA_SLICE_SIZE;
+  const uintptr_t page_idx    = ((uintptr_t)p / MI_ARENA_SLICE_SIZE) % (MI_PAGE_META_ALIGNMENT / MI_ARENA_SLICE_SIZE);
+  mi_assert_internal(page_idx <= MI_PAGE_META_ALIGNED_COUNT);
+  #if MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_RISCV // better code on x64/x86/riscv64
+  mi_page_t* const page = (mi_page_t*)((uintptr_t)page_metas | (page_idx * sizeof(mi_page_t)));
+  #else
+  mi_page_t* const page = &page_metas[page_idx];
+  #endif
+  return page;
+  
 }
 
 static inline mi_page_t* _mi_aligned_ptr_page(const void* p) {
@@ -789,7 +797,7 @@ static inline mi_page_t* _mi_aligned_ptr_page(const void* p) {
       return NULL;
     }
   #endif
-  return mi_atomic_load_acquire(&page->self);
+  return mi_atomic_load_ptr_acquire(mi_page_t, &page->self);
 }
 #endif
 
@@ -853,10 +861,14 @@ static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
 }
 
 static inline bool mi_page_meta_is_separated(const mi_page_t* page) {
-  #if MI_PAGE_META_IS_ALIGNED
-  MI_UNUSED_RELEASE(page);
-  mi_assert_internal(page != _mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));  
-  return true;
+  #if MI_PAGE_META_IS_ALIGNED 
+    #if MI_PAGE_META_SMALL_IS_ALIGNED
+    return (page != _mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));  
+    #else
+    MI_UNUSED_RELEASE(page);
+    mi_assert_internal(page != _mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));  
+    return true;
+    #endif
   #elif MI_PAGE_META_IS_SEPARATED
   // usually separated but can still be in front for direct OS allocations (due to size or alignment) or due to MI_PAGE_META_SMALL_IS_ALIGNED
   return (page->memid.memkind == MI_MEM_ARENA && page != _mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));
@@ -1424,32 +1436,34 @@ static inline void mi_rep_stosb(void* dst, uint8_t val, size_t n) {
   #endif
 }
 
-static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
+static inline void* _mi_memcpy(void* dst, const void* src, size_t n) {
   if mi_likely(n <= _mi_cpu_movsb_max) {  // has fsrm && n <= 127  (todo: and maybe has erms?)
     mi_rep_movsb(dst, src, n);
+    return dst;
   }
   else {
-    memcpy(dst, src, n);
+    return memcpy(dst, src, n);
   }
 }
 
-static inline void _mi_memset(void* dst, int val, size_t n) {
+static inline void* _mi_memset(void* dst, int val, size_t n) {
   if mi_likely(n <= _mi_cpu_stosb_max) {  // has fsrs && n <= 127
     mi_rep_stosb(dst, (uint8_t)val, n);
+    return dst;
   }
   else {
-    memset(dst, val, n);
+    return memset(dst, val, n);
   }
 }
 
 #else
 
-static inline void _mi_memcpy(void* dst, const void* src, size_t n) {
-  memcpy(dst, src, n);
+static inline void* _mi_memcpy(void* dst, const void* src, size_t n) {
+  return memcpy(dst, src, n);
 }
 
-static inline void _mi_memset(void* dst, int val, size_t n) {
-  memset(dst, val, n);
+static inline void* _mi_memset(void* dst, int val, size_t n) {
+  return memset(dst, val, n);
 }
 
 #endif
@@ -1462,42 +1476,40 @@ static inline void _mi_memset(void* dst, int val, size_t n) {
 #if (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__)
 
 // On GCC/CLang we provide a hint that the pointers are word aligned.
-static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
+static inline void* _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0));
   void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);
   const void* asrc = __builtin_assume_aligned(src, MI_INTPTR_SIZE);
-  _mi_memcpy(adst, asrc, n);
+  return _mi_memcpy(adst, asrc, n);
 }
 
-static inline void _mi_memset_aligned(void* dst, int val, size_t n) {
+static inline void* _mi_memset_aligned(void* dst, int val, size_t n) {
   mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
   void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);
-  _mi_memset(adst, val, n);
+  return _mi_memset(adst, val, n);
 }
 
 #else
 
 // Default fallback on `_mi_memcpy`
-static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
+static inline void* _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0));
-  _mi_memcpy(dst, src, n);
+  return _mi_memcpy(dst, src, n);
 }
 
-static inline void _mi_memset_aligned(void* dst, int val, size_t n) {
+static inline void* _mi_memset_aligned(void* dst, int val, size_t n) {
   mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
-  _mi_memset(dst, val, n);
+  return _mi_memset(dst, val, n);
 }
 
 #endif
 
-static inline void _mi_memzero(void* dst, size_t n) {
-  _mi_memset(dst, 0, n);
+static inline void* _mi_memzero(void* dst, size_t n) {
+  return _mi_memset(dst, 0, n);
 }
 
-static inline void _mi_memzero_aligned(void* dst, size_t n) {
-  _mi_memset_aligned(dst, 0, n);
+static inline void* _mi_memzero_aligned(void* dst, size_t n) {
+  return _mi_memset_aligned(dst, 0, n);
 }
-
-
 
 #endif  // MI_INTERNAL_H

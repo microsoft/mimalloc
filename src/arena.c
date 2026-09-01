@@ -871,9 +871,8 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
   return start;
 }
 
-#if !MI_PAGE_META_IS_ALIGNED
 // Only used for non-separate pages
-static size_t mi_page_block_start(size_t block_size, bool os_align)
+mi_decl_maybe_unused static size_t mi_page_block_start(size_t block_size, bool os_align)
 {
   size_t offset;  
   #if MI_GUARDED
@@ -892,6 +891,7 @@ static size_t mi_page_block_start(size_t block_size, bool os_align)
   else if (_mi_is_power_of_two(block_size) && block_size <= MI_PAGE_MAX_START_BLOCK_ALIGN2) {
     // naturally align power-of-2 blocks up to MI_PAGE_MAX_START_BLOCK_ALIGN2 size (4KiB)
     offset = _mi_align_up(mi_page_info_size(), block_size);
+    if (block_size < 64) { offset += 3*block_size; }
   }
   else if (block_size != 0 && (block_size % MI_PAGE_OSPAGE_BLOCK_ALIGN2) == 0) {
     // also align large pages that are a multiple of MI_PAGE_OSPAGE_BLOCK_ALIGN2 (4KiB)
@@ -903,7 +903,7 @@ static size_t mi_page_block_start(size_t block_size, bool os_align)
   }
   return _mi_align_up(offset,MI_MAX_ALIGN_SIZE);
 }
-#endif
+
 
 // Free a page without modifying page_bin stats
 static void mi_arenas_page_free_prim(mi_page_t* page);
@@ -980,17 +980,25 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
     #if MI_PAGE_META_SMALL_IS_ALIGNED
     // if `block_size <= MI_SMALL_SIZE_MAX` we put the page info in front of the slice,
     // (note: it is important that `page_meta->block_size == 0` for `mi_arena_page_at_slice`)
-    if (block_size > MI_SMALL_SIZE_MAX)
+    if (block_size <= MI_SMALL_SIZE_MAX) {
+      // put page info in front of the slice
+      page = (mi_page_t*)slice_start;
+      block_start = mi_page_block_start(block_size, os_align);
+    }
+    else
     #endif
     {
-      page = page_meta;
       page_meta_is_separate = true;
+      page = page_meta;
       block_start = 0;
       #if !defined(MI_PAGE_BLOCK_START_MAX_OFFSET)
       #define MI_PAGE_BLOCK_START_MAX_OFFSET  (8*MI_INTPTR_BITS) /* 512 */
       #endif
-      if (block_size >= MI_INTPTR_SIZE && block_size <= MI_PAGE_BLOCK_START_MAX_OFFSET && _mi_is_power_of_two(block_size)) {
-        block_start += block_size;
+      if (block_size >= MI_INTPTR_SIZE && block_size <= MI_PAGE_BLOCK_START_MAX_OFFSET && 
+          _mi_is_power_of_two(block_size)) 
+      {
+        block_start = _mi_align_up(mi_page_info_size(), block_size); // to maintain natural alignment
+        if (block_size < 64) { block_start += 3*block_size; }        
       }
       mi_assert_internal(page->block_size == 0);
       _mi_memzero_aligned(page, sizeof(*page));
@@ -1007,7 +1015,10 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
     block_start = mi_page_block_start(block_size, os_align);
     #endif
   }
-  mi_assert_internal(block_start % MI_MAX_ALIGN_SIZE == 0);
+  mi_assert_internal(block_size < MI_MAX_ALIGN_SIZE || block_start % MI_MAX_ALIGN_SIZE == 0);
+  if (_mi_is_power_of_two(block_size) && block_size <= MI_PAGE_MAX_START_BLOCK_ALIGN2) {
+    mi_assert_internal(block_start % block_size == 0); // natural alignment (see also alloc_aligned.c)
+  }
 
   // commit first block?
   size_t commit_size = 0;
@@ -1072,14 +1083,13 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   // mi_assert_internal(mi_page_theap(page) == _mi_heap_theap_peek(page->heap))
 
   #if MI_PAGE_META_IS_ALIGNED
-  mi_atomic_store_ptr_release(mi_page_t,&page->self,page);
-  if (page_meta_is_separate) {
-    if (slice_count > 1) {
-      // at least two for large singleton blocks as guard pages can have a large offset beyond a single slice
-      for(size_t i = 1; i < max_page_meta_count; i++) {
-        mi_assert_internal(page[i].block_size == 0);
-        mi_atomic_store_ptr_release(mi_page_t,&page[i].self,page);
-      }
+  mi_assert_internal(page_meta!=NULL);
+  mi_atomic_store_ptr_release(mi_page_t,&page_meta->self,page);
+  if (slice_count > 1) {
+    // at least two for large singleton blocks as guard pages can have a large offset beyond a single slice
+    for(size_t i = 1; i < max_page_meta_count; i++) {
+      mi_assert_internal(page_meta[i].block_size == 0);
+      mi_atomic_store_ptr_release(mi_page_t,&page_meta[i].self,page);
     }
   }
   #if MI_DEBUG>1

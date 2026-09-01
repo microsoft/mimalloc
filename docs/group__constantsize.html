@@ -34,7 +34,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -110,13 +110,13 @@ $(function(){initNavTree('group__constantsize.html',''); initResizable(true); })
 </div><!--header-->
 <div class="contents">
 
-<p>Constant size allocation and freeing For example:  
+<p>Inlined definitions for onstant size allocation and freeing.  
 <a href="#details">More...</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
 <tr class="memitem:ga9cd44d925d34f7180922e12bbf594571" id="r_ga9cd44d925d34f7180922e12bbf594571"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga9cd44d925d34f7180922e12bbf594571">mi_malloc_csize</a> (size_t size)</td></tr>
-<tr class="memdesc:ga9cd44d925d34f7180922e12bbf594571"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate a constant size object.  <br /></td></tr>
+<tr class="memdesc:ga9cd44d925d34f7180922e12bbf594571"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Allocate a constant size object.  <br /></td></tr>
 <tr class="separator:ga9cd44d925d34f7180922e12bbf594571"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:gadca6d340ee15b5c70695ed82d95c6cec" id="r_gadca6d340ee15b5c70695ed82d95c6cec"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#gadca6d340ee15b5c70695ed82d95c6cec">mi_zalloc_csize</a> (size_t size)</td></tr>
 <tr class="separator:gadca6d340ee15b5c70695ed82d95c6cec"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -125,14 +125,17 @@ Functions</h2></td></tr>
 <tr class="memitem:ga1addf755829380581dd9c3c9175e376f" id="r_ga1addf755829380581dd9c3c9175e376f"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga1addf755829380581dd9c3c9175e376f">mi_theap_zalloc_csize</a> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
 <tr class="separator:ga1addf755829380581dd9c3c9175e376f"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ga7a421e302074e598527c3eb052a6a3c5" id="r_ga7a421e302074e598527c3eb052a6a3c5"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga7a421e302074e598527c3eb052a6a3c5">mi_free_csize</a> (void *p, size_t size)</td></tr>
-<tr class="memdesc:ga7a421e302074e598527c3eb052a6a3c5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Free a pointer with a known constant size.  <br /></td></tr>
+<tr class="memdesc:ga7a421e302074e598527c3eb052a6a3c5"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Free a pointer with a known constant size.  <br /></td></tr>
 <tr class="separator:ga7a421e302074e598527c3eb052a6a3c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga38a93d373a9dc8edc8bca83edb6af5c5" id="r_ga38a93d373a9dc8edc8bca83edb6af5c5"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga38a93d373a9dc8edc8bca83edb6af5c5">mi_free_csize_nonnull</a> (void *p, size_t size)</td></tr>
+<tr class="memdesc:ga38a93d373a9dc8edc8bca83edb6af5c5"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Free a non-null pointer with a known constant size.  <br /></td></tr>
+<tr class="separator:ga38a93d373a9dc8edc8bca83edb6af5c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
-<p>Constant size allocation and freeing For example: </p>
-<div class="fragment"><div class="line"><span class="keywordtype">long</span>* p = (<span class="keywordtype">long</span>*)<a class="code hl_function" href="#ga9cd44d925d34f7180922e12bbf594571">mi_malloc_csize</a>(<span class="keyword">sizeof</span>(<span class="keywordtype">long</span>))</div>
-<div class="ttc" id="agroup__constantsize_html_ga9cd44d925d34f7180922e12bbf594571"><div class="ttname"><a href="#ga9cd44d925d34f7180922e12bbf594571">mi_malloc_csize</a></div><div class="ttdeci">void * mi_malloc_csize(size_t size)</div><div class="ttdoc">Allocate a constant size object.</div></div>
-</div><!-- fragment --><p> On <b>v3</b> these can improve performance as they will statically use <a class="el" href="group__extended.html#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small()</a>, <a class="el" href="group__extended.html#ga2a8469764c38dcaf878f36e5f50e3610" title="v3: Can be used to free an object that was allocated with mi_malloc_small() or any allocation with a ...">mi_free_small()</a>, etc. when possible. This is especially useful for compilers and runtimes where the the size is often statically known. These functions can be used even when the size is not constant but then there is no performance benefit. </p>
+<p>Inlined definitions for onstant size allocation and freeing. </p>
+<p>If the size is constant, it can pick statically between <a class="el" href="group__malloc.html#gae1dd97b542420c87ae085e822b1229e8" title="Allocate size bytes.">mi_malloc()</a> and <a class="el" href="group__extended.html#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small()</a>. For example: </p><div class="fragment"><div class="line"><span class="keywordtype">long</span>* p = (<span class="keywordtype">long</span>*)<a class="code hl_function" href="#ga9cd44d925d34f7180922e12bbf594571">mi_malloc_csize</a>(<span class="keyword">sizeof</span>(<span class="keywordtype">long</span>))</div>
+<div class="ttc" id="agroup__constantsize_html_ga9cd44d925d34f7180922e12bbf594571"><div class="ttname"><a href="#ga9cd44d925d34f7180922e12bbf594571">mi_malloc_csize</a></div><div class="ttdeci">void * mi_malloc_csize(size_t size)</div><div class="ttdoc">v3: Allocate a constant size object.</div></div>
+</div><!-- fragment --><p> On <b>v3</b> these can improve performance. This is especially useful for compilers and runtimes where the the size is often statically known. These functions can be used even when the size is not constant but then there is no performance benefit. </p>
 <h2 class="groupheader">Function Documentation</h2>
 <a id="ga7a421e302074e598527c3eb052a6a3c5" name="ga7a421e302074e598527c3eb052a6a3c5"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ga7a421e302074e598527c3eb052a6a3c5">&#9670;&#160;</a></span>mi_free_csize()</h2>
@@ -153,17 +156,54 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Free a pointer with a known constant size. </p>
+<p><b>v3</b>: Free a pointer with a known constant size. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">p</td><td>The pointer to the allocated block (or <em>NULL</em> ) </td></tr>
-    <tr><td class="paramname">size</td><td>The (compile time constant) size with which the pointer was allocated. </td></tr>
+    <tr><td class="paramname">size</td><td>The size with which the pointer was allocated. </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga9cd44d925d34f7180922e12bbf594571" title="Allocate a constant size object.">mi_malloc_csize()</a> </dd>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga9cd44d925d34f7180922e12bbf594571" title="v3: Allocate a constant size object.">mi_malloc_csize()</a> </dd>
 <dd>
-<a class="el" href="group__posix.html#gae01389eedab8d67341ff52e2aad80ebb" title="Free an object that was allocated with a known size.">mi_free_size()</a> </dd></dl>
+<a class="el" href="group__posix.html#gae01389eedab8d67341ff52e2aad80ebb" title="Free a block that was allocated with a known size.">mi_free_size()</a> </dd>
+<dd>
+<a class="el" href="group__posix.html#ga796602dae2a89797026f72e0c0240f32" title="Free a non-NULL pointer that was allocated with a known size.">mi_free_size_nonnull()</a> </dd></dl>
+
+</div>
+</div>
+<a id="ga38a93d373a9dc8edc8bca83edb6af5c5" name="ga38a93d373a9dc8edc8bca83edb6af5c5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga38a93d373a9dc8edc8bca83edb6af5c5">&#9670;&#160;</a></span>mi_free_csize_nonnull()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_free_csize_nonnull </td>
+          <td>(</td>
+          <td class="paramtype">void *</td>          <td class="paramname"><span class="paramname"><em>p</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>size</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>: Free a non-null pointer with a known constant size. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">p</td><td>The pointer to the allocated block (cannot be <em>NULL</em> !) </td></tr>
+    <tr><td class="paramname">size</td><td>The size with which the pointer was allocated. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga9cd44d925d34f7180922e12bbf594571" title="v3: Allocate a constant size object.">mi_malloc_csize()</a> </dd>
+<dd>
+<a class="el" href="group__posix.html#gae01389eedab8d67341ff52e2aad80ebb" title="Free a block that was allocated with a known size.">mi_free_size()</a> </dd>
+<dd>
+<a class="el" href="group__posix.html#ga796602dae2a89797026f72e0c0240f32" title="Free a non-NULL pointer that was allocated with a known size.">mi_free_size_nonnull()</a> </dd></dl>
 
 </div>
 </div>
@@ -182,7 +222,7 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Allocate a constant size object. </p>
+<p><b>v3</b>: Allocate a constant size object. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">size</td><td>A (compile-time) constant size. </td></tr>
@@ -190,7 +230,7 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A pointer to an allocated block of size <em>size</em> bytes. </dd></dl>
-<dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga7a421e302074e598527c3eb052a6a3c5" title="Free a pointer with a known constant size.">mi_free_csize()</a> </dd>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga7a421e302074e598527c3eb052a6a3c5" title="v3: Free a pointer with a known constant size.">mi_free_csize()</a> </dd>
 <dd>
 <a class="el" href="group__malloc.html#gae1dd97b542420c87ae085e822b1229e8" title="Allocate size bytes.">mi_malloc()</a> </dd></dl>
 

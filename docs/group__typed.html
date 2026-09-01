@@ -34,7 +34,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -155,7 +155,7 @@ Macros</h2></td></tr>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <p>Typed allocation macros. </p>
 <p>For example: </p><div class="fragment"><div class="line"><span class="keywordtype">int</span>* p = <a class="code hl_define" href="#ga0619a62c5fd886f1016030abe91f0557">mi_malloc_tp</a>(<span class="keywordtype">int</span>)</div>
-<div class="ttc" id="agroup__typed_html_ga0619a62c5fd886f1016030abe91f0557"><div class="ttname"><a href="#ga0619a62c5fd886f1016030abe91f0557">mi_malloc_tp</a></div><div class="ttdeci">#define mi_malloc_tp(tp)</div><div class="ttdoc">Allocate a block of type tp.</div><div class="ttdef"><b>Definition</b> mimalloc-doc.h:364</div></div>
+<div class="ttc" id="agroup__typed_html_ga0619a62c5fd886f1016030abe91f0557"><div class="ttname"><a href="#ga0619a62c5fd886f1016030abe91f0557">mi_malloc_tp</a></div><div class="ttdeci">#define mi_malloc_tp(tp)</div><div class="ttdoc">Allocate a block of type tp.</div><div class="ttdef"><b>Definition</b> mimalloc-doc.h:373</div></div>
 </div><!-- fragment --><p> On <b>v3</b> these can improve performance as they use the <code>mi_&lt;malloc&gt;_csize</code> api's that in turn can use <a class="el" href="group__extended.html#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small()</a>, <a class="el" href="group__extended.html#ga2a8469764c38dcaf878f36e5f50e3610" title="v3: Can be used to free an object that was allocated with mi_malloc_small() or any allocation with a ...">mi_free_small()</a>, etc. </p>
 <h2 class="groupheader">Macro Definition Documentation</h2>
 <a id="gae80c47c9d4cab10961fff1a8ac98fc07" name="gae80c47c9d4cab10961fff1a8ac98fc07"></a>
@@ -204,11 +204,11 @@ Macros</h2></td></tr>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">tp</td><td>The type of the object that is freed. </td></tr>
-    <tr><td class="paramname">p</td><td>A pointer to an object of type <em>tp</em> (or <em>NULL</em> ) Can be more efficient as it internally uses <a class="el" href="group__constantsize.html#ga7a421e302074e598527c3eb052a6a3c5" title="Free a pointer with a known constant size.">mi_free_csize()</a> </td></tr>
+    <tr><td class="paramname">p</td><td>A pointer to an object of type <em>tp</em> (or <em>NULL</em> ) Can be more efficient as it internally uses <a class="el" href="group__constantsize.html#ga7a421e302074e598527c3eb052a6a3c5" title="v3: Free a pointer with a known constant size.">mi_free_csize()</a> </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__constantsize.html#ga7a421e302074e598527c3eb052a6a3c5" title="Free a pointer with a known constant size.">mi_free_csize()</a> </dd>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__constantsize.html#ga7a421e302074e598527c3eb052a6a3c5" title="v3: Free a pointer with a known constant size.">mi_free_csize()</a> </dd>
 <dd>
 <a class="el" href="group__extended.html#ga2a8469764c38dcaf878f36e5f50e3610" title="v3: Can be used to free an object that was allocated with mi_malloc_small() or any allocation with a ...">mi_free_small()</a> </dd></dl>
 
@@ -406,7 +406,7 @@ Macros</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A pointer to an object of type <em>tp</em>, or <em>NULL</em> if out of memory.</dd></dl>
 <p><b>Example:</b> </p><div class="fragment"><div class="line"><span class="keywordtype">int</span>* p = <a class="code hl_define" href="#ga0619a62c5fd886f1016030abe91f0557">mi_malloc_tp</a>(<span class="keywordtype">int</span>)</div>
-</div><!-- fragment --><p> Using this is more safe, but can also be more efficient since the allocation size is a compile-time constant. </p><dl class="section see"><dt>See also</dt><dd><a class="el" href="group__constantsize.html#ga9cd44d925d34f7180922e12bbf594571" title="Allocate a constant size object.">mi_malloc_csize()</a> </dd>
+</div><!-- fragment --><p> Using this is more safe, but can also be more efficient since the allocation size is a compile-time constant. </p><dl class="section see"><dt>See also</dt><dd><a class="el" href="group__constantsize.html#ga9cd44d925d34f7180922e12bbf594571" title="v3: Allocate a constant size object.">mi_malloc_csize()</a> </dd>
 <dd>
 <a class="el" href="group__extended.html#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small()</a> </dd></dl>
 

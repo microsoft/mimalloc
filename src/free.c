@@ -14,9 +14,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // forward declarations
 mi_decl_nodiscard static bool mi_check_padding_on_free(const mi_page_t* page, const mi_block_t* block, bool is_guarded, size_t* usable_size);
+mi_decl_nodiscard static bool mi_check_double_free(const mi_page_t* page, const mi_block_t* block);
 static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block, bool was_guarded);
 static void   mi_stat_free(const mi_page_t* page, const mi_block_t* block);
-// static bool   mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block);
 
 
 // ------------------------------------------------------
@@ -30,7 +30,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   // checks  
   size_t usable_size;
   if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return; 
-  // if mi_unlikely(!mi_check_is_double_free(page,block)) return;  // checked with padding
+  if mi_unlikely(!mi_check_double_free(page,block)) return;  // usually checked with padding
 
   if (track_stats) { 
     mi_stat_free(page, block);    
@@ -169,9 +169,9 @@ void mi_decl_noinline _mi_free_generic(mi_page_t* page, bool is_local, void* p) 
 
 // Get the page belonging to a pointer
 // Does further checks in debug mode to see if this was a valid pointer.
-static inline bool mi_validate_ptr_page_nonnull(const void* p, const char* msg, bool free_small, mi_page_t** ppage)
+static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const char* msg, bool free_small, bool check_p_for_null, mi_page_t** ppage)
 {
-  MI_UNUSED_RELEASE(msg);
+  MI_UNUSED_RELEASE(msg); MI_UNUSED(free_small);
   #if MI_DEBUG
   if mi_unlikely(((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0 && !mi_option_is_enabled(mi_option_guarded_precise)) {
     _mi_error_message(EINVAL, "%s: invalid (unaligned) pointer: %p\n", msg, p);
@@ -180,42 +180,55 @@ static inline bool mi_validate_ptr_page_nonnull(const void* p, const char* msg, 
   #endif
   
   mi_page_t* page;
+  #if MI_PAGE_META_SMALL_IS_ALIGNED 
+    if (free_small) { page = (mi_page_t*)_mi_align_down_ptr(p,MI_SMALL_PAGE_SIZE); }
+    else
+  #endif
   #if MI_PAGE_META_IS_ALIGNED
-    page = _mi_aligned_ptr_page0(p);
-    if mi_unlikely(page==NULL) return false; // p==NULL => page==NULL    
-    #if MI_DEBUG 
-    mi_page_t* const cpage = _mi_checked_ptr_page(p);
-    if mi_unlikely(cpage==NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
-    #endif
-    
-    #if MI_SMALL_PAGE_SIZE == MI_ARENA_SLICE_SIZE
-    // for mi_free_small we can avoid a load-acquire
-    if (free_small) { mi_assert_internal(page == mi_atomic_load_ptr_acquire(mi_page_t,&page->self)); } 
-               else { page = mi_atomic_load_ptr_acquire(mi_page_t,&page->self); }
-    #else
-    MI_UNUSED(free_small);
-    page = mi_atomic_load_ptr_acquire(mi_page_t,&page->self);
-    #endif
-
-    mi_assert_internal(page!=NULL);
-    mi_assert(cpage==page /* page_map lookup should be the same as aligned lookup */ );  
+    { page = _mi_aligned_ptr_page0(p); }
   #else
-    MI_UNUSED(free_small);
-    page = _mi_ptr_page(p);
-    if mi_unlikely(page==NULL) {
-      #if MI_DEBUG
-      if (p!=NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
-      #endif
-      return false;
-    }
+    { page = _mi_ptr_page(p); }
+  #endif
+  
+  if mi_unlikely(check_p_for_null && page==NULL) {
+    #if MI_DEBUG
+    if (p!=NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
+    #endif
+    return false;
+  }
+  #if MI_DEBUG
+  mi_page_t* const cpage = _mi_checked_ptr_page(p);
+  if mi_unlikely(cpage==NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
+  #endif
+    
+  #if MI_PAGE_META_IS_ALIGNED 
+    #if MI_PAGE_META_SMALL_IS_ALIGNED
+    if (free_small) { mi_assert_internal(NULL == mi_atomic_load_ptr_acquire(mi_page_t,&page->self)); }    
+    else
+    #elif MI_SMALL_PAGE_SIZE == MI_ARENA_SLICE_SIZE && !MI_GUARDED
+    // for mi_free_small we can avoid a load-acquire (but not when guarded as that may still allocate large blocks)
+    if (free_small) { mi_assert_internal(page == mi_atomic_load_ptr_acquire(mi_page_t,&page->self)); }
+    else
+    #endif
+    { page = mi_atomic_load_ptr_acquire(mi_page_t,&page->self); }    
+  #endif
+
+  mi_assert_internal(page!=NULL);
+  mi_assert(cpage==page /* page_map lookup should be the same as aligned lookup */ );      
+  #if !MI_GUARDED
+  if (free_small) { mi_assert_internal(page->block_size <= mi_good_size(MI_SMALL_SIZE_MAX) /* free small should only be called on small pages */); }
   #endif
   *ppage = page;
   return true;
 }
 
-static inline mi_page_t* mi_validate_ptr_page(const void* p, const char* msg) {
+static mi_decl_forceinline bool mi_ptr_page_is_valid(const void* p, const char* msg, mi_page_t** ppage) {
+  return mi_ptr_page_is_valid_ex(p,msg,false /* free_small? */, true /* check_p_for_null */, ppage );
+}
+
+static mi_decl_forceinline mi_page_t* mi_ptr_page_validate(const void* p, const char* msg) {
   mi_page_t* page;
-  return (mi_validate_ptr_page_nonnull(p,msg,false,&page) ? page : NULL);
+  return (mi_ptr_page_is_valid(p,msg,&page) ? page : NULL);
 }
 
 // Free a block
@@ -250,14 +263,14 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
 
 void mi_free(void* p) mi_attr_noexcept {  
   mi_page_t* page; 
-  if mi_likely(mi_validate_ptr_page_nonnull(p,"mi_free",false,&page)) {    
+  if mi_likely(mi_ptr_page_is_valid(p,"mi_free",&page)) {    
     mi_free_nonnull(p, page, NULL, true /* allow collect? */);
   }
 }
 
 void mi_ufree(void* p, size_t* pblock_size) mi_attr_noexcept {
   mi_page_t* page; 
-  if mi_likely(mi_validate_ptr_page_nonnull(p,"mi_ufree",false,&page)) {    
+  if mi_likely(mi_ptr_page_is_valid(p,"mi_ufree",&page)) {    
     mi_free_nonnull(p, page, pblock_size, true /* allow collect? */);
   }
   else {
@@ -266,39 +279,24 @@ void mi_ufree(void* p, size_t* pblock_size) mi_attr_noexcept {
 }
 
 void mi_free_small(void* p) mi_attr_noexcept {
-  #if MI_PAGE_META_SMALL_IS_ALIGNED 
-    // deprecated: We can only call `mi_free_small` for pointers allocated with `mi_(heap_)malloc_small`.
-    // If we keep page info in front of the page area for small objects, we can find the info
-    // just by aligning down the pointer instead of looking it up in the page map.    
-    #if MI_GUARDED 
-    #warning "MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED) ignored as MI_GUARDED is defined"
-    mi_free(p);
-    #elif MI_ARENA_SLICE_ALIGN < MI_SMALL_PAGE_SIZE
-    #warning "MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED) ignored as the MI_ARENA_SLICE_ALIGN is less than the small page size"
-    mi_free(p);
-    #else
-      mi_page_t* const page = (mi_page_t*)_mi_align_down_ptr(p,MI_SMALL_PAGE_SIZE);
-      mi_assert(page == mi_validate_ptr_page(p,"mi_free_small"));
-      mi_assert((void*)page == _mi_align_down_ptr(mi_page_start(page),MI_SMALL_PAGE_SIZE));
-      mi_assert(page->block_size <= mi_good_size(MI_SMALL_SIZE_MAX));  // note: not `MI_SMALL_MAX_OBJ_SIZE` as we need to match `mi_(heap_)malloc_small`
-      mi_free_nonnull(p, page, NULL, true);
-    #endif
-  #else
-    mi_page_t* page; 
-    if mi_likely(mi_validate_ptr_page_nonnull(p,"mi_free_small",true /* is_small? */,&page)) {    
-      mi_free_nonnull(p, page, NULL, true /* allow collect? */);
-    }  
-  #endif  
+  mi_page_t* page; 
+  if mi_likely(mi_ptr_page_is_valid_ex(p,"mi_free_small",true /* is_small? */,true /*check p for null*/, &page)) {    
+    mi_free_nonnull(p, page, NULL, true /* allow collect? */);
+  }
 }
 
-// void _mi_free_subproc_safe_in_page_nonnull(void* p, mi_page_t* page) mi_attr_noexcept {
-//   mi_free_nonnull(p, page, NULL, false /* allow collect? */);
-// }
+void mi_free_small_nonnull(void* p) mi_attr_noexcept {
+  mi_assert(p!=NULL);
+  mi_page_t* page; 
+  if mi_likely(mi_ptr_page_is_valid_ex(p,"mi_free_small_nonnull",true /* is_small? */,false /*check p for null*/, &page)) {    
+    mi_free_nonnull(p, page, NULL, true /* allow collect? */);
+  }
+}
 
 // Free a pointer that is potentially allocated in a different sub-process
 void _mi_free_subproc_safe(void* p) mi_attr_noexcept {
   mi_page_t* page; 
-  if mi_likely(mi_validate_ptr_page_nonnull(p,"_mi_free_subproc_safe",false,&page)) {    
+  if mi_likely(mi_ptr_page_is_valid(p,"_mi_free_subproc_safe",&page)) {    
     mi_free_nonnull(p, page, NULL, false /* allow collect? */);
   }
 }
@@ -310,22 +308,30 @@ void _mi_free_subproc_safe(void* p) mi_attr_noexcept {
 void mi_free_size(void* p, size_t size) mi_attr_noexcept {
   MI_UNUSED_RELEASE(size);
   #if MI_DEBUG
-    const mi_page_t* const page = mi_validate_ptr_page(p,"mi_free_size");
+    const mi_page_t* const page = mi_ptr_page_validate(p,"mi_free_size");
     if (page==NULL) return;
     mi_assert(p!=NULL);
     const size_t usable = _mi_page_usable_size(page,p);
     if mi_unlikely(size > usable) { 
-      _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the size %zu is greater than the usable size %zu\n", p, size, usable);
-      mi_free(p);
-      return;
+      const mi_block_t* block = _mi_page_ptr_unalign(page, p);
+      const bool is_guarded = mi_block_ptr_is_guarded(block,p);
+      if (!is_guarded) {
+        _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the size %zu is greater than the usable size %zu\n", p, size, usable);
+        mi_free(p);
+        return;
+      }
     }
-    else if mi_unlikely(size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size(MI_SMALL_SIZE_MAX)) { 
-      _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n", p, size, mi_page_block_size(page));
-      mi_free(p);
-      return;
+    if mi_unlikely(size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size(MI_SMALL_SIZE_MAX)) { 
+      const mi_block_t* block = _mi_page_ptr_unalign(page, p);
+      const bool is_guarded = mi_block_ptr_is_guarded(block,p);
+      if (!is_guarded) {
+        _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n  (maybe a `new[]` was matched with `delete` instead of `delete[]`?)\n", p, size, mi_page_block_size(page));
+        mi_free(p);
+        return;
+      }
     }
   #endif
-  #if MI_PAGE_META_SMALL_IS_ALIGNED
+  #if MI_PAGE_META_SMALL_IS_ALIGNED || MI_PAGE_META_IS_ALIGNED
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {
     mi_free_small(p); 
   }
@@ -533,7 +539,7 @@ static size_t mi_decl_noinline mi_page_usable_aligned_size_of(const mi_page_t* p
 
 size_t _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr_noexcept {
   if mi_unlikely(page==NULL) return 0;
-  mi_assert_internal(mi_validate_ptr_page(p,"_mi_page_usable_size") == page);
+  mi_assert_internal(mi_ptr_page_validate(p,"_mi_page_usable_size") == page);
   if mi_likely(!mi_page_has_interior_pointers(page)) {
     const mi_block_t* block = mi_validate_block_from_ptr(page,p);
     return mi_page_usable_size_of(page, block, false /* is guarded */);
@@ -545,18 +551,19 @@ size_t _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr_noexce
 }
 
 mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
-  const mi_page_t* const page = mi_validate_ptr_page(p,"mi_usable_size");
+  const mi_page_t* const page = mi_ptr_page_validate(p,"mi_usable_size");
   return _mi_page_usable_size(page,p);
 }
 
 
 // ------------------------------------------------------
-// Deprecated: double free is checked with padding now.
+// Deprecated: double free is usually checked with padding now
+// as that is faster and works better for cross-thread free'ing.
 // Check for double free in secure and debug mode
 // This is somewhat expensive so only enabled for secure mode 4
 // ------------------------------------------------------
 
-#if MI_CHECK_DOUBLE_FREE      
+#if MI_SECURE>=3 && !MI_PADDING   
 // linear check if the free list contains a specific element
 static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, const mi_block_t* elem, const char* list_kind) {
   const size_t max_count = page->capacity;      // can never hold more blocks than the capacity
@@ -572,7 +579,7 @@ static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, cons
   return false;
 }
 
-static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, const mi_block_t* block) {
+static mi_decl_noinline bool mi_check_double_freex(const mi_page_t* page, const mi_block_t* block) {
   // The decoded value is in the same page (or NULL).
   // Walk the free lists to verify positively if it is already freed
   if (mi_list_contains(page, page->free, block, "free") ||
@@ -580,9 +587,9 @@ static mi_decl_noinline bool mi_check_is_double_freex(const mi_page_t* page, con
       mi_list_contains(page, mi_page_thread_free(page), block, "thread free"))
   {
     _mi_error_message(EAGAIN, "double free detected of block %p with size %zu\n", block, mi_page_block_size(page));
-    return true;
+    return false;
   }
-  return false;
+  return true;
 }
 
 // Used for double free checking to avoid checking free lists too frequently
@@ -593,20 +600,20 @@ static inline bool mi_block_could_be_double_free(const mi_page_t* page, const mi
 }
 
 // check if `block` was free'd before
-static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block) {
+static inline bool mi_check_double_free(const mi_page_t* page, const mi_block_t* block) {
   if mi_unlikely(mi_block_could_be_double_free(page,block))  // quick check: next field is aligned in the same page or NULL?
   {
     // Suspicious: decoded value a in block is in the same page (or NULL) -- maybe a double free?
     // (continue in separate function to improve code generation)
-    return mi_check_is_double_freex(page, block);
+    return mi_check_double_freex(page, block);
   }
-  else return false;
+  else return true;
 }
 #else
-static inline bool mi_check_is_double_free(const mi_page_t* page, const mi_block_t* block) {
+static inline bool mi_check_double_free(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(page);
   MI_UNUSED(block);
-  return false;
+  return true;
 }
 #endif
 
