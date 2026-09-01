@@ -89,7 +89,7 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
         __Send PR's against this version if possible.__
 
 ### Releases
-* 2026-09-01, `v1.15.1`, `v2.5.1`, `v3.5.1`: (v3) Yet better performance for `free` calls.
+* 2026-09-01, `v3.5.1`, `v2.5.1`, `v1.15.1`: (v3) Yet better performance for `free` calls.
   (v3) Added `mi_free_small(_nonnull)` for runtimes, and `mi_free_csize(_nonnull)` for inlined constant size free-ing.
   (v3) Improved MI_OPT_ARCH options; on arm64, defaults to armv8.3 on Apple and armv8.1 otherwise. Improved cache
   behavior for small allocations. Improved riscV suppor, add riscV to CI. Various small build fixes.
