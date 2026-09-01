@@ -41,6 +41,9 @@ bool _mi_os_has_virtual_reserve(void) {
   return mi_os_mem_config.has_virtual_reserve;
 }
 
+bool _mi_os_canuse_thp(void) {
+  return mi_os_mem_config.has_transparent_huge_pages;
+}
 
 // OS (small) page size
 size_t _mi_os_page_size(void) {
@@ -55,13 +58,19 @@ size_t _mi_os_large_page_size(void) {
 // minimal purge size. Can be larger than the page size if transparent huge pages are enabled.
 size_t _mi_os_minimal_purge_size(void) {
   size_t minsize = mi_option_get_size(mi_option_minimal_purge_size);
-  if (minsize != 0) {
+  if (minsize != 0) { 
+    // set by user
     return _mi_align_up(minsize, _mi_os_page_size());
   }
   else if (mi_os_mem_config.has_transparent_huge_pages && mi_option_get(mi_option_allow_thp) == 2) {
+    // don't break up THP pages; 
+    // we don't do this by default as that can lead to increased memory usage (see issue #1282).
+    // on the other hand, breaking up THP pages can lead to performance degradation and perhaps 
+    // allow_thp should be 2 by default (and the user can set the OS THP setting to [never]).
     return _mi_os_large_page_size();
   }
   else {
+    // OS page size by default
     return _mi_os_page_size();
   }
 }

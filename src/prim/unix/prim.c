@@ -463,15 +463,17 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
     #if !defined(MI_NO_THP)
     if (p != NULL && allow_large && mi_option_is_enabled(mi_option_allow_thp) && _mi_os_canuse_large_page(size, try_alignment)) {
       #if defined(MADV_HUGEPAGE)
-      // Many Linux systems don't allow MAP_HUGETLB but they support instead
-      // transparent huge pages (THP). Generally, it is not required to call `madvise` with MADV_HUGE
-      // though since properly aligned allocations will already use large pages if available
-      // in that case -- in particular for our large regions (in `memory.c`).
-      // However, some systems only allow THP if called with explicit `madvise`, so
-      // when large OS pages are enabled for mimalloc, we call `madvise` anyways.
-      if (unix_madvise(p, size, MADV_HUGEPAGE) == 0) {
-        // *is_large = true; // possibly
-      };
+      if (_mi_os_canuse_thp()) {
+        // Many Linux systems don't allow MAP_HUGETLB but they support instead
+        // transparent huge pages (THP). Generally, it is not required to call `madvise` with MADV_HUGE
+        // though since properly aligned allocations will already use large pages if available
+        // in that case -- in particular for our large regions (in `memory.c`).
+        // However, some systems only allow THP if called with explicit `madvise`, so
+        // when large OS pages are enabled for mimalloc, we call `madvise` anyways.
+        if (unix_madvise(p, size, MADV_HUGEPAGE) == 0) {
+          // *is_large = true; // possibly
+        };
+      }
       #elif defined(__sun)
       struct memcntl_mha cmd = {0};
       cmd.mha_pagesize = _mi_os_large_page_size();
