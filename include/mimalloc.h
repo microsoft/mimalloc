@@ -60,11 +60,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_attr_alloc_size2(s1,s2)
   #define mi_attr_alloc_align(p)
 #elif defined(__GNUC__)                 // includes clang and icc
-  #if defined(MI_SHARED_LIB) && defined(MI_SHARED_LIB_EXPORT)
-    #define mi_decl_export              __attribute__((visibility("default")))
-  #else
-    #define mi_decl_export
-  #endif
+  #define mi_decl_export              __attribute__((visibility("default")))
   #define mi_cdecl                      // leads to warnings... __attribute__((cdecl))
   #define mi_decl_restrict
   #define mi_attr_malloc                __attribute__((malloc))
