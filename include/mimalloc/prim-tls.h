@@ -35,7 +35,7 @@ static inline mi_theap_t*   _mi_theap_cached(void);                          // 
 static inline bool          _mi_thread_is_initialized(void);                 // a thread is initialized if it has a default theap
 static inline mi_theap_t*   _mi_heap_theap(mi_heap_t* heap);                 // get the thread local theap belonging to a heap
 static inline mi_theap_t*   _mi_heap_theap_peek(const mi_heap_t* heap);      // get the theap but don't update _mi_theap_cached
-static inline mi_theap_t*   _mi_page_associated_theap_peek(mi_page_t* page); // get the theap associated with a page (used in `mi_free_collect_mt`)
+static inline mi_theap_t*   _mi_page_associated_theap_peek(const mi_page_t* page); // get the theap associated with a page (used in `mi_free_collect_mt`)
 
 
 // Default TLS model
@@ -411,7 +411,7 @@ static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
 
 // Find the associated theap or NULL if it does not exist (during shutdown)
 // Should be fast as it is called in `free.c:mi_free_try_collect`.
-static inline mi_theap_t* _mi_page_associated_theap_peek(mi_page_t* page) {
+static inline mi_theap_t* _mi_page_associated_theap_peek(const mi_page_t* page) {
   mi_heap_t* const heap = mi_page_heap(page);
   mi_theap_t* const theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
   if (theap==NULL || theap->tld==NULL /* heap destroy */) return NULL;

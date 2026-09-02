@@ -214,8 +214,10 @@ static void mi_stat_print_ex(const mi_stat_count_t* stat, const char* msg, int64
         _mi_fprintf(out, arg, "%24s", "");
       }
       else {
-        mi_print_amount(-unit, 1, out, arg);
-        mi_print_count((stat->total / -unit), 0, out, arg);
+        // mi_print_amount(-unit, 1, out, arg);
+        //mi_print_count((stat->total / -unit), 0, out, arg);
+        _mi_fprintf(out, arg, "%12s", "");
+        mi_print_count(-unit, 0, out, arg);
       }
     }
     if (stat->current != 0) {
@@ -370,12 +372,12 @@ void _mi_stats_print(const char* name, size_t id, const mi_stats_t* stats, mi_ou
     mi_stats_print_bins(stats->malloc_bins, MI_BIN_HUGE, out, arg);
     #endif
     #if MI_STAT
-    mi_stat_print(&stats->malloc_normal, "binned", (stats->malloc_normal_count.total == 0 ? -1 : 1), out, arg);
-    mi_stat_print(&stats->malloc_huge, "huge", (stats->malloc_huge_count.total == 0 ? -1 : 1), out, arg);
+    mi_stat_print(&stats->malloc_normal, "binned", -stats->malloc_normal_count.total, out, arg);
+    mi_stat_print(&stats->malloc_huge, "huge", -stats->malloc_huge_count.total, out, arg);
     mi_stat_count_t total = { 0,0,0 };
     mi_stat_count_add_mt(&total, &stats->malloc_normal);
     mi_stat_count_add_mt(&total, &stats->malloc_huge);
-    mi_stat_print_ex(&total, "total", 1, out, arg, "");
+    mi_stat_print_ex(&total, "total", -(stats->malloc_normal_count.total + stats->malloc_huge_count.total), out, arg, "");
     #if MI_STAT>1
     mi_stat_total_print(&stats->malloc_requested, "malloc req", 1, out, arg);
     #endif
@@ -397,6 +399,8 @@ void _mi_stats_print(const char* name, size_t id, const mi_stats_t* stats, mi_ou
     mi_stat_counter_print(&stats->pages_unabandon_busy_wait, "waits", out, arg);
     mi_stat_counter_print(&stats->pages_extended, "extended", out, arg);
     mi_stat_counter_print(&stats->pages_retire, "retire", out, arg);
+    mi_stat_counter_print(&stats->pages_stat_updates, "stat upds", out, arg);
+    mi_stat_average_print(stats->pages_stat_updates.total, stats->pages_stat_update_count.total, "stat avg", out, arg);
     mi_stat_average_print(stats->page_searches_count.total, stats->page_searches.total, "searches", out, arg);
     _mi_fprintf(out, arg, "\n");
   }

@@ -1304,8 +1304,8 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_heap_t* const heap = mi_page_heap(page);
   mi_theapx_stat_decrease(heap, current_theapx, page_bins[_mi_page_stats_bin(page)], 1);
   mi_theapx_stat_decrease(heap, current_theapx, pages, 1);
-  _mi_page_free_collect(page,false);
-  _mi_page_update_stats(page);
+  _mi_page_free_collect(page,false);  // update used count for cross-thread free's
+  _mi_page_update_stats(page);        // and update the stats
   mi_arenas_page_free_prim(page);
 }
 
@@ -1322,6 +1322,11 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(page->next==NULL && page->prev == NULL);
   mi_assert_internal(mi_theap_matches_thread(current_theapx));
   // mi_assert_internal(current_theap == _mi_page_associated_theap(page));
+
+  // note: somewhat expensive to update here, but might be good as then we attribute
+  // the current allocations/frees to the current thread/theap. Otherwise it might be 
+  // reclaimed later in another thread/theap and those allocations/frees get attributed there...
+  _mi_page_update_stats(page); 
 
   // add to abandoned?
   mi_heap_t* heap = mi_page_heap(page);   
