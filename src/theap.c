@@ -145,7 +145,9 @@ static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
   }
 
   // merge statistics
-  _mi_theap_merge_stats(theap);
+  if (mi_option_is_enabled(mi_option_collect_merges_stats)) {
+    _mi_theap_merge_stats(theap);
+  }
 }
 
 void _mi_theap_collect_abandon(mi_theap_t* theap) {

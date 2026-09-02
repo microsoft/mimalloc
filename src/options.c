@@ -109,6 +109,10 @@ int mi_version(void) {
 #endif
 #endif
 
+#ifndef MI_DEFAULT_COLLECT_MERGES_STATS
+#define MI_DEFAULT_COLLECT_MERGES_STATS  1
+#endif
+
 // Static options
 static mi_option_desc_t mi_options[_mi_option_last] =
 {
@@ -176,6 +180,8 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { MI_DEFAULT_ARENA_MAX_OBJECT_SIZE,
          MI_OPTION_UNINIT, MI_OPTION(arena_max_object_size) },    // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit).
   { 0,   MI_OPTION_UNINIT, MI_OPTION(arena_is_numa_local) },      // associate local numa node with an initial arena allocation
+  { MI_DEFAULT_COLLECT_MERGES_STATS,
+         MI_OPTION_UNINIT, MI_OPTION(collect_merges_stats) },     // on each theap collect, stats are merged with the parent heap
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
