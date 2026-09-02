@@ -414,7 +414,7 @@ static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
 static inline mi_theap_t* _mi_page_associated_theap_peek(mi_page_t* page) {
   mi_heap_t* const heap = mi_page_heap(page);
   mi_theap_t* const theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
-  if (theap==NULL) return NULL;
+  if (theap==NULL || theap->tld==NULL /* heap destroy */) return NULL;
   if (theap->heap != heap) return NULL; // should never happen, but can happen for a free across subprocesses, which can happen during pthread tls storage deallocation
   mi_assert_internal(!_mi_is_empty_theap(theap) && mi_theap_matches_thread(theap));
   // note: for pages allocated by a detached theap, the returned theap may not be detached

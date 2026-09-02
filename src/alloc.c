@@ -62,13 +62,15 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
     mi_assert_internal(mi_page_block_size(page) >= size);
     mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
     mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
+    mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));    
   }
 
   // check the free list
   mi_block_t* const block = page->free;
-  const mi_used_t used = page->used;
+  mi_used_t xused = page->xused; 
+  xused.used_alloc += 0x10001;  // increment both (16-bit) used count and alloc count 
   #if defined(__GNUC__) 
-  __asm("" : : : "memory");  // always load the `used` field before the test
+  __asm("" : : : "memory");     // always load the `used` field before the test
   #endif  
   if (block == NULL) {
     return _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage);
@@ -83,7 +85,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   if (!zero) block->next = 0;  // don't leak internal data
   #endif
   page->free = next;
-  page->used = used+1;
+  page->xused = xused;
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
   mi_assert_internal(page->block_size < MI_MAX_ALIGN_SIZE || _mi_is_aligned(block, MI_MAX_ALIGN_SIZE));
 
@@ -100,7 +102,9 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   mi_track_mem_undefined(block, bsize);
 
   // track per-block statistics
-  #if (MI_STAT>0)
+  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+  
+  #if 0 && (MI_STAT>0)
   if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
     mi_theap_stat_increase(theap, malloc_normal, bsize);
     #if (MI_STAT>1)

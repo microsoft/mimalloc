@@ -19,7 +19,10 @@ static const mi_page_t mi_page_empty = {
   #endif
   MI_ATOMIC_VAR_INIT(0),  // xthread_id
   NULL,                   // free
-  0,                      // used
+  {0},                    // xused
+  #if MI_INTPTR_SIZE < 8
+  0                       // xlast_used
+  #endif
   NULL,                   // local_free
   0,                      // block_size
   0,                      // page_offset
@@ -627,6 +630,7 @@ static void mi_process_done_once(void) {
     _mi_thread_locals_done();
     if (subproc_main->heap_main != NULL) {
       if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
+        _mi_theap_collect_abandon(subproc_main->theap_meta); // update stats of all pages in theap_meta
         _mi_theap_merge_stats(subproc_main->theap_meta);
         _mi_theap_merge_stats(_mi_theap_default());  // _mi_thread_locals_done can free
         mi_heap_stats_merge_to_subproc(subproc_main->heap_main);

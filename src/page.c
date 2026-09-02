@@ -83,7 +83,7 @@ static bool mi_page_list_is_valid(mi_page_t* page, mi_block_t* p) {
 
 static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(mi_page_block_size(page) > 0);
-  mi_assert_internal(page->used <= page->capacity);
+  mi_assert_internal(mi_page_used(page) <= page->capacity);
   mi_assert_internal(page->capacity <= page->reserved);
   
   mi_assert_internal(page->heap!=NULL);
@@ -114,8 +114,9 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   #endif
 
   size_t free_count = mi_page_list_count(page, page->free) + mi_page_list_count(page, page->local_free);
-  mi_assert_internal(page->used + free_count == page->capacity);
+  mi_assert_internal(mi_page_used(page) + free_count == page->capacity);
 
+  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
   return true;
 }
 
@@ -142,6 +143,80 @@ bool _mi_page_is_valid(mi_page_t* page) {
 }
 #endif
 
+#if MI_STAT
+// Update stats for a page;
+// `theap` can be NULL in which case the page's heap stats are updated.
+void _mi_page_update_stats(mi_page_t* page) {
+  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+  
+  // get stat counts
+  const mi_used_t xused = page->xused;
+  const size_t used = mi_xused_used_count(xused);
+  const size_t alloc_count = mi_xused_alloc_count(xused);
+  const size_t last_used = mi_page_last_used(page);    
+  mi_assert_internal(last_used + alloc_count >= used);
+  const size_t free_count = last_used + alloc_count - used;  
+  if (alloc_count + free_count == 0) {
+    mi_assert_internal(last_used == used);
+    return;
+  }
+
+  // reset the alloc_count and set last_used to used
+  #if MI_INTPTR_SIZE >= 8
+  page->xused.used_alloc = (used << 32) | used;
+  #else
+  page->xused.used_alloc = used;
+  page->xlast_used = used;
+  #endif
+  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+  
+  // update stats
+  mi_heap_t* const heap = mi_page_heap(page);
+  mi_theap_t* const theap = _mi_page_associated_theap_peek(page);
+  mi_assert_internal(theap == NULL || (theap->tld != NULL && _mi_thread_id() == theap->tld->thread_id));
+
+  const size_t bsize = mi_page_usable_block_size(page);
+  if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
+    const size_t bin = _mi_bin(bsize);      
+    // allocations
+    if (alloc_count > 0) {
+      mi_theapx_stat_increase(heap, theap, malloc_normal, alloc_count*bsize);
+      #if MI_STAT>1
+      mi_theapx_stat_counter_increase(heap, theap, malloc_normal_count, 1);
+      mi_theapx_stat_increase(heap, theap, malloc_bins[bin], alloc_count);
+      mi_theapx_stat_increase(heap, theap, malloc_requested, alloc_count*(bsize - MI_PADDING_SIZE));
+      #endif
+    }
+    // frees
+    if (free_count > 0) {
+      mi_theapx_stat_decrease(heap, theap, malloc_normal, free_count*bsize);
+      #if (MI_STAT > 1)
+      mi_theapx_stat_decrease(heap, theap, malloc_bins[bin], free_count);
+      #endif
+    }
+  }
+  else {
+    // allocations
+    mi_assert_internal(alloc_count<=1);
+    mi_assert_internal(free_count<=1);    
+    if (alloc_count > 0) {
+      mi_theapx_stat_increase(heap, theap, malloc_huge, alloc_count*bsize);
+      mi_theapx_stat_counter_increase(heap, theap, malloc_huge_count, alloc_count);
+      #if MI_STAT>1
+      mi_theapx_stat_increase(heap, theap, malloc_requested, alloc_count*(bsize - MI_PADDING_SIZE));
+      #endif
+    }
+    // frees
+    if (free_count > 0) {
+      mi_theapx_stat_decrease(heap, theap, malloc_huge, free_count*bsize);
+    }
+  }
+}
+#else
+void _mi_page_update_stats(mi_page_t* page) {
+  MI_UNUSED(page);
+}
+#endif
 
 /* -----------------------------------------------------------
   Page collect the `local_free` and `thread_free` lists
@@ -167,7 +242,7 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
     return; // the thread-free items cannot be freed
   }
   // if `count > page->used` there was another kind memory corruption (either in the page meta-data or in the linked list)
-  else if mi_unlikely(count > page->used) {
+  else if mi_unlikely(count > mi_page_used(page)) {
     _mi_error_message(EFAULT, "corrupted meta-data in thread-free list\n");
     return; // the thread-free items cannot be freed
   }
@@ -178,8 +253,8 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
 
   // update counts now
   mi_assert_internal(count <= UINT16_MAX);
-  mi_assert_internal(page->used >= (uint16_t)count);
-  page->used = page->used - (uint16_t)count;
+  mi_assert_internal(mi_page_used(page) >= count);
+  page->xused.used_alloc -= count; // page->used = page->used - (uint16_t)count;
 }
 
 // Collect the local `thread_free` list using an atomic exchange.
@@ -200,6 +275,10 @@ static void mi_page_thread_free_collect(mi_page_t* page)
   mi_page_thread_collect_to_local(page, head);
 }
 
+static inline bool mi_page_should_update_stats(const mi_page_t* page) {
+  return (mi_xused_alloc_count(page->xused) > 0x7FFF);
+}
+
 // returns `true` if after collection `mi_page_immediate_available` is true.
 static inline bool mi_page_free_quick_collect(mi_page_t* page) {
   if mi_likely(page->free != NULL) return true;
@@ -207,7 +286,8 @@ static inline bool mi_page_free_quick_collect(mi_page_t* page) {
   // move local_free to free
   page->free = page->local_free;
   page->local_free = NULL;
-  page->free_is_zero = false;
+  page->free_is_zero = false;  
+  if (mi_page_should_update_stats(page)) { _mi_page_update_stats(page); }
   return true;
 }
 
@@ -236,9 +316,9 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
       page->free = page->local_free;
       page->local_free = NULL;
       page->free_is_zero = false;
-    }
+    }    
   }
-
+  _mi_page_update_stats(page);
   mi_assert_internal(!force || page->local_free == NULL);
 }
 
@@ -258,9 +338,10 @@ void _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
       page->free = page->local_free;
       page->local_free = NULL;
       page->free_is_zero = false;
+      if (mi_page_should_update_stats(page)) { _mi_page_update_stats(page); } 
     }
   }
-  if (page->used == 1) {
+  if (mi_page_used(page) == 1) {
     // all elements are free'd since we skipped the `head` element itself
     mi_assert_internal(mi_tf_block(mi_atomic_load_relaxed(&page->xthread_free)) == head);
     mi_assert_internal(mi_block_next(page,head) == NULL);
@@ -449,6 +530,7 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
       if (index < theap->page_retired_min) theap->page_retired_min = index;
       if (index > theap->page_retired_max) theap->page_retired_max = index;
       mi_assert_internal(mi_page_all_free(page));
+      _mi_page_update_stats(page);
       return; // don't free after all
     }  
   }
@@ -736,7 +818,8 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_internal(page->theap == mi_page_theap(page));
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);
-  mi_assert_internal(page->used == 0);
+  mi_assert_internal(mi_page_used(page) == 0);
+  mi_assert_internal(page->xused.used_alloc == 0);
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(page->xthread_free == 1);
   mi_assert_internal(page->next == NULL);
@@ -809,7 +892,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
         page_candidate = page;
       }
       // prefer to reuse fuller pages (in the hope the less used page gets freed)
-      else if (page->used >= page_candidate->used && !mi_page_is_mostly_used(page)) { // && !mi_page_is_expandable(page)) {
+      else if (mi_page_used(page) >= mi_page_used(page_candidate) && !mi_page_is_mostly_used(page)) { // && !mi_page_is_expandable(page)) {
         page_candidate = page;
       }
       // if we find a non-expandable candidate, or searched for N pages, return with the best candidate
@@ -939,8 +1022,8 @@ static mi_page_t* mi_huge_page_alloc(mi_theap_t* theap, size_t size, size_t page
     mi_assert_internal(mi_page_is_abandoned(page));
     mi_page_set_theap(page, NULL);
     #endif
-    mi_theap_stat_increase(theap, malloc_huge, mi_page_block_size(page));
-    mi_theap_stat_counter_increase(theap, malloc_huge_count, 1);
+    // mi_theap_stat_increase(theap, malloc_huge, mi_page_block_size(page));
+    // mi_theap_stat_counter_increase(theap, malloc_huge_count, 1);
   }
   return page;
 }
@@ -1078,6 +1161,7 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
   if (mi_page_block_size(page) > MI_SMALL_MAX_OBJ_SIZE && mi_page_is_full(page)) {
     mi_page_to_full(page, mi_page_queue_of(page));
   }
+  _mi_page_update_stats(page);
   return p;
 }
 

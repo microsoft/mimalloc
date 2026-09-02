@@ -101,15 +101,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define __has_builtin(x)    0
 #endif
 
-#if defined(__cplusplus)
-#define mi_decl_externc         extern "C"
-#define mi_init_struct_zero     { }
-#else
-#define mi_decl_externc
-#define mi_init_struct_zero     { 0 }
-#endif
-
-
 #if defined(__EMSCRIPTEN__) && !defined(__wasi__)
 #define __wasi__
 #endif
@@ -285,6 +276,7 @@ void          _mi_page_free_collect(mi_page_t* page, bool force);
 void          _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
 mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page);
 bool          _mi_page_queue_is_valid(mi_theap_t* theap, const mi_page_queue_t* pq);
+void          _mi_page_update_stats(mi_page_t* page);
 
 size_t        _mi_page_stats_bin(const mi_page_t* page); // for stats
 size_t        _mi_bin_size(size_t bin);                  // for stats
@@ -661,7 +653,7 @@ static inline bool mi_theap_is_detached(mi_theap_t* theap) {
 
 static inline bool mi_theap_matches_thread(mi_theap_t* theap) {
   const mi_threadid_t tid = _mi_thread_id();
-  return (theap==NULL || theap->tld->thread_id == tid || mi_theap_is_detached(theap));
+  return (theap==NULL || theap->tld==NULL || theap->tld->thread_id == tid || mi_theap_is_detached(theap));
 }
 
 /* -----------------------------------------------------------
@@ -905,11 +897,33 @@ static inline size_t mi_page_committed(const mi_page_t* page) {
   return (slice_committed == 0 ? mi_page_size(page) : slice_committed - mi_page_slice_offset_of(page,0));
 }
 
+static inline size_t mi_page_used(const mi_page_t* page) {
+  mi_assert_internal(page != NULL);
+  return mi_xused_used_count(page->xused);
+}
+
+static inline void mi_page_used_reset(mi_page_t* page) {
+  page->xused.used_alloc = page->xused.used_alloc & ~0xFFFF;  
+}
+
+static inline size_t mi_page_alloc_count(const mi_page_t* page) {
+  return mi_xused_alloc_count(page->xused);
+}
+
+static inline size_t mi_page_last_used(const mi_page_t* page) {
+  #if MI_INTPTR_SIZE >= 8
+  return (page->xused.used_alloc >> 32) & 0xFFFF;
+  #else
+  return page->xlast_used;
+  #endif
+}
+
+
 // are all blocks in a page freed?
 // note: needs up-to-date used count, (as the `xthread_free` list may not be empty). see `_mi_page_collect_free`.
 static inline bool mi_page_all_free(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  return (page->used == 0);
+  return (mi_page_used(page)==0);
 }
 
 // are there immediately available blocks, i.e. blocks available on the free list.
@@ -928,7 +942,7 @@ static inline bool mi_page_is_expandable(const mi_page_t* page) {
 
 
 static inline bool mi_page_is_full(const mi_page_t* page) {
-  const bool full = (page->reserved == page->used);
+  const bool full = (page->reserved == mi_page_used(page));
   mi_assert_internal(!full || page->free == NULL);
   return full;
 }
@@ -937,14 +951,14 @@ static inline bool mi_page_is_full(const mi_page_t* page) {
 static inline bool mi_page_is_mostly_used(const mi_page_t* page) {
   if (page==NULL) return true;
   uint16_t frac = page->reserved / 8U;
-  return (page->reserved - page->used <= frac);
+  return (page->reserved - mi_page_used(page) <= frac);
 }
 
 // is more than (n-1)/n'th of a page in use?
 static inline bool mi_page_is_used_at_frac(const mi_page_t* page, uint16_t n) {
   if (page==NULL) return true;
   uint16_t frac = page->reserved / n;
-  return (page->reserved - page->used <= frac);
+  return (page->reserved - mi_page_used(page) <= frac);
 }
 
 
@@ -1116,7 +1130,7 @@ static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
 // are there any available blocks?
 static inline bool mi_page_has_any_available(const mi_page_t* page) {
   mi_assert_internal(page != NULL && page->reserved > 0);
-  return (page->used < page->reserved || (mi_page_thread_free(page) != NULL));
+  return (mi_page_used(page) < page->reserved || (mi_page_thread_free(page) != NULL));
 }
 
 // Owned?

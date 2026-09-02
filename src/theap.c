@@ -115,7 +115,7 @@ static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_pag
 }
 
 void _mi_theap_merge_stats(mi_theap_t* theap) {
-  mi_assert_internal(mi_theap_is_initialized(theap));
+  mi_assert_internal(mi_theap_is_initialized(theap));  
   mi_heap_t* const heap = _mi_theap_heap(theap);
   _mi_stats_merge_into(&heap->stats, &theap->stats);
 }
@@ -545,7 +545,7 @@ void _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page) {
   area->reserved = page->reserved * bsize;
   area->committed = page->capacity * bsize;
   area->blocks = mi_page_start(page);
-  area->used = page->used;   // number of blocks in use (#553)
+  area->used = mi_page_used(page);   // number of blocks in use (#553)
   area->block_size = ubsize;
   area->full_block_size = bsize;
   area->reserved1 = page;
@@ -571,7 +571,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
 
   _mi_page_free_collect(page,true);              // collect both thread_delayed and local_free
   mi_assert_internal(page->local_free == NULL);
-  if (page->used == 0) return true;
+  if (mi_page_used(page) == 0) return true;
 
   size_t psize;
   uint8_t* const pstart = mi_page_area(page, &psize);
@@ -581,13 +581,13 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
 
   // optimize page with one block
   if (page->capacity == 1) {
-    mi_assert_internal(page->used == 1 && page->free == NULL);
+    mi_assert_internal(mi_page_used(page) == 1 && page->free == NULL);
     return visitor(heap, area, pstart, ubsize, arg);
   }
   mi_assert(bsize <= UINT32_MAX);
 
   // optimize full pages
-  if (page->used == page->capacity) {
+  if (mi_page_used(page) == page->capacity) {
     uint8_t* block = pstart;
     for (size_t i = 0; i < page->capacity; i++) {
       if (!visitor(heap, area, block, ubsize, arg)) return false;
@@ -631,7 +631,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
     size_t bit = blockidx - (bitidx * MI_INTPTR_BITS);
     free_map[bitidx] |= ((uintptr_t)1 << bit);
   }
-  mi_assert_internal(page->capacity == (free_count + page->used));
+  mi_assert_internal(page->capacity == (free_count + mi_page_used(page)));
 
   // walk through all blocks skipping the free ones
   #if MI_DEBUG>1
@@ -663,7 +663,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
       block += bsize * MI_INTPTR_BITS;
     }
   }
-  mi_assert_internal(page->used == used_count);
+  mi_assert_internal(mi_page_used(page) == used_count);
   return true;
 }
 

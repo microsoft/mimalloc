@@ -287,7 +287,7 @@ bool mi_check_owned(const void* p) {
 bool mi_unsafe_heap_page_is_under_utilized(mi_heap_t* heap, void* p, size_t perc_threshold) mi_attr_noexcept {
   if (p==NULL) return false;
   const mi_page_t* const page = _mi_safe_ptr_page(p);   // Get the page containing this pointer
-  if (page==NULL || page->used==page->capacity || page->capacity < page->reserved) return false;
+  if (page==NULL || mi_page_used(page)==page->capacity || page->capacity < page->reserved) return false;
   // If the page is the head of the queue, it is currently being used for
   // allocations; we skip it to avoid immediate thrashing.
   if (page->prev == NULL)  return false;
@@ -300,5 +300,5 @@ bool mi_unsafe_heap_page_is_under_utilized(mi_heap_t* heap, void* p, size_t perc
   // check utilization
   if (page->capacity==0)   return false;
   if (perc_threshold>=100) return true;
-  return (perc_threshold >= ((100UL*page->used) / page->capacity));
+  return (perc_threshold >= ((100UL*mi_page_used(page)) / page->capacity));
 }

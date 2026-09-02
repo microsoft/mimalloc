@@ -1304,6 +1304,8 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_heap_t* const heap = mi_page_heap(page);
   mi_theapx_stat_decrease(heap, current_theapx, page_bins[_mi_page_stats_bin(page)], 1);
   mi_theapx_stat_decrease(heap, current_theapx, pages, 1);
+  _mi_page_free_collect(page,false);
+  _mi_page_update_stats(page);
   mi_arenas_page_free_prim(page);
 }
 
@@ -1983,7 +1985,7 @@ static void mi_debug_color(char* buf, size_t* k, mi_ansi_color_t color) {
 
 static int mi_page_commit_usage(mi_page_t* page) {
   const size_t committed_size = mi_page_committed(page);
-  const size_t used_size = page->used * mi_page_block_size(page);
+  const size_t used_size = mi_page_used(page) * mi_page_block_size(page);
   return (int)(used_size * 100 / committed_size);
 }
 
@@ -2554,7 +2556,7 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(mi_page_is_owned(page));
 
-  if (page->used==0) {
+  if (mi_page_used(page)==0) {
     // free the page
     _mi_arenas_page_free(page, theap);
   }
@@ -2563,7 +2565,7 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
     _mi_page_unguard_all(page);          // remove potential interior guard pages 
     #endif
     // destroy the page
-    page->used=0;                        // note: invariant `|local_free| + |free| == reserved - used`  does not hold in this case
+    page->xused = mi_xused_used_reset(page->xused);  // note: invariant `|local_free| + |free| == reserved - used`  does not hold in this case
     _mi_arenas_page_free(page, theap);
   }
   else {

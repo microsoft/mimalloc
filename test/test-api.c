@@ -377,6 +377,7 @@ int main(void) {
     ptr = mi_rezalloc_aligned(ptr, n, alignment);
     assert(mem_has_vals((uint8_t*)ptr,n/2,123));
     result = mem_is_zero((uint8_t*)ptr + n/2, n/2);    
+    mi_free(ptr);
   }
 
   // ---------------------------------------------------
@@ -414,6 +415,7 @@ int main(void) {
         shared_ptr = mi_realloc(shared_ptr, i * 64);
       }
     }
+    mi_free(shared_ptr);
   }
 
   // ---------------------------------------------------

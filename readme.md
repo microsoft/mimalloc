@@ -92,11 +92,11 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 
 * 2026-09-01: Added a readme section on [getting the best performance](#getting-the-best-performance).
 * 2026-09-01, `v3.5.1`, `v2.5.1`, `v1.15.1`: (v3) Yet better performance for `free` calls.
-  (v3) Added `mi_free_small(_nonnull)` for runtimes, and `mi_free_csize(_nonnull)` for inlined constant size free-ing.
+  (v3) Added `mi_free_small(_nonnull)` for fast small allocations, and `mi_free_csize(_nonnull)` for inlined constant size free-ing.
   (v3) Improved MI_OPT_ARCH options; on arm64, defaults to armv8.3 on Apple and armv8.1 otherwise. 
   (v3) Default to `-DMI_ALLOW_THP=FULL` on Linux, where we never split transparent huge pages (THP) during purging (#1282). This
   may increase rss but can also improve performance. Use `-DMI_ALLOW_THP=OFF` to disable the use of THP.
-  (v3) Improved cache behavior for small allocations. Improved riscV suppor, add riscV to CI. Various small build fixes.
+  (v3) Improved cache behavior for small allocations. Improved riscV support. Various small build fixes.
 * 2026-08-18, `v1.15.0`, `v2.5.0`, `v3.5.0`: (v3) slightly better performance for `free`
   using aligned chunks, cleanup cmake options, require armv8.3 (with MI_OPT_ARCH) for 
   faster load-acquire, increase retired page count from 1 to 3, faster double free 
