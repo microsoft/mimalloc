@@ -903,7 +903,7 @@ static inline size_t mi_page_used(const mi_page_t* page) {
 }
 
 static inline void mi_page_used_reset(mi_page_t* page) {
-  page->xused.used_alloc = page->xused.used_alloc & ~0xFFFF;  
+  page->xused = mi_xused_used_reset(page->xused);
 }
 
 static inline size_t mi_page_alloc_count(const mi_page_t* page) {

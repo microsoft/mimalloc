@@ -197,22 +197,20 @@ static void mi_print_count(int64_t n, int64_t unit, mi_output_fun* out, void* ar
 static void mi_stat_print_ex(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg, const char* notok ) {
   _mi_fprintf(out, arg,"  %-12s:", msg);
   if (unit != 0) {
-    if (unit > 0) {
+    if (unit > 0) { // as KiB (power of two) 
       mi_print_amount(stat->peak, unit, out, arg);
       mi_print_amount(stat->total, unit, out, arg);
-      // mi_print_amount(stat->freed, unit, out, arg);
       mi_print_amount(stat->current, unit, out, arg);
       mi_print_amount(unit, 1, out, arg);
       mi_print_count(stat->total, unit, out, arg);
     }
-    else if (unit==-1) {
+    else if (unit==-1) { // as K (decimal)
       mi_print_amount(stat->peak, -1, out, arg);
       mi_print_amount(stat->total, -1, out, arg);
-      // mi_print_amount(stat->freed, -1, out, arg);
       mi_print_amount(stat->current, -1, out, arg);
       _mi_fprintf(out, arg, "%24s", "");
     }
-    else {
+    else { // as KiB , unit is final count
       mi_print_amount(stat->peak, 1, out, arg);
       mi_print_amount(stat->total, 1, out, arg);
       mi_print_amount(stat->current, -1, out, arg);

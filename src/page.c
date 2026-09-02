@@ -196,9 +196,8 @@ void _mi_page_update_stats(mi_page_t* page) {
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
   
   // get stat counts
-  const mi_used_t xused = page->xused;
-  const size_t used = mi_xused_used_count(xused);
-  const size_t alloc_count = mi_xused_alloc_count(xused);
+  const size_t used = mi_page_used(page);
+  const size_t alloc_count = mi_page_alloc_count(page);
   const size_t last_used = mi_page_last_used(page);    
   mi_assert_internal(last_used + alloc_count >= used);
   const size_t free_count = last_used + alloc_count - used;  

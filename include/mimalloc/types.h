@@ -392,8 +392,15 @@ typedef size_t mi_page_flags_t;
 // This way we can push a block on the thread free list and try to claim ownership atomically in `free.c:mi_free_block_mt`.
 typedef uintptr_t mi_thread_free_t;
 
+// We store the currently used block count together with the total malloc call count as 16-bit numbers.
+// This is done for better codegen `mi_malloc/mi_free` (where we can increment both at once as `used_alloc += 0x10001` for example).
+// The `last_used` is the `used` count since the statistics are last updated; on 32-bit platforms this
+// is a separate field in `mi_page_t` but on 64-bit we use the upper 32-bits to store it.
+// We need the `alloc_count` and `last_used` to efficiently calculate allocation and free statistics even
+// in a release build; this way we can update the stats in the slow path (`_mi_page_update_stats`).
 typedef union mi_used_s { 
-  uintptr_t  used_alloc;
+  uintptr_t  used_alloc;         // used + alloc_count
+  // the following struct is unused but nice for debugging
   struct {
     uint16_t used_count;
     uint16_t alloc_count;
@@ -401,11 +408,11 @@ typedef union mi_used_s {
     uint16_t last_used;
     uint16_t padding;
     #endif
-  } debug;
+  } debug_le;
 } mi_used_t;
 
-static inline size_t mi_xused_used_count(mi_used_t xused)  { return (xused.used_alloc & 0xFFFF); }
-static inline size_t mi_xused_alloc_count(mi_used_t xused) { return ((xused.used_alloc>>16) & 0xFFFF); }
+static inline size_t mi_xused_used_count(mi_used_t xused)    { return (xused.used_alloc & 0xFFFF); }
+static inline size_t mi_xused_alloc_count(mi_used_t xused)   { return ((xused.used_alloc>>16) & 0xFFFF); }
 static inline mi_used_t mi_xused_used_reset(mi_used_t xused) { xused.used_alloc =  xused.used_alloc & ~0xFFFF; return xused; }
 
 // A page contains blocks of one specific size (`block_size`).
@@ -443,7 +450,7 @@ typedef struct mi_page_s {
   mi_block_t*               free;              // list of available free blocks (`malloc` allocates from this list)
   mi_used_t                 xused;             // number of blocks in use (including blocks in `thread_free`) (and the allocated count for statistics)
   #if MI_INTPTR_SIZE < 8
-  int32_t                   xlast_used;        // for statistics; on 64-bit platforms it is the upper 32-bits of xused.
+  uint32_t                  xlast_used;        // for statistics; on 64-bit platforms it is the upper 32-bits of xused.
   #endif
   mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
  
