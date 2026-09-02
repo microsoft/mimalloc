@@ -79,12 +79,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
-// Statistics (0=only essential, 1=normal, 2=more fine-grained (expensive) tracking)
+// Statistics (0=only essential, 1=normal, 2=more expensive tracking of precise requested bytes)
 #ifndef MI_STAT
 #if (MI_DEBUG>0)
 #define MI_STAT 2
 #else
-#define MI_STAT 2
+#define MI_STAT 1
 #endif
 #endif
 

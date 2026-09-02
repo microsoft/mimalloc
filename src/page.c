@@ -161,7 +161,7 @@ static void mi_page_merge_stats(const mi_page_t* page, size_t alloc_count, size_
       mi_theapx_stat_increase(heap, theap, malloc_normal, alloc_count*bsize);
       mi_theapx_stat_counter_increase(heap, theap, malloc_normal_count, alloc_count);
       mi_theapx_stat_increase(heap, theap, malloc_bins[bin], alloc_count);
-      #if MI_STATS==1
+      #if MI_STAT==1
       // use coarse total requested bytes
       mi_theapx_stat_increase(heap, theap, malloc_requested, alloc_count*(bsize - MI_PADDING_SIZE));      
       #endif
@@ -179,7 +179,7 @@ static void mi_page_merge_stats(const mi_page_t* page, size_t alloc_count, size_
     if (alloc_count > 0) {
       mi_theapx_stat_increase(heap, theap, malloc_huge, alloc_count*bsize);
       mi_theapx_stat_counter_increase(heap, theap, malloc_huge_count, alloc_count);
-      #if MI_STATS==1
+      #if MI_STAT==1
       // use coarse total requested bytes      
       mi_theapx_stat_increase(heap, theap, malloc_requested, alloc_count*(bsize - MI_PADDING_SIZE));      
       #endif

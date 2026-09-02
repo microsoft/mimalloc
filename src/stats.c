@@ -195,7 +195,7 @@ static void mi_print_count(int64_t n, int64_t unit, mi_output_fun* out, void* ar
 }
 
 static void mi_stat_print_ex(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg, const char* notok ) {
-  _mi_fprintf(out, arg,"  %-10s:", msg);
+  _mi_fprintf(out, arg,"  %-12s:", msg);
   if (unit != 0) {
     if (unit > 0) {
       mi_print_amount(stat->peak, unit, out, arg);
@@ -205,20 +205,18 @@ static void mi_stat_print_ex(const mi_stat_count_t* stat, const char* msg, int64
       mi_print_amount(unit, 1, out, arg);
       mi_print_count(stat->total, unit, out, arg);
     }
-    else {
+    else if (unit==-1) {
       mi_print_amount(stat->peak, -1, out, arg);
       mi_print_amount(stat->total, -1, out, arg);
       // mi_print_amount(stat->freed, -1, out, arg);
       mi_print_amount(stat->current, -1, out, arg);
-      if (unit == -1) {
-        _mi_fprintf(out, arg, "%24s", "");
-      }
-      else {
-        // mi_print_amount(-unit, 1, out, arg);
-        //mi_print_count((stat->total / -unit), 0, out, arg);
-        _mi_fprintf(out, arg, "%12s", "");
-        mi_print_count(-unit, 0, out, arg);
-      }
+      _mi_fprintf(out, arg, "%24s", "");
+    }
+    else {
+      mi_print_amount(stat->peak, 1, out, arg);
+      mi_print_amount(stat->total, 1, out, arg);
+      _mi_fprintf(out, arg, "%12s", "");
+      mi_print_count(-unit, 0, out, arg);  
     }
     if (stat->current != 0) {
       _mi_fprintf(out, arg, "  ");
@@ -243,7 +241,7 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
 
 #if MI_STAT
 static void mi_stat_total_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg) {
-  _mi_fprintf(out, arg, "  %-10s:", msg);
+  _mi_fprintf(out, arg, "  %-12s:", msg);
   _mi_fprintf(out, arg, "%12s", " ");  // no peak
   mi_print_amount(stat->total, unit, out, arg);
   _mi_fprintf(out, arg, "\n");
@@ -251,13 +249,13 @@ static void mi_stat_total_print(const mi_stat_count_t* stat, const char* msg, in
 #endif
 
 static void mi_stat_counter_print(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg ) {
-  _mi_fprintf(out, arg, "  %-10s:", msg);
+  _mi_fprintf(out, arg, "  %-12s:", msg);
   mi_print_amount(stat->total, 0, out, arg);
   _mi_fprintf(out, arg, "\n");
 }
 
 static void mi_stat_counter_print_size(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg ) {
-  _mi_fprintf(out, arg, "  %-10s:", msg);
+  _mi_fprintf(out, arg, "  %-12s:", msg);
   mi_print_amount(stat->total, 1, out, arg);
   _mi_fprintf(out, arg, "\n");
 }
@@ -266,12 +264,12 @@ static void mi_stat_average_print(int64_t count, int64_t total, const char* msg,
   const int64_t avg_tens = (count == 0 ? 0 : (total*10 / count));
   const int64_t avg_whole = avg_tens/10;
   const int64_t avg_frac1 = avg_tens%10;
-  _mi_fprintf(out, arg, "  %-10s: %5lld.%lld avg\n", msg, avg_whole, avg_frac1);
+  _mi_fprintf(out, arg, "  %-12s: %5lld.%lld avg\n", msg, avg_whole, avg_frac1);
 }
 
 
 static void mi_print_header(const char* name,mi_output_fun* out, void* arg ) {
-  _mi_fprintf(out, arg, " %-11s %11s %11s %11s %11s %11s\n",
+  _mi_fprintf(out, arg, " %-13s %11s %11s %11s %11s %11s\n",
                         name, "peak   ", "total   ", "current   ", "block   ", "total#   ");
 }
 
@@ -344,8 +342,8 @@ mi_decl_export void mi_process_info_print_out(mi_output_fun* out, void* arg) mi_
   size_t peak_commit;
   size_t page_faults;
   mi_process_info(&elapsed, &user_time, &sys_time, &current_rss, &peak_rss, &current_commit, &peak_commit, &page_faults);
-  _mi_fprintf(out, arg, "  %-10s: %5zu.%03zu s\n", "elapsed", elapsed/1000, elapsed%1000);
-  _mi_fprintf(out, arg, "  %-10s: user: %zu.%03zu s, system: %zu.%03zu s, faults: %zu, peak rss: ", "process",
+  _mi_fprintf(out, arg, "  %-12s: %5zu.%03zu s\n", "elapsed", elapsed/1000, elapsed%1000);
+  _mi_fprintf(out, arg, "  %-12s: user: %zu.%03zu s, system: %zu.%03zu s, faults: %zu, peak rss: ", "process",
     user_time/1000, user_time%1000, sys_time/1000, sys_time%1000, page_faults);
   mi_printf_amount((int64_t)peak_rss, 1, out, arg, false);
   if (peak_commit > 0) {
@@ -401,7 +399,7 @@ void _mi_stats_print(const char* name, size_t id, const mi_stats_t* stats, mi_ou
     mi_stat_counter_print(&stats->pages_unabandon_busy_wait, "waits", out, arg);
     mi_stat_counter_print(&stats->pages_extended, "extended", out, arg);
     mi_stat_counter_print(&stats->pages_retire, "retire", out, arg);
-    mi_stat_counter_print(&stats->pages_stat_updates, "stat upds", out, arg);
+    mi_stat_counter_print(&stats->pages_stat_updates, "stat updates", out, arg);
     mi_stat_average_print(stats->pages_stat_updates.total, stats->pages_stat_update_count.total, "stat avg", out, arg);
     mi_stat_average_print(stats->page_searches_count.total, stats->page_searches.total, "searches", out, arg);
     _mi_fprintf(out, arg, "\n");
@@ -429,7 +427,7 @@ void _mi_stats_print(const char* name, size_t id, const mi_stats_t* stats, mi_ou
 
   mi_print_header("process", out, arg);
   mi_stat_print_ex(&stats->threads, "threads", 0, out, arg, "");
-  _mi_fprintf(out, arg, "  %-10s: %5i\n", "numa nodes", _mi_os_numa_node_count());
+  _mi_fprintf(out, arg, "  %-12s: %5i\n", "numa nodes", _mi_os_numa_node_count());
   mi_process_info_print_out(out, arg);
   
   _mi_fprintf(out, arg, "\n");
