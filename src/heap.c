@@ -182,6 +182,12 @@ static void mi_heap_free_theaps(mi_heap_t* heap) {
       theap = next;
     }
   }  
+
+  // set the theap thread local to NULL (so _mi_page_associated_theap does not read from a freed theap)
+  if (!_mi_is_process_heap_main(heap)) { 
+    _mi_thread_local_free(heap->theap);
+    heap->theap = 0;
+  }
 }
 
 // free the heap resources (assuming the pages are already moved/destroyed, and all theaps have been freed)
@@ -221,7 +227,7 @@ static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
   mi_lock_done(&heap->os_abandoned_pages_lock);
   mi_lock_done(&heap->arena_pages_lock);
   if (!_mi_is_process_heap_main(heap)) { 
-    _mi_thread_local_free(heap->theap);
+    // _mi_thread_local_free(heap->theap);
     _mi_free_subproc_safe(heap); 
   }
 }
