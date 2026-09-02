@@ -159,18 +159,17 @@ static void mi_page_merge_stats(const mi_page_t* page, size_t alloc_count, size_
     // allocations
     if (alloc_count > 0) {
       mi_theapx_stat_increase(heap, theap, malloc_normal, alloc_count*bsize);
-      #if MI_STAT>1
       mi_theapx_stat_counter_increase(heap, theap, malloc_normal_count, alloc_count);
       mi_theapx_stat_increase(heap, theap, malloc_bins[bin], alloc_count);
-      mi_theapx_stat_increase(heap, theap, malloc_requested, alloc_count*(bsize - MI_PADDING_SIZE));
+      #if MI_STATS==1
+      // use coarse total requested bytes
+      mi_theapx_stat_increase(heap, theap, malloc_requested, alloc_count*(bsize - MI_PADDING_SIZE));      
       #endif
     }
     // frees
     if (free_count > 0) {
       mi_theapx_stat_decrease(heap, theap, malloc_normal, free_count*bsize);
-      #if (MI_STAT > 1)
-      mi_theapx_stat_decrease(heap, theap, malloc_bins[bin], free_count);
-      #endif
+      mi_theapx_stat_decrease(heap, theap, malloc_bins[bin], free_count);      
     }
   }
   else {
@@ -180,8 +179,9 @@ static void mi_page_merge_stats(const mi_page_t* page, size_t alloc_count, size_
     if (alloc_count > 0) {
       mi_theapx_stat_increase(heap, theap, malloc_huge, alloc_count*bsize);
       mi_theapx_stat_counter_increase(heap, theap, malloc_huge_count, alloc_count);
-      #if MI_STAT>1
-      mi_theapx_stat_increase(heap, theap, malloc_requested, alloc_count*(bsize - MI_PADDING_SIZE));
+      #if MI_STATS==1
+      // use coarse total requested bytes      
+      mi_theapx_stat_increase(heap, theap, malloc_requested, alloc_count*(bsize - MI_PADDING_SIZE));      
       #endif
     }
     // frees
@@ -739,10 +739,8 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   size_t page_size;
   //uint8_t* page_start =
   mi_page_area(page, &page_size);
-  #if MI_STAT>0
   mi_theap_stat_counter_increase(theap, pages_extended, 1);
-  #endif
-
+  
   // calculate the extend count
   const size_t bsize = mi_page_block_size(page);
   size_t extend = (size_t)page->reserved - page->capacity;
@@ -798,9 +796,7 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   }
   // enable the new free list
   page->capacity += (uint16_t)extend;
-  #if MI_STAT>0
   mi_theap_stat_increase(theap, page_committed, extend * bsize);
-  #endif
   mi_assert_expensive(mi_page_is_valid_init(page));
   return true;
 }

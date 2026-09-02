@@ -89,6 +89,10 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
   mi_assert_internal(page->block_size < MI_MAX_ALIGN_SIZE || _mi_is_aligned(block, MI_MAX_ALIGN_SIZE));
 
+  #if MI_STAT>1
+  mi_theap_stat_increase(theap,malloc_requested,size - MI_PADDING_SIZE);
+  #endif
+
   #if MI_DEBUG>3
   if (page->free_is_zero && size > sizeof(*block)) {
     mi_assert_expensive(mi_mem_is_zero(block+1,size - sizeof(*block)));
@@ -104,18 +108,6 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   // track per-block statistics
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
   
-  #if 0 && (MI_STAT>0)
-  if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
-    mi_theap_stat_increase(theap, malloc_normal, bsize);
-    #if (MI_STAT>1)
-    mi_theap_stat_counter_increase(theap, malloc_normal_count, 1);
-    const size_t bin = _mi_bin(bsize);
-    mi_theap_stat_increase(theap, malloc_bins[bin], 1);
-    mi_theap_stat_increase(theap, malloc_requested, size - MI_PADDING_SIZE);
-    #endif
-  }
-  #endif
-
   // in debug mode initialize with 0xD0
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
   if mi_likely(!zero && !mi_page_is_huge(page)) { memset(block, MI_DEBUG_UNINIT, bsize); }
@@ -954,7 +946,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   if (!mi_theap_is_initialized(theap)) { theap = _mi_theap_default(); }
   mi_theap_stat_counter_increase(theap, malloc_guarded_count, 1);
   #if MI_STAT>1
-  // adjust stats to only count the allocated size of the block (and not the guard page)
+  // adjust request stats to only count the allocated size of the block (and not the guard page)
   mi_theap_stat_adjust_decrease(theap, malloc_requested, req_size);
   mi_theap_stat_increase(theap, malloc_requested, size);
   #endif

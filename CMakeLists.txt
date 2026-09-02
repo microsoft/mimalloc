@@ -29,6 +29,9 @@ set_property(CACHE MI_DEBUG PROPERTY STRINGS "OFF" "ON" "INTERNAL" "FULL" "DEFAU
 set(MI_TRACK "OFF" CACHE STRING "Enable tracking: OFF, ASAN (address sanitizer), VALGRIND, ETW (Windows event tracing). Adds a small overhead.")
 set_property(CACHE MI_TRACK PROPERTY STRINGS "OFF" "ASAN" "VALGRIND" "ETW")
 
+set(MI_STAT "DEFAULT" CACHE STRING "Enable statistics.")
+set_property(CACHE MI_STAT PROPERTY STRINGS "OFF" "ON" "FULL" "DEFAULT")
+
 set(MI_ALLOW_THP "DEFAULT" CACHE STRING "Enable transparent huge pages on Linux: OFF, ON, FULL, DEFAULT. 'FULL' enables THP and also avoids splitting up huge pages during purging.")
 set_property(CACHE MI_ALLOW_THP PROPERTY STRINGS "OFF" "ON" "FULL" "DEFAULT")
 
@@ -471,6 +474,25 @@ elseif(MI_FREE_IS_CHECKED STREQUAL "OFF")
   # message(STATUS "Do not check validity of pointers passed to 'mi_free' (MI_FREE_IS_CHECKED=OFF)")
 else()
   message(STATUS "Invalid value for MI_FREE_IS_CHECKED: ${MI_FREE_IS_CHECKED} (expecting: DEFAULT, OFF, SHARED, or ON)")
+endif()
+
+if(MI_STAT STREQUAL "DEFAULT")
+  if(MI_DEBUG)
+    set(MI_STAT "FULL")
+  else()
+    set(MI_STAT "ON")
+  endif()
+endif()
+
+if(MI_STAT STREQUAL "FULL")
+  message(STATUS "Enable detailed statistics including precise requested bytes (expensive) (MI_STAT=FULL)")
+  list(APPEND mi_defines MI_STAT=2)
+elseif(MI_STAT)
+  message(STATUS "Enable detailed statistics (MI_STAT=${MI_STAT})")
+  list(APPEND mi_defines MI_STAT=1)
+else()
+  message(STATUS "Disable detailed statistics (MI_STAT=${MI_STAT})")
+  list(APPEND mi_defines MI_STAT=0)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "WASI")

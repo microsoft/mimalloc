@@ -128,7 +128,7 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   // copy all fields
   MI_STAT_FIELDS()
 
-  #if MI_STAT>1
+  #if MI_STAT
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
     mi_stat_count_add_mt(&stats->malloc_bins[i], &src->malloc_bins[i]);
   }
@@ -241,7 +241,7 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
   mi_stat_print_ex(stat, msg, unit, out, arg, NULL);
 }
 
-#if MI_STAT>1
+#if MI_STAT
 static void mi_stat_total_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg) {
   _mi_fprintf(out, arg, "  %-10s:", msg);
   _mi_fprintf(out, arg, "%12s", " ");  // no peak
@@ -275,7 +275,7 @@ static void mi_print_header(const char* name,mi_output_fun* out, void* arg ) {
                         name, "peak   ", "total   ", "current   ", "block   ", "total#   ");
 }
 
-#if MI_STAT>1
+#if MI_STAT
 static bool mi_stats_print_bins(const mi_stat_count_t* bins, size_t max, mi_output_fun* out, void* arg) {
   bool found = false;
   char buf[64];
@@ -367,7 +367,7 @@ void _mi_stats_print(const char* name, size_t id, const mi_stats_t* stats, mi_ou
   _mi_fprintf(out, arg, "%s %zu\n", name, id);
 
   if (stats->malloc_normal.total + stats->malloc_huge.total != 0) {
-    #if MI_STAT>1
+    #if MI_STAT
     mi_print_header("blocks", out, arg);
     mi_stats_print_bins(stats->malloc_bins, MI_BIN_HUGE, out, arg);
     #endif
@@ -380,6 +380,8 @@ void _mi_stats_print(const char* name, size_t id, const mi_stats_t* stats, mi_ou
     mi_stat_print_ex(&total, "total", -(stats->malloc_normal_count.total + stats->malloc_huge_count.total), out, arg, "");
     #if MI_STAT>1
     mi_stat_total_print(&stats->malloc_requested, "malloc req", 1, out, arg);
+    #else
+    mi_stat_total_print(&stats->malloc_requested, "malloc req~", 1, out, arg);
     #endif
     _mi_fprintf(out, arg, "\n");
     #endif
