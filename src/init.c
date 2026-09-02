@@ -21,7 +21,7 @@ static const mi_page_t mi_page_empty = {
   NULL,                   // free
   {0},                    // xused
   #if MI_INTPTR_SIZE < 8
-  0                       // xlast_used
+  0,                      // xlast_used
   #endif
   NULL,                   // local_free
   0,                      // block_size
