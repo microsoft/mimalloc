@@ -75,6 +75,8 @@ typedef struct mi_stat_counter_s {
   /* only on v3 */ \
   MI_STAT_COUNT(heaps) \
   MI_STAT_COUNT(theaps) \
+  MI_STAT_COUNT(pages_os_abandoned)        /* pages in the os abandoned list (bad) */ \
+  MI_STAT_COUNT(pages_os_allocated)        /* pages allocated outside arenas (bad) */ \
   MI_STAT_COUNTER(pages_reclaim_on_alloc) \
   MI_STAT_COUNTER(pages_reclaim_on_free) \
   MI_STAT_COUNTER(pages_reabandon_full) \

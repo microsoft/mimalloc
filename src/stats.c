@@ -215,6 +215,7 @@ static void mi_stat_print_ex(const mi_stat_count_t* stat, const char* msg, int64
     else {
       mi_print_amount(stat->peak, 1, out, arg);
       mi_print_amount(stat->total, 1, out, arg);
+      mi_print_amount(stat->current, -1, out, arg);
       _mi_fprintf(out, arg, "%12s", "");
       mi_print_count(-unit, 0, out, arg);  
     }
@@ -393,6 +394,8 @@ void _mi_stats_print(const char* name, size_t id, const mi_stats_t* stats, mi_ou
     // mi_stat_print(&stats->segments_cache, "-cached", -1, out, arg);
     mi_stat_print(&stats->pages, "pages", 0, out, arg);
     mi_stat_print(&stats->pages_abandoned, "abandoned", 0, out, arg);
+    mi_stat_print(&stats->pages_os_abandoned, "os abandoned", 0, out, arg);
+    mi_stat_print(&stats->pages_os_allocated, "os allocated", 0, out, arg);
     mi_stat_counter_print(&stats->pages_reclaim_on_alloc, "reclaima", out, arg);
     mi_stat_counter_print(&stats->pages_reclaim_on_free, "reclaimf", out, arg);
     mi_stat_counter_print(&stats->pages_reabandon_full, "reabandon", out, arg);

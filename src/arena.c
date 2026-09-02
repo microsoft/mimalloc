@@ -864,6 +864,7 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
       start = (uint8_t*)mi_arena_os_alloc_aligned(heap->subproc, alloc_size, page_alignment, 0 /* align offset */, commit, allow_large, req_arena, memid);
     }
     #endif
+    if (start!=NULL) { mi_heap_stat_increase(heap,pages_os_allocated,1); }
   }
 
   if (start == NULL) return NULL;
@@ -1288,6 +1289,9 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
       mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
     }
   }
+  else {
+    mi_heap_stat_decrease(page->heap, pages_os_allocated, 1);
+  }
   if (mi_page_meta_is_separated(page)) { page->block_size = 0; }  // for assertion checking
   _mi_arenas_free( mi_page_subproc(page), mi_page_slice_start(page), mi_page_full_size(page), page->memid);
 }
@@ -1366,6 +1370,7 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theapx) {
       if (page->next != NULL) { page->next->prev = page; }
       heap->os_abandoned_pages = page;
     }
+    mi_theapx_stat_increase(heap, current_theapx, pages_os_abandoned, 1);
   }
   mi_theapx_stat_increase(heap, current_theapx, pages_abandoned, 1);
   mi_abandoned_page_unown(page, current_theapx);
@@ -1435,6 +1440,7 @@ void _mi_arenas_page_unabandon(mi_page_t* page, mi_theap_t* current_theapx) {
         page->next = NULL;
         page->prev = NULL;
       }
+      mi_theapx_stat_decrease(heap, current_theapx, pages_os_abandoned, 1);
     }
   }
   mi_theapx_stat_decrease(heap, current_theapx, pages_abandoned, 1);
