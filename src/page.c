@@ -154,6 +154,13 @@ static void mi_page_merge_stats(const mi_page_t* page, size_t alloc_count, size_
   mi_theapx_stat_counter_increase(heap,theap,pages_stat_update_count, alloc_count + free_count);
 
   const size_t bsize = mi_page_usable_block_size(page);
+  #if MI_PROFILE
+  if (alloc_count>0 && theap!=NULL) { 
+    // track profile allocated
+    theap->profile_allocated += alloc_count*bsize; 
+  } 
+  #endif
+
   if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
     const size_t bin = _mi_bin(bsize);      
     // allocations
@@ -176,7 +183,7 @@ static void mi_page_merge_stats(const mi_page_t* page, size_t alloc_count, size_
     // allocations
     mi_assert_internal(alloc_count<=1);
     mi_assert_internal(free_count<=1);    
-    if (alloc_count > 0) {
+    if (alloc_count > 0) {      
       mi_theapx_stat_increase(heap, theap, malloc_huge, alloc_count*bsize);
       mi_theapx_stat_counter_increase(heap, theap, malloc_huge_count, alloc_count);
       #if MI_STAT==1
@@ -1104,7 +1111,7 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
   Admin
 ----------------------------------------------------------- */
 
-static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap) 
+static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap, mi_profiler_t** pprof) 
 {
   if mi_unlikely(!mi_theap_is_initialized(theap)) {
     if (theap==&_mi_theap_empty_wrong) {
@@ -1121,7 +1128,13 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
   if mi_unlikely(theap->generic_count >= 1000) {
     theap->generic_collect_count += theap->generic_count;
     theap->generic_count = 0;
-    
+
+    mi_heap_t* const heap = _mi_theap_heap(theap);
+    mi_profiler_t* prof = mi_atomic_load_ptr_relaxed(mi_profiler_t, &heap->profiler);
+    if (prof!=NULL) {
+      if (mi_profiler_is_enabled(prof)) { *pprof = prof; } else { prof = NULL; }
+    }
+
     // do a full theap collect every once in a while (10000 by default)
     const long generic_collect = mi_option_get_clamp(mi_option_generic_collect, 1, 1000000L);
     if (theap->generic_collect_count >= generic_collect) {
@@ -1132,6 +1145,7 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
       // otherwise we do a mini-collect
       _mi_deferred_free(theap, false);         // call potential deferred free routines      
       _mi_theap_collect_retired(theap, false); // free retired pages      
+      if (prof!=NULL) { mi_theap_collect(theap, false /* force? */); }
     }
   }
   return theap;
@@ -1144,9 +1158,16 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
 static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage) 
 {  
   // initialize if necessary
-  theap = mi_malloc_generic_admin(theap);
+  mi_profiler_t* prof = NULL;
+  theap = mi_malloc_generic_admin(theap, &prof);
   if (theap==NULL) return NULL;
-  
+  if mi_unlikely(prof!=NULL && huge_alignment==0) {  // we cannot profile huge alignments as we put a block in front
+    if mi_unlikely(theap->profile_allocated > theap->profile_threshold) {
+      // sample the allocation
+      return _mi_theap_profile_alloc(theap,prof,size,zero,ppage);
+    }
+  }
+
   // find (or allocate) a page of the right size
   mi_page_t* page = mi_find_page(theap, size, huge_alignment);
   if mi_unlikely(page == NULL) { // first time out of memory, try to collect and retry the allocation once more

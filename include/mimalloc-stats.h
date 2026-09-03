@@ -84,6 +84,7 @@ typedef struct mi_stat_counter_s {
   MI_STAT_COUNTER(heaps_delete_wait) \
   MI_STAT_COUNTER(pages_stat_updates)      /* calls to successful page_stat_update */ \
   MI_STAT_COUNTER(pages_stat_update_count) /* total free/allocs */ \
+  MI_STAT_COUNTER(profile_samples)         /* total sampled profiled allocations */ \
 
 // Size bins for chunks
 typedef enum mi_chunkbin_e {

@@ -332,6 +332,9 @@ size_t        _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr
 bool          _mi_page_is_valid(mi_page_t* page);
 #endif
 
+// "profile.c"
+void*         _mi_theap_profile_alloc(mi_theap_t* theap, mi_profiler_t* prof, size_t size, bool zero, mi_page_t** ppage);
+void          _mi_page_profile_free(mi_page_t* page, mi_block_t* block, void* p);
 
 // ------------------------------------------------------
 // Assertions
@@ -1146,14 +1149,15 @@ static inline bool mi_page_claim_ownership(mi_page_t* page) {
 
 
 /* -------------------------------------------------------------------
-  Guarded objects
+  Guarded and profiled objects
 ------------------------------------------------------------------- */
-#if MI_GUARDED
+
 // we always align guarded pointers in a block at an offset
 // the block `next` field is then used as a tag to distinguish regular offset aligned blocks from guarded ones
 #define MI_BLOCK_TAG_ALIGNED   ((mi_encoded_t)(0))
+#define MI_BLOCK_TAG_PROFILED  ((mi_encoded_t)(1))
 #define MI_BLOCK_TAG_GUARDED   (~MI_BLOCK_TAG_ALIGNED)
-#endif
+
 
 static inline bool mi_block_ptr_is_guarded(const mi_block_t* block, const void* p) {
 #if MI_GUARDED
@@ -1164,6 +1168,38 @@ static inline bool mi_block_ptr_is_guarded(const mi_block_t* block, const void* 
   return false;
 #endif
 }
+
+static inline bool mi_block_ptr_is_profiled(const mi_block_t* block, const void* p) {
+#if MI_PROFILE
+  const ptrdiff_t offset = (uint8_t*)p - (uint8_t*)block;
+  return (offset >= (ptrdiff_t)(sizeof(mi_block_t)) && block->next == MI_BLOCK_TAG_PROFILED);
+#else
+  MI_UNUSED(block); MI_UNUSED(p);
+  return false;
+#endif
+}
+
+static inline bool mi_profiler_is_enabled(const mi_profiler_t* prof) {
+  _Atomic(size_t)* penabled = (_Atomic(size_t)*)&prof->reserved1;
+  return (mi_atomic_load_acquire(penabled) != 0);
+}
+
+static inline bool mi_profiler_set_enabled(mi_profiler_t* prof, bool enable) {
+  _Atomic(size_t)* penabled = (_Atomic(size_t)*)&prof->reserved1;
+  return (mi_atomic_exchange_release(penabled, (enable ? 1 : 0)) != 0);
+}
+
+
+static inline size_t mi_theap_disable_profiler(mi_theap_t* theap) {
+  const size_t threshold = theap->profile_threshold;
+  theap->profile_threshold = SIZE_MAX;
+  return threshold;
+}
+
+static inline void mi_theap_enable_profiler(mi_theap_t* theap, size_t threshold) {
+  theap->profile_threshold = threshold;
+}
+
 
 #if MI_GUARDED
 static inline bool mi_theap_malloc_use_guarded(mi_theap_t* theap, size_t size) {

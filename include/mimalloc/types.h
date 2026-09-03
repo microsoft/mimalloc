@@ -24,6 +24,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 #include <mimalloc-stats.h>
+#include <mimalloc-profile.h>
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
 #include <stdbool.h>  // bool
@@ -86,6 +87,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #else
 #define MI_STAT 1
 #endif
+#endif
+
+// Enable profiling support
+#ifndef MI_PROFILE
+#define MI_PROFILE 1
 #endif
 
 // Enable guard pages behind objects of a certain size (set by the MIMALLOC_GUARDED_MIN/MAX/SAMPLE_RATE options)
@@ -588,6 +594,9 @@ struct mi_theap_s {
   _Atomic(mi_heap_t*)   heap;                                // the heap this theap belongs to.
   _Atomic(mi_subproc_t*)subproc;                             // subproc this belongs too (always `subproc == heap->subproc` but needed for safe destruction)
   _Atomic(size_t)       refcount;                            // reference count
+
+  size_t                profile_allocated;                   // allocated since last profiler sample
+  size_t                profile_threshold;                   // threshold for the next sample
   
   unsigned long long    heartbeat;                           // monotonic heartbeat count
   mi_random_ctx_t       random;                              // random number context used for secure allocation
@@ -607,6 +616,7 @@ struct mi_theap_s {
   bool                  allow_page_reclaim;                  // `true` if this theap can reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this theap can abandon pages to reduce memory footprint
   bool                  is_detached;                         // `true` if `tld->thread_id == MI_THREADID_DETACHED`
+
   #if MI_GUARDED
   size_t                guarded_size_min;                    // minimal size for guarded objects
   size_t                guarded_size_max;                    // maximal size for guarded objects
@@ -648,6 +658,8 @@ typedef struct mi_heap_s {
 
   mi_theap_t*           theaps;                         // list of all thread-local theaps belonging to this heap (using the `hnext`/`hprev` fields)
   mi_lock_t             theaps_lock;                    // lock for the theaps list operations
+
+  _Atomic(mi_profiler_t*) profiler;
 
   _Atomic(size_t)       abandoned_count[MI_BIN_COUNT];  // total count of abandoned pages in this heap
   mi_page_t*            os_abandoned_pages;             // list of pages that are OS allocated and not in an arena
@@ -692,6 +704,8 @@ struct mi_subproc_s {
   _Atomic(size_t)       thread_total_count;             // total created threads associated with this sub-process
   _Atomic(size_t)       heap_count;                     // current heaps in this sub-process (== |heaps|)
   _Atomic(size_t)       heap_total_count;               // total created heaps in this sub-process
+
+  _Atomic(mi_profiler_t*) profiler;
 
   mi_memid_t            memid;                          // provenance of this memory block (meta or static)
   mi_subproc_t*         parent;                         // subproc in which this one was allocated

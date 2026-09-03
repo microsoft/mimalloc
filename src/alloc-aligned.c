@@ -117,8 +117,9 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
     //   if (*usable > adjust) { *usable = *usable - adjust; }
     //   mi_assert_internal(*usable >= size);
     // }
-    #if MI_GUARDED
+    #if MI_GUARDED || MI_PROFILE
     // set tag to aligned so mi_usable_size works with guard pages
+    // note: we could have gotten a profiled block but that is still ok 
     if (adjust >= sizeof(mi_block_t)) {
       mi_block_t* const block = (mi_block_t*)p;
       block->next = MI_BLOCK_TAG_ALIGNED;
@@ -135,7 +136,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
   #if MI_DEBUG > 1
   mi_page_t* const apage = _mi_ptr_page(aligned_p);
   void* unalign_p = _mi_page_ptr_unalign(apage, aligned_p);
-  mi_assert_internal(p == unalign_p);
+  mi_assert_internal(p == unalign_p || mi_block_ptr_is_profiled((mi_block_t*)unalign_p, aligned_p));
   #endif
 
   // now zero the block if needed
@@ -149,7 +150,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
 
   if (p != aligned_p) {
     mi_track_align(p,aligned_p,adjust,mi_usable_size(aligned_p));
-    #if MI_GUARDED
+    #if MI_GUARDED || MI_PROFILE
     mi_track_mem_defined(p, sizeof(mi_block_t));
     #endif
   }
@@ -178,7 +179,10 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_generic(mi_theap_t
     }
     else {
       // this should never happen if the `mi_malloc_is_naturally_aligned` check is correct..
+      // but it can happen if this allocation just so happens to become a profile sample (which adds a block in front)
+      #if !MI_PROFILE
       mi_assert(false);
+      #endif
       mi_free(p);
     }
   }

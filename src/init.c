@@ -126,6 +126,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   MI_ATOMIC_VAR_INIT(NULL), // heap
   MI_ATOMIC_VAR_INIT(NULL), // subproc
   MI_ATOMIC_VAR_INIT(1),  // refcount
+  0, 0,                   // profiler allocated, threshold
   0,                      // heartbeat
   { {0}, {0}, 0, true },  // random
   0,                      // page count
@@ -137,7 +138,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   0,                      // full page retain
   false,                  // allow reclaim
   true,                   // allow abandon
-  true,                   // is_detached
+  true,                   // is_detached  
   #if MI_GUARDED
   0, 0, 0, 1,             // rate is 0 and count is 1 so we never write to it (see `internal.h:mi_heap_malloc_use_guarded`)
   #endif

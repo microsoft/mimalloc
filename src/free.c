@@ -141,11 +141,22 @@ static inline bool mi_block_check_unguard(mi_page_t* page, mi_block_t* block, vo
 }
 #endif
 
+static inline void mi_block_check_profiled(mi_page_t* page, mi_block_t* block, void* p) {
+  #if MI_PROFILE
+  if mi_unlikely(mi_block_ptr_is_profiled(block,p)) {
+    _mi_page_profile_free(page,block,p);
+  }
+  #else
+  MI_UNUSED(page); MI_UNUSED(block); MI_UNUSED(p);
+  #endif
+}
+
 
 // free a local pointer  (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_attr_noexcept {
   mi_assert_internal(p!=NULL && page != NULL);
   mi_block_t* const block = (mi_page_has_interior_pointers(page) ? _mi_page_ptr_unalign(page, p) : mi_validate_block_from_ptr(page,p));
+  mi_block_check_profiled(page,block,p);
   const bool was_guarded = mi_block_check_unguard(page, block, p);
   mi_free_block_local(page, block, was_guarded, true /* check for a full page */);
 }
@@ -154,6 +165,7 @@ static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_
 static void mi_decl_noinline mi_free_generic_mt(mi_page_t* page, void* p, bool allow_reclaim) mi_attr_noexcept {
   mi_assert_internal(p!=NULL && page != NULL);
   mi_block_t* const block = (mi_page_has_interior_pointers(page) ? _mi_page_ptr_unalign(page, p) : mi_validate_block_from_ptr(page,p));
+  mi_block_check_profiled(page,block,p);
   const bool was_guarded = mi_block_check_unguard(page, block, p);
   mi_free_block_mt(page, block, was_guarded, allow_reclaim);
 }

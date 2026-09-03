@@ -403,6 +403,7 @@ void _mi_stats_print(const char* name, size_t id, const mi_stats_t* stats, mi_ou
     mi_stat_counter_print(&stats->pages_stat_updates, "stat updates", out, arg);
     mi_stat_average_print(stats->pages_stat_updates.total, stats->pages_stat_update_count.total, "stat avg", out, arg);
     mi_stat_average_print(stats->page_searches_count.total, stats->page_searches.total, "searches", out, arg);
+    mi_stat_counter_print(&stats->profile_samples, "prof samples", out, arg);
     _mi_fprintf(out, arg, "\n");
   }
 
