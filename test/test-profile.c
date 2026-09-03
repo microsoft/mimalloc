@@ -73,7 +73,7 @@ mi_profiler_t my_profiler = {
 // Force at least one sample by allocating well over the threshold.
 static void allocate_past_threshold(void) {
   size_t total = 0;
-  while (total < TEST_THRESHOLD * 3) {
+  while (total < TEST_THRESHOLD * 10) {
     void* p = mi_malloc(4096);
     mi_free(p);
     total += 4096;
