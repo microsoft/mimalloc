@@ -1179,6 +1179,16 @@ static inline bool mi_block_ptr_is_profiled(const mi_block_t* block, const void*
 #endif
 }
 
+static inline bool mi_block_ptr_is_profiled_or_guarded(const mi_block_t* block, const void* p) {
+#if MI_GUARDED || MI_PROFILE
+  const ptrdiff_t offset = (uint8_t*)p - (uint8_t*)block;
+  return (offset >= (ptrdiff_t)(sizeof(mi_block_t)) && block->next != MI_BLOCK_TAG_ALIGNED);
+#else
+  MI_UNUSED(block); MI_UNUSED(p);
+  return false;
+#endif
+}
+
 static inline bool mi_profiler_is_enabled(const mi_profiler_t* prof) {
   _Atomic(size_t)* penabled = (_Atomic(size_t)*)&prof->reserved1;
   return (mi_atomic_load_acquire(penabled) != 0);

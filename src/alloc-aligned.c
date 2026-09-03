@@ -49,14 +49,14 @@ static mi_decl_noinline mi_decl_restrict void* mi_theap_malloc_guarded_aligned(m
 }
 
 static void* mi_theap_malloc_zero_no_guarded(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) {
-  #if MI_THEAP_INITASNULL
-  if mi_unlikely(theap==NULL) { theap = _mi_theap_empty_get(); }
-  #endif
-  const size_t rate = theap->guarded_sample_rate;
+  // #if MI_THEAP_INITASNULL
+  // if mi_unlikely(theap==NULL) { theap = _mi_theap_empty_get(); }
+  // #endif
+  // const size_t rate = theap->guarded_sample_rate;
   // only write if `rate!=0` so we don't write to the constant `_mi_theap_empty`
-  if (rate != 0) { theap->guarded_sample_rate = 0; }
+  // if (rate != 0) { theap->guarded_sample_rate = 0; }
   void* p = _mi_theap_malloc_zero(theap, size, zero, ppage);
-  if (rate != 0) { theap->guarded_sample_rate = rate; }
+  // if (rate != 0) { theap->guarded_sample_rate = rate; }
   return p;
 }
 #else
@@ -112,14 +112,11 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
   // (we can access the page though since the just allocated pointer keeps it alive)
   if (aligned_p != p) {
     mi_page_set_has_interior_pointers(page, true);
-    // if (usable!=NULL) { 
-    //   mi_assert_internal(*usable > adjust);
-    //   if (*usable > adjust) { *usable = *usable - adjust; }
-    //   mi_assert_internal(*usable >= size);
-    // }
+
     #if MI_GUARDED || MI_PROFILE
     // set tag to aligned so mi_usable_size works with guard pages
-    // note: we could have gotten a profiled block but that is still ok 
+    // note: we could have gotten a profiled or guarded block but that is still ok 
+    // and in such case the MI_BLOCK_TAG_ALIGNED is just not at the start of the real heap block
     if (adjust >= sizeof(mi_block_t)) {
       mi_block_t* const block = (mi_block_t*)p;
       block->next = MI_BLOCK_TAG_ALIGNED;
@@ -135,18 +132,9 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
   mi_assert_internal(mi_usable_size(p) == mi_usable_size(aligned_p)+adjust);
   #if MI_DEBUG > 1
   mi_page_t* const apage = _mi_ptr_page(aligned_p);
-  void* unalign_p = _mi_page_ptr_unalign(apage, aligned_p);
-  mi_assert_internal(p == unalign_p || mi_block_ptr_is_profiled((mi_block_t*)unalign_p, aligned_p));
+  mi_block_t* unalign_p = _mi_page_ptr_unalign(apage, aligned_p);
+  mi_assert_internal(p == (void*)unalign_p || mi_block_ptr_is_profiled_or_guarded(unalign_p, aligned_p));
   #endif
-
-  // now zero the block if needed
-  //if (alignment > MI_PAGE_MAX_OVERALLOC_ALIGN) {
-  //  // for the tracker, on huge aligned allocations only from the start of the large block is defined
-  //  mi_track_mem_undefined(aligned_p, size);
-  //  if (zero) {
-  //    _mi_memzero_(aligned_p, mi_usable_size(aligned_p));
-  //  }
-  //}
 
   if (p != aligned_p) {
     mi_track_align(p,aligned_p,adjust,mi_usable_size(aligned_p));
@@ -171,18 +159,17 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_generic(mi_theap_t
   // this is important to try as the fast path in `mi_theap_malloc_zero_aligned` only works when there exist
   // a page with the right block size, and if we always use the over-alloc fallback that would never happen.
   if (offset == 0 && mi_malloc_is_naturally_aligned(size,alignment)) {
-    void* p = mi_theap_malloc_zero_no_guarded(theap, size, zero, ppage);
-    mi_assert_internal(p == NULL || ((uintptr_t)p % alignment) == 0);
+    mi_page_t* page = NULL;
+    void* p = mi_theap_malloc_zero_no_guarded(theap, size, zero, &page);
+    if (ppage!=NULL) { *ppage = page; }    
     const bool is_aligned_or_null = (((uintptr_t)p) & (alignment-1))==0;
     if mi_likely(is_aligned_or_null) {
       return p;
     }
     else {
       // this should never happen if the `mi_malloc_is_naturally_aligned` check is correct..
-      // but it can happen if this allocation just so happens to become a profile sample (which adds a block in front)
-      #if !MI_PROFILE
-      mi_assert(false);
-      #endif
+      // but it can happen if this allocation just so happens to become a profile or guarded allocation (which adds a block in front)
+      mi_assert_internal(p==NULL || mi_block_ptr_is_profiled_or_guarded(_mi_page_ptr_unalign(page,p),p));
       mi_free(p);
     }
   }

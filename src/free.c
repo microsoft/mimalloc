@@ -124,49 +124,57 @@ static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, con
 
 // forward declaration for a MI_GUARDED build
 #if MI_GUARDED
-static void mi_block_unguard(mi_page_t* page, mi_block_t* block, void* p); // forward declaration
-static inline bool mi_block_check_unguard(mi_page_t* page, mi_block_t* block, void* p) {
-  if (mi_block_ptr_is_guarded(block, p)) { 
-    mi_block_unguard(page, block, p); 
-    return true;
-  }
-  else {
-    return false;
-  }
-}
-#else
-static inline bool mi_block_check_unguard(mi_page_t* page, mi_block_t* block, void* p) {
-  MI_UNUSED(page); MI_UNUSED(block); MI_UNUSED(p);
-  return false;
-}
+static void mi_page_block_unguard(mi_page_t* page, mi_block_t* block, void* p); // forward declaration
 #endif
 
-static inline void mi_block_check_profiled(mi_page_t* page, mi_block_t* block, void* p) {
-  #if MI_PROFILE
-  if mi_unlikely(mi_block_ptr_is_profiled(block,p)) {
-    _mi_page_profile_free(page,block,p);
+static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool* was_guarded) mi_attr_noexcept {
+  if mi_likely(!mi_page_has_interior_pointers(page)) {
+    return mi_validate_block_from_ptr(page,p);
   }
-  #else
-  MI_UNUSED(page); MI_UNUSED(block); MI_UNUSED(p);
-  #endif
+  else {
+    mi_block_t* const block = _mi_page_ptr_unalign(page,p);
+    #if MI_GUARDED || MI_PROFILE
+    const size_t offset = (uint8_t*)p - (uint8_t*)block;
+    if (offset >= sizeof(mi_block_t)) {
+      #if MI_PROFILE
+      if (block->next == MI_BLOCK_TAG_PROFILED) {
+        _mi_page_profile_free(page,block,p); 
+      }
+      else 
+      #endif
+      #if MI_GUARDED
+      if (block->next == MI_BLOCK_TAG_GUARDED) { 
+        mi_page_block_unguard(page, block, p); 
+        *was_guarded = true; 
+      }
+      #else 
+      { MI_UNUSED(was_guarded); }
+      #endif
+    }
+    #endif
+    return block;
+  }
 }
-
 
 // free a local pointer  (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_attr_noexcept {
   mi_assert_internal(p!=NULL && page != NULL);
-  mi_block_t* const block = (mi_page_has_interior_pointers(page) ? _mi_page_ptr_unalign(page, p) : mi_validate_block_from_ptr(page,p));
-  mi_block_check_profiled(page,block,p);
-  const bool was_guarded = mi_block_check_unguard(page, block, p);
+  bool was_guarded = false;
+  mi_block_t* block = mi_page_ptr_block_check(page,p,&was_guarded);  
+  // mi_block_t* const block = (mi_page_has_interior_pointers(page) ? _mi_page_ptr_unalign(page, p) : mi_validate_block_from_ptr(page,p));
+  // mi_block_check_profiled(page,block,p);
+  // const bool was_guarded = mi_block_check_unguard(page, block, p);
   mi_free_block_local(page, block, was_guarded, true /* check for a full page */);
 }
 
 // free a pointer owned by another thread (page parameter comes first for better codegen)
 static void mi_decl_noinline mi_free_generic_mt(mi_page_t* page, void* p, bool allow_reclaim) mi_attr_noexcept {
   mi_assert_internal(p!=NULL && page != NULL);
-  mi_block_t* const block = (mi_page_has_interior_pointers(page) ? _mi_page_ptr_unalign(page, p) : mi_validate_block_from_ptr(page,p));
-  mi_block_check_profiled(page,block,p);
-  const bool was_guarded = mi_block_check_unguard(page, block, p);
+  bool was_guarded = false;
+  mi_block_t* block = mi_page_ptr_block_check(page,p,&was_guarded);
+  // mi_block_t* const block = (mi_page_has_interior_pointers(page) ? _mi_page_ptr_unalign(page, p) : mi_validate_block_from_ptr(page,p));
+  // mi_block_check_profiled(page,block,p);
+  // const bool was_guarded = mi_block_check_unguard(page, block, p);
   mi_free_block_mt(page, block, was_guarded, allow_reclaim);
 }
 
@@ -804,7 +812,7 @@ void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
 
 // Remove guard page when building with MI_GUARDED
 #if MI_GUARDED
-static void mi_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
+static void mi_page_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
   MI_UNUSED(p);
   mi_assert_internal(mi_block_ptr_is_guarded(block, p));
   mi_assert_internal(mi_page_has_interior_pointers(page));
