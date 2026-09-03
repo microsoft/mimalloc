@@ -338,7 +338,8 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
       page->local_free = NULL;
       page->free_is_zero = false;
     }    
-    if ((page->theap != NULL && page->theap->profile_threshold!=0) || mi_page_has_high_alloc_count(page)) { _mi_page_update_stats(page); }
+    mi_theap_t* const theap = _mi_page_associated_theap_peek(page);
+    if ((theap != NULL && theap->profile_threshold!=0) || mi_page_has_high_alloc_count(page)) { _mi_page_update_stats(page); }
   }  
   mi_assert_internal(!force || page->local_free == NULL);
 }
