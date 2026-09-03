@@ -6,20 +6,32 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
+#include "mimalloc/prim-tls.h"
 
 static mi_profiler_t* mi_heap_profiler(const mi_heap_t* heap) {
   return mi_atomic_load_ptr_acquire(mi_profiler_t,&heap->profiler);
 } 
 
-
+static mi_profiler_t* mi_theap_get_enabled_profiler(const mi_theap_t* theap) {
+  mi_heap_t* const heap = _mi_theap_heap(theap);
+  mi_profiler_t* prof = mi_atomic_load_ptr_relaxed(mi_profiler_t, &heap->profiler);
+  if (prof!=NULL && mi_profiler_is_enabled(prof)) {
+    return prof;
+  }
+  else {
+    return NULL;
+  }
+}
 
 /* ----------------------------------------------------------------------------
   Profile an allocation and free
 -----------------------------------------------------------------------------*/
-void* _mi_theap_profile_alloc(mi_theap_t* theap, mi_profiler_t* prof, size_t size, bool zero, mi_page_t** ppage) 
+void* _mi_theap_profile_alloc(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) 
 {
-  mi_assert_internal(theap!=NULL && prof!=NULL);
+  mi_assert_internal(theap!=NULL);
   mi_assert_internal(theap->profile_allocated > theap->profile_threshold);
+  mi_profiler_t* const prof = mi_theap_get_enabled_profiler(theap);
+  if (prof == NULL) { return NULL; }
   const size_t allocated = theap->profile_allocated;
   theap->profile_allocated = 0;
   
@@ -79,7 +91,7 @@ void _mi_page_profile_free(mi_page_t* page, mi_block_t* block, void* p) {
 
 bool mi_heap_profile(mi_heap_t* heap, const mi_profiler_t* profiler) {
   // if (mi_heap_profiler(heap)!=NULL) return false;  // always overwrite?
-  mi_atomic_store_ptr_release(mi_profiler_t,&heap->profiler,(mi_profiler_t*)profiler);
+  mi_atomic_store_ptr_release(mi_profiler_t,&heap->profiler,(mi_profiler_t*)profiler);  
   return true;
 }
 
@@ -101,7 +113,16 @@ bool mi_profile(const mi_profiler_t* profiler) {
 }
 
 bool mi_profiler_start(const mi_profiler_t* profiler ) {
-  return mi_profiler_set_enabled((mi_profiler_t*)profiler,true);  
+  const bool was_running = mi_profiler_set_enabled((mi_profiler_t*)profiler,true);  
+  if (was_running) return true;
+  mi_heap_t* heap = mi_heap_main();
+  if (mi_heap_profiler(heap)==profiler) {
+    mi_theap_t* theap = _mi_heap_theap_peek(heap);
+    if (theap!=NULL && theap->profile_threshold == 0) {
+      theap->profile_threshold = 1; // get started more quickly
+    }
+  }
+  return false;
 }
 
 bool mi_profiler_stop(const mi_profiler_t* profiler) {

@@ -333,7 +333,7 @@ bool          _mi_page_is_valid(mi_page_t* page);
 #endif
 
 // "profile.c"
-void*         _mi_theap_profile_alloc(mi_theap_t* theap, mi_profiler_t* prof, size_t size, bool zero, mi_page_t** ppage);
+void*         _mi_theap_profile_alloc(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage);
 void          _mi_page_profile_free(mi_page_t* page, mi_block_t* block, void* p);
 
 // ------------------------------------------------------

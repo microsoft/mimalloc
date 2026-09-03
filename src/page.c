@@ -155,9 +155,9 @@ static void mi_page_merge_stats(const mi_page_t* page, size_t alloc_count, size_
 
   const size_t bsize = mi_page_usable_block_size(page);
   #if MI_PROFILE
-  if (alloc_count>0 && theap!=NULL) { 
+  if (alloc_count>0 && theap!=NULL && theap->profile_threshold!=0) { 
     // track profile allocated
-    theap->profile_allocated += alloc_count*bsize; 
+    theap->profile_allocated += alloc_count*bsize;
   } 
   #endif
 
@@ -295,10 +295,8 @@ static void mi_page_thread_free_collect(mi_page_t* page)
 // potentially keep growing by repeated allocation/free in the same page.
 // When it gets too large where it could overflow the 16 bits, we update
 // the stats to reset the allocated counter.
-static inline void mi_page_maybe_update_stats(mi_page_t* page) {
-  if mi_unlikely(mi_xused_alloc_count(page->xused) > 0x7FFF) {
-    _mi_page_update_stats(page);
-  }
+static inline bool mi_page_has_high_alloc_count(const mi_page_t* page) {
+  return mi_xused_alloc_count(page->xused) > 0x7FFF;
 }
 
 // returns `true` if after collection `mi_page_immediate_available` is true.
@@ -309,7 +307,8 @@ static inline bool mi_page_free_quick_collect(mi_page_t* page) {
   page->free = page->local_free;
   page->local_free = NULL;
   page->free_is_zero = false;  
-  mi_page_maybe_update_stats(page);
+  mi_assert_internal(page->theap != NULL);
+  if (page->theap->profile_threshold!=0 || mi_page_has_high_alloc_count(page)) { _mi_page_update_stats(page); }
   return true;
 }
 
@@ -339,7 +338,7 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
       page->local_free = NULL;
       page->free_is_zero = false;
     }    
-    mi_page_maybe_update_stats(page);
+    if ((page->theap != NULL && page->theap->profile_threshold!=0) || mi_page_has_high_alloc_count(page)) { _mi_page_update_stats(page); }
   }  
   mi_assert_internal(!force || page->local_free == NULL);
 }
@@ -360,7 +359,7 @@ void _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
       page->free = page->local_free;
       page->local_free = NULL;
       page->free_is_zero = false;
-      mi_page_maybe_update_stats(page);
+      if (mi_page_has_high_alloc_count(page)) { _mi_page_update_stats(page); }
     }
   }
   if (mi_page_used(page) == 1) {
@@ -1111,7 +1110,7 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
   Admin
 ----------------------------------------------------------- */
 
-static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap, mi_profiler_t** pprof) 
+static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap) 
 {
   if mi_unlikely(!mi_theap_is_initialized(theap)) {
     if (theap==&_mi_theap_empty_wrong) {
@@ -1131,8 +1130,12 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap, mi_profiler_t** pp
 
     mi_heap_t* const heap = _mi_theap_heap(theap);
     mi_profiler_t* prof = mi_atomic_load_ptr_relaxed(mi_profiler_t, &heap->profiler);
-    if (prof!=NULL) {
-      if (mi_profiler_is_enabled(prof)) { *pprof = prof; } else { prof = NULL; }
+    const bool prof_enabled = (prof!=NULL && mi_profiler_is_enabled(prof));
+    if (theap->profile_threshold==0 && prof_enabled) { 
+      theap->profile_threshold = 1; // start profiling
+    }
+    else if (theap->profile_threshold>0 && !prof_enabled) {
+      theap->profile_threshold = 0; // stop profiling
     }
 
     // do a full theap collect every once in a while (10000 by default)
@@ -1145,7 +1148,7 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap, mi_profiler_t** pp
       // otherwise we do a mini-collect
       _mi_deferred_free(theap, false);         // call potential deferred free routines      
       _mi_theap_collect_retired(theap, false); // free retired pages      
-      if (prof!=NULL) { mi_theap_collect(theap, false /* force? */); }
+      if (prof_enabled) { mi_theap_collect(theap, false /* force? */); } // update stats
     }
   }
   return theap;
@@ -1158,14 +1161,14 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap, mi_profiler_t** pp
 static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage) 
 {  
   // initialize if necessary
-  mi_profiler_t* prof = NULL;
-  theap = mi_malloc_generic_admin(theap, &prof);
+  theap = mi_malloc_generic_admin(theap);
   if (theap==NULL) return NULL;
-  if mi_unlikely(prof!=NULL && huge_alignment==0) {  // we cannot profile huge alignments as we put a block in front
-    if mi_unlikely(theap->profile_allocated > theap->profile_threshold) {
-      // sample the allocation
-      return _mi_theap_profile_alloc(theap,prof,size,zero,ppage);
-    }
+  
+  if mi_unlikely(huge_alignment==0 && theap->profile_allocated > theap->profile_threshold) {
+    // profile the allocation
+    void* const p = _mi_theap_profile_alloc(theap,size,zero,ppage);
+    if (p!=NULL) { return p; }
+    // else fall through
   }
 
   // find (or allocate) a page of the right size
@@ -1218,16 +1221,19 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
 
   // fast path objects that fit in a small page
   if mi_likely(mi_theap_is_initialized(theap) && ++theap->generic_count < 1000 && huge_alignment==0) {
-    const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
-    if (req_size < MI_SMALL_MAX_OBJ_SIZE) {
-      mi_page_queue_t* pq = mi_page_queue(theap, size);
-      mi_assert_internal(pq!=NULL && !mi_page_queue_is_huge(pq));
-      page = mi_page_queue_find_free(theap,pq);
-      // mi_assert_internal(mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE);
-      if (page!=NULL) {        
-        if (ppage!=NULL) { *ppage = page; }
-        mi_assert_internal(mi_page_immediate_available(page));
-        return _mi_page_malloc_zero(theap,page,size,zero);
+    // fast profile check
+    if (theap->profile_allocated <= theap->profile_threshold) {
+      const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
+      if (req_size < MI_SMALL_MAX_OBJ_SIZE) {
+        mi_page_queue_t* pq = mi_page_queue(theap, size);
+        mi_assert_internal(pq!=NULL && !mi_page_queue_is_huge(pq));
+        page = mi_page_queue_find_free(theap,pq);
+        // mi_assert_internal(mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE);
+        if (page!=NULL) {        
+          if (ppage!=NULL) { *ppage = page; }
+          mi_assert_internal(mi_page_immediate_available(page));
+          return _mi_page_malloc_zero(theap,page,size,zero);
+        }
       }
     }
   }
