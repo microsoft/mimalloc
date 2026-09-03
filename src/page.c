@@ -771,8 +771,9 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
   long page_full_retain = (pq->block_size > MI_SMALL_MAX_OBJ_SIZE ? 0 : theap->page_full_retain); // only retain small pages
   mi_page_t* page_candidate = NULL;  // a page with free space
   mi_page_t* page = pq->first;
+  mi_page_t* const last = pq->last;
 
-  while (page != NULL)
+  while (page!=NULL)
   {
     mi_page_t* next = page->next; // remember next (as this page can move to another queue)
     count++;
@@ -795,6 +796,10 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
       if (page_full_retain < 0) {
         mi_assert_internal(!mi_page_is_in_full(page) && !mi_page_immediate_available(page));
         mi_page_to_full(page, pq);
+      }
+      else if (page!=last && pq->last!=page) {
+        // avoid revisiting this page for a while
+        mi_page_queue_move_to_back(theap, pq, page);
       }
     }
     else {
@@ -831,8 +836,8 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
     mi_assert_internal(!mi_page_is_in_full(page) && !mi_page_immediate_available(page));
     mi_page_to_full(page, pq);
   #endif
-
-    page = next;
+    if (page==last) { page=NULL; }  // don't revisit earlier pages that moved to the back
+              else  { page = next; }
   } // for each page
 
   mi_theap_stat_counter_increase(theap, page_searches, count);
