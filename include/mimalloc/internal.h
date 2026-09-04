@@ -273,7 +273,7 @@ void          _mi_page_free(mi_page_t* page, mi_page_queue_t* pq);     // free t
 void          _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);  // abandon the page, to be picked up by another thread...
 void          _mi_deferred_free(mi_theap_t* theap, bool force);
 void          _mi_page_free_collect(mi_page_t* page, bool force);
-void          _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
+mi_block_t*   _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
 mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page);
 bool          _mi_page_queue_is_valid(mi_theap_t* theap, const mi_page_queue_t* pq);
 void          _mi_page_update_stats(mi_page_t* page);

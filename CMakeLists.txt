@@ -75,7 +75,6 @@ set_property(CACHE MI_TLS_MODEL PROPERTY STRINGS "LOCAL" "PTHREADS" "LOCAL_DYNAM
 
 # deprecated options
 option(MI_USE_LIBATOMIC       "Deprecated: Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
-option(MI_OPT_FREE_SMALL      "Deprecated: Use aligned `mi_free_small` without pagemap lookup (can only be used if SECURE or GUARDED mode are off)" OFF)
 option(MI_DEBUG_INTERNAL      "Deprecated: Enable assertion and internal invariant checks (use MI_DEBUG=INTERNAL instead)" OFF)
 option(MI_DEBUG_FULL          "Deprecated: Enable assertion checks and expensive internal heap invariant checking (use MI_DEBUG=FULL instead)" OFF)
 option(MI_CHECK_FULL          "Deprecated: Use full internal invariant checking in DEBUG mode (use MI_DEBUG=FULL instead)" OFF)
@@ -92,6 +91,8 @@ option(MI_TRACK_VALGRIND      "Deprecated: Compile with Valgrind support (adds a
 option(MI_TRACK_ASAN          "Deprecated: Compile with address sanitizer support (adds a small overhead) (use MI_TRACK=ASAN instead)" OFF)
 option(MI_TRACK_ETW           "Deprecated: Compile with Windows event tracing (ETW) support (adds a small overhead) (use MI_TRACK=ETW instead)" OFF)
 
+set(MI_OPT_FREE_SMALL "DEFAULT" CACHE STRING "Deprecated: Use aligned `mi_free_small` without pagemap lookup (can only be used if SECURE or GUARDED mode are off)")
+set_property(CACHE MI_OPT_FREE_SMALL PROPERTY STRINGS "OFF" "ON" "DEFAULT")
 
 include(CheckLinkerFlag)    # requires cmake 3.18
 include(CheckIncludeFiles)
@@ -506,13 +507,18 @@ if(MI_FREE_USE_PAGEMAP)
 endif()  
 
 # deprecated
-if(MI_OPT_FREE_SMALL) 
+if(MI_OPT_FREE_SMALL STREQUAL "DEFAULT")
+  # do nothing
+elseif(MI_OPT_FREE_SMALL) 
   if(MI_GUARDED OR MI_SECURE)
     message(STATUS "Cannot enable MI_OPT_FREE_SMALL in secure or guarded mode (MI_OPT_FREE_SMALL=OFF)")
   else()
     message(STATUS "Use aligned `mi_free_small` (MI_OPT_FREE_SMALL=ON)")
     list(APPEND mi_defines MI_OPT_FREE_SMALL=1)
   endif()
+else()
+  message(STATUS "Disable aligned `mi_free_small` (MI_OPT_FREE_SMALL=OFF)")
+  list(APPEND mi_defines MI_OPT_FREE_SMALL=0)
 endif()
 
 if(MI_XMALLOC)

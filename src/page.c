@@ -346,12 +346,13 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
 
 // Collect elements in the thread-free list starting at `head`. This is an optimized
 // version of `_mi_page_free_collect` to be used from `free.c:_mi_free_collect_mt` that avoids atomic access to `xthread_free`.
+// returns a possibly updated expected value for the thread_free pointer.
 //
 // `head` must be in the `xthread_free` list. It will not collect `head` itself
 // so the `used` count is not fully updated in general. However, if the `head` is
 // the last remaining element, it will be collected and the used count will become `0` (so `mi_page_all_free` becomes true).
-void _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
-  if (head == NULL) return;
+mi_block_t* _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
+  if (head == NULL) return NULL;
   mi_block_t* next = mi_block_next(page,head);  // we cannot collect the head element itself as `page->thread_free` may point to it (and we want to avoid atomic ops)
   if (next != NULL) {
     mi_block_set_next(page, head, NULL);
@@ -368,6 +369,10 @@ void _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
     mi_assert_internal(mi_tf_block(mi_atomic_load_relaxed(&page->xthread_free)) == head);
     mi_assert_internal(mi_block_next(page,head) == NULL);
     _mi_page_free_collect(page, false);  // collect the final element
+    return NULL;
+  }
+  else {
+    return head;
   }
 }
 
@@ -874,8 +879,9 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
   long page_full_retain = (pq->block_size > MI_SMALL_MAX_OBJ_SIZE ? 0 : theap->page_full_retain); // only retain small pages
   mi_page_t* page_candidate = NULL;  // a page with free space
   mi_page_t* page = pq->first;
+  mi_page_t* const last = pq->last;
 
-  while (page != NULL)
+  while (page!=NULL)
   {
     mi_page_t* next = page->next; // remember next (as this page can move to another queue)
     count++;
@@ -898,6 +904,10 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
       if (page_full_retain < 0) {
         mi_assert_internal(!mi_page_is_in_full(page) && !mi_page_immediate_available(page));
         mi_page_to_full(page, pq);
+      }
+      else if (page!=last && pq->last!=page) {
+        // avoid revisiting this page for a while
+        mi_page_queue_move_to_back(theap, pq, page);
       }
     }
     else {
@@ -934,8 +944,8 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
     mi_assert_internal(!mi_page_is_in_full(page) && !mi_page_immediate_available(page));
     mi_page_to_full(page, pq);
   #endif
-
-    page = next;
+    if (page==last) { page=NULL; }  // don't revisit earlier pages that moved to the back
+              else  { page = next; }
   } // for each page
 
   mi_theap_stat_counter_increase(theap, page_searches, count);
