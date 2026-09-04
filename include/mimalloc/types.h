@@ -91,12 +91,20 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Enable profiling support
 #ifndef MI_PROFILE
-#define MI_PROFILE 1
+#define MI_PROFILE 2
 #endif
 
 // Enable guard pages behind objects of a certain size (set by the MIMALLOC_GUARDED_MIN/MAX/SAMPLE_RATE options)
 #if !defined(MI_GUARDED) && MI_DEBUG && !defined(NDEBUG) && !MI_OPT_FREE_SMALL
 #define MI_GUARDED  1
+#endif
+
+#if MI_PROFILE || MI_GUARDED
+#if MI_PROFILE>1 || MI_GUARDED>1
+#define MI_SAMPLE 2
+#else
+#define MI_SAMPLE 1
+#endif
 #endif
 
 // Reserve extra padding at the end of each block to be more resilient against theap block overflows.
@@ -588,15 +596,22 @@ typedef struct mi_padding_s {
 // A thread-local heap ("theap") owns a set of thread-local pages.
 struct mi_theap_s {
   // put in front for fast small allocations
+  mi_ssize_t            sample_countdown;
   mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
 
   mi_tld_t*             tld;                                 // thread-local data
   _Atomic(mi_heap_t*)   heap;                                // the heap this theap belongs to.
   _Atomic(mi_subproc_t*)subproc;                             // subproc this belongs too (always `subproc == heap->subproc` but needed for safe destruction)
   _Atomic(size_t)       refcount;                            // reference count
-
-  size_t                profile_allocated;                   // allocated since last profiler sample
-  size_t                profile_threshold;                   // threshold for the next sample
+  
+  mi_ssize_t            sample_rate;
+  mi_ssize_t            profile_sample_rate;
+  mi_ssize_t            profile_sample_countdown;
+  mi_ssize_t            guarded_sample_rate;
+  mi_ssize_t            guarded_sample_countdown;
+  size_t                guarded_size_min;                    // minimal size for guarded objects
+  size_t                guarded_size_max;                    // maximal size for guarded objects
+  
   
   unsigned long long    heartbeat;                           // monotonic heartbeat count
   mi_random_ctx_t       random;                              // random number context used for secure allocation
@@ -617,12 +632,6 @@ struct mi_theap_s {
   bool                  allow_page_abandon;                  // `true` if this theap can abandon pages to reduce memory footprint
   bool                  is_detached;                         // `true` if `tld->thread_id == MI_THREADID_DETACHED`
 
-  #if MI_GUARDED
-  size_t                guarded_size_min;                    // minimal size for guarded objects
-  size_t                guarded_size_max;                    // maximal size for guarded objects
-  size_t                guarded_sample_rate;                 // sample rate (set to 0 to disable guarded pages)
-  size_t                guarded_sample_count;                // current sample count (counting down to 0)
-  #endif
   mi_page_queue_t       pages[MI_BIN_COUNT];                 // queue of pages for each size class (or "bin")
   mi_memid_t            memid;                               // provenance of the theap struct itself (meta or os)
   mi_stats_t            stats;                               // thread-local statistics

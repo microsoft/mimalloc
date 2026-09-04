@@ -26,25 +26,21 @@ static mi_profiler_t* mi_theap_get_enabled_profiler(const mi_theap_t* theap) {
 /* ----------------------------------------------------------------------------
   Profile an allocation and free
 -----------------------------------------------------------------------------*/
-void* _mi_theap_profile_alloc(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) 
+mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
-  mi_assert_internal(theap!=NULL);
-  mi_assert_internal(theap->profile_allocated > theap->profile_threshold);
+  mi_assert_internal(theap!=NULL);  
   mi_profiler_t* const prof = mi_theap_get_enabled_profiler(theap);
-  if (prof == NULL) { return NULL; }
-  const size_t allocated = theap->profile_allocated;
-  theap->profile_allocated = 0;
+  if (prof == NULL) { return _mi_malloc_generic_no_sample(theap,size,zero,ppage); }
   
   // Overallocate a larger block to store the profiler data
   // [MI_BLOCK_TAG_PROFILE] [usable size] [ ... profile data ... ] [... user data ...]
-  const size_t zero_huge_alignment = (zero ? 1 : 0);
   const size_t profiler_data_offset = sizeof(mi_block_t);
   size_t profiler_data_size = sizeof(mi_profiler_data_t);
   if (prof->profiler_data_size > 2*sizeof(size_t)) { profiler_data_size = (prof->profiler_data_size > 512 ? 512 : prof->profiler_data_size); };
   const size_t profiler_user_offset = _mi_align_up(profiler_data_offset + profiler_data_size, MI_MAX_ALIGN_SIZE);
   const size_t oversize = profiler_user_offset + size;
   mi_page_t* page = NULL;
-  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic(theap,oversize,zero_huge_alignment,&page);  // cannot recurse as the profile_allocated is now zero
+  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(theap,oversize,zero,&page); 
   if (block==NULL) return NULL;
   mi_assert_internal(page!=NULL);
   if (ppage!=NULL) { *ppage = page; }
@@ -61,9 +57,9 @@ void* _mi_theap_profile_alloc(mi_theap_t* theap, size_t size, bool zero, mi_page
 
   // and call the profiler on_alloc
   if (prof->on_alloc!=NULL) { 
-    const size_t new_threshold = (*prof->on_alloc)(profiler_data, p, theap->profile_threshold, allocated, _mi_theap_heap(theap), prof->profiler_arg);
-    if (new_threshold!=0) { 
-      theap->profile_threshold = new_threshold;
+    const size_t new_sample_rate = (*prof->on_alloc)(profiler_data, p, (size_t)theap->profile_sample_rate, size /* TODO: bytes since last sample */, _mi_theap_heap(theap), prof->profiler_arg);
+    if (new_sample_rate!=0 && new_sample_rate != (size_t)theap->profile_sample_rate) { 
+      mi_theap_enable_profiler(theap,new_sample_rate);
     }
     mi_theap_stat_counter_increase(theap,profile_samples,1);
   }
@@ -118,8 +114,8 @@ bool mi_profiler_start(const mi_profiler_t* profiler ) {
   mi_heap_t* heap = mi_heap_main();
   if (mi_heap_profiler(heap)==profiler) {
     mi_theap_t* theap = _mi_heap_theap_peek(heap);
-    if (theap!=NULL && theap->profile_threshold == 0) {
-      theap->profile_threshold = 1; // get started more quickly
+    if (theap!=NULL) {
+      mi_theap_enable_profiler(theap,1);
     }
   }
   return false;

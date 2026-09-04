@@ -153,14 +153,22 @@ static void mi_page_merge_stats(const mi_page_t* page, size_t alloc_count, size_
   mi_theapx_stat_counter_increase(heap,theap,pages_stat_updates,1);
   mi_theapx_stat_counter_increase(heap,theap,pages_stat_update_count, alloc_count + free_count);
 
+  // adjust sample countdown
   const size_t bsize = mi_page_usable_block_size(page);
-  #if MI_PROFILE
-  if (alloc_count>0 && theap!=NULL && theap->profile_threshold!=0) { 
-    // track profile allocated
-    theap->profile_allocated += alloc_count*bsize;
+  #if MI_SAMPLE==1
+  if (alloc_count>0 && theap!=NULL && theap->sample_rate!=0) { 
+    // adjust countdown
+    const mi_ssize_t samples = alloc_count*mi_sample_from_size(bsize);
+    if (theap->sample_countdown > samples) {
+      theap->sample_countdown -= samples;
+    }
+    else { 
+      theap->sample_countdown = -1; 
+    }
   } 
   #endif
 
+  // adjust stats
   if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
     const size_t bin = _mi_bin(bsize);      
     // allocations
@@ -308,7 +316,7 @@ static inline bool mi_page_free_quick_collect(mi_page_t* page) {
   page->local_free = NULL;
   page->free_is_zero = false;  
   mi_assert_internal(page->theap != NULL);
-  if (page->theap->profile_threshold!=0 || mi_page_has_high_alloc_count(page)) { _mi_page_update_stats(page); }
+  if (page->theap->sample_rate!=0 || mi_page_has_high_alloc_count(page)) { _mi_page_update_stats(page); }
   return true;
 }
 
@@ -339,7 +347,7 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
       page->free_is_zero = false;
     }    
     mi_theap_t* const theap = _mi_page_associated_theap_peek(page);
-    if ((theap != NULL && theap->profile_threshold!=0) || mi_page_has_high_alloc_count(page)) { _mi_page_update_stats(page); }
+    if ((theap != NULL && theap->sample_rate!=0) || mi_page_has_high_alloc_count(page)) { _mi_page_update_stats(page); }
   }  
   mi_assert_internal(!force || page->local_free == NULL);
 }
@@ -1139,14 +1147,17 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
     theap->generic_collect_count += theap->generic_count;
     theap->generic_count = 0;
 
+    // check if the profiler is enabled
     mi_heap_t* const heap = _mi_theap_heap(theap);
     mi_profiler_t* prof = mi_atomic_load_ptr_relaxed(mi_profiler_t, &heap->profiler);
     const bool prof_enabled = (prof!=NULL && mi_profiler_is_enabled(prof));
-    if (theap->profile_threshold==0 && prof_enabled) { 
-      theap->profile_threshold = 1; // start profiling
+    if (prof_enabled && theap->sample_rate==0) { 
+      theap->sample_rate = 1; // start profiling
+      theap->profile_sample_rate = 1;
     }
-    else if (theap->profile_threshold>0 && !prof_enabled) {
-      theap->profile_threshold = 0; // stop profiling
+    else if (!prof_enabled && theap->sample_rate!=0) {
+      theap->sample_rate = theap->guarded_sample_rate; // stop profiling
+      theap->profile_sample_rate = 0;
     }
 
     // do a full theap collect every once in a while (10000 by default)
@@ -1159,7 +1170,9 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
       // otherwise we do a mini-collect
       _mi_deferred_free(theap, false);         // call potential deferred free routines      
       _mi_theap_collect_retired(theap, false); // free retired pages      
-      if (prof_enabled) { mi_theap_collect(theap, false /* force? */); } // update stats
+      if (theap->sample_rate != 0) {           // update stats more aggressively if we are sampling
+        mi_theap_collect(theap, false /* force? */); 
+      }
     }
   }
   return theap;
@@ -1175,11 +1188,16 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
   theap = mi_malloc_generic_admin(theap);
   if (theap==NULL) return NULL;
   
-  if mi_unlikely(huge_alignment==0 && theap->profile_allocated > theap->profile_threshold) {
-    // profile the allocation
-    void* const p = _mi_theap_profile_alloc(theap,size,zero,ppage);
-    if (p!=NULL) { return p; }
-    // else fall through
+  // take a sample? 
+  if mi_unlikely(huge_alignment==0 && theap->sample_rate!=0) {
+    #if MI_SAMPLE==2 // fine grained
+    if (mi_theap_sample(theap,size)) 
+    #elif MI_SAMPLE==1
+    if (theap->sample_countdown < 0)
+    #endif
+    {
+      return _mi_theap_malloc_sample(theap,size,zero,ppage);
+    }
   }
 
   // find (or allocate) a page of the right size
@@ -1232,8 +1250,14 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
 
   // fast path objects that fit in a small page
   if mi_likely(mi_theap_is_initialized(theap) && ++theap->generic_count < 1000 && huge_alignment==0) {
-    // fast profile check
-    if (theap->profile_allocated <= theap->profile_threshold) {
+    #if MI_SAMPLE
+    const mi_ssize_t samples = mi_samples_from_size(size);
+    if (theap->sample_countdown >= samples) 
+    #endif
+    { 
+      #if MI_SAMPLE==2  // fine grained needs to update the countdown
+      theap->sample_countdown -= samples;
+      #endif
       const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
       if (req_size < MI_SMALL_MAX_OBJ_SIZE) {
         mi_page_queue_t* pq = mi_page_queue(theap, size);
@@ -1249,5 +1273,13 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
     }
   }
   // otherwise fallback
-  return mi_malloc_generic_fallback(theap,size,zero, huge_alignment,ppage);
+  return mi_malloc_generic_fallback(theap,size,zero,huge_alignment,ppage);
+}
+
+void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept {
+  const mi_ssize_t sample_rate = theap->sample_rate;
+  theap->sample_rate = 0;  // prevent a recursive call to _mi_theap_malloc_sample from _mi_malloc_generic
+  void* p = _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage);  
+  theap->sample_rate = sample_rate;
+  return p;
 }

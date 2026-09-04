@@ -121,12 +121,15 @@ static mi_decl_cache_align mi_tld_t mi_tld_detached = {
 };
 
 mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
+  -1,                     // sample countdown: -1 (with a sample rate of 0, so we won't write to the empty theap)
   MI_SMALL_PAGES_EMPTY,   // direct small pages  
   &mi_tld_detached,       // tld
   MI_ATOMIC_VAR_INIT(NULL), // heap
   MI_ATOMIC_VAR_INIT(NULL), // subproc
   MI_ATOMIC_VAR_INIT(1),  // refcount
-  0, 0,                   // profiler allocated, threshold
+  0,                      // sample rate
+  0, 0,                   // profile rate, countdown
+  0, 0, 0, 0,             // guarded rate, countdown, min, max
   0,                      // heartbeat
   { {0}, {0}, 0, true },  // random
   0,                      // page count
@@ -138,10 +141,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   0,                      // full page retain
   false,                  // allow reclaim
   true,                   // allow abandon
-  true,                   // is_detached  
-  #if MI_GUARDED
-  0, 0, 0, 1,             // rate is 0 and count is 1 so we never write to it (see `internal.h:mi_heap_malloc_use_guarded`)
-  #endif
+  true,                   // is_detached    
   MI_PAGE_QUEUES_EMPTY,
   MI_MEMID_STATIC,
   MI_STATS_NULL,          // stats
