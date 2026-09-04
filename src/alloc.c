@@ -148,13 +148,13 @@ static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero_non
   #if MI_DEBUG
   mi_assert(mi_theap_matches_thread(theap)); // theaps are thread local
   #endif
-  #if (MI_PADDING || MI_GUARDED)
+  #if (MI_PADDING) // || MI_GUARDED)
   if mi_unlikely(size == 0) { size = sizeof(void*); }
   #endif
   
   // we only sample if fine-grained sampling is enabled (otherwise we sample in mi_malloc_generic)
   #if MI_SAMPLE==2 
-  if mi_unlikely(mi_theap_sample(theap,size)) { return _mi_theap_malloc_sample(theap,size,zero,ppage); }
+  if mi_unlikely(mi_theap_sample_small(theap,size)) { return _mi_theap_malloc_sample(theap,size,zero,ppage); }
   #endif
   
   // get page in constant time 
@@ -926,9 +926,9 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   const size_t obj_size = (mi_option_is_enabled(mi_option_guarded_precise) ? size : _mi_align_up(size, MI_MAX_ALIGN_SIZE));
   const size_t bsize    = _mi_align_up(_mi_align_up(obj_size, MI_MAX_ALIGN_SIZE) + sizeof(mi_block_t), MI_MAX_ALIGN_SIZE);
   const size_t req_size = _mi_align_up(bsize + os_page_size, os_page_size);  
-  const size_t threshold = mi_theap_disable_profiler(theap);
+  // const size_t threshold = mi_theap_disable_profiler(theap);
   mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(theap, req_size, false /* don't zero */, ppage);
-  mi_theap_enable_profiler(theap,threshold);
+  // mi_theap_enable_profiler(theap,threshold);
   if (block==NULL) return NULL;
   size_t usable_size = 0;
   void* const p = mi_block_ptr_set_guarded(block, obj_size, &usable_size);
@@ -954,37 +954,62 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   return p;
 }
 
-mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept {
-  mi_assert_internal(theap->sample_countdown < 0);
-  mi_assert_internal(!_mi_is_empty_theap(theap));
+mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sample(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) mi_attr_noexcept {
+  // the size has not yet been counted against the countdown (and does not include MI_PADDING_SIZE)
+  mi_assert_internal(req_size <= MI_MAX_ALLOC_SIZE);
+  mi_assert_internal(theap->sample_countdown < req_size);
+  const size_t size = req_size + MI_PADDING_SIZE;
+
+  // handle empty theap and disabled profiling
+  if (theap->sample_rate==0) { 
+    #if MI_SAMPLE==2  // fine-grained; reset the countdown to avoid the slow sample path
+    if (!_mi_is_empty_theap(theap)) { // avoid writing to the initial empty theap 
+      theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;
+    }
+    #endif
+    return _mi_malloc_generic_no_sample(theap,size,zero,ppage);
+  }
   
   // update countdown
-  const mi_ssize_t samples = theap->sample_rate - theap->sample_countdown;
-  mi_assert_internal(samples > 0);
+  mi_assert_internal(!_mi_is_empty_theap(theap));  
+  mi_assert_internal(req_size <= SIZE_MAX/2);
+  mi_assert_internal(theap->sample_rate > 0);
+  mi_assert_internal(theap->sample_rate <= SIZE_MAX/2);
+  mi_assert_internal(theap->sample_rate >= theap->sample_countdown);  
+  const size_t requested = theap->sample_rate + (req_size - theap->sample_countdown) + theap->sample_requested;
+  mi_assert_internal(requested > 0);
+  mi_assert_internal(requested >= size);
+  if (requested < size) {
+    _mi_error_message(EFAULT,"wrong requested/size");
+  }
+  theap->sample_requested = 0;                       // reset extra count
   theap->sample_countdown = theap->sample_rate;      // reset sampling
 
   // update derived countdowns
   mi_assert_internal(theap->profile_sample_rate!=0 || theap->profile_sample_countdown==0);
   mi_assert_internal(theap->guarded_sample_rate!=0 || theap->guarded_sample_countdown==0);
-  if (theap->profile_sample_rate!=0) { theap->profile_sample_countdown -= samples; }
-  if (theap->guarded_sample_rate!=0) { theap->guarded_sample_countdown -= samples; }
-  if (theap->profile_sample_countdown < 0) {
+  bool sample_profile = false;
+  bool sample_guarded = false;
+  if (theap->profile_sample_countdown >= requested) { theap->profile_sample_countdown -= requested; } else { sample_profile = true; }
+  if (theap->guarded_sample_countdown >= requested) { theap->guarded_sample_countdown -= requested; } else { sample_guarded = true; }
+
+  // invoke callback?
+  if (sample_profile) {
     theap->profile_sample_countdown = theap->profile_sample_rate;  // reset countdown
-    if (theap->guarded_sample_countdown < 0) { theap->guarded_sample_countdown = -1; };  // prevent underflow if profile sampling is usually taken 
-    return _mi_theap_malloc_profiled(theap,size,zero,ppage);
+    if (sample_guarded) { theap->guarded_sample_countdown = 0; };  // ensure it will get sampled at some point
+    return _mi_theap_malloc_profiled(theap,size,requested,zero,ppage);
   }
-  else if (theap->guarded_sample_countdown < 0) {
-    if (size >= theap->guarded_size_min && size <= theap->guarded_size_max) {
+  else if (sample_guarded) {
+    if (req_size >= theap->guarded_size_min && req_size <= theap->guarded_size_max) {
       // use guarded allocation
       theap->guarded_sample_countdown = theap->guarded_sample_rate; // reset countdown
       return _mi_theap_malloc_guarded(theap,size,zero,ppage);
     }
     else {
-      // failed size criteria, rewind the sample countdown so we sample on the next allocation
-      theap->sample_countdown = -1;
-    }    
+      // failed size criteria, rewind the sample countdown so we sample asap again
+      theap->sample_countdown = 0;
+    }
   }
-  
   // take generic path
   return _mi_malloc_generic_no_sample(theap,size,zero,ppage);
 }

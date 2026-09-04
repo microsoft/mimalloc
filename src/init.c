@@ -121,13 +121,13 @@ static mi_decl_cache_align mi_tld_t mi_tld_detached = {
 };
 
 mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
-  -1,                     // sample countdown: -1 (with a sample rate of 0, so we won't write to the empty theap)
+  ~0,                     // sample countdown: "-1" (with a sample rate of 0, so we won't write to the empty theap with MI_SAMPLE==2)  
   MI_SMALL_PAGES_EMPTY,   // direct small pages  
   &mi_tld_detached,       // tld
   MI_ATOMIC_VAR_INIT(NULL), // heap
   MI_ATOMIC_VAR_INIT(NULL), // subproc
   MI_ATOMIC_VAR_INIT(1),  // refcount
-  0,                      // sample rate
+  0, 0,                   // sample rate, requested
   0, 0,                   // profile rate, countdown
   0, 0, 0, 0,             // guarded rate, countdown, min, max
   0,                      // heartbeat

@@ -158,12 +158,16 @@ static void mi_page_merge_stats(const mi_page_t* page, size_t alloc_count, size_
   #if MI_SAMPLE==1
   if (alloc_count>0 && theap!=NULL && theap->sample_rate!=0) { 
     // adjust countdown
-    const mi_ssize_t samples = alloc_count*mi_sample_from_size(bsize);
-    if (theap->sample_countdown > samples) {
-      theap->sample_countdown -= samples;
+    size_t requested = 0;
+    if (mi_mul_overflow(alloc_count,bsize,&requested)) {
+      mi_assert(false);
+    }
+    if (theap->sample_countdown >= requested) {
+      theap->sample_countdown -= requested;
     }
     else { 
-      theap->sample_countdown = -1; 
+      theap->sample_countdown = 0;
+      theap->sample_requested += (requested - theap->sample_countdown); // TODO: check that overflow never happens
     }
   } 
   #endif
@@ -1070,7 +1074,7 @@ static mi_page_t* mi_huge_page_alloc(mi_theap_t* theap, size_t size, size_t page
 // Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
 static mi_page_t* mi_find_page(mi_theap_t* theap, size_t size, size_t huge_alignment) mi_attr_noexcept {
   const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
-  if mi_unlikely(req_size > MI_MAX_ALLOC_SIZE) {
+  if mi_unlikely(req_size > MI_MAX_ALLOC_SIZE) {   // TODO: remove as we check in generic_fallback ?
     _mi_error_message(EOVERFLOW, "allocation request is too large (%zu bytes)\n", req_size);
     return NULL;
   }
@@ -1188,16 +1192,21 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
   theap = mi_malloc_generic_admin(theap);
   if (theap==NULL) return NULL;
   
-  // take a sample? 
+  // check allocation size
+  const size_t req_size = size - MI_PADDING_SIZE;
+  if mi_unlikely(req_size > MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE) {
+    _mi_error_message(EOVERFLOW, "allocation request is too large (%zu bytes)\n", req_size);
+    return NULL;
+  }
+
+  // take a sample?
   if mi_unlikely(huge_alignment==0 && theap->sample_rate!=0) {
-    #if MI_SAMPLE==2 // fine grained
-    if (mi_theap_sample(theap,size)) 
-    #elif MI_SAMPLE==1
-    if (theap->sample_countdown < 0)
-    #endif
-    {
-      return _mi_theap_malloc_sample(theap,size,zero,ppage);
+    if mi_unlikely(theap->sample_countdown < req_size) {
+      return _mi_theap_malloc_sample(theap,req_size,zero,ppage);
     }
+    #if MI_SAMPLE==2 
+    else { theap->sample_countdown -= req_size; }  // fine grained updates directly
+    #endif    
   }
 
   // find (or allocate) a page of the right size
@@ -1250,21 +1259,21 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
 
   // fast path objects that fit in a small page
   if mi_likely(mi_theap_is_initialized(theap) && ++theap->generic_count < 1000 && huge_alignment==0) {
-    #if MI_SAMPLE
-    const mi_ssize_t samples = mi_samples_from_size(size);
-    if (theap->sample_countdown >= samples) 
-    #endif
+    const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`         
+    if (req_size < MI_SMALL_MAX_OBJ_SIZE)
     { 
-      #if MI_SAMPLE==2  // fine grained needs to update the countdown
-      theap->sample_countdown -= samples;
+      #if MI_SAMPLE
+      if (theap->sample_countdown >= req_size) // ensure we don't need to take a sample
       #endif
-      const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
-      if (req_size < MI_SMALL_MAX_OBJ_SIZE) {
+      {
         mi_page_queue_t* pq = mi_page_queue(theap, size);
         mi_assert_internal(pq!=NULL && !mi_page_queue_is_huge(pq));
         page = mi_page_queue_find_free(theap,pq);
         // mi_assert_internal(mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE);
         if (page!=NULL) {        
+          #if MI_SAMPLE==2  // fine grained sampling needs to update the countdown
+          theap->sample_countdown -= req_size;
+          #endif          
           if (ppage!=NULL) { *ppage = page; }
           mi_assert_internal(mi_page_immediate_available(page));
           return _mi_page_malloc_zero(theap,page,size,zero);

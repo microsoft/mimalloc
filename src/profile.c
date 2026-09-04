@@ -26,9 +26,10 @@ static mi_profiler_t* mi_theap_get_enabled_profiler(const mi_theap_t* theap) {
 /* ----------------------------------------------------------------------------
   Profile an allocation and free
 -----------------------------------------------------------------------------*/
-mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept
+mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* theap, size_t size, size_t requested_since_last_sample, bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
   mi_assert_internal(theap!=NULL);  
+  mi_assert_internal(size<=requested_since_last_sample);
   mi_profiler_t* const prof = mi_theap_get_enabled_profiler(theap);
   if (prof == NULL) { return _mi_malloc_generic_no_sample(theap,size,zero,ppage); }
   
@@ -57,7 +58,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
 
   // and call the profiler on_alloc
   if (prof->on_alloc!=NULL) { 
-    const size_t new_sample_rate = (*prof->on_alloc)(profiler_data, p, (size_t)theap->profile_sample_rate, size /* TODO: bytes since last sample */, _mi_theap_heap(theap), prof->profiler_arg);
+    const size_t new_sample_rate = (*prof->on_alloc)(profiler_data, p, (size_t)theap->profile_sample_rate, requested_since_last_sample /* TODO: bytes since last sample */, _mi_theap_heap(theap), prof->profiler_arg);
     if (new_sample_rate!=0 && new_sample_rate != (size_t)theap->profile_sample_rate) { 
       mi_theap_enable_profiler(theap,new_sample_rate);
     }
