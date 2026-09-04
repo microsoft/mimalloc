@@ -166,7 +166,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_generic(mi_theap_t
     if (offset == 0 && mi_malloc_is_naturally_aligned(size,alignment))
     {
       #if MI_SAMPLE  // only try if we would not take a sample
-      if (theap->sample_countdown >= size) 
+      if mi_likely(!mi_theap_should_sample(theap,size))
       #endif
       {
         mi_page_t* page = NULL;
@@ -214,7 +214,7 @@ static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, con
     #endif
     {
       #if MI_SAMPLE  // check if we shouldn't take a sample
-      if (theap->sample_countdown >= size) 
+      if mi_likely(!mi_theap_should_sample(theap,size))
       #endif      
       {
         const uintptr_t align_mask = alignment-1;       // for any x, `(x & align_mask) == (x % alignment)`

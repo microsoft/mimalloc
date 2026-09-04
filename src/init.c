@@ -121,7 +121,7 @@ static mi_decl_cache_align mi_tld_t mi_tld_detached = {
 };
 
 mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
-  ~0,                     // sample countdown: "-1" (with a sample rate of 0, so we won't write to the empty theap with MI_SAMPLE==2)  
+  ~MI_ZU(0),              // sample countdown: "-1" (with a sample rate of 0, so we won't write to the empty theap with MI_SAMPLE==2)  
   MI_SMALL_PAGES_EMPTY,   // direct small pages  
   &mi_tld_detached,       // tld
   MI_ATOMIC_VAR_INIT(NULL), // heap

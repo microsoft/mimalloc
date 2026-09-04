@@ -1159,6 +1159,12 @@ static inline bool mi_page_claim_ownership(mi_page_t* page) {
 #define MI_SAMPLE_RATE_MAX        (SIZE_MAX/4)
 #define MI_SAMPLE_COUNTDOWN_MAX   (SIZE_MAX/4)
 
+static inline bool mi_theap_should_sample(mi_theap_t* theap, size_t req_size) {
+  mi_assert_internal(req_size <= SIZE_MAX/2);
+  const size_t sample_countdown = theap->sample_countdown - req_size;
+  return ((mi_ssize_t)sample_countdown < 0);
+}
+
 #if MI_SAMPLE==2  // fine grained
 static inline bool mi_theap_sample_small(mi_theap_t* theap, size_t req_size) {
   mi_assert_internal(req_size <= SIZE_MAX/2);
@@ -1222,15 +1228,15 @@ static inline bool mi_profiler_set_enabled(mi_profiler_t* prof, bool enable) {
 
 
 static inline size_t mi_theap_disable_profiler(mi_theap_t* theap) {
-  const mi_ssize_t sample_rate = theap->profile_sample_rate;
+  const size_t sample_rate = theap->profile_sample_rate;
   theap->profile_sample_rate = 0;
   // theap->profile_sample_countdown = 0;
   theap->sample_rate = theap->guarded_sample_rate;
-  return (sample_rate < 0 ? 0 : (size_t)sample_rate);
+  return sample_rate;
 }
 
 static inline void mi_theap_enable_profiler(mi_theap_t* theap, size_t sample_rate) {
-  theap->profile_sample_rate = (sample_rate > MI_SAMPLE_RATE_MAX ? MI_SAMPLE_RATE_MAX : (mi_ssize_t)sample_rate);
+  theap->profile_sample_rate = (sample_rate > MI_SAMPLE_RATE_MAX ? MI_SAMPLE_RATE_MAX : sample_rate);
   if (theap->profile_sample_countdown==0) { theap->profile_sample_countdown = theap->profile_sample_rate; }
   if (theap->sample_rate==0 || theap->sample_rate > theap->profile_sample_rate) {
     theap->sample_rate = theap->profile_sample_rate;

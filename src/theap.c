@@ -192,7 +192,7 @@ mi_theap_t* mi_theap_set_default(mi_theap_t* theap) {
 
 #if MI_GUARDED
 mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed) {
-  theap->guarded_sample_rate  = (sample_rate > MI_SAMPLE_RATE_MAX ? MI_SAMPLE_RATE_MAX : (mi_ssize_t)sample_rate);
+  theap->guarded_sample_rate  = (sample_rate > MI_SAMPLE_RATE_MAX ? MI_SAMPLE_RATE_MAX : sample_rate);
   theap->guarded_sample_countdown = theap->guarded_sample_rate; 
   if (theap->sample_rate==0 || theap->sample_rate > theap->guarded_sample_rate) {
     theap->sample_rate = theap->guarded_sample_rate;
