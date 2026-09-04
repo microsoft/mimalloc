@@ -244,12 +244,13 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
 
 // Collect elements in the thread-free list starting at `head`. This is an optimized
 // version of `_mi_page_free_collect` to be used from `free.c:_mi_free_collect_mt` that avoids atomic access to `xthread_free`.
+// returns a possibly updated expected value for the thread_free pointer.
 //
 // `head` must be in the `xthread_free` list. It will not collect `head` itself
 // so the `used` count is not fully updated in general. However, if the `head` is
 // the last remaining element, it will be collected and the used count will become `0` (so `mi_page_all_free` becomes true).
-void _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
-  if (head == NULL) return;
+mi_block_t* _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
+  if (head == NULL) return NULL;
   mi_block_t* next = mi_block_next(page,head);  // we cannot collect the head element itself as `page->thread_free` may point to it (and we want to avoid atomic ops)
   if (next != NULL) {
     mi_block_set_next(page, head, NULL);
@@ -265,6 +266,10 @@ void _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
     mi_assert_internal(mi_tf_block(mi_atomic_load_relaxed(&page->xthread_free)) == head);
     mi_assert_internal(mi_block_next(page,head) == NULL);
     _mi_page_free_collect(page, false);  // collect the final element
+    return NULL;
+  }
+  else {
+    return head;
   }
 }
 

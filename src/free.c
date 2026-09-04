@@ -496,7 +496,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
     // (after this the `used` count might be too high (as some blocks may have been concurrently added to the thread free list and are yet uncounted).
     //  however, if the page became completely free, the used count is guaranteed to be 0.)
     mi_assert_internal(page->reserved>=16); // below this even one freed block goes from full to no longer mostly used.
-    _mi_page_free_collect_partly(page, mt_free);    
+    mt_free = _mi_page_free_collect_partly(page, mt_free);    
   }
   else {
     // for larger blocks we use the regular collect 
