@@ -441,6 +441,17 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
 static void mi_process_setup_auto_thread_done(void) {
   mi_atomic_do_once {
     _mi_prim_thread_init_auto_done();
+    // The thread that ran `mi_process_init` initialized its default theap before the
+    // thread-done key existed, so `_mi_theap_default_set` could not associate it
+    // (see `_mi_prim_thread_associate_default_theap`). Associate it now so that
+    // `_mi_thread_done` also runs when that thread terminates (for example when the
+    // first thread to use mimalloc is a short-lived worker thread that loaded us).
+    // Otherwise its theap stays registered in the heap with a thread id that the OS
+    // may reuse for a later thread.
+    mi_theap_t* theap = _mi_theap_default();
+    if (mi_theap_is_initialized(theap)) {
+      _mi_prim_thread_associate_default_theap(theap);
+    }
   }
 }
 
