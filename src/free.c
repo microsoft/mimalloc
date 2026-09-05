@@ -199,21 +199,26 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
   
   mi_page_t* page;
   #if MI_PAGE_META_SMALL_IS_ALIGNED 
-    if (free_small) { page = (mi_page_t*)_mi_align_down_ptr(p,MI_SMALL_PAGE_SIZE); }
+    if (free_small) { 
+      const uintptr_t up = _mi_align_down((uintptr_t)p,MI_SMALL_PAGE_SIZE);  // like this for codegen on gcc
+      if mi_unlikely(up==0 && check_p_for_null) { return false; }
+      page = (mi_page_t*)up;
+    }
     else
   #endif
-  #if MI_PAGE_META_IS_ALIGNED
-    { page = _mi_aligned_ptr_page0(p); }
-  #else
-    { page = _mi_ptr_page(p); }
-  #endif
-  
-  if mi_unlikely(check_p_for_null && page==NULL) {
-    #if MI_DEBUG
-    if (p!=NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
-    #endif
-    return false;
-  }
+    {
+      #if MI_PAGE_META_IS_ALIGNED
+        { page = _mi_aligned_ptr_page0(p); }
+      #else
+        { page = _mi_ptr_page(p); }
+      #endif      
+      if mi_unlikely(page==NULL && check_p_for_null) {
+        #if MI_DEBUG
+        if (p!=NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
+        #endif
+        return false;
+      }
+    }
   #if MI_DEBUG
   mi_page_t* const cpage = _mi_checked_ptr_page(p);
   if mi_unlikely(cpage==NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
