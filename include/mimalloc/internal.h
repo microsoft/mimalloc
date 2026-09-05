@@ -1175,8 +1175,9 @@ static inline bool mi_page_claim_ownership(mi_page_t* page) {
 static inline bool mi_theap_should_sample(mi_theap_t* theap, size_t req_size) {
   // note: this should return `true` on an empty theap so we initialize it's countdown to `-1`.
   mi_assert_internal(req_size <= SIZE_MAX/2);
-  const size_t sample_countdown = theap->sample_countdown - req_size;
-  return ((mi_ssize_t)sample_countdown < 0);
+  // const size_t sample_countdown = theap->sample_countdown - req_size;
+  // return ((mi_ssize_t)sample_countdown < 0);
+  return ((mi_ssize_t)theap->sample_countdown < (mi_ssize_t)req_size);
 }
 
 #if MI_SAMPLE==2  // fine grained
