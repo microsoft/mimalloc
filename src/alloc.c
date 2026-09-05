@@ -101,7 +101,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   #endif
 
   #if MI_STAT>=2
-  mi_theap_stat_increase(theap,malloc_requested,size - MI_PADDING_SIZE);
+  mi_theap_stat_counter_increase(theap,malloc_requested,size - MI_PADDING_SIZE);
   #endif
 
   #if MI_DEBUG>3
@@ -954,8 +954,8 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   mi_theap_stat_counter_increase(theap, malloc_guarded_count, 1);
   #if MI_STAT
   // adjust request stats to only count the allocated size of the block (and not the guard page)
-  mi_theap_stat_adjust_decrease(theap, malloc_requested, req_size);
-  mi_theap_stat_increase(theap, malloc_requested, size);
+  mi_theap_stat_counter_decrease(theap, malloc_requested, req_size);
+  mi_theap_stat_counter_increase(theap, malloc_requested, size);
   #endif
   #if MI_DEBUG>3
   if (zero) {
@@ -986,7 +986,8 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sample(mi_theap_t* thea
   mi_assert_internal(theap->sample_rate > 0);
   mi_assert_internal(theap->sample_rate <= SIZE_MAX/2);
   mi_assert_internal(theap->sample_rate >= theap->sample_countdown);  
-  const size_t requested = theap->sample_rate + (req_size - theap->sample_countdown) + theap->sample_requested;
+
+  const uint64_t requested = (uint64_t)theap->sample_rate + (uint64_t)(req_size - theap->sample_countdown) + theap->sample_requested;
   mi_assert_internal(requested > 0);
   mi_assert_internal(requested >= size);
   if (requested < size) {
@@ -1000,8 +1001,8 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sample(mi_theap_t* thea
   mi_assert_internal(theap->guarded_sample_rate!=0 || theap->guarded_sample_countdown==0);
   bool sample_profile = false;
   bool sample_guarded = false;
-  if (theap->profile_sample_countdown >= requested) { theap->profile_sample_countdown -= requested; } else { sample_profile = true; }
-  if (theap->guarded_sample_countdown >= requested) { theap->guarded_sample_countdown -= requested; } else { sample_guarded = true; }
+  if (theap->profile_sample_countdown >= requested) { theap->profile_sample_countdown -= (size_t)requested; } else { sample_profile = true; }
+  if (theap->guarded_sample_countdown >= requested) { theap->guarded_sample_countdown -= (size_t)requested; } else { sample_guarded = true; }
 
   // invoke callback?
   if (sample_profile) {

@@ -39,17 +39,21 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
   if (amount > 0) { stat->total += amount; }
 }
 
-void __mi_stat_increase_mt(mi_stat_count_t* stat, size_t amount) {
+void __mi_stat_increase_mt(mi_stat_count_t* stat, uint64_t amount) {
+  mi_assert_internal(amount<=INT64_MAX);
   mi_stat_update_mt(stat, (int64_t)amount);
 }
-void __mi_stat_increase(mi_stat_count_t* stat, size_t amount) {
+void __mi_stat_increase(mi_stat_count_t* stat, uint64_t amount) {
+  mi_assert_internal(amount<=INT64_MAX);
   mi_stat_update(stat, (int64_t)amount);
 }
 
-void __mi_stat_decrease_mt(mi_stat_count_t* stat, size_t amount) {
+void __mi_stat_decrease_mt(mi_stat_count_t* stat, uint64_t amount) {
+  mi_assert_internal(amount<=INT64_MAX);
   mi_stat_update_mt(stat, -((int64_t)amount));
 }
-void __mi_stat_decrease(mi_stat_count_t* stat, size_t amount) {
+void __mi_stat_decrease(mi_stat_count_t* stat, uint64_t amount) {
+  mi_assert_internal(amount<=INT64_MAX);
   mi_stat_update(stat, -((int64_t)amount));
 }
 
@@ -73,16 +77,20 @@ static void mi_stat_adjust(mi_stat_count_t* stat, int64_t amount) {
   stat->total += amount;  
 }
 
-void __mi_stat_adjust_increase_mt(mi_stat_count_t* stat, size_t amount) {
+void __mi_stat_adjust_increase_mt(mi_stat_count_t* stat, uint64_t amount) {
+  mi_assert_internal(amount<=INT64_MAX);
   mi_stat_adjust_mt(stat, (int64_t)amount);
 }
-void __mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount) {
+void __mi_stat_adjust_increase(mi_stat_count_t* stat, uint64_t amount) {
+  mi_assert_internal(amount<=INT64_MAX);
   mi_stat_adjust(stat, (int64_t)amount);
 }
-void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, size_t amount) {
+void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, uint64_t amount) {
+  mi_assert_internal(amount<=INT64_MAX);
   mi_stat_adjust_mt(stat, -((int64_t)amount));
 }
-void __mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount) {
+void __mi_stat_adjust_decrease(mi_stat_count_t* stat, uint64_t amount) {
+  mi_assert_internal(amount<=INT64_MAX);
   mi_stat_adjust(stat, -((int64_t)amount));
 }
 
@@ -230,10 +238,10 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
 }
 
 #if MI_STAT
-static void mi_stat_total_print(const mi_stat_count_t* stat, const char* msg, int64_t unit, mi_output_fun* out, void* arg) {
+static void mi_stat_total_print(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg) {
   _mi_fprintf(out, arg, "  %-12s:", msg);
   _mi_fprintf(out, arg, "%12s", " ");  // no peak
-  mi_print_amount(stat->total, unit, out, arg);
+  mi_print_amount(stat->total, 1, out, arg);
   _mi_fprintf(out, arg, "\n");
 }
 #endif
@@ -367,9 +375,9 @@ void _mi_stats_print(const char* name, size_t id, const mi_stats_t* stats, mi_ou
     mi_stat_count_add_mt(&total, &stats->malloc_huge);
     mi_stat_print_ex(&total, "total", -(stats->malloc_normal_count.total + stats->malloc_huge_count.total), out, arg, "");
     #if MI_STAT>=2
-    mi_stat_total_print(&stats->malloc_requested, "malloc req", 1, out, arg);
+    mi_stat_total_print(&stats->malloc_requested, "malloc req", out, arg);
     #else
-    mi_stat_total_print(&stats->malloc_requested, "malloc req~", 1, out, arg);
+    mi_stat_total_print(&stats->malloc_requested, "malloc req~", out, arg);
     #endif
     _mi_fprintf(out, arg, "\n");
     #endif

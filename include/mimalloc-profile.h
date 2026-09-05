@@ -10,14 +10,15 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <mimalloc.h>
 #include <stdbool.h>  // bool
+#include <stdint.h>   // uint64_t
 
 typedef struct mi_profiler_data_s {
   size_t usable_size;
   size_t requested_size;
-  void*  user_data[14];
+  void*  user_data[6];      // default, but can be less or more (up to 1KiB), depending on `profiler_data_size`
 } mi_profiler_data_t;
 
-typedef size_t (mi_cdecl mi_profiler_on_alloc_fun  )(mi_profiler_data_t* profiler_data, void* ptr, size_t threshold, size_t bytes_since_last_sample, const mi_heap_t* heap, void* profiler_arg);
+typedef size_t (mi_cdecl mi_profiler_on_alloc_fun  )(mi_profiler_data_t* profiler_data, void* ptr, size_t bytes_sample_rate, uint64_t bytes_since_last_sample, const mi_heap_t* heap, void* profiler_arg);
 typedef size_t (mi_cdecl mi_profiler_on_realloc_inplace_fun)(mi_profiler_data_t* profiler_data, void* ptr, size_t old_requested_size, const mi_heap_t* heap, void* profiler_arg);
 typedef void   (mi_cdecl mi_profiler_on_free_fun   )(mi_profiler_data_t* profiler_data, void* ptr, const mi_heap_t* heap, void* profiler_arg);
 

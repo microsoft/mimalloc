@@ -337,7 +337,7 @@ bool          _mi_page_is_valid(mi_page_t* page);
 // "profile.c"
 mi_decl_restrict void* _mi_theap_malloc_sample(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) mi_attr_noexcept;
 mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept;
-mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* theap, size_t size, size_t requested_since_last_sample, bool zero, mi_page_t** ppage) mi_attr_noexcept;
+mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* theap, size_t size, uint64_t requested_since_last_sample, bool zero, mi_page_t** ppage) mi_attr_noexcept;
 void          _mi_page_profile_free(mi_page_t* page, mi_block_t* block, void* p);
 
 // ------------------------------------------------------
@@ -370,24 +370,31 @@ mi_decl_noreturn mi_decl_cold void _mi_assert_fail(const char* assertion, const 
 ----------------------------------------------------------- */
 
 // add to stat keeping track of the peak
-void __mi_stat_increase(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_decrease(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_increase_mt(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_decrease_mt(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_increase(mi_stat_count_t* stat, uint64_t amount);
+void __mi_stat_decrease(mi_stat_count_t* stat, uint64_t amount);
+void __mi_stat_increase_mt(mi_stat_count_t* stat, uint64_t amount);
+void __mi_stat_decrease_mt(mi_stat_count_t* stat, uint64_t amount);
 
 // adjust stat in special cases to compensate for double counting (and does not adjust peak values and can decrease the total)
-void __mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_adjust_increase_mt(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_adjust_increase(mi_stat_count_t* stat, uint64_t amount);
+void __mi_stat_adjust_decrease(mi_stat_count_t* stat, uint64_t amount);
+void __mi_stat_adjust_increase_mt(mi_stat_count_t* stat, uint64_t amount);
+void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, uint64_t amount);
 
 // counters can just be increased
-static inline void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount) {
+static inline void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, uint64_t amount) {
+  mi_assert_internal(amount<=INT64_MAX);
   mi_atomic_addi64_relaxed(&stat->total, (int64_t)amount);
 }
 
-static inline void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {
-  stat->total += amount;
+static inline void __mi_stat_counter_increase(mi_stat_counter_t* stat, uint64_t amount) {
+  mi_assert_internal(amount<=INT64_MAX);
+  stat->total += (int64_t)amount;
+}
+
+static inline void __mi_stat_counter_decrease(mi_stat_counter_t* stat, uint64_t amount) {
+  mi_assert_internal(amount<=INT64_MAX);
+  stat->total -= (int64_t)amount;
 }
 
 #define mi_heap_stat_counter_increase(heap,stat,amount)         __mi_stat_counter_increase_mt( &(heap)->stats.stat, amount)
@@ -403,15 +410,17 @@ static inline void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t am
 #define mi_subproc_stat_adjust_decrease(subproc,stat,amount)    __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amount)
 
 #define mi_theap_stat_counter_increase(theap,stat,amount)       __mi_stat_counter_increase( &(theap)->stats.stat, amount)
+#define mi_theap_stat_counter_decrease(theap,stat,amount)       __mi_stat_counter_decrease( &(theap)->stats.stat, amount)
 #define mi_theap_stat_increase(theap,stat,amount)               __mi_stat_increase( &(theap)->stats.stat, amount)
 #define mi_theap_stat_decrease(theap,stat,amount)               __mi_stat_decrease( &(theap)->stats.stat, amount)
 #define mi_theap_stat_adjust_increase(theap,stat,amnt)          __mi_stat_adjust_increase( &(theap)->stats.stat, amnt)
 #define mi_theap_stat_adjust_decrease(theap,stat,amnt)          __mi_stat_adjust_decrease( &(theap)->stats.stat, amnt)
 
 #define mi_theapx_stat_counter_increase(heap,theap,stat,amount) if (theap!=NULL) { mi_theap_stat_counter_increase(theap,stat,amount); } else { mi_heap_stat_counter_increase(heap,stat,amount); }
+#define mi_theapx_stat_adjust_decrease(heap,theap,stat,amount)  if (theap!=NULL) { mi_theap_stat_adjust_decrease(theap,stat,amount); } else { mi_heap_stat_adjust_decrease(heap,stat,amount); }
 #define mi_theapx_stat_increase(heap,theap,stat,amount)         if (theap!=NULL) { mi_theap_stat_increase(theap,stat,amount); } else { mi_heap_stat_increase(heap,stat,amount); }
 #define mi_theapx_stat_decrease(heap,theap,stat,amount)         if (theap!=NULL) { mi_theap_stat_decrease(theap,stat,amount); } else { mi_heap_stat_decrease(heap,stat,amount); }
-#define mi_theapx_stat_adjust_decrease(heap,theap,stat,amount)  if (theap!=NULL) { mi_theap_stat_adjust_decrease(theap,stat,amount); } else { mi_heap_stat_adjust_decrease(heap,stat,amount); }
+
 
 /* -----------------------------------------------------------
   pthread thread locals

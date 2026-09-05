@@ -26,7 +26,7 @@ static mi_profiler_t* mi_theap_get_enabled_profiler(const mi_theap_t* theap) {
 /* ----------------------------------------------------------------------------
   Profile an allocation and free
 -----------------------------------------------------------------------------*/
-mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* theap, size_t size, size_t requested_since_last_sample, bool zero, mi_page_t** ppage) mi_attr_noexcept
+mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* theap, size_t size, uint64_t requested_since_last_sample, bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
   mi_assert_internal(theap!=NULL);  
   mi_assert_internal(size<=requested_since_last_sample);
@@ -37,7 +37,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
   // [MI_BLOCK_TAG_PROFILE] [usable size] [ ... profile data ... ] [... user data ...]
   const size_t profiler_data_offset = sizeof(mi_block_t);
   size_t profiler_data_size = sizeof(mi_profiler_data_t);
-  if (prof->profiler_data_size > 2*sizeof(size_t)) { profiler_data_size = (prof->profiler_data_size > 512 ? 512 : prof->profiler_data_size); };
+  if (prof->profiler_data_size > 2*sizeof(size_t)) { profiler_data_size = (prof->profiler_data_size > 1024 ? 1024 : prof->profiler_data_size); };
   const size_t profiler_user_offset = _mi_align_up(profiler_data_offset + profiler_data_size, MI_MAX_ALIGN_SIZE);
   const size_t oversize = profiler_user_offset + size;
   mi_page_t* page = NULL;
@@ -58,7 +58,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
 
   // and call the profiler on_alloc
   if (prof->on_alloc!=NULL) { 
-    const size_t new_sample_rate = (*prof->on_alloc)(profiler_data, p, (size_t)theap->profile_sample_rate, requested_since_last_sample /* TODO: bytes since last sample */, _mi_theap_heap(theap), prof->profiler_arg);
+    const size_t new_sample_rate = (*prof->on_alloc)(profiler_data, p, theap->profile_sample_rate, requested_since_last_sample, _mi_theap_heap(theap), prof->profiler_arg);
     if (new_sample_rate!=0 && new_sample_rate != (size_t)theap->profile_sample_rate) { 
       mi_theap_enable_profiler(theap,new_sample_rate);
     }
