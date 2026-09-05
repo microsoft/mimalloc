@@ -163,11 +163,11 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_generic(mi_theap_t
   if mi_likely(theap!=NULL)
   #endif
   {
-    if (offset == 0 && mi_malloc_is_naturally_aligned(size,alignment))
+    #if MI_SAMPLE  // only try if we would not take a sample
+    if mi_likely(!mi_theap_should_sample(theap,size))
+    #endif
     {
-      #if MI_SAMPLE  // only try if we would not take a sample
-      if mi_likely(!mi_theap_should_sample(theap,size))
-      #endif
+      if (offset == 0 && mi_malloc_is_naturally_aligned(size,alignment))    
       {
         mi_page_t* page = NULL;
         void* p = mi_theap_malloc_zero_no_guarded(theap, size, zero, &page);

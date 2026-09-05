@@ -91,7 +91,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Enable profiling support
 #ifndef MI_PROFILE
-#define MI_PROFILE  1
+#define MI_PROFILE  2
 #endif
 
 // Enable guard pages behind objects of a certain size (set by the MIMALLOC_GUARDED_MIN/MAX/SAMPLE_RATE options)

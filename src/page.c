@@ -1132,18 +1132,23 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
 /* -----------------------------------------------------------
   Admin
 ----------------------------------------------------------- */
+static mi_theap_t* mi_theap_init(mi_theap_t* theap) {
+  if mi_likely(mi_theap_is_initialized(theap)) return theap;
+  if (theap==&_mi_theap_empty_wrong) {
+    // we were unable to allocate a theap for a first-class heap
+    return NULL;
+  }
+  // otherwise we initialize the thread and its default theap
+  theap = _mi_thread_init();
+  if mi_unlikely(!mi_theap_is_initialized(theap)) { return NULL; }
+  mi_assert_internal(mi_theap_is_initialized(theap));
+  return theap;
+}
 
 static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap) 
 {
-  if mi_unlikely(!mi_theap_is_initialized(theap)) {
-    if (theap==&_mi_theap_empty_wrong) {
-      // we were unable to allocate a theap for a first-class heap
-      return NULL;
-    }
-    // otherwise we initialize the thread and its default theap
-    theap = _mi_thread_init();
-    if mi_unlikely(!mi_theap_is_initialized(theap)) { return NULL; }    
-  }
+  theap = mi_theap_init(theap);
+  if (theap==NULL) return NULL;
   mi_assert_internal(mi_theap_is_initialized(theap));
 
   // do administrative tasks every N generic mallocs
@@ -1294,11 +1299,13 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
 }
 
 void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept {
+  theap = mi_theap_init(theap);
+  if (theap==NULL) return NULL;
   const size_t sample_rate = theap->sample_rate;
   const size_t sample_countdown = theap->sample_countdown;
   theap->sample_rate = 0;  // prevent a recursive call to _mi_theap_malloc_sample from _mi_malloc_generic
   theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;
-  void* p = _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage);  
+  void* p = _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage);
   theap->sample_rate = sample_rate;
   theap->sample_countdown = sample_countdown;
   return p;
