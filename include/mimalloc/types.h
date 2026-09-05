@@ -91,7 +91,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Enable profiling support
 #ifndef MI_PROFILE
-#define MI_PROFILE 1
+#define MI_PROFILE 2
 #endif
 
 // Enable guard pages behind objects of a certain size (set by the MIMALLOC_GUARDED_MIN/MAX/SAMPLE_RATE options)
@@ -596,9 +596,10 @@ typedef struct mi_padding_s {
 // A thread-local heap ("theap") owns a set of thread-local pages.
 struct mi_theap_s {
   // put in front for fast small allocations
-  size_t                sample_countdown;
+  size_t                sample_countdown;                    // sample countdown in requested bytes (don't change the field order; see `internal.h:_mi_theap_get_free_small_page`)
   mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
 
+  // less frequently accessed fields
   mi_tld_t*             tld;                                 // thread-local data
   _Atomic(mi_heap_t*)   heap;                                // the heap this theap belongs to.
   _Atomic(mi_subproc_t*)subproc;                             // subproc this belongs too (always `subproc == heap->subproc` but needed for safe destruction)
@@ -612,7 +613,6 @@ struct mi_theap_s {
   size_t                guarded_sample_countdown;
   size_t                guarded_size_min;                    // minimal size for guarded objects
   size_t                guarded_size_max;                    // maximal size for guarded objects
-  
   
   unsigned long long    heartbeat;                           // monotonic heartbeat count
   mi_random_ctx_t       random;                              // random number context used for secure allocation

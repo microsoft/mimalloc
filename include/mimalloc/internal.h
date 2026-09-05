@@ -654,9 +654,17 @@ static inline mi_subproc_t* _mi_theap_subproc(const mi_theap_t* theap) {
 
 static inline mi_page_t* _mi_theap_get_free_small_page(mi_theap_t* theap, size_t size) {
   mi_assert_internal(size <= (MI_SMALL_SIZE_MAX + MI_PADDING_SIZE));
+  #if MI_INTPTR_SIZE==MI_SIZE_SIZE
+  // the sample_countdown field comes before the pages_direct; the following generates better code in general 
+  // (where we treat the countdown as a first -1 entry of the pages_free_direct array)
+  const size_t idx1 = (size + 2*MI_INTPTR_SIZE - 1)/MI_INTPTR_SIZE;
+  mi_assert_internal(idx1 <= MI_PAGES_DIRECT);
+  return ((mi_page_t**)theap)[idx1];
+  #else
   const size_t idx = _mi_wsize_from_size(size);
   mi_assert_internal(idx < MI_PAGES_DIRECT);
   return theap->pages_free_direct[idx];
+  #endif
 }
 
 static inline bool mi_theap_is_detached(mi_theap_t* theap) {
