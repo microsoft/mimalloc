@@ -963,7 +963,8 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
 mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sample(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) mi_attr_noexcept {
   // the size has not yet been counted against the countdown (and does not include MI_PADDING_SIZE)
   mi_assert_internal(req_size <= MI_MAX_ALLOC_SIZE);
-  mi_assert_internal(theap->sample_countdown < req_size);
+  mi_assert_internal((theap->sample_countdown==SIZE_MAX && _mi_is_empty_theap(theap)) || 
+                     (theap->sample_countdown <= MI_SAMPLE_COUNTDOWN_MAX && theap->sample_countdown < req_size));
   const size_t size = req_size + MI_PADDING_SIZE;
 
   // handle empty theap and disabled profiling
