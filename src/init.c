@@ -205,6 +205,8 @@ static void mi_heap_main_init_once(void) {
   _mi_theap_init(&mi_process_theap_meta,&mi_process_heap_main,&mi_tld_detached);
   mi_process_theap_meta.allow_page_abandon = false;  // for security, don't share with other threads
   mi_process_theap_meta.page_full_retain = 2;
+  mi_process_theap_meta.sample_rate = 0; // no sampling for meta data
+  mi_process_theap_meta.sample_countdown = 0;
   subproc_main->theap_meta = &mi_process_theap_meta;
 
   // mi_heap_theap_set(&mi_process_heap_main,&mi_process_theap_main); // set in `mi_thread_init(_theap_default)`
