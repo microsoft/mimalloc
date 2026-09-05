@@ -1200,6 +1200,7 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
   }
 
   // take a sample?
+  bool sample_countdown_is_adjusted = false;
   if mi_unlikely(mi_theap_should_sample(theap,req_size)) {
     if (huge_alignment==0 && theap->sample_rate!=0) {
       return _mi_theap_malloc_sample(theap,req_size,zero,ppage);    
@@ -1212,6 +1213,8 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
     #if MI_SAMPLE==2
     else {
       mi_assert_internal(huge_alignment!=0);
+      mi_assert_internal(theap->sample_countdown <= SIZE_MAX - req_size);
+      sample_countdown_is_adjusted = true;
       theap->sample_countdown += req_size;                // adjust such that after `_mi_page_malloc_zero` the countdown is correct again
     }
     #endif    
@@ -1225,9 +1228,9 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
   }
 
   if mi_unlikely(page == NULL) { // out of memory
-    const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
+    if (sample_countdown_is_adjusted) { theap->sample_countdown -= req_size; }  // unadjust again if we failed to find a page
     _mi_error_message(ENOMEM, "unable to allocate memory (%zu bytes)\n", req_size);
-    return NULL;
+    return NULL;  
   }
 
   mi_assert_internal(mi_page_immediate_available(page));
@@ -1235,7 +1238,7 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
   mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
 
-  // and try again, this time succeeding! (i.e. this should never recurse through _mi_page_malloc)
+  // and try again, this time succeeding! (i.e. this should never recurse through _mi_page_malloc_zero)
   if (ppage!=NULL) { *ppage = page; }
   void* const p = _mi_page_malloc_zero(theap,page,size,zero);
   mi_assert_internal(p != NULL);
