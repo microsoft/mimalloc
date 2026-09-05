@@ -784,7 +784,7 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   }
 
   const size_t bsize = mi_page_usable_block_size(page);
-  // #if (MI_STAT>1)
+  // #if (MI_STAT>=2)
   // const size_t usize = mi_page_usable_size_of(page, block);
   // mi_theap_stat_decrease(theap, malloc_requested, usize);
   // #endif

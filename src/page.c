@@ -169,7 +169,7 @@ static void mi_page_merge_stats(const mi_page_t* page, size_t alloc_count, size_
       theap->sample_countdown = 0;
       theap->sample_requested += (requested - theap->sample_countdown); // TODO: check that overflow never happens
     }
-  } 
+  }
   #endif
 
   // adjust stats
@@ -1201,13 +1201,13 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
 
   // take a sample?
   if mi_unlikely(huge_alignment==0 && mi_theap_should_sample(theap,req_size)) {
-    if (theap->sample_rate!=0) {
+    if (theap->sample_rate!=0) {  // must check to avoid recursion with `_mi_malloc_generic_nosample`
       return _mi_theap_malloc_sample(theap,req_size,zero,ppage);    
     }
     else {
       mi_assert_internal(!_mi_is_empty_theap(theap));
       mi_assert_internal(req_size <= MI_SAMPLE_COUNTDOWN_MAX);
-      theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;  // reset the countdown counter    
+      theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;  // reset the countdown counter to avoid sampling for a while 
     }
   }
 

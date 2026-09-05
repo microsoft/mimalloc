@@ -366,7 +366,7 @@ void _mi_stats_print(const char* name, size_t id, const mi_stats_t* stats, mi_ou
     mi_stat_count_add_mt(&total, &stats->malloc_normal);
     mi_stat_count_add_mt(&total, &stats->malloc_huge);
     mi_stat_print_ex(&total, "total", -(stats->malloc_normal_count.total + stats->malloc_huge_count.total), out, arg, "");
-    #if MI_STAT>1
+    #if MI_STAT>=2
     mi_stat_total_print(&stats->malloc_requested, "malloc req", 1, out, arg);
     #else
     mi_stat_total_print(&stats->malloc_requested, "malloc req~", 1, out, arg);
