@@ -382,8 +382,13 @@ void __mi_stat_adjust_increase_mt(mi_stat_count_t* stat, size_t amount);
 void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, size_t amount);
 
 // counters can just be increased
-void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount);
-void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount);
+static inline void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount) {
+  mi_atomic_addi64_relaxed(&stat->total, (int64_t)amount);
+}
+
+static inline void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {
+  stat->total += amount;
+}
 
 #define mi_heap_stat_counter_increase(heap,stat,amount)         __mi_stat_counter_increase_mt( &(heap)->stats.stat, amount)
 #define mi_heap_stat_increase(heap,stat,amount)                 __mi_stat_increase_mt( &(heap)->stats.stat, amount)
@@ -1157,9 +1162,10 @@ static inline bool mi_page_claim_ownership(mi_page_t* page) {
 ------------------------------------------------------------------- */
 
 #define MI_SAMPLE_RATE_MAX        (SIZE_MAX/4)
-#define MI_SAMPLE_COUNTDOWN_MAX   (SIZE_MAX/4)
+#define MI_SAMPLE_COUNTDOWN_MAX   (MI_MAX_ALLOC_SIZE)
 
 static inline bool mi_theap_should_sample(mi_theap_t* theap, size_t req_size) {
+  // note: this should return `true` on an empty theap so we initialize it's countdown to `-1`.
   mi_assert_internal(req_size <= SIZE_MAX/2);
   const size_t sample_countdown = theap->sample_countdown - req_size;
   return ((mi_ssize_t)sample_countdown < 0);

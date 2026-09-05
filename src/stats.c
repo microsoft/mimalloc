@@ -39,15 +39,6 @@ static void mi_stat_update(mi_stat_count_t* stat, int64_t amount) {
   if (amount > 0) { stat->total += amount; }
 }
 
-
-void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount) {
-  mi_atomic_addi64_relaxed(&stat->total, (int64_t)amount);
-}
-
-void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {
-  stat->total += amount;
-}
-
 void __mi_stat_increase_mt(mi_stat_count_t* stat, size_t amount) {
   mi_stat_update_mt(stat, (int64_t)amount);
 }

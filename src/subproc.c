@@ -102,7 +102,7 @@ bool _mi_subproc_is_main(mi_subproc_t* subproc) {
 
 mi_subproc_t* _mi_subproc(void) {
   mi_theap_t* theap = _mi_theap_default();
-  if (theap == NULL || theap->tld == NULL) {  // see issue #1289
+  if (theap == NULL || theap->tld == NULL || theap->tld->subproc == NULL) {  // see issue #1289 and #1391
     return _mi_subproc_main();
   }
   else {

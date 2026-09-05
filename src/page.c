@@ -1200,13 +1200,15 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
   }
 
   // take a sample?
-  if mi_unlikely(huge_alignment==0 && theap->sample_rate!=0) {
-    if mi_unlikely(mi_theap_should_sample(theap,req_size)) {
-      return _mi_theap_malloc_sample(theap,req_size,zero,ppage);
+  if mi_unlikely(huge_alignment==0 && mi_theap_should_sample(theap,req_size)) {
+    if (theap->sample_rate!=0) {
+      return _mi_theap_malloc_sample(theap,req_size,zero,ppage);    
     }
-    #if MI_SAMPLE==2 
-    else { theap->sample_countdown -= req_size; }  // fine grained updates directly
-    #endif    
+    else {
+      mi_assert_internal(!_mi_is_empty_theap(theap));
+      mi_assert_internal(req_size <= MI_SAMPLE_COUNTDOWN_MAX);
+      theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;  // reset the countdown counter    
+    }
   }
 
   // find (or allocate) a page of the right size
@@ -1271,11 +1273,8 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
         page = mi_page_queue_find_free(theap,pq);
         // mi_assert_internal(mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE);
         if (page!=NULL) {        
-          #if MI_SAMPLE==2  // fine grained sampling needs to update the countdown
-          theap->sample_countdown -= req_size;
-          #endif          
           if (ppage!=NULL) { *ppage = page; }
-          mi_assert_internal(mi_page_immediate_available(page));
+          mi_assert_internal(mi_page_immediate_available(page)); // we should never recurse in _mi_page_malloc_zero
           return _mi_page_malloc_zero(theap,page,size,zero);
         }
       }
@@ -1287,8 +1286,11 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
 
 void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept {
   const size_t sample_rate = theap->sample_rate;
+  const size_t sample_countdown = theap->sample_countdown;
   theap->sample_rate = 0;  // prevent a recursive call to _mi_theap_malloc_sample from _mi_malloc_generic
+  theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;
   void* p = _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage);  
   theap->sample_rate = sample_rate;
+  theap->sample_countdown = sample_countdown;
   return p;
 }

@@ -89,7 +89,13 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
   mi_assert_internal(page->block_size < MI_MAX_ALIGN_SIZE || _mi_is_aligned(block, MI_MAX_ALIGN_SIZE));
 
-  #if MI_STAT>1
+  #if MI_SAMPLE==2 
+  const size_t req_size = size - MI_PADDING_SIZE;
+  mi_assert_internal(theap->sample_countdown >= req_size);
+  theap->sample_countdown -= req_size;
+  #endif
+
+  #if MI_STAT==2
   mi_theap_stat_increase(theap,malloc_requested,size - MI_PADDING_SIZE);
   #endif
 
@@ -154,7 +160,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero_non
   
   // we only sample if fine-grained sampling is enabled (otherwise we sample in mi_malloc_generic)
   #if MI_SAMPLE==2 
-  if mi_unlikely(mi_theap_sample_small(theap,size)) { return _mi_theap_malloc_sample(theap,size,zero,ppage); }
+  if mi_unlikely(mi_theap_should_sample(theap,size)) { return _mi_theap_malloc_sample(theap,size,zero,ppage); }
   #endif
   
   // get page in constant time 
@@ -962,11 +968,9 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sample(mi_theap_t* thea
 
   // handle empty theap and disabled profiling
   if (theap->sample_rate==0) { 
-    #if MI_SAMPLE==2  // fine-grained; reset the countdown to avoid the slow sample path
     if (!_mi_is_empty_theap(theap)) { // avoid writing to the initial empty theap 
-      theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;
+      theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX; // avoid the sampling path for a long time
     }
-    #endif
     return _mi_malloc_generic_no_sample(theap,size,zero,ppage);
   }
   

@@ -224,9 +224,6 @@ static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, con
           const bool is_aligned = (((uintptr_t)page->free + offset) & align_mask)==0;
           if mi_likely(is_aligned)
           {
-            #if MI_SAMPLE==2  // fine grained needs to update the sample countdown
-            theap->sample_countdown -= size;
-            #endif
             if (ppage!=NULL) { *ppage = page; }
             void* p = _mi_page_malloc_zero(theap, page, padsize, zero);
             mi_assert_internal(p != NULL);

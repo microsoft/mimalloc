@@ -95,14 +95,17 @@ bool test_profiler_samples(void) {
   return true;
 }
 
+#define MAXLOOP 100000
+
 bool test_profiler_record_fields(void) {
   CHECK_BODY("profiler: record ptr and size are non-zero") {
     int before = g_state.alloc_count;
-    while (g_state.alloc_count == before) {
+    int count;
+    for (count = 0; g_state.alloc_count == before && count < MAXLOOP; count++) {
       void* p = mi_malloc(1024);
       mi_free(p);
     }
-    result = (g_state.last_ptr != NULL && g_state.last_size > 0 && g_state.last_upscaled > 0);
+    result = (g_state.last_ptr != NULL && g_state.last_size > 0 && g_state.last_upscaled > 0 && count!=MAXLOOP);
   }
   return true;
 }
@@ -114,7 +117,8 @@ bool test_profiler_on_free_called(void) {
 
     // Keep the pointer live until we confirm a sample was taken, then free it.
     void* sampled = NULL;
-    while (g_state.alloc_count == alloc_before) {
+    int count;
+    for (count = 0; g_state.alloc_count == alloc_before && count < MAXLOOP; count++) {
       if (sampled) { mi_free(sampled); }
       sampled = mi_malloc(1024);
     }
@@ -124,7 +128,7 @@ bool test_profiler_on_free_called(void) {
     mi_free(expected);
     sampled = NULL;
 
-    result = (g_state.free_count > free_before);
+    result = (g_state.free_count > free_before && count!=MAXLOOP);
   }
   return true;
 }
