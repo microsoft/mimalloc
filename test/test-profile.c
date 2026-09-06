@@ -23,11 +23,11 @@ terms of the MIT license. A copy of the license can be found in the file
 // ---------------------------------------------------------------------------
 
 typedef struct {
-  int64_t alloc_count;
-  int64_t free_count;
-  size_t  last_size;
-  size_t  last_upscaled;
-  void*   last_ptr;
+  uint64_t  alloc_count;
+  uint64_t  free_count;
+  size_t    last_size;
+  uint64_t  last_upscaled;
+  void*     last_ptr;
 } profile_state_t;
 
 // We store ptr in user_data so on_free can verify the round-trip.
@@ -36,7 +36,7 @@ static profile_state_t g_state;
 
 #define TEST_THRESHOLD (16 * 1024)
 
-static size_t mi_cdecl on_alloc(mi_profiler_data_t* data, void* ptr, size_t threshold, size_t bytes_since_last_sample, const mi_heap_t* heap, void* profiler_arg) {
+static size_t mi_cdecl on_alloc(mi_profiler_data_t* data, void* ptr, size_t threshold, uint64_t bytes_since_last_sample, const mi_heap_t* heap, void* profiler_arg) {
   MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(profiler_arg);
   assert(profiler_arg==&g_state);
   assert(bytes_since_last_sample >= data->requested_size);
@@ -88,7 +88,7 @@ static void allocate_past_threshold(void) {
 
 bool test_profiler_samples(void) {
   CHECK_BODY("profiler: on_alloc called after threshold") {
-    int before = g_state.alloc_count;
+    uint64_t before = g_state.alloc_count;
     allocate_past_threshold();
     result = (g_state.alloc_count > before);
   }
@@ -99,7 +99,7 @@ bool test_profiler_samples(void) {
 
 bool test_profiler_record_fields(void) {
   CHECK_BODY("profiler: record ptr and size are non-zero") {
-    int before = g_state.alloc_count;
+    uint64_t before = g_state.alloc_count;
     int count;
     for (count = 0; g_state.alloc_count == before && count < MAXLOOP; count++) {
       void* p = mi_malloc(1024);
@@ -112,8 +112,8 @@ bool test_profiler_record_fields(void) {
 
 bool test_profiler_on_free_called(void) {
   CHECK_BODY("profiler: on_free called for sampled allocation") {
-    int alloc_before = g_state.alloc_count;
-    int free_before  = g_state.free_count;
+    uint64_t alloc_before = g_state.alloc_count;
+    uint64_t free_before  = g_state.free_count;
 
     // Keep the pointer live until we confirm a sample was taken, then free it.
     void* sampled = NULL;
@@ -135,7 +135,7 @@ bool test_profiler_on_free_called(void) {
 
 bool test_profiler_upscaled_at_least_size(void) {
   CHECK_BODY("profiler: upscaled_size >= size") {
-    int before = g_state.alloc_count;
+    uint64_t before = g_state.alloc_count;
     while (g_state.alloc_count == before) {
       void* p = mi_malloc(256);
       mi_free(p);

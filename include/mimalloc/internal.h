@@ -337,7 +337,7 @@ bool          _mi_page_is_valid(mi_page_t* page);
 // "profile.c"
 mi_decl_restrict void* _mi_theap_malloc_sample(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) mi_attr_noexcept;
 mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept;
-mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* theap, size_t size, size_t requested_since_last_sample, bool zero, mi_page_t** ppage) mi_attr_noexcept;
+mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* theap, size_t size, uint64_t requested_since_last_sample, bool zero, mi_page_t** ppage) mi_attr_noexcept;
 void          _mi_page_profile_free(mi_page_t* page, mi_block_t* block, void* p);
 
 // ------------------------------------------------------
@@ -370,24 +370,31 @@ mi_decl_noreturn mi_decl_cold void _mi_assert_fail(const char* assertion, const 
 ----------------------------------------------------------- */
 
 // add to stat keeping track of the peak
-void __mi_stat_increase(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_decrease(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_increase_mt(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_decrease_mt(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_increase(mi_stat_count_t* stat, uint64_t amount);
+void __mi_stat_decrease(mi_stat_count_t* stat, uint64_t amount);
+void __mi_stat_increase_mt(mi_stat_count_t* stat, uint64_t amount);
+void __mi_stat_decrease_mt(mi_stat_count_t* stat, uint64_t amount);
 
 // adjust stat in special cases to compensate for double counting (and does not adjust peak values and can decrease the total)
-void __mi_stat_adjust_increase(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_adjust_decrease(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_adjust_increase_mt(mi_stat_count_t* stat, size_t amount);
-void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, size_t amount);
+void __mi_stat_adjust_increase(mi_stat_count_t* stat, uint64_t amount);
+void __mi_stat_adjust_decrease(mi_stat_count_t* stat, uint64_t amount);
+void __mi_stat_adjust_increase_mt(mi_stat_count_t* stat, uint64_t amount);
+void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, uint64_t amount);
 
 // counters can just be increased
-static inline void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, size_t amount) {
+static inline void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, uint64_t amount) {
+  mi_assert_internal(amount<=INT64_MAX);
   mi_atomic_addi64_relaxed(&stat->total, (int64_t)amount);
 }
 
-static inline void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t amount) {
-  stat->total += amount;
+static inline void __mi_stat_counter_increase(mi_stat_counter_t* stat, uint64_t amount) {
+  mi_assert_internal(amount<=INT64_MAX);
+  stat->total += (int64_t)amount;
+}
+
+static inline void __mi_stat_counter_decrease(mi_stat_counter_t* stat, uint64_t amount) {
+  mi_assert_internal(amount<=INT64_MAX);
+  stat->total -= (int64_t)amount;
 }
 
 #define mi_heap_stat_counter_increase(heap,stat,amount)         __mi_stat_counter_increase_mt( &(heap)->stats.stat, amount)
@@ -403,15 +410,17 @@ static inline void __mi_stat_counter_increase(mi_stat_counter_t* stat, size_t am
 #define mi_subproc_stat_adjust_decrease(subproc,stat,amount)    __mi_stat_adjust_decrease_mt( &(subproc)->stats.stat, amount)
 
 #define mi_theap_stat_counter_increase(theap,stat,amount)       __mi_stat_counter_increase( &(theap)->stats.stat, amount)
+#define mi_theap_stat_counter_decrease(theap,stat,amount)       __mi_stat_counter_decrease( &(theap)->stats.stat, amount)
 #define mi_theap_stat_increase(theap,stat,amount)               __mi_stat_increase( &(theap)->stats.stat, amount)
 #define mi_theap_stat_decrease(theap,stat,amount)               __mi_stat_decrease( &(theap)->stats.stat, amount)
 #define mi_theap_stat_adjust_increase(theap,stat,amnt)          __mi_stat_adjust_increase( &(theap)->stats.stat, amnt)
 #define mi_theap_stat_adjust_decrease(theap,stat,amnt)          __mi_stat_adjust_decrease( &(theap)->stats.stat, amnt)
 
 #define mi_theapx_stat_counter_increase(heap,theap,stat,amount) if (theap!=NULL) { mi_theap_stat_counter_increase(theap,stat,amount); } else { mi_heap_stat_counter_increase(heap,stat,amount); }
+#define mi_theapx_stat_adjust_decrease(heap,theap,stat,amount)  if (theap!=NULL) { mi_theap_stat_adjust_decrease(theap,stat,amount); } else { mi_heap_stat_adjust_decrease(heap,stat,amount); }
 #define mi_theapx_stat_increase(heap,theap,stat,amount)         if (theap!=NULL) { mi_theap_stat_increase(theap,stat,amount); } else { mi_heap_stat_increase(heap,stat,amount); }
 #define mi_theapx_stat_decrease(heap,theap,stat,amount)         if (theap!=NULL) { mi_theap_stat_decrease(theap,stat,amount); } else { mi_heap_stat_decrease(heap,stat,amount); }
-#define mi_theapx_stat_adjust_decrease(heap,theap,stat,amount)  if (theap!=NULL) { mi_theap_stat_adjust_decrease(theap,stat,amount); } else { mi_heap_stat_adjust_decrease(heap,stat,amount); }
+
 
 /* -----------------------------------------------------------
   pthread thread locals
@@ -1175,8 +1184,9 @@ static inline bool mi_page_claim_ownership(mi_page_t* page) {
 static inline bool mi_theap_should_sample(mi_theap_t* theap, size_t req_size) {
   // note: this should return `true` on an empty theap so we initialize it's countdown to `-1`.
   mi_assert_internal(req_size <= SIZE_MAX/2);
-  const size_t sample_countdown = theap->sample_countdown - req_size;
-  return ((mi_ssize_t)sample_countdown < 0);
+  // const size_t sample_countdown = theap->sample_countdown - req_size;
+  // return ((mi_ssize_t)sample_countdown < 0);
+  return ((mi_ssize_t)theap->sample_countdown < (mi_ssize_t)req_size);
 }
 
 #if MI_SAMPLE==2  // fine grained
@@ -1539,7 +1549,7 @@ static inline void* _mi_memcpy(void* dst, const void* src, size_t n) {
   return memcpy(dst, src, n);
 }
 
-static inline void* _mi_memset(void* dst, int val, size_t n) {
+static inline void* _mi_memset(void* dst, int val, size_t n) {  
   return memset(dst, val, n);
 }
 
@@ -1587,6 +1597,37 @@ static inline void* _mi_memzero(void* dst, size_t n) {
 
 static inline void* _mi_memzero_aligned(void* dst, size_t n) {
   return _mi_memset_aligned(dst, 0, n);
+}
+
+// MI_SIZE_SIZE aligned and sized
+static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize) {
+  mi_assert_internal(bsize%MI_SIZE_SIZE == 0);
+  mi_assert_internal(bsize > 0);
+  mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
+  mi_assert_internal(bsize < MI_MAX_ALIGN_SIZE || (uintptr_t)dst % MI_MAX_ALIGN_SIZE == 0);
+  #if MI_ARCH_ARM64 && defined(__SIZEOF_INT128__) // any 64-bit platform with 128-bit stores could benefit (todo: maybe also for x64 instead of using `rep stosb` there?)
+  // fast memzero based on overlapping writes (and assuming non-zero size_t multiple size, and uintptr_t aligned)
+  if mi_unlikely(bsize < 16) {
+    *((uint64_t*)dst) = 0; 
+    return dst;
+  }
+  __uint128_t* const start = (__uint128_t*)dst;    
+  __uint128_t* const end   = (__uint128_t*)((uint8_t*)dst + bsize);
+  if mi_likely(bsize < 64) {    
+    const size_t ofs = (bsize>>5)&1;  // == (n >= 32)
+    mi_assert_internal(bsize < 32 ? ofs==0 : ofs==1);    
+    __uint128_t* const end0 = end - ofs;
+    start[0] = 0; start[ofs] = 0;
+    end0[-1] = 0; end[-1] = 0;
+    return dst;
+  }
+  if mi_likely(bsize <= 128) {    
+    start[0] = 0; start[1] = 0; start[2] = 0; start[3] = 0;
+    end[-4] = 0; end[-3] = 0; end[-2] = 0; end[-1] = 0; 
+    return dst;
+  }
+  #endif
+  return _mi_memset_aligned(dst, 0, bsize);
 }
 
 #endif  // MI_INTERNAL_H

@@ -91,7 +91,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Enable profiling support
 #ifndef MI_PROFILE
-#define MI_PROFILE  2
+#define MI_PROFILE  1
 #endif
 
 // Enable guard pages behind objects of a certain size (set by the MIMALLOC_GUARDED_MIN/MAX/SAMPLE_RATE options)
@@ -606,7 +606,7 @@ struct mi_theap_s {
   _Atomic(size_t)       refcount;                            // reference count
   
   size_t                sample_rate;
-  size_t                sample_requested;
+  uint64_t              sample_requested;
   size_t                profile_sample_rate;
   size_t                profile_sample_countdown;
   size_t                guarded_sample_rate;

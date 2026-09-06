@@ -49,7 +49,7 @@ typedef struct mi_stat_counter_s {
   MI_STAT_COUNT(threads)                    /* number of threads */ \
   MI_STAT_COUNT(malloc_normal)              /* allocated bytes <= MI_LARGE_OBJ_SIZE_MAX */ \
   MI_STAT_COUNT(malloc_huge)                /* allocated bytes in huge pages */ \
-  MI_STAT_COUNT(malloc_requested)           /* malloc requested bytes */ \
+  MI_STAT_COUNTER(malloc_requested)         /* malloc requested bytes */ \
   \
   MI_STAT_COUNTER(mmap_calls) \
   MI_STAT_COUNTER(commit_calls) \

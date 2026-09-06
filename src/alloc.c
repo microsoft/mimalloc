@@ -56,7 +56,7 @@ static mi_decl_maybe_unused mi_decl_noinline void* mi_block_zero(mi_block_t* blo
 // Fast allocation in a page: just pop from the free list.
 // Fall back to generic allocation only if the list is empty.
 // Note: in release mode the (inlined) routine is about 7 instructions with a single test.
-static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept
+static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, size_t sample_countdown, bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
   if (page->block_size != 0) { // not the empty theap
     mi_assert_internal(mi_page_block_size(page) >= size);
@@ -70,7 +70,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   mi_used_t xused = page->xused; 
   xused.used_alloc += 0x10001;  // increment both (16-bit) used count and alloc count 
   #if defined(__GNUC__) 
-  __asm("" : : : "memory");     // always load the `used` field before the test
+  __asm("" : : : "memory" );     // always load the `used` field before the test
   #endif  
   if (block == NULL) {
     return _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage);
@@ -81,9 +81,11 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   // pop from the free list
   mi_block_t* next = mi_block_next(page,block);
   mi_track_mem_undefined(block,sizeof(*block));
+  
   #if MI_SECURE
   if (!zero) block->next = 0;  // don't leak internal data
   #endif
+
   page->free = next;
   page->xused = xused;
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
@@ -91,12 +93,15 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
 
   #if MI_SAMPLE==2 
   const size_t req_size = size - MI_PADDING_SIZE;
+  mi_assert_internal(theap->sample_countdown == sample_countdown); // we pass it to improve codegen
   mi_assert_internal(theap->sample_countdown >= req_size);
-  theap->sample_countdown -= req_size;
+  theap->sample_countdown = sample_countdown - req_size;
+  #else
+  MI_UNUSED(sample_countdown);
   #endif
 
   #if MI_STAT>=2
-  mi_theap_stat_increase(theap,malloc_requested,size - MI_PADDING_SIZE);
+  mi_theap_stat_counter_increase(theap,malloc_requested,size - MI_PADDING_SIZE);
   #endif
 
   #if MI_DEBUG>3
@@ -122,7 +127,8 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   // zero the block? note: we need to zero the full block size (issue #63)
   if mi_unlikely(zero) {
     if (!page->free_is_zero) {
-      _mi_memzero_aligned(block,bsize);
+      mi_assert_internal(bsize%MI_SIZE_SIZE == 0);
+      _mi_memzero_block(block,bsize);
     }
     else {
       block->next = 0; 
@@ -140,7 +146,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
 
 // extra entries for improved efficiency in `alloc-aligned.c` (and in `page.c:mi_malloc_generic`.
 extern void* _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept {
-  return mi_page_malloc_zero(theap, page, size, zero, NULL);
+  return mi_page_malloc_zero(theap, page, size, theap->sample_countdown, zero, NULL);
 }
 
 // main allocation primitives for small and generic allocation
@@ -167,7 +173,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero_non
   mi_page_t* page = _mi_theap_get_free_small_page(theap, size + MI_PADDING_SIZE);
 
   // and allocate  
-  void* const p = mi_page_malloc_zero(theap, page, size + MI_PADDING_SIZE, zero, ppage);
+  void* const p = mi_page_malloc_zero(theap, page, size + MI_PADDING_SIZE, theap->sample_countdown, zero, ppage);
   mi_track_malloc(p,size,zero);
 
   #if MI_DEBUG>3
@@ -949,8 +955,8 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   mi_theap_stat_counter_increase(theap, malloc_guarded_count, 1);
   #if MI_STAT
   // adjust request stats to only count the allocated size of the block (and not the guard page)
-  mi_theap_stat_adjust_decrease(theap, malloc_requested, req_size);
-  mi_theap_stat_increase(theap, malloc_requested, size);
+  mi_theap_stat_counter_decrease(theap, malloc_requested, req_size);
+  mi_theap_stat_counter_increase(theap, malloc_requested, size);
   #endif
   #if MI_DEBUG>3
   if (zero) {
@@ -981,7 +987,8 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sample(mi_theap_t* thea
   mi_assert_internal(theap->sample_rate > 0);
   mi_assert_internal(theap->sample_rate <= SIZE_MAX/2);
   mi_assert_internal(theap->sample_rate >= theap->sample_countdown);  
-  const size_t requested = theap->sample_rate + (req_size - theap->sample_countdown) + theap->sample_requested;
+
+  const uint64_t requested = (uint64_t)theap->sample_rate + (uint64_t)(req_size - theap->sample_countdown) + theap->sample_requested;
   mi_assert_internal(requested > 0);
   mi_assert_internal(requested >= size);
   if (requested < size) {
@@ -995,8 +1002,8 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sample(mi_theap_t* thea
   mi_assert_internal(theap->guarded_sample_rate!=0 || theap->guarded_sample_countdown==0);
   bool sample_profile = false;
   bool sample_guarded = false;
-  if (theap->profile_sample_countdown >= requested) { theap->profile_sample_countdown -= requested; } else { sample_profile = true; }
-  if (theap->guarded_sample_countdown >= requested) { theap->guarded_sample_countdown -= requested; } else { sample_guarded = true; }
+  if (theap->profile_sample_countdown >= requested) { theap->profile_sample_countdown -= (size_t)requested; } else { sample_profile = true; }
+  if (theap->guarded_sample_countdown >= requested) { theap->guarded_sample_countdown -= (size_t)requested; } else { sample_guarded = true; }
 
   // invoke callback?
   if (sample_profile) {
