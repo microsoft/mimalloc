@@ -1600,27 +1600,34 @@ static inline void* _mi_memzero_aligned(void* dst, size_t n) {
 }
 
 // MI_SIZE_SIZE aligned and sized
-static inline void* _mi_memzero_alignedw(void* dst, size_t n) {
-  mi_assert_internal(n%MI_SIZE_SIZE == 0);
-  mi_assert_internal((uintptr_t)dst % MI_SIZE_SIZE == 0);
-  #if MI_ARCH_ARM64 && defined(__GNUC__)
-  if mi_likely(n <= 128) {
-    __asm__ volatile (
-      "tbz  %[n], #3, 1f\n\t" 
-      "sub  %[n], %[n], #8\n\t"
-      "str  xzr, [%[dst]], #8\n\t"
-      "1:\n\t"
-      "cbz  %[n], 3f\n\t"
-      "2:\n\t"
-      "subs %[n],%[n],#16\n\t"
-      "stp  xzr,xzr,[%[dst]],#16\n\t"
-      "b.gt 2b\n\t"
-      "3:"      
-      : [n] "+r" (n), [dst] "+r" (dst) : : "cc");    
+static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize) {
+  mi_assert_internal(bsize%MI_SIZE_SIZE == 0);
+  mi_assert_internal(bsize > 0);
+  mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
+  mi_assert_internal(bsize < MI_MAX_ALIGN_SIZE || (uintptr_t)dst % MI_MAX_ALIGN_SIZE == 0);
+  #if MI_ARCH_ARM64 && defined(__SIZEOF_INT128__) // any 64-bit platform with 128-bit stores could benefit (todo: maybe also for x64 instead of using `rep stosb` there?)
+  // fast memzero based on overlapping writes (and assuming non-zero size_t multiple size, and uintptr_t aligned)
+  if mi_unlikely(bsize < 16) {
+    *((uint64_t*)dst) = 0; 
+    return dst;
+  }
+  __uint128_t* const start = (__uint128_t*)dst;    
+  __uint128_t* const end   = (__uint128_t*)((uint8_t*)dst + bsize);
+  if mi_likely(bsize < 64) {    
+    const size_t ofs = (bsize>>5)&1;  // == (n >= 32)
+    mi_assert_internal(bsize < 32 ? ofs==0 : ofs==1);    
+    __uint128_t* const end0 = end - ofs;
+    start[0] = 0; start[ofs] = 0;
+    end0[-1] = 0; end[-1] = 0;
+    return dst;
+  }
+  if mi_likely(bsize <= 128) {    
+    start[0] = 0; start[1] = 0; start[2] = 0; start[3] = 0;
+    end[-4] = 0; end[-3] = 0; end[-2] = 0; end[-1] = 0; 
     return dst;
   }
   #endif
-  return _mi_memset_aligned(dst, 0, n);
+  return _mi_memset_aligned(dst, 0, bsize);
 }
 
 #endif  // MI_INTERNAL_H

@@ -128,7 +128,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   if mi_unlikely(zero) {
     if (!page->free_is_zero) {
       mi_assert_internal(bsize%MI_SIZE_SIZE == 0);
-      _mi_memzero_alignedw(block,bsize);
+      _mi_memzero_block(block,bsize);
     }
     else {
       block->next = 0; 
