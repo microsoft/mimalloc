@@ -1549,7 +1549,7 @@ static inline void* _mi_memcpy(void* dst, const void* src, size_t n) {
   return memcpy(dst, src, n);
 }
 
-static inline void* _mi_memset(void* dst, int val, size_t n) {
+static inline void* _mi_memset(void* dst, int val, size_t n) {  
   return memset(dst, val, n);
 }
 
@@ -1596,6 +1596,30 @@ static inline void* _mi_memzero(void* dst, size_t n) {
 }
 
 static inline void* _mi_memzero_aligned(void* dst, size_t n) {
+  return _mi_memset_aligned(dst, 0, n);
+}
+
+// MI_SIZE_SIZE aligned and sized
+static inline void* _mi_memzero_alignedw(void* dst, size_t n) {
+  mi_assert_internal(n%MI_SIZE_SIZE == 0);
+  mi_assert_internal((uintptr_t)dst % MI_SIZE_SIZE == 0);
+  #if MI_ARCH_ARM64 && defined(__GNUC__)
+  if mi_likely(n <= 128) {
+    __asm__ volatile (
+      "tbz  %[n], #3, 1f\n\t" 
+      "sub  %[n], %[n], #8\n\t"
+      "str  xzr, [%[dst]], #8\n\t"
+      "1:\n\t"
+      "cbz  %[n], 3f\n\t"
+      "2:\n\t"
+      "subs %[n],%[n],#16\n\t"
+      "stp  xzr,xzr,[%[dst]],#16\n\t"
+      "b.gt 2b\n\t"
+      "3:"      
+      : [n] "+r" (n), [dst] "+r" (dst) : : "cc");    
+    return dst;
+  }
+  #endif
   return _mi_memset_aligned(dst, 0, n);
 }
 

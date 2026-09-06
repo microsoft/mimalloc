@@ -127,7 +127,8 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   // zero the block? note: we need to zero the full block size (issue #63)
   if mi_unlikely(zero) {
     if (!page->free_is_zero) {
-      _mi_memzero_aligned(block,bsize);
+      mi_assert_internal(bsize%MI_SIZE_SIZE == 0);
+      _mi_memzero_alignedw(block,bsize);
     }
     else {
       block->next = 0; 
