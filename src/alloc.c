@@ -45,12 +45,6 @@ static mi_decl_noinline void mi_page_block_setup_padding(mi_page_t* page, mi_blo
   }
   #endif
 }
-#else
-static mi_decl_maybe_unused mi_decl_noinline void* mi_block_zero(mi_block_t* block, size_t bsize) mi_attr_noexcept {
-  // const size_t bsize = mi_page_usable_block_size(page);
-  _mi_memzero_aligned(block, bsize);
-  return block;
-}
 #endif
 
 // Fast allocation in a page: just pop from the free list.
