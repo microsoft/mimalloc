@@ -40,7 +40,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
-#define mi_assume_aligned(p,sz)
+#define mi_assume_aligned(p,sz) (p)
 #elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
 #if !MI_TRACK_ASAN
 #define mi_decl_forceinline     __attribute__((always_inline)) inline
@@ -61,7 +61,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_assume_aligned(p,sz) __builtin_assume_aligned(p,sz)
 #else
 #define mi_decl_cold
-#define mi_assume_aligned(p,sz)
+#define mi_assume_aligned(p,sz) (p)
 #endif
 #elif __cplusplus >= 201103L    // c++11
 #define mi_decl_forceinline     inline
@@ -71,7 +71,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
-#define mi_assume_aligned(p,sz)
+#define mi_assume_aligned(p,sz) (p)
 #else
 #define mi_decl_forceinline     inline
 #define mi_decl_noinline
@@ -80,7 +80,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
-#define mi_assume_aligned(p,sz)
+#define mi_assume_aligned(p,sz) (p)
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -1507,7 +1507,11 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
 // Todo: we see improvements on win32 but less with glibc; we might want to only enable this on windows.
 // ---------------------------------------------------------------------------------
 
-#if !MI_TRACK_ENABLED && (MI_ARCH_X64 || MI_ARCH_X86) && (defined(_WIN32) || defined(__GNUC__)) && !defined(__SIZEOF_INT128__)
+#if !MI_TRACK_ENABLED && (MI_ARCH_ARM64 || MI_ARCH_X64) && (defined(__SIZEOF_INT128__) || (defined(_MSC_VER) && defined(__AVX2__))) // any 64-bit platform with 128-bit stores can benefit.
+#define MI_USE_MEMZERO128  1
+#endif
+
+#if !MI_TRACK_ENABLED && !MI_USE_MEMZERO128 && (MI_ARCH_X64 || MI_ARCH_X86) && (defined(_WIN32) || defined(__GNUC__))
 
 extern mi_decl_hidden size_t _mi_cpu_movsb_max;  // in init.c
 extern mi_decl_hidden size_t _mi_cpu_stosb_max;
@@ -1594,27 +1598,34 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
   mi_assert_internal(bsize > 0);
   mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
   mi_assert_internal(bsize < MI_MAX_ALIGN_SIZE || (uintptr_t)dst % MI_MAX_ALIGN_SIZE == 0);
-
-  #if (MI_ARCH_ARM64 || MI_ARCH_X64) && defined(__SIZEOF_INT128__) // any 64-bit platform with 128-bit stores can benefit.
+  
+  #if MI_USE_MEMZERO128  // 64-bit with 128-bit stores (arm64 and x64)
     // fast memzero based on overlapping writes (and assuming non-zero size_t-multiple size, and uintptr_t aligned)
+    #if defined(_MSC_VER) && defined(__AVX2__)
+      typedef __m128i __int128_t;
+      const __int128_t zero = _mm_setzero_si128();
+    #else
+      const __int128_t zero = 0;
+    #endif
     if mi_unlikely(bsize < 16) {
-      *((uint64_t*)dst) = 0; 
+      *((uint64_t*)dst) = 0;
       return dst;
     }
-    mi_assert_internal((uintptr_t)dst % MI_MAX_ALIGN_SIZE == 0);  
-    void* const adst = mi_assume_aligned(dst,MI_MAX_ALIGN_SIZE);
-    __int128_t* const start = (__int128_t*)adst;    
-    __int128_t* const end   = (__int128_t*)((uint8_t*)adst + bsize);
-    if mi_likely(bsize < 64) {    
-      const size_t ofs = (bsize>>5)&1; mi_assert_internal(bsize < 32 ? ofs==0 : ofs==1);    
+    mi_assert_internal((uintptr_t)dst % MI_MAX_ALIGN_SIZE == 0);
+    mi_assert_internal(bsize % 16 == 0);
+    void* const adst = mi_assume_aligned(dst, MI_MAX_ALIGN_SIZE);
+    __int128_t* const start = (__int128_t*)adst;
+    __int128_t* const end = (__int128_t*)((uint8_t*)adst + bsize);
+    if mi_likely(bsize < 64) {
+      const size_t ofs = (bsize>>5)&1; mi_assert_internal(bsize < 32 ? ofs==0 : ofs==1);
       __int128_t* const end0 = end - ofs;
-      start[0] = 0; start[ofs] = 0;
-      end0[-1] = 0; end[-1] = 0;
+      start[0] = zero; start[ofs] = zero;
+      end0[-1] = zero; end[-1] = zero;
       return adst;
     }
-    if mi_likely(bsize <= 128) {    
-      start[0] = 0; start[1] = 0; start[2] = 0; start[3] = 0;
-      end[-4] = 0; end[-3] = 0; end[-2] = 0; end[-1] = 0; 
+    if mi_likely(bsize <= 128) {
+      start[0] = zero; start[1] = zero; start[2] = zero; start[3] = zero;
+      end[-4] = zero; end[-3] = zero; end[-2] = zero; end[-1] = zero;
       return adst;
     }
   #endif
