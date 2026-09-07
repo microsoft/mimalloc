@@ -40,6 +40,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
+#define mi_assume_aligned(p,sz)
 #elif (defined(__GNUC__) && (__GNUC__ >= 3)) || defined(__clang__) // includes clang and icc
 #if !MI_TRACK_ASAN
 #define mi_decl_forceinline     __attribute__((always_inline)) inline
@@ -55,10 +56,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #else
 #define mi_decl_hidden          __attribute__((visibility("hidden")))
 #endif
-#if (__GNUC__ >= 4) || defined(__clang__)
+#if (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__)
 #define mi_decl_cold            __attribute__((cold))
+#define mi_assume_aligned(p,sz) __builtin_assume_aligned(p,sz)
 #else
 #define mi_decl_cold
+#define mi_assume_aligned(p,sz)
 #endif
 #elif __cplusplus >= 201103L    // c++11
 #define mi_decl_forceinline     inline
@@ -68,6 +71,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
+#define mi_assume_aligned(p,sz)
 #else
 #define mi_decl_forceinline     inline
 #define mi_decl_noinline
@@ -76,6 +80,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
+#define mi_assume_aligned(p,sz)
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -89,7 +94,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_likely(x)       (x)
 #endif
 
-#if (defined(__GNUC__) && (__GNUC__ >= 7)) || defined(__clang__) // includes clang and icc
+#if (defined(__GNUC__) && (__GNUC__ >= 7)) || defined(__clang__)
 #define mi_decl_maybe_unused    __attribute__((unused))
 #elif __cplusplus >= 201703L    // c++17
 #define mi_decl_maybe_unused    [[maybe_unused]]
@@ -1560,36 +1565,19 @@ static inline void* _mi_memset(void* dst, int val, size_t n) {
 // This is used for example in `mi_realloc`.
 // -------------------------------------------------------------------------------
 
-#if (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__)
-
 // On GCC/CLang we provide a hint that the pointers are word aligned.
 static inline void* _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0));
-  void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);
-  const void* asrc = __builtin_assume_aligned(src, MI_INTPTR_SIZE);
+  void* adst = mi_assume_aligned(dst, MI_INTPTR_SIZE);
+  const void* asrc = mi_assume_aligned(src, MI_INTPTR_SIZE);
   return _mi_memcpy(adst, asrc, n);
 }
 
 static inline void* _mi_memset_aligned(void* dst, int val, size_t n) {
   mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
-  void* adst = __builtin_assume_aligned(dst, MI_INTPTR_SIZE);
+  void* adst = mi_assume_aligned(dst, MI_INTPTR_SIZE);
   return _mi_memset(adst, val, n);
 }
-
-#else
-
-// Default fallback on `_mi_memcpy`
-static inline void* _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
-  mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0));
-  return _mi_memcpy(dst, src, n);
-}
-
-static inline void* _mi_memset_aligned(void* dst, int val, size_t n) {
-  mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
-  return _mi_memset(dst, val, n);
-}
-
-#endif
 
 static inline void* _mi_memzero(void* dst, size_t n) {
   return _mi_memset(dst, 0, n);
@@ -1599,40 +1587,41 @@ static inline void* _mi_memzero_aligned(void* dst, size_t n) {
   return _mi_memset_aligned(dst, 0, n);
 }
 
-// MI_SIZE_SIZE aligned and sized
+
+// Zero a block: blocks are always aligned with a positive bsize in machine-word bytes.
 static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize) {
   mi_assert_internal(bsize%MI_SIZE_SIZE == 0);
   mi_assert_internal(bsize > 0);
   mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
   mi_assert_internal(bsize < MI_MAX_ALIGN_SIZE || (uintptr_t)dst % MI_MAX_ALIGN_SIZE == 0);
-  #if (defined(__GNUC__) && (__GNUC__ >= 4)) || defined(__clang__)
-  void* const adst = __builtin_assume_aligned(dst,MI_INTPTR_SIZE);
-  #else
-  void* const adst = dst;
-  #endif
+
   #if (MI_ARCH_ARM64 || MI_ARCH_X64) && defined(__SIZEOF_INT128__) // any 64-bit platform with 128-bit stores can benefit.
-  // fast memzero based on overlapping writes (and assuming non-zero size_t multiple size, and uintptr_t aligned)
-  if mi_unlikely(bsize < 16) {
-    *((uint64_t*)adst) = 0; 
-    return adst;
-  }
-  __int128_t* const start = (__int128_t*)adst;    
-  __int128_t* const end   = (__int128_t*)((uint8_t*)adst + bsize);
-  if mi_likely(bsize < 64) {    
-    const size_t ofs = (bsize>>5)&1;  // == (n >= 32)
-    mi_assert_internal(bsize < 32 ? ofs==0 : ofs==1);    
-    __int128_t* const end0 = end - ofs;
-    start[0] = 0; start[ofs] = 0;
-    end0[-1] = 0; end[-1] = 0;
-    return adst;
-  }
-  if mi_likely(bsize <= 128) {    
-    start[0] = 0; start[1] = 0; start[2] = 0; start[3] = 0;
-    end[-4] = 0; end[-3] = 0; end[-2] = 0; end[-1] = 0; 
-    return adst;
-  }
+    // fast memzero based on overlapping writes (and assuming non-zero size_t-multiple size, and uintptr_t aligned)
+    if mi_unlikely(bsize < 16) {
+      *((uint64_t*)dst) = 0; 
+      return dst;
+    }
+    mi_assert_internal((uintptr_t)dst % MI_MAX_ALIGN_SIZE == 0);  
+    void* const adst = mi_assume_aligned(dst,MI_MAX_ALIGN_SIZE);
+    __int128_t* const start = (__int128_t*)adst;    
+    __int128_t* const end   = (__int128_t*)((uint8_t*)adst + bsize);
+    if mi_likely(bsize < 64) {    
+      const size_t ofs = (bsize>>5)&1; mi_assert_internal(bsize < 32 ? ofs==0 : ofs==1);    
+      __int128_t* const end0 = end - ofs;
+      start[0] = 0; start[ofs] = 0;
+      end0[-1] = 0; end[-1] = 0;
+      return adst;
+    }
+    if mi_likely(bsize <= 128) {    
+      start[0] = 0; start[1] = 0; start[2] = 0; start[3] = 0;
+      end[-4] = 0; end[-3] = 0; end[-2] = 0; end[-1] = 0; 
+      return adst;
+    }
   #endif
-  return _mi_memset_aligned(adst, 0, bsize);
+
+  // regular memset
+  void* const wdst = mi_assume_aligned(dst,MI_INTPTR_SIZE);
+  return _mi_memset_aligned(wdst, 0, bsize);
 }
 
 #endif  // MI_INTERNAL_H
