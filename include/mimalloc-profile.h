@@ -12,24 +12,30 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdbool.h>  // bool
 #include <stdint.h>   // uint64_t
 
+// Profiler data is stored together with each sampled allocation (unless the `on_free` field in the profiler is NULL.)
 typedef struct mi_profiler_data_s {
-  size_t usable_size;
-  size_t requested_size;
-  void*  user_data[6];      // default, but can be less or more (up to 1KiB), depending on `profiler_data_size`
+  size_t profiler_data_size;  // size of the custom profile data (should be the `mi_profiler_t.profiler_data_size`)
+  size_t usable_size;         // usable size in the allocated block
+  size_t requested_size;      // user requested size (i.e. the size passed to `mi_malloc`)
+  void*  user_data[1];        // default, but can be less or more (up to 1KiB), depending on `profiler_data_size`
 } mi_profiler_data_t;
 
+// Profiling callback invoked on each sampled allocation.
 typedef size_t (mi_cdecl mi_profiler_on_alloc_fun  )(mi_profiler_data_t* profiler_data, void* ptr, size_t bytes_sample_rate, uint64_t bytes_since_last_sample, const mi_heap_t* heap, void* profiler_arg);
-typedef size_t (mi_cdecl mi_profiler_on_realloc_inplace_fun)(mi_profiler_data_t* profiler_data, void* ptr, size_t old_requested_size, const mi_heap_t* heap, void* profiler_arg);
+
+// Profiling callback invoked on each sampled in-place re-allocation.
+typedef size_t (mi_cdecl mi_profiler_on_realloc_inplace_fun)(mi_profiler_data_t* profiler_data, void* ptr, size_t old_size, const mi_heap_t* heap, void* profiler_arg);
+
+// Profiling callback invoked on a previously sampled allocation.
 typedef void   (mi_cdecl mi_profiler_on_free_fun   )(mi_profiler_data_t* profiler_data, void* ptr, const mi_heap_t* heap, void* profiler_arg);
 
 // A profiler
-// All fields are considered immutable such that they can be copied and accessed concurrently.
-// All fields can be NULL/0.
+// All fields are considered immutable such that they can be copied and accessed concurrently. All fields can be NULL/0.
 typedef struct mi_profiler_s {
   void*                       reserved1;          // opaque -- internal use for mimalloc
   void*                       reserved2;          
   void*                       reserved3;
-  void*                       profiler_arg;       // opaque profiler state pointer -- passed to each callback
+  void*                       profiler_arg;       // opaque user profiler state pointer -- passed to each callback
   size_t                      profiler_data_size; // size of required profiler data for each sampled allocation
   mi_profiler_on_alloc_fun*   on_alloc;           // called on a sampled allocation (may be called concurrently)  
   mi_profiler_on_free_fun*    on_free;            // called on when previous sampled allocation is freed (may be called concurrently)

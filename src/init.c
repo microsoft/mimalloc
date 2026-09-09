@@ -22,6 +22,7 @@ static const mi_page_t mi_page_empty = {
   {0},                    // xused
   #if MI_INTPTR_SIZE < 8
   0,                      // xlast_used
+  0,                      // xlast_alloc
   #endif
   NULL,                   // local_free
   0,                      // block_size
@@ -127,6 +128,10 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   MI_ATOMIC_VAR_INIT(NULL), // heap
   MI_ATOMIC_VAR_INIT(NULL), // subproc
   MI_ATOMIC_VAR_INIT(1),  // refcount
+  0,                      // full page retain
+  false,                  // allow reclaim
+  true,                   // allow abandon
+  true,                   // is_detached 
   0, 0,                   // sample rate, requested
   0, 0,                   // profile rate, countdown
   0, 0, 0, 0,             // guarded rate, countdown, min, max
@@ -138,10 +143,6 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   0, 0,                   // generic count
   NULL, NULL,             // tnext, tprev
   NULL, NULL,             // hnext, hprev
-  0,                      // full page retain
-  false,                  // allow reclaim
-  true,                   // allow abandon
-  true,                   // is_detached    
   MI_PAGE_QUEUES_EMPTY,
   MI_MEMID_STATIC,
   MI_STATS_NULL,          // stats

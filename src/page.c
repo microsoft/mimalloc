@@ -168,12 +168,13 @@ static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page,
   
   // update countdown
   const size_t bsize = mi_page_usable_block_size(page);  mi_assert_internal(bsize >= MI_PADDING_SIZE);
-  const uint64_t requested = (uint64_t)(alloc_count - last_alloc) * (uint64_t)(bsize - MI_PADDING_SIZE);
+  const size_t alloc_diff = alloc_count - last_alloc;
+  const uint64_t requested = (uint64_t)alloc_diff * (uint64_t)(bsize - MI_PADDING_SIZE);
   if (requested <= SIZE_MAX && theap->sample_countdown >= (size_t)requested) {
     theap->sample_countdown -= requested;
   }
   else {
-    theap->sample_requested += (requested - theap->sample_countdown);    
+    theap->sample_requested   += (requested - theap->sample_countdown);
     theap->sample_countdown = 0;    
   }
 }

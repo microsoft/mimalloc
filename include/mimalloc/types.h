@@ -610,17 +610,25 @@ struct mi_theap_s {
   mi_tld_t*             tld;                                 // thread-local data
   _Atomic(mi_heap_t*)   heap;                                // the heap this theap belongs to.
   _Atomic(mi_subproc_t*)subproc;                             // subproc this belongs too (always `subproc == heap->subproc` but needed for safe destruction)
-  _Atomic(size_t)       refcount;                            // reference count
+  _Atomic(size_t)       refcount;                            // reference count (needed for safe heap destroy)
   
-  size_t                sample_rate;
-  uint64_t              sample_requested;
-  size_t                profile_sample_rate;
-  size_t                profile_sample_countdown;
-  size_t                guarded_sample_rate;
-  size_t                guarded_sample_countdown;
+  // config
+  long                  page_full_retain;                    // how many full pages can be retained per queue (before abandoning them)
+  bool                  allow_page_reclaim;                  // `true` if this theap can reclaim abandoned pages
+  bool                  allow_page_abandon;                  // `true` if this theap can abandon pages to reduce memory footprint
+  bool                  is_detached;                         // `true` if `tld->thread_id == MI_THREADID_DETACHED`
+
+  // sampling
+  size_t                sample_rate;                         // current sampling rate in requested bytes (or 0 to disable) (for profiling and guarded mode)
+  uint64_t              sample_requested;                    // total allocated/requested bytes since the last sample
+  size_t                profile_sample_rate;                 // sampling rate in requested bytes for profiling
+  size_t                profile_sample_countdown;            // countdown in requested bytes for profiling
+  size_t                guarded_sample_rate;                 // sampling rate in requested bytes for guarded objects
+  size_t                guarded_sample_countdown;            // countdown in requested bytes for guarded objects
   size_t                guarded_size_min;                    // minimal size for guarded objects
   size_t                guarded_size_max;                    // maximal size for guarded objects
   
+  // stats
   unsigned long long    heartbeat;                           // monotonic heartbeat count
   mi_random_ctx_t       random;                              // random number context used for secure allocation
   size_t                page_count;                          // total number of pages in the `pages` queues.
@@ -630,16 +638,13 @@ struct mi_theap_s {
   long                  generic_count;                       // how often is `_mi_malloc_generic` called?
   long                  generic_collect_count;               // how often is `_mi_malloc_generic` called without collecting?
 
+  // theaps belong to heaps and threads
   mi_theap_t*           tnext;                               // list of theaps in this thread
   mi_theap_t*           tprev;
   mi_theap_t*           hnext;                               // list of theaps of the owning `heap`
   mi_theap_t*           hprev;
 
-  long                  page_full_retain;                    // how many full pages can be retained per queue (before abandoning them)
-  bool                  allow_page_reclaim;                  // `true` if this theap can reclaim abandoned pages
-  bool                  allow_page_abandon;                  // `true` if this theap can abandon pages to reduce memory footprint
-  bool                  is_detached;                         // `true` if `tld->thread_id == MI_THREADID_DETACHED`
-
+  // page queues
   mi_page_queue_t       pages[MI_BIN_COUNT];                 // queue of pages for each size class (or "bin")
   mi_memid_t            memid;                               // provenance of the theap struct itself (meta or os)
   mi_stats_t            stats;                               // thread-local statistics
