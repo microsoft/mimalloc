@@ -996,8 +996,8 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sample(mi_theap_t* thea
   mi_assert_internal(theap->guarded_sample_rate!=0 || theap->guarded_sample_countdown==0);
   bool sample_profile = false;
   bool sample_guarded = false;
-  if (theap->profile_sample_countdown >= requested) { theap->profile_sample_countdown -= (size_t)requested; } else { sample_profile = true; }
-  if (theap->guarded_sample_countdown >= requested) { theap->guarded_sample_countdown -= (size_t)requested; } else { sample_guarded = true; }
+  if (theap->profile_sample_countdown >= requested) { theap->profile_sample_countdown -= (size_t)requested; } else { sample_profile = (theap->profile_sample_rate!=0); }
+  if (theap->guarded_sample_countdown >= requested) { theap->guarded_sample_countdown -= (size_t)requested; } else { sample_guarded = (theap->guarded_sample_rate!=0); }
 
   // invoke callback?
   if (sample_profile) {

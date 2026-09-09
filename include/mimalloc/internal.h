@@ -1264,7 +1264,7 @@ static inline bool mi_profiler_set_enabled(mi_profiler_t* prof, bool enable) {
 }
 
 
-static inline size_t mi_theap_disable_profiler(mi_theap_t* theap) {
+static inline size_t mi_theap_disable_profiling(mi_theap_t* theap) {
   const size_t sample_rate = theap->profile_sample_rate;
   theap->profile_sample_rate = 0;
   // theap->profile_sample_countdown = 0;
@@ -1272,7 +1272,7 @@ static inline size_t mi_theap_disable_profiler(mi_theap_t* theap) {
   return sample_rate;
 }
 
-static inline void mi_theap_enable_profiler(mi_theap_t* theap, size_t sample_rate) {
+static inline void mi_theap_enable_profiling(mi_theap_t* theap, size_t sample_rate) {
   theap->profile_sample_rate = (sample_rate > MI_SAMPLE_RATE_MAX ? MI_SAMPLE_RATE_MAX : sample_rate);
   if (theap->profile_sample_countdown==0) { theap->profile_sample_countdown = theap->profile_sample_rate; }
   if (theap->sample_rate==0 || theap->sample_rate > theap->profile_sample_rate) {

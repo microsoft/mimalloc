@@ -215,7 +215,7 @@ mi_decl_export void mi_theap_guarded_set_size_bound(mi_theap_t* theap, size_t mi
 
 static void mi_theap_guarded_init(mi_theap_t* theap) {
   mi_theap_guarded_set_sample_rate(theap,
-    (size_t)mi_option_get_clamp(mi_option_guarded_sample_rate, 0, LONG_MAX),
+    (size_t)mi_option_get_clamp(mi_option_guarded_sample_rate, 0, MI_SAMPLE_RATE_MAX),
     (size_t)mi_option_get(mi_option_guarded_sample_seed));
   mi_theap_guarded_set_size_bound(theap,
     (size_t)mi_option_get_clamp(mi_option_guarded_min, 0, LONG_MAX),

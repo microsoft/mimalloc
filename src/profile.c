@@ -60,7 +60,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
   if (prof->on_alloc!=NULL) { 
     const size_t new_sample_rate = (*prof->on_alloc)(profiler_data, p, theap->profile_sample_rate, requested_since_last_sample, _mi_theap_heap(theap), prof->profiler_arg);
     if (new_sample_rate!=0 && new_sample_rate != (size_t)theap->profile_sample_rate) { 
-      mi_theap_enable_profiler(theap,new_sample_rate);
+      mi_theap_enable_profiling(theap,new_sample_rate);
     }
     mi_theap_stat_counter_increase(theap,profile_samples,1);
   }
@@ -116,7 +116,7 @@ bool mi_profiler_start(const mi_profiler_t* profiler ) {
   if (mi_heap_profiler(heap)==profiler) {
     mi_theap_t* theap = _mi_heap_theap_peek(heap);
     if (theap!=NULL) {
-      mi_theap_enable_profiler(theap,1);
+      mi_theap_enable_profiling(theap,1);
     }
   }
   return false;
