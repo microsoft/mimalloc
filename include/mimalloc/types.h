@@ -55,8 +55,8 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_TRACK_ASAN     1
 // #define MI_TRACK_ETW      1
 
-// Define MI_STAT as 1 to maintain statistics; set it to 2 to have detailed statistics (but costs some performance).
-// #define MI_STAT 1
+// Define MI_STATS as 1 to maintain statistics; set it to 2 to have detailed statistics (but costs some performance).
+// #define MI_STATS 1
 
 // Define MI_SECURE to enable security mitigations
 // #define MI_SECURE 1  // check invalid pointer free, guard pages around meta data, randomize arena allocation addresses (like ASLR), abort on detected meta data corruption
@@ -84,11 +84,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // Statistics (0=only essential, 1=detailed (fast, can be enabled always), 2=more expensive tracking of precise requested bytes)
-#ifndef MI_STAT
+#ifndef MI_STATS
 #if (MI_DEBUG>0)
-#define MI_STAT 2
+#define MI_STATS 2
 #else
-#define MI_STAT 1
+#define MI_STATS 1
 #endif
 #endif
 

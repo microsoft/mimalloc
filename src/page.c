@@ -145,7 +145,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
 }
 #endif
 
-#if MI_STAT || MI_SAMPLE
+#if MI_STATS || MI_SAMPLE
 // Gets the theap belonging to a page.
 static mi_theap_t* mi_theap_of_page(mi_page_t* page) {
   mi_theap_t* theap = page->theap;
@@ -179,7 +179,7 @@ static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page,
 }
 #endif
 
-#if MI_STAT
+#if MI_STATS
 // Merge stats from the page into the corresponding theap or heap.
 static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, size_t alloc_count, size_t free_count ) {
   // get heap (as the theap might be NULL)
@@ -192,7 +192,7 @@ static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, 
   const size_t bsize = mi_page_usable_block_size(page);
   const uint64_t allocated = (uint64_t)alloc_count * (uint64_t)bsize;
   const uint64_t freed     = (uint64_t)free_count * (uint64_t)bsize;
-  #if MI_STAT==1
+  #if MI_STATS==1
   const uint64_t requested = allocated - ((uint64_t)alloc_count * MI_PADDING_SIZE);
   #endif
   mi_assert_internal(allocated <= INT64_MAX);  // safe to cast to int64_t for stats
@@ -206,7 +206,7 @@ static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, 
       mi_theapx_stat_counter_increase(heap, theap, malloc_normal_count, alloc_count);
       mi_theapx_stat_increase(heap, theap, malloc_normal, allocated);
       mi_theapx_stat_increase(heap, theap, malloc_bins[bin], alloc_count);
-      #if MI_STAT==1
+      #if MI_STATS==1
       // use coarse total requested bytes
       mi_theapx_stat_counter_increase(heap, theap, malloc_requested, requested);      
       #endif
@@ -224,7 +224,7 @@ static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, 
     if (alloc_count > 0) {      
       mi_theapx_stat_counter_increase(heap, theap, malloc_huge_count, alloc_count);
       mi_theapx_stat_increase(heap, theap, malloc_huge, allocated);
-      #if MI_STAT==1
+      #if MI_STATS==1
       // use coarse total requested bytes      
       mi_theapx_stat_counter_increase(heap, theap, malloc_requested, requested);      
       #endif

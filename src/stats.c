@@ -127,7 +127,7 @@ static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
   // copy all fields
   MI_STAT_FIELDS()
 
-  #if MI_STAT
+  #if MI_STATS
   for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
     mi_stat_count_add_mt(&stats->malloc_bins[i], &src->malloc_bins[i]);
   }
@@ -237,7 +237,7 @@ static void mi_stat_print(const mi_stat_count_t* stat, const char* msg, int64_t 
   mi_stat_print_ex(stat, msg, unit, out, arg, NULL);
 }
 
-#if MI_STAT
+#if MI_STATS
 static void mi_stat_total_print(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg) {
   _mi_fprintf(out, arg, "  %-12s:", msg);
   _mi_fprintf(out, arg, "%12s", " ");  // no peak
@@ -271,7 +271,7 @@ static void mi_print_header(const char* name,mi_output_fun* out, void* arg ) {
                         name, "peak   ", "total   ", "current   ", "block   ", "total#   ");
 }
 
-#if MI_STAT
+#if MI_STATS
 static bool mi_stats_print_bins(const mi_stat_count_t* bins, size_t max, mi_output_fun* out, void* arg) {
   bool found = false;
   char buf[64];
@@ -363,18 +363,18 @@ void _mi_stats_print(const char* name, size_t id, const mi_stats_t* stats, mi_ou
   _mi_fprintf(out, arg, "%s %zu\n", name, id);
 
   if (stats->malloc_normal.total + stats->malloc_huge.total != 0) {
-    #if MI_STAT
+    #if MI_STATS
     mi_print_header("blocks", out, arg);
     mi_stats_print_bins(stats->malloc_bins, MI_BIN_HUGE, out, arg);
     #endif
-    #if MI_STAT
+    #if MI_STATS
     mi_stat_print(&stats->malloc_normal, "binned", -stats->malloc_normal_count.total, out, arg);
     mi_stat_print(&stats->malloc_huge, "huge", -stats->malloc_huge_count.total, out, arg);
     mi_stat_count_t total = { 0,0,0 };
     mi_stat_count_add_mt(&total, &stats->malloc_normal);
     mi_stat_count_add_mt(&total, &stats->malloc_huge);
     mi_stat_print_ex(&total, "total", -(stats->malloc_normal_count.total + stats->malloc_huge_count.total), out, arg, "");
-    #if MI_STAT>=2
+    #if MI_STATS>=2
     mi_stat_total_print(&stats->malloc_requested, "malloc req", out, arg);
     #else
     mi_stat_total_print(&stats->malloc_requested, "malloc req~", out, arg);

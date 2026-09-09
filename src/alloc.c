@@ -94,7 +94,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   MI_UNUSED(sample_countdown);
   #endif
 
-  #if MI_STAT>=2
+  #if MI_STATS>=2
   mi_theap_stat_counter_increase(theap,malloc_requested,size - MI_PADDING_SIZE);
   #endif
 
@@ -947,7 +947,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   mi_track_malloc(p, usable_size, zero);    
   if (!mi_theap_is_initialized(theap)) { theap = _mi_theap_default(); }
   mi_theap_stat_counter_increase(theap, malloc_guarded_count, 1);
-  #if MI_STAT
+  #if MI_STATS
   // adjust request stats to only count the allocated size of the block (and not the guard page)
   mi_theap_stat_counter_decrease(theap, malloc_requested, req_size);
   mi_theap_stat_counter_increase(theap, malloc_requested, size);
