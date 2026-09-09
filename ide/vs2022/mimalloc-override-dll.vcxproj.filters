@@ -70,7 +70,10 @@
     <ClCompile Include="..\..\src\subproc.c">
       <Filter>Sources</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\profile.c">
+    <ClCompile Include="..\..\src\sample-guarded.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\sample-profile.c">
       <Filter>Sources</Filter>
     </ClCompile>
   </ItemGroup>

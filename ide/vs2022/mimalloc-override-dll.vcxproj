@@ -481,7 +481,8 @@
     </ClCompile>
     <ClCompile Include="..\..\src\heap.c" />
     <ClCompile Include="..\..\src\prim\prim-tls.c" />
-    <ClCompile Include="..\..\src\profile.c" />
+    <ClCompile Include="..\..\src\sample-guarded.c" />
+    <ClCompile Include="..\..\src\sample-profile.c" />
     <ClCompile Include="..\..\src\subproc.c" />
     <ClCompile Include="..\..\src\theap.c" />
     <ClCompile Include="..\..\src\init.c" />

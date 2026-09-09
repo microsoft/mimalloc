@@ -1264,7 +1264,7 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
   bool sample_countdown_is_adjusted = false;
   if mi_unlikely(mi_theap_should_sample(theap,req_size)) {
     if (huge_alignment==0 && theap->sample_rate!=0) {
-      return _mi_theap_malloc_sample(theap,req_size,zero,ppage);    
+      return _mi_theap_malloc_sampled(theap,req_size,zero,ppage);    
     }    
     mi_assert_internal(!_mi_is_empty_theap(theap));       // cannot write to the empty theap
     mi_assert_internal(req_size <= MI_SAMPLE_COUNTDOWN_MAX);
@@ -1362,7 +1362,7 @@ void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi
   if (theap==NULL) return NULL;
   const size_t sample_rate = theap->sample_rate;
   const size_t sample_countdown = theap->sample_countdown;
-  theap->sample_rate = 0;  // prevent a recursive call to _mi_theap_malloc_sample from _mi_malloc_generic
+  theap->sample_rate = 0;  // prevent a recursive call to mi_theap_malloc_sampled from _mi_malloc_generic
   theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;
   void* p = _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage);
   theap->sample_rate = sample_rate;

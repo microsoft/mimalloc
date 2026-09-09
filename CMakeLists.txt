@@ -116,15 +116,16 @@ set(mi_sources
     src/options.c
     src/os.c
     src/page.c
-    src/page-map.c
-    src/profile.c
+    src/page-map.c   
+    src/prim/prim.c
+    src/prim/prim-tls.c 
     src/random.c
+    src/sample-guarded.c
+    src/sample-profile.c
     src/stats.c
     src/subproc.c
     src/theap.c
-    src/threadlocal.c
-    src/prim/prim.c
-    src/prim/prim-tls.c)
+    src/threadlocal.c)  
 
 set(mi_cflags "")
 set(mi_cflags_static "")            # extra flags for a static library build

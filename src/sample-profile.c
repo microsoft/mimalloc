@@ -1,0 +1,223 @@
+/* ----------------------------------------------------------------------------
+Copyright (c) 2019-2026, Microsoft Research, Daan Leijen
+This is free software; you can redistribute it and/or modify it under the
+terms of the MIT license. A copy of the license can be found in the file
+"LICENSE" at the root of this distribution.
+-----------------------------------------------------------------------------*/
+#include "mimalloc.h"
+#include "mimalloc/internal.h"
+#include "mimalloc/prim-tls.h"
+
+//----------------------------------------------------------------------------
+// General sampled allocation (called from `page.c:mi_malloc_generic_fallback`)
+// This is for both guarded and profiled sampling
+//----------------------------------------------------------------------------
+
+size_t _mi_theap_update_sample_rate(mi_theap_t* theap) {
+  const size_t old_sample_rate = theap->sample_rate;
+  theap->sample_rate = theap->profile_sample_rate;
+  if (theap->sample_rate == 0 || (theap->guarded_sample_rate!=0 && theap->sample_rate > theap->guarded_sample_rate)) {
+    theap->sample_rate = theap->guarded_sample_rate;
+  }
+  if (theap->sample_countdown > theap->sample_rate) {
+    theap->sample_countdown = theap->sample_rate;  // todo: adjust difference?
+  }
+  return old_sample_rate;
+}
+
+mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) mi_attr_noexcept 
+{
+  // the size has not yet been counted against the countdown (and does not include MI_PADDING_SIZE)
+  mi_assert_internal(req_size <= MI_MAX_ALLOC_SIZE);
+  mi_assert_internal((theap->sample_countdown==SIZE_MAX && _mi_is_empty_theap(theap)) || 
+                     (theap->sample_countdown <= MI_SAMPLE_COUNTDOWN_MAX && theap->sample_countdown < req_size));
+  const size_t size = req_size + MI_PADDING_SIZE;
+
+  // handle empty theap and disabled sampling
+  if (theap->sample_rate==0) { 
+    if (!_mi_is_empty_theap(theap)) {                    // avoid writing to the initial empty theap 
+      theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX; // avoid the sampling path for a long time 
+    }
+    return _mi_malloc_generic_no_sample(theap,size,zero,ppage);
+  }
+  
+  // update countdown and total accummulated requested bytes since the last sample
+  mi_assert_internal(!_mi_is_empty_theap(theap));  
+  mi_assert_internal(req_size <= SIZE_MAX/2);
+  mi_assert_internal(theap->sample_rate > 0);
+  mi_assert_internal(theap->sample_rate <= SIZE_MAX/2);
+  mi_assert_internal(theap->sample_rate >= theap->sample_countdown);  
+
+  const uint64_t requested = theap->sample_requested = (uint64_t)theap->sample_rate + (uint64_t)(req_size - theap->sample_countdown) + theap->sample_requested;
+  mi_assert_internal(requested > 0);
+  mi_assert_internal(requested >= size);
+  theap->sample_countdown = theap->sample_rate;      // reset sampling
+
+  // update derived countdowns
+  mi_assert_internal(theap->profile_sample_rate!=0 || theap->profile_sample_countdown==0);
+  mi_assert_internal(theap->guarded_sample_rate!=0 || theap->guarded_sample_countdown==0);
+  bool sample_profile = false;
+  bool sample_guarded = false;
+  if (theap->profile_sample_rate!=0) {
+    if (theap->profile_sample_countdown >= requested) { theap->profile_sample_countdown -= (size_t)requested; } else { sample_profile = true; }
+  }
+  if (theap->guarded_sample_rate!=0) {
+    if (theap->guarded_sample_countdown >= requested) { theap->guarded_sample_countdown -= (size_t)requested; } else { sample_guarded = true; }
+  }
+
+  // invoke callback?
+  if (sample_profile) {
+    theap->profile_sample_countdown = theap->profile_sample_rate;  // reset countdown
+    theap->sample_requested = 0;                                   // reset requested as we pass it to malloc_profiled
+    return _mi_theap_malloc_profiled(theap,size,requested,zero,ppage);
+  }
+  else if (sample_guarded) {
+    if (req_size >= theap->guarded_size_min && req_size <= theap->guarded_size_max) {
+      // use guarded allocation
+      theap->guarded_sample_countdown = theap->guarded_sample_rate; // reset countdown
+      return _mi_theap_malloc_guarded(theap,size,zero,ppage);
+    }
+    else {
+      // failed size criteria, rewind the sample countdown so we sample asap again
+      // todo: can we do better here as this will cause many samples until it fits the size..
+      theap->sample_countdown = 0;
+    }
+  }
+  // take generic path
+  return _mi_malloc_generic_no_sample(theap,size,zero,ppage);
+}
+
+
+
+//----------------------------------------------------------------------------
+// Util
+//----------------------------------------------------------------------------
+
+static mi_profiler_t* mi_heap_profiler(const mi_heap_t* heap) {
+  return mi_atomic_load_ptr_acquire(mi_profiler_t,&heap->profiler);
+} 
+
+static mi_profiler_t* mi_theap_get_enabled_profiler(const mi_theap_t* theap) {
+  mi_heap_t* const heap = _mi_theap_heap(theap);
+  mi_profiler_t* prof = mi_atomic_load_ptr_relaxed(mi_profiler_t, &heap->profiler);
+  if (prof!=NULL && mi_profiler_is_enabled(prof)) {
+    return prof;
+  }
+  else {
+    return NULL;
+  }
+}
+
+//----------------------------------------------------------------------------
+// Profile an allocation 
+//-----------------------------------------------------------------------------
+
+mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* theap, size_t size, uint64_t requested_since_last_sample, bool zero, mi_page_t** ppage) mi_attr_noexcept
+{
+  mi_assert_internal(theap!=NULL);  
+  mi_assert_internal(size<=requested_since_last_sample);
+  mi_profiler_t* const prof = mi_theap_get_enabled_profiler(theap);
+  if (prof == NULL) { return _mi_malloc_generic_no_sample(theap,size,zero,ppage); }
+  
+  // Overallocate a larger block to store the profiler data
+  // [MI_BLOCK_TAG_PROFILE] [usable size] [ ... profile data ... ] [... user data ...]
+  const size_t profiler_data_offset = sizeof(mi_block_t);
+  size_t profiler_data_size = sizeof(mi_profiler_data_t);
+  if (prof->profiler_data_size > 2*sizeof(size_t)) { profiler_data_size = (prof->profiler_data_size > 1024 ? 1024 : prof->profiler_data_size); };
+  const size_t profiler_user_offset = _mi_align_up(profiler_data_offset + profiler_data_size, MI_MAX_ALIGN_SIZE);
+  const size_t oversize = profiler_user_offset + size;
+  mi_page_t* page = NULL;
+  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(theap,oversize,zero,&page); 
+  if (block==NULL) return NULL;
+  mi_assert_internal(page!=NULL);
+  if (ppage!=NULL) { *ppage = page; }
+  mi_assert_internal(!mi_block_ptr_is_guarded(_mi_page_ptr_unalign(page,block),block));
+
+  // Set up the profiled block
+  mi_page_set_has_interior_pointers(page, true);
+  block->next = MI_BLOCK_TAG_PROFILED;  
+  const size_t usable_size = _mi_page_usable_size(page,block) - profiler_user_offset;
+  void* const p = (uint8_t*)block + profiler_user_offset;
+  mi_profiler_data_t* profiler_data = (mi_profiler_data_t*)((uint8_t*)block + profiler_data_offset);
+  profiler_data->requested_size = size - MI_PADDING_SIZE;
+  profiler_data->usable_size = usable_size;
+
+  // and call the profiler on_alloc
+  if (prof->on_alloc!=NULL) { 
+    const size_t new_sample_rate = (*prof->on_alloc)(profiler_data, p, theap->profile_sample_rate, requested_since_last_sample, _mi_theap_heap(theap), prof->profiler_arg);
+    if (new_sample_rate!=0 && new_sample_rate != (size_t)theap->profile_sample_rate) { 
+      _mi_theap_set_profile_sample_rate(theap,new_sample_rate);
+    }
+    mi_theap_stat_counter_increase(theap,profile_samples,1);
+  }
+  return p;
+}
+
+void _mi_page_profile_free(mi_page_t* page, mi_block_t* block, void* p) {
+  mi_assert_internal(mi_block_ptr_is_sampled(block,p));
+
+  // get the heap and profiler
+  mi_heap_t* const heap = mi_page_heap(page);
+  if (heap==NULL) return;
+  mi_profiler_t* prof = mi_heap_profiler(heap);
+  if (prof==NULL || !mi_profiler_is_enabled(prof) || prof->on_free==NULL) return;
+  
+  // call the on_free callback
+  mi_profiler_data_t* const profiler_data = (mi_profiler_data_t*)((uint8_t*)block + sizeof(mi_block_t));
+  prof->on_free(profiler_data, p, heap, prof->profiler_arg);
+}
+
+
+//----------------------------------------------------------------------------
+// Profiling API
+//-----------------------------------------------------------------------------*
+
+size_t _mi_theap_set_profile_sample_rate(mi_theap_t* theap, size_t sample_rate) {
+  const size_t old_sample_rate = theap->profile_sample_rate;
+  theap->profile_sample_rate = (sample_rate > MI_SAMPLE_RATE_MAX ? MI_SAMPLE_RATE_MAX : sample_rate);
+  if (theap->profile_sample_countdown > theap->profile_sample_rate) { 
+    theap->profile_sample_countdown = theap->profile_sample_rate;  // todo: adjust difference?
+  }
+  _mi_theap_update_sample_rate(theap);
+  return old_sample_rate;
+}
+
+bool mi_heap_profile(mi_heap_t* heap, const mi_profiler_t* profiler) {
+  // if (mi_heap_profiler(heap)!=NULL) return false;  // always overwrite?
+  mi_atomic_store_ptr_release(mi_profiler_t,&heap->profiler,(mi_profiler_t*)profiler);  
+  return true;
+}
+
+bool mi_subproc_profile(mi_subproc_id_t subproc_id, const mi_profiler_t* profiler) {
+  mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
+  if (subproc==NULL) return false; 
+  // if (mi_subproc_profiler(subproc)!=NULL) return false;  // always overwrite?
+  mi_atomic_store_ptr_release(mi_profiler_t,&subproc->profiler, (mi_profiler_t*)profiler);
+  mi_lock(&subproc->heaps_lock) {
+    for (mi_heap_t* heap = subproc->heaps; heap!=NULL; heap = heap->next) {
+      mi_heap_profile(heap,profiler);
+    }
+  }
+  return true;
+}
+
+bool mi_profile(const mi_profiler_t* profiler) {
+  return mi_subproc_profile(mi_subproc_main(),profiler);
+}
+
+bool mi_profiler_start(const mi_profiler_t* profiler ) {
+  const bool was_running = mi_profiler_set_enabled((mi_profiler_t*)profiler,true);  
+  if (was_running) return true;
+  mi_heap_t* heap = mi_heap_main();
+  if (mi_heap_profiler(heap)==profiler) {
+    mi_theap_t* theap = _mi_heap_theap_peek(heap);
+    if (theap!=NULL) {
+      _mi_theap_set_profile_sample_rate(theap,1);
+    }
+  }
+  return false;
+}
+
+bool mi_profiler_stop(const mi_profiler_t* profiler) {
+  return mi_profiler_set_enabled((mi_profiler_t*)profiler,false);
+}

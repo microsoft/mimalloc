@@ -122,11 +122,6 @@ static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, con
   #endif
 }
 
-// forward declaration for a MI_GUARDED build
-#if MI_GUARDED
-static void mi_page_block_unguard(mi_page_t* page, mi_block_t* block, void* p); // forward declaration
-#endif
-
 static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool* was_guarded) mi_attr_noexcept {
   MI_UNUSED(was_guarded);
   if mi_likely(!mi_page_has_interior_pointers(page)) {
@@ -145,7 +140,7 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
       #endif
       #if MI_GUARDED
       if (block->next == MI_BLOCK_TAG_GUARDED) { 
-        mi_page_block_unguard(page, block, p); 
+        _mi_page_block_unguard(page, block, p); 
         *was_guarded = true; 
       }
       #else
@@ -816,34 +811,3 @@ void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
 #endif
 
 
-// Remove guard page when building with MI_GUARDED
-#if MI_GUARDED
-static void mi_page_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
-  MI_UNUSED(p);
-  mi_assert_internal(mi_block_ptr_is_guarded(block, p));
-  mi_assert_internal(mi_page_has_interior_pointers(page));
-  mi_assert_internal((uint8_t*)p - (uint8_t*)block >= (ptrdiff_t)sizeof(mi_block_t));
-  mi_assert_internal(block->next == MI_BLOCK_TAG_GUARDED);
-
-  const size_t bsize = mi_page_block_size(page);
-  const size_t psize = _mi_os_page_size();
-  mi_assert_internal(bsize > psize);
-  mi_assert_internal(!page->memid.is_pinned);
-  void* gpage = (uint8_t*)block + bsize - psize;
-  mi_assert_internal(_mi_is_aligned(gpage, psize));
-  _mi_os_unprotect(gpage, psize);
-}
-
-// unguard a whole page (called from `mi_heap_destroy`)
-void _mi_page_unguard_all(mi_page_t* page) {      
-  if mi_likely(!mi_page_has_interior_pointers(page)) return;
-  uint8_t* const start = mi_page_start(page);
-  const size_t psize = mi_page_committed(page);
-  _mi_os_unprotect(start,psize);  // unprotect all at once as we cannot know which blocks are guarded
-}
-#else
-void _mi_page_unguard_all(mi_page_t* page) {
-  MI_UNUSED(page);
-  // nothing to do 
-}
-#endif

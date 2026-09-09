@@ -339,11 +339,20 @@ size_t        _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr
 bool          _mi_page_is_valid(mi_page_t* page);
 #endif
 
-// "profile.c"
-mi_decl_restrict void* _mi_theap_malloc_sample(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) mi_attr_noexcept;
+// "sample-guarded.c"
 mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept;
+void          _mi_page_block_unguard(mi_page_t* page, mi_block_t* block, void* p);  
+void          _mi_page_unguard_all(mi_page_t* page);
+void          _mi_theap_guarded_init(mi_theap_t* theap);
+
+// "sample-profile.c"
+mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) mi_attr_noexcept;
+size_t        _mi_theap_update_sample_rate(mi_theap_t* theap);
+
 mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* theap, size_t size, uint64_t requested_since_last_sample, bool zero, mi_page_t** ppage) mi_attr_noexcept;
 void          _mi_page_profile_free(mi_page_t* page, mi_block_t* block, void* p);
+size_t        _mi_theap_set_profile_sample_rate(mi_theap_t* theap, size_t sample_rate);
+
 
 // ------------------------------------------------------
 // Assertions
@@ -513,6 +522,12 @@ typedef struct mi_option_desc_s {
 #include <string.h>
 // initialize a local variable to zero; use memset as compilers optimize constant sized memset's
 #define _mi_memzero_var(x)  memset(&x,0,sizeof(x))
+
+// minimum
+static inline size_t mi_min(size_t x,  size_t y) { return (x <= y ? x : y); }
+
+// maximum
+static inline size_t mi_max(size_t x,  size_t y) { return (x >= y ? x : y); }
 
 // Is `x` a power of two? (0 is considered a power of two)
 static inline bool _mi_is_power_of_two(uintptr_t x) {
@@ -1202,20 +1217,6 @@ static inline bool mi_theap_should_sample(mi_theap_t* theap, size_t req_size) {
   return ((mi_ssize_t)theap->sample_countdown < (mi_ssize_t)req_size);
 }
 
-#if MI_SAMPLE==2  // fine grained
-static inline bool mi_theap_sample_small(mi_theap_t* theap, size_t req_size) {
-  mi_assert_internal(req_size <= SIZE_MAX/2);
-  const size_t sample_countdown = theap->sample_countdown - req_size;
-  if mi_likely((mi_ssize_t)sample_countdown >= 0) {
-    theap->sample_countdown = sample_countdown;
-    return false;
-  }
-  else {
-    return true;
-  }
-}
-#endif
-
 // we always align guarded pointers in a block at an offset
 // the block `next` field is then used as a tag to distinguish regular offset aligned blocks from guarded ones
 #define MI_BLOCK_TAG_ALIGNED   ((mi_encoded_t)(0))
@@ -1233,17 +1234,7 @@ static inline bool mi_block_ptr_is_guarded(const mi_block_t* block, const void* 
 #endif
 }
 
-static inline bool mi_block_ptr_is_profiled(const mi_block_t* block, const void* p) {
-#if MI_PROFILE
-  const ptrdiff_t offset = (uint8_t*)p - (uint8_t*)block;
-  return (offset >= (ptrdiff_t)(sizeof(mi_block_t)) && block->next == MI_BLOCK_TAG_PROFILED);
-#else
-  MI_UNUSED(block); MI_UNUSED(p);
-  return false;
-#endif
-}
-
-static inline bool mi_block_ptr_is_profiled_or_guarded(const mi_block_t* block, const void* p) {
+static inline bool mi_block_ptr_is_sampled(const mi_block_t* block, const void* p) {
 #if MI_GUARDED || MI_PROFILE
   const ptrdiff_t offset = (uint8_t*)p - (uint8_t*)block;
   return (offset >= (ptrdiff_t)(sizeof(mi_block_t)) && block->next != MI_BLOCK_TAG_ALIGNED);
@@ -1261,24 +1252,6 @@ static inline bool mi_profiler_is_enabled(const mi_profiler_t* prof) {
 static inline bool mi_profiler_set_enabled(mi_profiler_t* prof, bool enable) {
   _Atomic(size_t)* penabled = (_Atomic(size_t)*)&prof->reserved1;
   return (mi_atomic_exchange_release(penabled, (enable ? 1 : 0)) != 0);
-}
-
-
-static inline size_t mi_theap_disable_profiling(mi_theap_t* theap) {
-  const size_t sample_rate = theap->profile_sample_rate;
-  theap->profile_sample_rate = 0;
-  // theap->profile_sample_countdown = 0;
-  theap->sample_rate = theap->guarded_sample_rate;
-  return sample_rate;
-}
-
-static inline void mi_theap_enable_profiling(mi_theap_t* theap, size_t sample_rate) {
-  theap->profile_sample_rate = (sample_rate > MI_SAMPLE_RATE_MAX ? MI_SAMPLE_RATE_MAX : sample_rate);
-  if (theap->profile_sample_countdown==0) { theap->profile_sample_countdown = theap->profile_sample_rate; }
-  if (theap->sample_rate==0 || theap->sample_rate > theap->profile_sample_rate) {
-    theap->sample_rate = theap->profile_sample_rate;
-    theap->sample_countdown = theap->profile_sample_countdown; // TODO: track any previous allocation countdown into sample_requested
-  }
 }
 
 

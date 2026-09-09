@@ -134,7 +134,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
   #if MI_DEBUG > 1
   mi_page_t* const apage = _mi_ptr_page(aligned_p);
   mi_block_t* unalign_p = _mi_page_ptr_unalign(apage, aligned_p);
-  mi_assert_internal(p == (void*)unalign_p || mi_block_ptr_is_profiled_or_guarded(unalign_p, aligned_p));
+  mi_assert_internal(p == (void*)unalign_p || mi_block_ptr_is_sampled(unalign_p, aligned_p));
   #endif
 
   if (p != aligned_p) {

@@ -105,6 +105,7 @@ bool test_profiler_record_fields(void) {
       void* p = mi_malloc(1024);
       mi_free(p);
     }
+    assert(count!=MAXLOOP);    
     result = (g_state.last_ptr != NULL && g_state.last_size > 0 && g_state.last_upscaled > 0 && count!=MAXLOOP);
   }
   return true;
@@ -127,7 +128,7 @@ bool test_profiler_on_free_called(void) {
     void* expected = g_state.last_ptr;
     mi_free(expected);
     sampled = NULL;
-
+    assert(count!=MAXLOOP);
     result = (g_state.free_count > free_before && count!=MAXLOOP);
   }
   return true;
@@ -136,11 +137,13 @@ bool test_profiler_on_free_called(void) {
 bool test_profiler_upscaled_at_least_size(void) {
   CHECK_BODY("profiler: upscaled_size >= size") {
     uint64_t before = g_state.alloc_count;
-    while (g_state.alloc_count == before) {
+    int count;
+    for (count = 0; g_state.alloc_count == before && count < MAXLOOP; count++) {
       void* p = mi_malloc(256);
       mi_free(p);
     }
-    result = (g_state.last_upscaled >= g_state.last_size);
+    assert(count!=MAXLOOP);
+    result = (g_state.last_upscaled >= g_state.last_size && count!=MAXLOOP);
   }
   return true;
 }

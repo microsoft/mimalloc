@@ -143,9 +143,6 @@ extern void* _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t siz
   return mi_page_malloc_zero(theap, page, size, theap->sample_countdown, zero, NULL);
 }
 
-// main allocation primitives for small and generic allocation
-mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept;
-
 // internal small size allocation
 static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero_nonnull(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
@@ -160,7 +157,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero_non
   
   // we only sample if fine-grained sampling is enabled (otherwise we sample in mi_malloc_generic)
   #if MI_SAMPLE==2 
-  if mi_unlikely(mi_theap_should_sample(theap,size)) { return _mi_theap_malloc_sample(theap,size,zero,ppage); }
+  if mi_unlikely(mi_theap_should_sample(theap,size)) { return _mi_theap_malloc_sampled(theap,size,zero,ppage); }
   #endif
   
   // get page in constant time 
@@ -870,156 +867,6 @@ mi_decl_nodiscard void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
     return mi_new_realloc(p, total);
   }
 }
-
-
-// We always allocate a guarded allocation at an offset (`mi_page_has_interior_pointers` will be true).
-// We then set the first word of the block to `0` for regular offset aligned allocations (in `alloc-aligned.c`)
-// and the first word to `~0` for guarded allocations to have a correct `mi_usable_size`
-static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size, size_t* usable_size) {
-  // todo: we can still make padding work by moving it out of the guard page area
-  mi_page_t* const page = _mi_ptr_page(block);
-  mi_page_set_has_interior_pointers(page, true);
-  block->next = MI_BLOCK_TAG_GUARDED;
-
-  // set guard page at the end of the block
-  const size_t block_size = mi_page_block_size(page);  // must use `block_size` to match `mi_free_local`
-  const size_t os_page_size = _mi_os_page_size();
-  mi_assert_internal(block_size >= obj_size + os_page_size + sizeof(mi_block_t));
-  if (block_size < obj_size + os_page_size + sizeof(mi_block_t)) {
-    // should never happen
-    mi_free(block);
-    return NULL;
-  }
-  uint8_t* guard_page = (uint8_t*)block + block_size - os_page_size;
-  // note: the alignment of the guard page relies on blocks being os_page_size aligned which
-  // is ensured in `mi_arena_page_alloc_fresh`.  
-  mi_assert_internal(_mi_is_aligned(block, os_page_size));
-  mi_assert_internal(_mi_is_aligned(guard_page, os_page_size));
-  if (!page->memid.is_pinned && _mi_is_aligned(guard_page, os_page_size)) {
-    const bool ok = _mi_os_protect(guard_page, os_page_size);
-    if mi_unlikely(!ok) {
-      _mi_warning_message("failed to set a guard page behind an object (object %p of size %zu)\n", block, block_size);
-    }
-  }
-  else {
-    _mi_warning_message("unable to set a guard page behind an object due to pinned memory (large OS pages?) (object %p of size %zu)\n", block, block_size);
-  }
-
-  // align pointer just in front of the guard page
-  size_t offset = block_size - os_page_size - obj_size;
-  mi_assert_internal(offset > sizeof(mi_block_t));
-  if (offset > MI_PAGE_MAX_OVERALLOC_ALIGN) {
-    // give up to place it right in front of the guard page if the offset is too large for unalignment
-    offset = MI_PAGE_MAX_OVERALLOC_ALIGN;
-  }
-  uint8_t* const p = (uint8_t*)block + offset;
-  mi_assert_internal(p == guard_page - obj_size || offset >= MI_PAGE_MAX_OVERALLOC_ALIGN);
-  if (usable_size != NULL) { *usable_size = (guard_page - p); mi_assert_internal(mi_usable_size(p)==*usable_size); }
-  mi_track_align(block, p, offset, obj_size);
-  mi_track_mem_defined(block, sizeof(mi_block_t));
-  return p;
-}
-
-mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept
-{
-  // allocate multiple of page size ending in a guard page
-  // ensure minimal alignment requirement?
-  if mi_unlikely(size >= MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE) {  // check up front so the `req_size` won't overflow    
-    _mi_error_message(EOVERFLOW, "(guarded) allocation request is too large (%zu bytes)\n", size);
-    return NULL;
-  }
-  const size_t os_page_size = _mi_os_page_size();
-  const size_t obj_size = (mi_option_is_enabled(mi_option_guarded_precise) ? size : _mi_align_up(size, MI_MAX_ALIGN_SIZE));
-  const size_t bsize    = _mi_align_up(_mi_align_up(obj_size, MI_MAX_ALIGN_SIZE) + sizeof(mi_block_t), MI_MAX_ALIGN_SIZE);
-  const size_t req_size = _mi_align_up(bsize + os_page_size, os_page_size);  
-  // const size_t threshold = mi_theap_disable_profiler(theap);
-  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(theap, req_size, false /* don't zero */, ppage);
-  // mi_theap_enable_profiler(theap,threshold);
-  if (block==NULL) return NULL;
-  size_t usable_size = 0;
-  void* const p = mi_block_ptr_set_guarded(block, obj_size, &usable_size);
-  if (p == NULL) return NULL;
-  if (zero) {
-    _mi_memzero(p,obj_size);  // we have to zero afterwards as padding might have written inside the block (if the `blocksize > reqsize + os_page_size`)
-  }
-
-  // stats
-  mi_track_malloc(p, usable_size, zero);    
-  if (!mi_theap_is_initialized(theap)) { theap = _mi_theap_default(); }
-  mi_theap_stat_counter_increase(theap, malloc_guarded_count, 1);
-  #if MI_STATS
-  // adjust request stats to only count the allocated size of the block (and not the guard page)
-  mi_theap_stat_counter_decrease(theap, malloc_requested, req_size);
-  mi_theap_stat_counter_increase(theap, malloc_requested, size);
-  #endif
-  #if MI_DEBUG>3
-  if (zero) {
-    mi_assert_expensive(mi_mem_is_zero(p, size));
-  }
-  #endif
-  return p;
-}
-
-mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sample(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) mi_attr_noexcept {
-  // the size has not yet been counted against the countdown (and does not include MI_PADDING_SIZE)
-  mi_assert_internal(req_size <= MI_MAX_ALLOC_SIZE);
-  mi_assert_internal((theap->sample_countdown==SIZE_MAX && _mi_is_empty_theap(theap)) || 
-                     (theap->sample_countdown <= MI_SAMPLE_COUNTDOWN_MAX && theap->sample_countdown < req_size));
-  const size_t size = req_size + MI_PADDING_SIZE;
-
-  // handle empty theap and disabled profiling
-  if (theap->sample_rate==0) { 
-    if (!_mi_is_empty_theap(theap)) {                    // avoid writing to the initial empty theap 
-      theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX; // avoid the sampling path for a long time 
-    }
-    return _mi_malloc_generic_no_sample(theap,size,zero,ppage);
-  }
-  
-  // update countdown
-  mi_assert_internal(!_mi_is_empty_theap(theap));  
-  mi_assert_internal(req_size <= SIZE_MAX/2);
-  mi_assert_internal(theap->sample_rate > 0);
-  mi_assert_internal(theap->sample_rate <= SIZE_MAX/2);
-  mi_assert_internal(theap->sample_rate >= theap->sample_countdown);  
-
-  const uint64_t requested = (uint64_t)theap->sample_rate + (uint64_t)(req_size - theap->sample_countdown) + theap->sample_requested;
-  mi_assert_internal(requested > 0);
-  mi_assert_internal(requested >= size);
-  if (requested < size) {
-    _mi_error_message(EFAULT,"wrong requested/size");
-  }
-  theap->sample_requested = 0;                       // reset extra count
-  theap->sample_countdown = theap->sample_rate;      // reset sampling
-
-  // update derived countdowns
-  mi_assert_internal(theap->profile_sample_rate!=0 || theap->profile_sample_countdown==0);
-  mi_assert_internal(theap->guarded_sample_rate!=0 || theap->guarded_sample_countdown==0);
-  bool sample_profile = false;
-  bool sample_guarded = false;
-  if (theap->profile_sample_countdown >= requested) { theap->profile_sample_countdown -= (size_t)requested; } else { sample_profile = (theap->profile_sample_rate!=0); }
-  if (theap->guarded_sample_countdown >= requested) { theap->guarded_sample_countdown -= (size_t)requested; } else { sample_guarded = (theap->guarded_sample_rate!=0); }
-
-  // invoke callback?
-  if (sample_profile) {
-    theap->profile_sample_countdown = theap->profile_sample_rate;  // reset countdown
-    if (sample_guarded) { theap->guarded_sample_countdown = 0; };  // ensure it will get sampled at some point
-    return _mi_theap_malloc_profiled(theap,size,requested,zero,ppage);
-  }
-  else if (sample_guarded) {
-    if (req_size >= theap->guarded_size_min && req_size <= theap->guarded_size_max) {
-      // use guarded allocation
-      theap->guarded_sample_countdown = theap->guarded_sample_rate; // reset countdown
-      return _mi_theap_malloc_guarded(theap,size,zero,ppage);
-    }
-    else {
-      // failed size criteria, rewind the sample countdown so we sample asap again
-      theap->sample_countdown = 0;
-    }
-  }
-  // take generic path
-  return _mi_malloc_generic_no_sample(theap,size,zero,ppage);
-}
-
 
 // ------------------------------------------------------
 // ensure explicit external inline definitions are emitted!

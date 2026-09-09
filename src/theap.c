@@ -190,49 +190,6 @@ mi_theap_t* mi_theap_set_default(mi_theap_t* theap) {
   return previous;
 }
 
-#if MI_GUARDED
-mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed) {
-  theap->guarded_sample_rate  = (sample_rate > MI_SAMPLE_RATE_MAX ? MI_SAMPLE_RATE_MAX : sample_rate);
-  theap->guarded_sample_countdown = theap->guarded_sample_rate; 
-  if (theap->sample_rate==0 || theap->sample_rate > theap->guarded_sample_rate) {
-    theap->sample_rate = theap->guarded_sample_rate;
-  } 
-  if (theap->guarded_sample_rate > 1) {
-    if (seed == 0) {
-      seed = _mi_theap_random_next(theap);
-    }
-    theap->guarded_sample_countdown = (seed % theap->guarded_sample_rate) + 1;  // start at random count between 1 and `sample_rate`
-  }
-  if (theap->sample_countdown > theap->guarded_sample_countdown) {
-    theap->sample_countdown = theap->guarded_sample_countdown;
-  }
-}
-
-mi_decl_export void mi_theap_guarded_set_size_bound(mi_theap_t* theap, size_t min, size_t max) {
-  theap->guarded_size_min = min;
-  theap->guarded_size_max = (min > max ? min : max);
-}
-
-static void mi_theap_guarded_init(mi_theap_t* theap) {
-  mi_theap_guarded_set_sample_rate(theap,
-    (size_t)mi_option_get_clamp(mi_option_guarded_sample_rate, 0, MI_SAMPLE_RATE_MAX),
-    (size_t)mi_option_get(mi_option_guarded_sample_seed));
-  mi_theap_guarded_set_size_bound(theap,
-    (size_t)mi_option_get_clamp(mi_option_guarded_min, 0, LONG_MAX),
-    (size_t)mi_option_get_clamp(mi_option_guarded_max, 0, LONG_MAX) );
-}
-#else
-mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed) {
-  MI_UNUSED(theap); MI_UNUSED(sample_rate); MI_UNUSED(seed);
-}
-
-mi_decl_export void mi_theap_guarded_set_size_bound(mi_theap_t* theap, size_t min, size_t max) {
-  MI_UNUSED(theap); MI_UNUSED(min); MI_UNUSED(max);
-}
-static void mi_theap_guarded_init(mi_theap_t* theap) {
-  MI_UNUSED(theap);
-}
-#endif
 
 static void mi_theap_options_init(mi_theap_t* theap) {
   theap->allow_page_reclaim = (mi_option_get(mi_option_page_reclaim_on_free) >= 0);
@@ -296,7 +253,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
     _mi_random_split(&head_random, &theap->random); // &theap->random is used as nonce so it is ok if threads capture the same head->random
   }
   // theap->cookie = _mi_theap_random_next(theap) | 1;
-  mi_theap_guarded_init(theap); // needs theap->random
+  _mi_theap_guarded_init(theap); // needs theap->random
   if (!theap->is_detached) {
     mi_subproc_stat_increase(_mi_theap_subproc(theap),theaps,1);  // on subproc to match theap_free_mem
   }
