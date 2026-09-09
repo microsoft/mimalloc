@@ -945,10 +945,18 @@ static inline size_t mi_page_alloc_count(const mi_page_t* page) {
 }
 
 static inline size_t mi_page_last_used(const mi_page_t* page) {
-  #if MI_INTPTR_SIZE >= 8
+  #if MI_SIZE_SIZE >= 8
   return (page->xused.used_alloc >> 32) & 0xFFFF;
   #else
   return page->xlast_used;
+  #endif
+}
+
+static inline size_t mi_page_last_alloc(const mi_page_t* page) {
+  #if MI_SIZE_SIZE >= 8
+  return (page->xused.used_alloc >> 48) & 0xFFFF;
+  #else
+  return page->xlast_alloc;
   #endif
 }
 
@@ -1600,7 +1608,7 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
   mi_assert_internal(bsize < MI_MAX_ALIGN_SIZE || (uintptr_t)dst % MI_MAX_ALIGN_SIZE == 0);
   
   #if MI_USE_MEMZERO128  // 64-bit with 128-bit stores (arm64 and x64)
-    // fast memzero based on overlapping writes (and assuming non-zero size_t-multiple size, and uintptr_t aligned)
+    // fast memzero based on overlapping writes (and assuming non-zero size_t-multiple size, and size_t aligned)
     #if defined(_MSC_VER) && defined(__AVX2__)
       typedef __m128i __int128_t;
       const __int128_t zero = _mm_setzero_si128();

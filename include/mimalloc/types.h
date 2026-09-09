@@ -39,6 +39,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_MAX_ALIGN_SIZE  16   // sizeof(max_align_t)
 #endif
 
+#if MI_MAX_ALIGN_SIZE < MI_INTPTR_SIZE
+#error MI_MAX_ALIGN_SIZE must be at least MI_INTPTR_SIZE
+#endif
 
 // ------------------------------------------------------
 // Variants
@@ -413,14 +416,14 @@ typedef uintptr_t mi_thread_free_t;
 // We need the `alloc_count` and `last_used` to efficiently calculate allocation and free statistics even
 // in a release build; this way we can update the stats in the slow path (`_mi_page_update_stats`).
 typedef union mi_used_s { 
-  uintptr_t  used_alloc;         // used + alloc_count
+  size_t      used_alloc;         // used + alloc_count
   // the following struct is unused but nice for debugging
   struct {
     uint16_t used_count;
     uint16_t alloc_count;
-    #if MI_INTPTR_SIZE >= 8
+    #if MI_SIZE_SIZE >= 8
     uint16_t last_used;
-    uint16_t padding;
+    uint16_t last_alloc;        
     #endif
   } debug_le;
 } mi_used_t;
@@ -463,8 +466,9 @@ typedef struct mi_page_s {
   _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= `theap->thread_id (or 0 or 4 if abandoned) | page_flags`)
   mi_block_t*               free;              // list of available free blocks (`malloc` allocates from this list)
   mi_used_t                 xused;             // number of blocks in use (including blocks in `thread_free`) (and the allocated count for statistics)
-  #if MI_INTPTR_SIZE < 8
-  uint32_t                  xlast_used;        // for statistics; on 64-bit platforms it is the upper 32-bits of xused.
+  #if MI_SIZE_SIZE < 8
+  uint16_t                  xlast_used;        // for statistics; on 64-bit platforms it is in bits 32..47 of xused.
+  uint16_t                  xlast_alloc;       // for sampling; on 64-bit platforms it is in bits 48..63 of xused.
   #endif
   mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
  
