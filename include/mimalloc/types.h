@@ -83,7 +83,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
-// Statistics (0=only essential, 1=normal, 2=more expensive tracking of precise requested bytes)
+// Statistics (0=only essential, 1=detailed (fast, can be enabled always), 2=more expensive tracking of precise requested bytes)
 #ifndef MI_STAT
 #if (MI_DEBUG>0)
 #define MI_STAT 2
@@ -92,7 +92,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
-// Enable profiling support
+// Enable profiling support (0=off, 1=fast, can be enabled always, 2=allow fine-grained sample rates, more expensive(<64 KiB))
 #ifndef MI_PROFILE
 #define MI_PROFILE  1
 #endif
@@ -102,6 +102,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_GUARDED  1
 #endif
 
+// For profiling or guarded pages we need to sample every once in a while. (1=fast, 2=allow fine grained sample rates, more expensive (<64KiB))
 #if MI_PROFILE || MI_GUARDED
 #if MI_PROFILE>1 || MI_GUARDED>1
 #define MI_SAMPLE 2

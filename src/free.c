@@ -128,6 +128,7 @@ static void mi_page_block_unguard(mi_page_t* page, mi_block_t* block, void* p); 
 #endif
 
 static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool* was_guarded) mi_attr_noexcept {
+  MI_UNUSED(was_guarded);
   if mi_likely(!mi_page_has_interior_pointers(page)) {
     return mi_validate_block_from_ptr(page,p);
   }
@@ -147,8 +148,8 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
         mi_page_block_unguard(page, block, p); 
         *was_guarded = true; 
       }
-      #else 
-      { MI_UNUSED(was_guarded); }
+      #else
+      { }
       #endif
     }
     #endif

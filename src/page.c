@@ -177,10 +177,6 @@ static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page,
     theap->sample_countdown = 0;    
   }
 }
-#else
-static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page, size_t alloc_count) {
-  MI_UNUSED(theap); MI_UNUSED(page); MI_UNUSED(alloc_count);
-}
 #endif
 
 #if MI_STAT
@@ -281,9 +277,6 @@ void _mi_page_update_stats(mi_page_t* page) {         // called on abandoned pag
 }
 
 #else
-static void mi_page_update_stats(mi_page_t* page) {
-  MI_UNUSED(page);
-}
 void _mi_page_update_stats(mi_page_t* page) {
   MI_UNUSED(page);
 }

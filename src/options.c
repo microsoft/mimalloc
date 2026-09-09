@@ -77,10 +77,10 @@ int mi_version(void) {
 #endif
 
 #ifndef MI_DEFAULT_GUARDED_SAMPLE_RATE
-#if MI_GUARDED && !MI_DEBUG
-#define MI_DEFAULT_GUARDED_SAMPLE_RATE 4000
+#if MI_GUARDED && MI_DEBUG
+#define MI_DEFAULT_GUARDED_SAMPLE_RATE  MI_MiB
 #else
-#define MI_DEFAULT_GUARDED_SAMPLE_RATE 0
+#define MI_DEFAULT_GUARDED_SAMPLE_RATE  0
 #endif
 #endif
 
@@ -251,24 +251,28 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
   _mi_fprintf(out, arg, "secure level: %d\n", MI_SECURE );
   _mi_fprintf(out, arg, "mem tracking: %s\n", MI_TRACK_TOOL);
   #if MI_GUARDED
-  _mi_fprintf(out, arg, "guarded build: %s\n", mi_option_get(mi_option_guarded_sample_rate) != 0 ? "enabled" : "disabled");
-  #endif
+  _mi_fprintf(out, arg, "guarded mode: %s, rate=%ld\n",  MI_SAMPLE==2 ? "fine-grained" : "enabled", mi_option_get(mi_option_guarded_sample_rate));
+  #endif  
   #if MI_TSAN
   _mi_fprintf(out, arg, "thread santizer enabled\n");
   #endif
+  #if MI_PROFILE
+  _mi_fprintf(out, arg, "profiling   : %s\n", MI_SAMPLE==2 ? "fine-grained" : "enabled");
+  #endif
+
   #if MI_PAGE_META_IS_ALIGNED && MI_PAGE_META_SMALL_IS_ALIGNED
-  _mi_fprintf(out, arg, "free: (small) aligned, page size: %zu\n", sizeof(mi_page_t));
+  _mi_fprintf(out, arg, "free mode   : (small) aligned, page size: %zu\n", sizeof(mi_page_t));
   #elif MI_PAGE_META_IS_ALIGNED
-  _mi_fprintf(out, arg, "free: aligned, page size: %zu\n", sizeof(mi_page_t));
+  _mi_fprintf(out, arg, "free mode   : aligned, page size: %zu\n", sizeof(mi_page_t));
   #elif MI_PAGE_META_SMALL_IS_ALIGNED
-  _mi_fprintf(out, arg, "free: small aligned + pagemap, page size: %zu\n", sizeof(mi_page_t));
+  _mi_fprintf(out, arg, "free mode   : small aligned + pagemap, page size: %zu\n", sizeof(mi_page_t));
   #elif MI_FREE_IS_CHECKED
-  _mi_fprintf(out, arg, "free: checked, page size: %zu\n", sizeof(mi_page_t));
+  _mi_fprintf(out, arg, "free mode   : checked, page size: %zu\n", sizeof(mi_page_t));
   #else 
-  _mi_fprintf(out, arg, "free: pagemap, page size: %zu\n", sizeof(mi_page_t));
+  _mi_fprintf(out, arg, "free mode   : pagemap, page size: %zu\n", sizeof(mi_page_t));
   #endif
   #if MI_ENCODE_FREELIST
-  _mi_fprintf(out, arg, "free lists: encoded with %d key(s)\n", MI_PAGE_KEY_COUNT);
+  _mi_fprintf(out, arg, "free lists  : encoded with %d key(s)\n", MI_PAGE_KEY_COUNT);
   #endif
 }
 
