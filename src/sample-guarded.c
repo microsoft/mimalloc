@@ -99,7 +99,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   const size_t bsize    = _mi_align_up(_mi_align_up(obj_size, MI_MAX_ALIGN_SIZE) + sizeof(mi_block_t), MI_MAX_ALIGN_SIZE);
   const size_t req_size = _mi_align_up(bsize + os_page_size, os_page_size);  
   // const size_t threshold = mi_theap_disable_profiler(theap);
-  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(theap, req_size, false /* don't zero */, ppage);
+  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(req_size, theap, false /* don't zero */, ppage);
   // mi_theap_enable_profiler(theap,threshold);
   if (block==NULL) return NULL;
   size_t usable_size = 0;
@@ -123,6 +123,8 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
     mi_assert_expensive(mi_mem_is_zero(p, size));
   }
   #endif
+  // we should never allocate something allocated as small in a non-small page or otherwise aligned mi_free_small may fail.
+  if (size <= MI_SMALL_SIZE_MAX) { mi_assert_internal(mi_page_block_size(_mi_ptr_page(p)) <= MI_SMALL_MAX_OBJ_SIZE); }
   return p;
 }
 

@@ -67,7 +67,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   __asm("" : : : "memory" );     // always load the `used` field before the test
   #endif  
   if (block == NULL) {
-    return _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage);
+    return _mi_malloc_generic(size, theap, (zero ? 1 : 0), ppage);
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   if (ppage != NULL) { *ppage = page; };
@@ -122,6 +122,9 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   if mi_unlikely(zero) {
     if (!page->free_is_zero) {
       mi_assert_internal(bsize%MI_SIZE_SIZE == 0);
+      #if !MI_PADDING
+      return // use tail-call       
+      #endif
       _mi_memzero_block(block,bsize);
     }
     else {
@@ -183,7 +186,7 @@ static mi_decl_forceinline void* mi_theap_malloc_generic(mi_theap_t* theap, size
   #endif
   mi_assert(mi_theap_matches_thread(theap));   // theaps are thread local
   mi_assert((huge_alignment & 1)==0);
-  void* const p = _mi_malloc_generic(theap, size + MI_PADDING_SIZE, (zero ? 1 : 0) | huge_alignment, ppage);  // note: size can overflow but it is detected in malloc_generic
+  void* const p = _mi_malloc_generic(size + MI_PADDING_SIZE, theap, (zero ? 1 : 0) | huge_alignment, ppage);  // note: size can overflow but it is detected in malloc_generic
   mi_track_malloc(p, size, zero);
 
   #if MI_DEBUG>3
@@ -218,8 +221,16 @@ mi_decl_nodiscard mi_decl_restrict void* mi_malloc_small(size_t size) mi_attr_no
   return mi_theap_malloc_small(_mi_theap_default(), size);
 }
 
+static mi_decl_nodiscard mi_decl_restrict void* mi_decl_noinline mi_heap_init_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+  return mi_theap_malloc_small_zero_nonnull(_mi_heap_theap_get_or_init(heap), size, false, NULL);
+}
+
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  return mi_theap_malloc_small_zero_nonnull(_mi_heap_theap(heap), size, false, NULL);
+  // we could also use: mi_theap_malloc_small_zero_nonnull(_mi_heap_theap(theap), size, false, NULL); }
+  // but the following prevents using a stack frame. We use this to optimize some select functions only.
+  mi_theap_t* const theap = _mi_heap_theap_cached(heap);
+  if mi_likely(theap!=NULL) { return mi_theap_malloc_small_zero_nonnull(theap, size, false, NULL); }
+                       else { return mi_heap_init_malloc_small(heap, size); }  
 }
 
 // The main internal allocation functions
@@ -265,8 +276,15 @@ mi_decl_nodiscard mi_decl_restrict void* mi_malloc(size_t size) mi_attr_noexcept
   return mi_theap_malloc(_mi_theap_default(), size);
 }
 
+static mi_decl_nodiscard mi_decl_restrict void* mi_decl_noinline mi_heap_init_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+  return mi_theap_malloc_zero_nonnull(_mi_heap_theap_get_or_init(heap), size, false, 0, NULL);
+}
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  return mi_theap_malloc_zero_nonnull(_mi_heap_theap(heap), size, false, 0, NULL);
+  // return mi_theap_malloc_zero_nonnull(_mi_heap_theap(heap), size, false, 0, NULL);
+  mi_theap_t* const theap = _mi_heap_theap_cached(heap);
+  if mi_likely(theap!=NULL) { return mi_theap_malloc_zero_nonnull(theap, size, false, 0, NULL); }
+                       else { return mi_heap_init_malloc(heap, size); }  
+
 }
 
 
@@ -279,10 +297,15 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_zalloc_small(mi_
   return mi_theap_malloc_small_zero(theap, size, true, NULL);
 }
 
-mi_decl_nodiscard mi_decl_restrict void* mi_heap_zalloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  return mi_theap_malloc_small_zero_nonnull(_mi_heap_theap(heap), size, true, NULL);
+static mi_decl_nodiscard mi_decl_restrict void* mi_decl_noinline mi_heap_init_zalloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+  return mi_theap_malloc_small_zero_nonnull(_mi_heap_theap_get_or_init(heap), size, false, NULL);
 }
-
+mi_decl_nodiscard mi_decl_restrict void* mi_heap_zalloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+  // optimize: return mi_theap_malloc_small_zero_nonnull(_mi_heap_theap(heap), size, true, NULL);
+  mi_theap_t* const theap = _mi_heap_theap_cached(heap);
+  if mi_likely(theap!=NULL) { return mi_theap_malloc_small_zero_nonnull(theap, size, true, NULL); }
+                       else { return mi_heap_init_zalloc_small(heap, size); }  
+}
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_zalloc(mi_theap_t* theap, size_t size) mi_attr_noexcept {
   return _mi_theap_malloc_zero(theap, size, true, NULL);
@@ -292,8 +315,14 @@ mi_decl_nodiscard mi_decl_restrict void* mi_zalloc(size_t size) mi_attr_noexcept
   return _mi_theap_malloc_zero(_mi_theap_default(), size, true, NULL);
 }
 
+static mi_decl_nodiscard mi_decl_restrict void* mi_decl_noinline mi_heap_init_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
+  return mi_theap_malloc_zero_nonnull(_mi_heap_theap_get_or_init(heap), size, false, 0, NULL);
+}
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t size) mi_attr_noexcept {
-  return mi_theap_malloc_zero_nonnull(_mi_heap_theap(heap), size, true, 0, NULL);
+  // optimize: return mi_theap_malloc_zero_nonnull(_mi_heap_theap(heap), size, true, 0, NULL);
+  mi_theap_t* const theap = _mi_heap_theap_cached(heap);
+  if mi_likely(theap!=NULL) { return mi_theap_malloc_zero_nonnull(theap, size, true, 0, NULL); }
+                       else { return mi_heap_init_zalloc(heap, size); }  
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_calloc(mi_theap_t* theap, size_t count, size_t size) mi_attr_noexcept {

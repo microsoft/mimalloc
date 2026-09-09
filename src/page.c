@@ -1324,7 +1324,7 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
 // very large requested alignments in which case we use a huge singleton page.
 // Note: we put `bool zero, size_t huge_alignment` into one parameter (with zero in the low bit)
 // to use 4 parameters which compiles better on msvc for the malloc fast path.
-void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, mi_page_t** ppage) mi_attr_noexcept
+void* _mi_malloc_generic(size_t size, mi_theap_t* theap, size_t zero_huge_alignment, mi_page_t** ppage) mi_attr_noexcept
 {
   #if !MI_THEAP_INITASNULL
   mi_assert_internal(theap != NULL);
@@ -1358,14 +1358,14 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
   return mi_malloc_generic_fallback(theap,size,zero,huge_alignment,ppage);
 }
 
-void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept {
+void* _mi_malloc_generic_no_sample(size_t size, mi_theap_t* theap, bool zero, mi_page_t** ppage) mi_attr_noexcept {
   theap = mi_theap_init(theap);
   if (theap==NULL) return NULL;
   const size_t sample_rate = theap->sample_rate;
   const size_t sample_countdown = theap->sample_countdown;
   theap->sample_rate = 0;  // prevent a recursive call to mi_theap_malloc_sampled from _mi_malloc_generic
   theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;
-  void* p = _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage);
+  void* p = _mi_malloc_generic(size, theap, (zero ? 1 : 0), ppage);
   theap->sample_rate = sample_rate;
   theap->sample_countdown = sample_countdown;
   return p;

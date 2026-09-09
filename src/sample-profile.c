@@ -38,7 +38,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* the
     if (!_mi_is_empty_theap(theap)) {                    // avoid writing to the initial empty theap 
       theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX; // avoid the sampling path for a long time 
     }
-    return _mi_malloc_generic_no_sample(theap,size,zero,ppage);
+    return _mi_malloc_generic_no_sample(size,theap,zero,ppage);
   }
   
   // update countdown and total accummulated requested bytes since the last sample
@@ -84,7 +84,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* the
     }
   }
   // take generic path
-  return _mi_malloc_generic_no_sample(theap,size,zero,ppage);
+  return _mi_malloc_generic_no_sample(size,theap,zero,ppage);
 }
 
 
@@ -117,7 +117,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
   mi_assert_internal(theap!=NULL);  
   mi_assert_internal(size<=requested_since_last_sample);
   mi_profiler_t* const prof = mi_theap_get_enabled_profiler(theap);
-  if (prof == NULL) { return _mi_malloc_generic_no_sample(theap,size,zero,ppage); }
+  if (prof == NULL) { return _mi_malloc_generic_no_sample(size,theap,zero,ppage); }
   
   // Overallocate a larger block to store the profiler data
   // [MI_BLOCK_TAG_PROFILE] [usable size] [ ... profile data ... ] [... user data ...]
@@ -127,11 +127,14 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
   const size_t profiler_user_offset = _mi_align_up(profiler_data_offset + profiler_data_size, MI_MAX_ALIGN_SIZE);
   const size_t oversize = profiler_user_offset + size;
   mi_page_t* page = NULL;
-  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(theap,oversize,zero,&page); 
+  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(oversize,theap,zero,&page); 
   if (block==NULL) return NULL;
   mi_assert_internal(page!=NULL);
   if (ppage!=NULL) { *ppage = page; }
   mi_assert_internal(!mi_block_ptr_is_guarded(_mi_page_ptr_unalign(page,block),block));
+  // we should never allocate something allocated as small in a non-small page or otherwise aligned mi_free_small may fail.
+  // (that is why we need to limit the profiler_data_size as well)
+  if (size <= MI_SMALL_SIZE_MAX) { mi_assert_internal(mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE); }
 
   // Set up the profiled block
   mi_page_set_has_interior_pointers(page, true);

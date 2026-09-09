@@ -396,6 +396,16 @@ static inline mi_theap_t* _mi_heap_theap(mi_heap_t* heap) {
   return _mi_heap_theap_get_or_init(heap);
 }
 
+static inline mi_theap_t* _mi_heap_theap_cached(mi_heap_t* heap) {
+  mi_theap_t* theap = _mi_theap_cached();
+  #if MI_THEAP_INITASNULL
+  if mi_likely(theap!=NULL && _mi_theap_heap_peek(theap)==heap) return theap;
+  #else
+  if mi_likely(_mi_theap_heap_peek(theap)==heap) return theap;
+  #endif
+  return NULL;
+}
+
 // Get the theap belonging to a heap without creating it if it is not yet initialized.
 static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
   mi_theap_t* theap = _mi_theap_cached();

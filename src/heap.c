@@ -87,7 +87,7 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
 
 
 // get (and possibly create) the theap belonging to a heap
-mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
+mi_decl_cold mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
 {
   mi_assert_internal(heap->theap != 0);
   mi_theap_t* theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
