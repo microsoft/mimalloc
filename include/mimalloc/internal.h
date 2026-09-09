@@ -270,7 +270,7 @@ mi_page_t*    _mi_safe_ptr_page(const void* p);
 void          _mi_page_map_unsafe_destroy(void);
 
 // "page.c"
-void*         _mi_malloc_generic(size_t size, mi_theap_t* theap, size_t zero_huge_alignment, mi_page_t** ppage)  mi_attr_noexcept mi_attr_malloc;
+void*         _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, mi_page_t** ppage)  mi_attr_noexcept mi_attr_malloc;
 void*         _mi_malloc_generic_no_sample(size_t size, mi_theap_t* theap,  bool zero, mi_page_t** ppage)  mi_attr_noexcept mi_attr_malloc;
 
 void          _mi_page_retire(mi_page_t* page) mi_attr_noexcept;       // free the page if there are no other pages with many free blocks
@@ -681,19 +681,11 @@ static inline mi_subproc_t* _mi_theap_subproc(const mi_theap_t* theap) {
   return subproc;
 }
 
-static inline mi_page_t* _mi_theap_get_free_small_page(mi_theap_t* theap, size_t size) {
-  mi_assert_internal(size <= (MI_SMALL_SIZE_MAX + MI_PADDING_SIZE));
-  #if MI_INTPTR_SIZE==MI_SIZE_SIZE
-  // the sample_countdown field comes before the pages_direct; the following generates better code in general 
-  // (where we treat the countdown as a first -1 entry of the pages_free_direct array)
-  const size_t idx1 = (size + 2*MI_INTPTR_SIZE - 1)/MI_INTPTR_SIZE;
-  mi_assert_internal(idx1 <= MI_PAGES_DIRECT);
-  return ((mi_page_t**)theap)[idx1];
-  #else
-  const size_t idx = _mi_wsize_from_size(size);
+static inline mi_page_t* _mi_theap_get_free_small_page(mi_theap_t* theap, size_t xsize, bool is_wsize) {
+  mi_assert_internal(is_wsize ? xsize <= (MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE) : xsize <= (MI_SMALL_SIZE_MAX + MI_PADDING_SIZE));
+  const size_t idx = (is_wsize ? xsize : _mi_wsize_from_size(xsize));
   mi_assert_internal(idx < MI_PAGES_DIRECT);
   return theap->pages_free_direct[idx];
-  #endif
 }
 
 static inline bool mi_theap_is_detached(mi_theap_t* theap) {

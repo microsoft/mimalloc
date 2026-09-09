@@ -179,7 +179,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #if !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
 #if defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0
-#elif (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED) && !MI_SECURE 
+#elif (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED) && !MI_SECURE && !MI_GUARDED // guarded can put small allocations into big blocks in a medium page (which would make `mi_free_small` fail)
 #define MI_PAGE_META_SMALL_IS_ALIGNED   1
 #else
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0
@@ -603,7 +603,6 @@ typedef struct mi_padding_s {
 // A thread-local heap ("theap") owns a set of thread-local pages.
 struct mi_theap_s {
   // put in front for fast small allocations
-  size_t                sample_countdown;                    // sample countdown in requested bytes (don't change the field order; see `internal.h:_mi_theap_get_free_small_page`)
   mi_page_t*            pages_free_direct[MI_PAGES_DIRECT];  // optimize: array where every entry points a page with possibly free blocks in the corresponding queue for that size.
 
   // less frequently accessed fields
@@ -619,6 +618,7 @@ struct mi_theap_s {
   bool                  is_detached;                         // `true` if `tld->thread_id == MI_THREADID_DETACHED`
 
   // sampling
+  size_t                sample_countdown;                    // sample countdown in requested bytes (don't change the field order; see `internal.h:_mi_theap_get_free_small_page`)
   size_t                sample_rate;                         // current sampling rate in requested bytes (or 0 to disable) (for profiling and guarded mode)
   uint64_t              sample_requested;                    // total allocated/requested bytes since the last sample
   size_t                profile_sample_rate;                 // sampling rate in requested bytes for profiling

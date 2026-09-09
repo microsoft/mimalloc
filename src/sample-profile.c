@@ -132,9 +132,12 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
   mi_assert_internal(page!=NULL);
   if (ppage!=NULL) { *ppage = page; }
   mi_assert_internal(!mi_block_ptr_is_guarded(_mi_page_ptr_unalign(page,block),block));
+  #if MI_PAGE_META_SMALL_IS_ALIGNED
   // we should never allocate something allocated as small in a non-small page or otherwise aligned mi_free_small may fail.
   // (that is why we need to limit the profiler_data_size as well)
+   // we should never allocate something allocated as small in a non-small page or otherwise aligned mi_free_small may fail.
   if (size <= MI_SMALL_SIZE_MAX) { mi_assert_internal(mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE); }
+  #endif
 
   // Set up the profiled block
   mi_page_set_has_interior_pointers(page, true);

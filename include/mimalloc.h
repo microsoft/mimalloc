@@ -97,6 +97,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <stddef.h>     // size_t, wchar_t
 #include <stdbool.h>    // bool
+#include <assert.h>     // inline assertions
 
 #ifdef __cplusplus
 extern "C" {
@@ -120,7 +121,7 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_realpath(const char* 
 // Extended allocation functions
 // ------------------------------------------------------
 #define MI_SMALL_WSIZE_MAX  128
-#define MI_SMALL_SIZE_MAX   (MI_SMALL_WSIZE_MAX*sizeof(void*))
+#define MI_SMALL_SIZE_MAX   (MI_SMALL_WSIZE_MAX*sizeof(size_t))  // mimalloc considers `sizeof(size_t)` as the machine word size
 
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_malloc_small(size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_zalloc_small(size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
@@ -399,23 +400,42 @@ mi_decl_nodiscard mi_decl_export                  void* mi_theap_rezalloc(mi_the
 // Fast constant size allocations.
 // ------------------------------------------------------
 
+// `__mi` are internal functions; do not use.
+mi_decl_nodiscard mi_decl_restrict void* __mi_wzalloc_small(size_t wsize) mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_restrict void* __mi_wmalloc_small(size_t wsize) mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_restrict void* __mi_theap_wmalloc_small(mi_theap_t* theap, size_t wsize) mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_restrict void* __mi_theap_wzalloc_small(mi_theap_t* theap, size_t wsize) mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_restrict void* __mi_theap_wmalloc_small_nonnull(mi_theap_t* theap, size_t wsize) mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_restrict void* __mi_theap_wzalloc_small_nonnull(mi_theap_t* theap, size_t wsize) mi_attr_noexcept;
+static inline size_t mi_wsize_from_size(size_t size) { 
+  return ((size + sizeof(size_t) - 1) / sizeof(size_t));  
+}
+
 static inline mi_decl_restrict void* mi_malloc_csize(size_t size) mi_attr_noexcept {
-  if (size <= MI_SMALL_SIZE_MAX) { return mi_malloc_small(size); } else { return mi_malloc(size); }
+  if (size <= MI_SMALL_SIZE_MAX) { return __mi_wmalloc_small(mi_wsize_from_size(size)); } else { return mi_malloc(size); }
 }
 static inline mi_decl_restrict void* mi_zalloc_csize(size_t size) mi_attr_noexcept {
-  if (size <= MI_SMALL_SIZE_MAX) { return mi_zalloc_small(size); } else { return mi_zalloc(size); }
+  if (size <= MI_SMALL_SIZE_MAX) { return __mi_wzalloc_small(mi_wsize_from_size(size)); } else { return mi_zalloc(size); }
 }
-static inline mi_decl_restrict void* mi_theap_malloc_csize(mi_theap_t* theap, size_t size) mi_attr_noexcept {
-  if (size <= MI_SMALL_SIZE_MAX) { return mi_theap_malloc_small(theap,size); } else { return mi_theap_malloc(theap,size); }
+static inline mi_decl_restrict void* mi_theap_malloc_csize(mi_theap_t* theap, size_t size) mi_attr_noexcept {  
+  if (size <= MI_SMALL_SIZE_MAX) { return __mi_theap_wmalloc_small(theap,mi_wsize_from_size(size)); } else { return mi_theap_malloc(theap,size); }
 }
 static inline mi_decl_restrict void* mi_theap_zalloc_csize(mi_theap_t* theap, size_t size) mi_attr_noexcept {
-  if (size <= MI_SMALL_SIZE_MAX) { return mi_theap_zalloc_small(theap,size); } else { return mi_theap_zalloc(theap,size); }
+  if (size <= MI_SMALL_SIZE_MAX) { return __mi_theap_wzalloc_small(theap,mi_wsize_from_size(size)); } else { return mi_theap_zalloc(theap,size); }
+}
+static inline mi_decl_restrict void* mi_theap_malloc_csize_nonnull(mi_theap_t* theap, size_t size) mi_attr_noexcept {
+  assert(theap!=NULL);
+  if (size <= MI_SMALL_SIZE_MAX) { return __mi_theap_wmalloc_small_nonnull(theap,mi_wsize_from_size(size)); } else { return mi_theap_malloc(theap,size); }
+}
+static inline mi_decl_restrict void* mi_theap_zalloc_csize_nonnull(mi_theap_t* theap, size_t size) mi_attr_noexcept {
+  assert(theap!=NULL);
+  if (size <= MI_SMALL_SIZE_MAX) { return __mi_theap_wzalloc_small_nonnull(theap,mi_wsize_from_size(size)); } else { return mi_theap_zalloc(theap,size); }
 }
 static inline void mi_free_csize(void* p, size_t size) mi_attr_noexcept {
   if (size <= MI_SMALL_SIZE_MAX) { mi_free_small(p); } else { mi_free(p); }
 }
 static inline void mi_free_csize_nonnull(void* p, size_t size) mi_attr_noexcept {
-  // assert(p!=NULL);
+  assert(p!=NULL);
   if (size <= MI_SMALL_SIZE_MAX) { mi_free_small_nonnull(p); } else { mi_free(p); }
 }
 

@@ -123,8 +123,13 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
     mi_assert_expensive(mi_mem_is_zero(p, size));
   }
   #endif
+  #if MI_PAGE_META_SMALL_IS_ALIGNED && MI_DEBUG>=2
   // we should never allocate something allocated as small in a non-small page or otherwise aligned mi_free_small may fail.
-  if (size <= MI_SMALL_SIZE_MAX) { mi_assert_internal(mi_page_block_size(_mi_ptr_page(p)) <= MI_SMALL_MAX_OBJ_SIZE); }
+  if (size <= MI_SMALL_SIZE_MAX) { 
+    mi_page_t* const page = _mi_ptr_page(p); 
+    mi_assert_internal(mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE); 
+  }
+  #endif
   return p;
 }
 

@@ -219,7 +219,7 @@ static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, con
       {
         const uintptr_t align_mask = alignment-1;       // for any x, `(x & align_mask) == (x % alignment)`
         const size_t padsize = size + MI_PADDING_SIZE;
-        mi_page_t* page = _mi_theap_get_free_small_page(theap, padsize);
+        mi_page_t* page = _mi_theap_get_free_small_page(theap, padsize, false);
         if mi_likely(page->free != NULL) {
           const bool is_aligned = (((uintptr_t)page->free + offset) & align_mask)==0;
           if mi_likely(is_aligned)
