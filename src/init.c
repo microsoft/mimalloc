@@ -20,7 +20,7 @@ static const mi_page_t mi_page_empty = {
   MI_ATOMIC_VAR_INIT(0),  // xthread_id
   NULL,                   // free
   {0},                    // xused
-  #if MI_INTPTR_SIZE < 8
+  #if MI_SIZE_SIZE < 8
   0,                      // xlast_used
   0,                      // xlast_alloc
   #endif
@@ -43,8 +43,6 @@ static const mi_page_t mi_page_empty = {
   #else
   { 0 },                  // key
   #endif
-  // #elif MI_PAGE_META_IS_ALIGNED && MI_INTPTR_SIZE==8
-  // { 0 },                  // padding 
   #endif
 };
 
@@ -58,7 +56,7 @@ static const mi_page_t mi_page_empty = {
 #error define initializer for direct pages
 #endif
 
-#if (MI_PADDING>0) && (MI_INTPTR_SIZE >= 8)
+#if (MI_PADDING>0) && (MI_SIZE_SIZE >= 8)
 #define MI_SMALL_PAGES_EMPTY  { MI_INIT_PAGES_DIRECT(MI_PAGE_EMPTY), MI_PAGE_EMPTY(), MI_PAGE_EMPTY() }
 #elif (MI_PADDING>0)
 #define MI_SMALL_PAGES_EMPTY  { MI_INIT_PAGES_DIRECT(MI_PAGE_EMPTY), MI_PAGE_EMPTY(), MI_PAGE_EMPTY(), MI_PAGE_EMPTY() }

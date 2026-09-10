@@ -21,11 +21,11 @@ terms of the MIT license. A copy of the license can be found in the file
   Minimal alignment in machine words (i.e. `sizeof(void*)`)
 ----------------------------------------------------------- */
 
-#if (MI_MAX_ALIGN_SIZE > 4*MI_INTPTR_SIZE)
+#if (MI_MAX_ALIGN_SIZE > 4*MI_SIZE_SIZE)
   #error "define alignment for more than 4x word size for this platform"
-#elif (MI_MAX_ALIGN_SIZE > 2*MI_INTPTR_SIZE)
+#elif (MI_MAX_ALIGN_SIZE > 2*MI_SIZE_SIZE)
   #define MI_ALIGN4W   // 4 machine words minimal alignment
-#elif (MI_MAX_ALIGN_SIZE > MI_INTPTR_SIZE)
+#elif (MI_MAX_ALIGN_SIZE > MI_SIZE_SIZE)
   #define MI_ALIGN2W   // 2 machine words minimal alignment
 #else
   // ok, default alignment is 1 word

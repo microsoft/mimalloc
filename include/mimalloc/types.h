@@ -30,7 +30,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdbool.h>  // bool
 #include <limits.h>   // SIZE_MAX etc.
 #include <errno.h>    // error codes
-#include "bits.h"     // size defines (MI_INTPTR_SIZE etc), bit operations
+#include "bits.h"     // size defines (MI_SIZE_SIZE etc), bit operations
 #include "atomic.h"   // _Atomic primitives
 
 // Minimal alignment necessary. On most platforms 16 bytes are needed
@@ -167,7 +167,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #if !MI_FREE_IS_CHECKED && !MI_FREE_USE_PAGEMAP
 #if MI_PAGE_META_IS_SEPARATED
 #define MI_PAGE_META_IS_ALIGNED         1        
-#define MI_PAGE_META_ALIGNED_CHUNKS     MI_INTPTR_SIZE
+#define MI_PAGE_META_ALIGNED_CHUNKS     MI_SIZE_SIZE
 #else
 #warning "cannot optimize free with alignment since the page meta data is not separated (due to MI_PAGE_MAP_FLAT?)"
 #endif
@@ -494,8 +494,6 @@ typedef struct mi_page_s {
   
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   uintptr_t                 keys[MI_PAGE_KEY_COUNT]; // const: one or two random keys to encode the free lists (see `_mi_block_next`) or padding canary
-  // #elif MI_PAGE_META_IS_ALIGNED && MI_INTPTR_SIZE==8 
-  // uintptr_t                 padding[1];        // make it 128 bytes for best codegen in mi_ptr_page_align
   #endif
 } mi_page_t;
 
@@ -591,7 +589,7 @@ typedef struct mi_padding_s {
   uint32_t delta;  // padding bytes before the block. (mi_full_usable_size(p) - delta == exact allocated bytes)
 } mi_padding_t;
 #define MI_PADDING_SIZE   (sizeof(mi_padding_t))
-#define MI_PADDING_WSIZE  ((MI_PADDING_SIZE + MI_INTPTR_SIZE - 1) / MI_INTPTR_SIZE)
+#define MI_PADDING_WSIZE  ((MI_PADDING_SIZE + MI_SIZE_SIZE - 1) / MI_SIZE_SIZE)
 #else
 #define MI_PADDING_SIZE   0
 #define MI_PADDING_WSIZE  0

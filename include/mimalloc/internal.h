@@ -148,10 +148,10 @@ void          _mi_random_init(mi_random_ctx_t* ctx);
 void          _mi_random_init_weak(mi_random_ctx_t* ctx);
 void          _mi_random_reinit_if_weak(mi_random_ctx_t * ctx);
 void          _mi_random_split(mi_random_ctx_t* ctx, mi_random_ctx_t* new_ctx);
-uintptr_t     _mi_random_next(mi_random_ctx_t* ctx);
-uintptr_t     _mi_theap_random_next(mi_theap_t* theap);
-uintptr_t     _mi_os_random_weak(uintptr_t extra_seed);
-static inline uintptr_t _mi_random_shuffle(uintptr_t x);
+size_t        _mi_random_next(mi_random_ctx_t* ctx);
+size_t        _mi_theap_random_next(mi_theap_t* theap);
+size_t        _mi_os_random_weak(size_t extra_seed);
+static inline size_t _mi_random_shuffle(size_t x);
 
 // prim-tls.c
 void          _mi_tls_slots_init(void);
@@ -1443,16 +1443,16 @@ static inline size_t _mi_memid_size(mi_memid_t memid) {
 // Fast "random" shuffle
 // -------------------------------------------------------------------
 
-static inline uintptr_t _mi_random_shuffle(uintptr_t x) {
+static inline size_t _mi_random_shuffle(size_t x) {
   if (x==0) { x = 17; }   // ensure we don't get stuck in generating zeros
-#if (MI_INTPTR_SIZE>=8)
+#if (MI_SIZE_SIZE>=8)
   // by Sebastiano Vigna, see: <http://xoshiro.di.unimi.it/splitmix64.c>
   x ^= x >> 30;
   x *= 0xbf58476d1ce4e5b9UL;
   x ^= x >> 27;
   x *= 0x94d049bb133111ebUL;
   x ^= x >> 31;
-#elif (MI_INTPTR_SIZE==4)
+#elif (MI_SIZE_SIZE==4)
   // by Chris Wellons, see: <https://nullprogram.com/blog/2018/07/31/>
   x ^= x >> 16;
   x *= 0x7feb352dUL;
@@ -1531,21 +1531,21 @@ static inline void* _mi_memset(void* dst, int val, size_t n) {
 #endif
 
 // -------------------------------------------------------------------------------
-// The `_mi_memcpy_aligned` can be used if the pointers are machine-word aligned
+// The `_mi_memcpy_aligned` can be used if the pointers are machine-word (size_t) aligned
 // This is used for example in `mi_realloc`.
 // -------------------------------------------------------------------------------
 
 // On GCC/CLang we provide a hint that the pointers are word aligned.
 static inline void* _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
-  mi_assert_internal(((uintptr_t)dst % MI_INTPTR_SIZE == 0) && ((uintptr_t)src % MI_INTPTR_SIZE == 0));
-  void* adst = mi_assume_aligned(dst, MI_INTPTR_SIZE);
-  const void* asrc = mi_assume_aligned(src, MI_INTPTR_SIZE);
+  mi_assert_internal(_mi_is_aligned(dst,MI_SIZE_SIZE) && _mi_is_aligned(src,MI_SIZE_SIZE));
+  void* adst = mi_assume_aligned(dst, MI_SIZE_SIZE);
+  const void* asrc = mi_assume_aligned(src, MI_SIZE_SIZE);
   return _mi_memcpy(adst, asrc, n);
 }
 
 static inline void* _mi_memset_aligned(void* dst, int val, size_t n) {
-  mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
-  void* adst = mi_assume_aligned(dst, MI_INTPTR_SIZE);
+  mi_assert_internal(_mi_is_aligned(dst,MI_SIZE_SIZE));
+  void* adst = mi_assume_aligned(dst, MI_SIZE_SIZE);
   return _mi_memset(adst, val, n);
 }
 
@@ -1562,8 +1562,8 @@ static inline void* _mi_memzero_aligned(void* dst, size_t n) {
 static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize) {
   mi_assert_internal(bsize%MI_SIZE_SIZE == 0);
   mi_assert_internal(bsize > 0);
-  mi_assert_internal((uintptr_t)dst % MI_INTPTR_SIZE == 0);
-  mi_assert_internal(bsize < MI_MAX_ALIGN_SIZE || (uintptr_t)dst % MI_MAX_ALIGN_SIZE == 0);
+  mi_assert_internal(_mi_is_aligned(dst,MI_SIZE_SIZE));
+  mi_assert_internal(bsize < MI_MAX_ALIGN_SIZE || _mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
   
   #if MI_USE_MEMZERO128  // 64-bit with 128-bit stores (arm64 and x64)
     // fast memzero based on overlapping writes (and assuming non-zero size_t-multiple size, and size_t aligned)
@@ -1577,7 +1577,7 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
       *((uint64_t*)dst) = 0;
       return dst;
     }
-    mi_assert_internal((uintptr_t)dst % MI_MAX_ALIGN_SIZE == 0);
+    mi_assert_internal(_mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
     mi_assert_internal(bsize % 16 == 0);
     void* const adst = mi_assume_aligned(dst, MI_MAX_ALIGN_SIZE);
     __int128_t* const start = (__int128_t*)adst;
@@ -1597,7 +1597,7 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
   #endif
 
   // regular memset
-  void* const wdst = mi_assume_aligned(dst,MI_INTPTR_SIZE);
+  void* const wdst = mi_assume_aligned(dst,MI_SIZE_SIZE);
   return _mi_memset_aligned(wdst, 0, bsize);
 }
 

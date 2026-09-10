@@ -118,7 +118,7 @@ static inline void** mi_prim_thread_pointer(void) {
     void** tcb;
     #if defined(__APPLE__)
     __asm__ ("movq %%gs:0, %0" : "=r" (tcb) : : );  // x86_64 macOSX uses GS
-    #elif (MI_INTPTR_SIZE==4)
+    #elif (MI_SIZE_SIZE==4)
     __asm__ ("movl %%fs:0, %0" : "=r" (tcb) : : );  // x32 ABI
     #else
     __asm__ ("movq %%fs:0, %0" : "=r" (tcb) : : );  // x86_64 Linux, BSD uses FS
@@ -301,9 +301,9 @@ static inline mi_theap_t* _mi_theap_cached(void) {
 // We try to use direct slots (64 available), but can also use the expansion slots (upto 1024 extra available)
 // See <https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/api/pebteb/teb/index.htm> for the offsets.
 #if MI_SIZE_SIZE==4
-#define MI_TLS_EXPANSION_SLOT    (0x0F94 / MI_INTPTR_SIZE)
+#define MI_TLS_EXPANSION_SLOT    (0x0F94 / MI_SIZE_SIZE)
 #else
-#define MI_TLS_EXPANSION_SLOT    (0x1780 / MI_INTPTR_SIZE)
+#define MI_TLS_EXPANSION_SLOT    (0x1780 / MI_SIZE_SIZE)
 #endif
 
 extern mi_decl_hidden _Atomic(size_t) _mi_theap_default_slot;

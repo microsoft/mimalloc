@@ -738,15 +738,15 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
 
   // and initialize the free list by randomly threading through them
   // set up first element
-  const uintptr_t r = _mi_theap_random_next(theap);
+  const size_t r = _mi_theap_random_next(theap);
   size_t current = r % slice_count;
   counts[current]--;
   mi_block_t* const free_start = blocks[current];
   // and iterate through the rest; use `random_shuffle` for performance
-  uintptr_t rnd = _mi_random_shuffle(r|1); // ensure not 0
+  size_t rnd = _mi_random_shuffle(r|1); // ensure not 0
   for (size_t i = 1; i < extend; i++) {
-    // call random_shuffle only every INTPTR_SIZE rounds
-    const size_t round = i%MI_INTPTR_SIZE;
+    // call random_shuffle only every SIZE_SIZE rounds
+    const size_t round = i%MI_SIZE_SIZE;
     if (round == 0) rnd = _mi_random_shuffle(rnd);
     // select a random next slice index
     size_t next = ((rnd >> 8*round) & (slice_count-1));
