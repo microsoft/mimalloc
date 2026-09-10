@@ -16,8 +16,6 @@ terms of the MIT license. A copy of the license can be found in the file
 mi_decl_nodiscard static bool mi_check_padding_on_free(const mi_page_t* page, const mi_block_t* block, bool is_guarded, size_t* usable_size);
 mi_decl_nodiscard static bool mi_check_double_free(const mi_page_t* page, const mi_block_t* block);
 static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block, bool was_guarded);
-// static void   mi_stat_free(const mi_page_t* page, const mi_block_t* block);
-
 
 // ------------------------------------------------------
 // Free
@@ -615,7 +613,7 @@ static mi_decl_noinline bool mi_check_double_freex(const mi_page_t* page, const 
 // Used for double free checking to avoid checking free lists too frequently
 static inline bool mi_block_could_be_double_free(const mi_page_t* page, const mi_block_t* block) {
   mi_block_t* n = mi_block_nextx(page,block,page->keys);
-  return (!_mi_is_aligned(block,MI_SIZE_SIZE) &&              // quick check: aligned pointer?
+  return (_mi_is_aligned(block,MI_SIZE_SIZE) &&           // quick check: aligned pointer?
           (n==NULL || mi_page_contains_address(page,n))); // quick check: in the same page or NULL?  
 }
 
