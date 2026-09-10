@@ -36,13 +36,14 @@ static profile_state_t g_state;
 
 #define TEST_THRESHOLD (16 * 1024)
 
-static size_t mi_cdecl on_alloc(mi_profiler_data_t* data, void* ptr, size_t threshold, uint64_t bytes_since_last_sample, const mi_heap_t* heap, void* profiler_arg) {
-  MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(profiler_arg);
+static size_t mi_cdecl on_alloc(mi_profiler_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, const mi_heap_t* heap, void* profiler_arg) {
+  MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(profiler_arg); MI_UNUSED(requested_size);
   assert(profiler_arg==&g_state);
-  assert(bytes_since_last_sample >= data->requested_size);
+  assert(bytes_since_last_sample >= requested_size);
+  assert(requested_size == data->requested_size);
   g_state.alloc_count++;
   g_state.last_ptr      = ptr;
-  g_state.last_size     = data->requested_size;
+  g_state.last_size     = requested_size;
   g_state.last_upscaled = bytes_since_last_sample;   
   // store ptr to verify round-trip
   data->user_data[0] = ptr; 

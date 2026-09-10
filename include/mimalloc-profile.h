@@ -12,6 +12,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdbool.h>  // bool
 #include <stdint.h>   // uint64_t
 
+#define MI_PROFILE_DATA_MAX_SIZE  (1024)
+
 // Profiler data is stored together with each sampled allocation (unless the `on_free` field in the profiler is NULL.)
 typedef struct mi_profiler_data_s {
   size_t profiler_data_size;  // size of the custom profile data (should be the `mi_profiler_t.profiler_data_size`)

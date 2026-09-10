@@ -116,46 +116,59 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
 {
   mi_assert_internal(theap!=NULL);  
   mi_assert_internal(size<=requested_since_last_sample);
+  mi_assert_internal(size>=MI_PADDING_SIZE);
   mi_profiler_t* const prof = mi_theap_get_enabled_profiler(theap);
   if (prof == NULL) { return _mi_malloc_generic_no_sample(size,theap,zero,ppage); }
-  
-  // Overallocate a larger block to store the profiler data
-  // [MI_BLOCK_TAG_PROFILE] [usable size] [ ... profile data ... ] [... user data ...]
-  const size_t profiler_data_offset = sizeof(mi_block_t);
-  size_t profiler_data_size = sizeof(mi_profiler_data_t);
-  if (prof->profiler_data_size > 2*sizeof(size_t)) { profiler_data_size = (prof->profiler_data_size > 1024 ? 1024 : prof->profiler_data_size); };
-  const size_t profiler_user_offset = _mi_align_up(profiler_data_offset + profiler_data_size, MI_MAX_ALIGN_SIZE);
-  const size_t oversize = profiler_user_offset + size;
-  mi_page_t* page = NULL;
-  mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(oversize,theap,zero,&page); 
-  if (block==NULL) return NULL;
-  mi_assert_internal(page!=NULL);
-  if (ppage!=NULL) { *ppage = page; }
-  mi_assert_internal(!mi_block_ptr_is_guarded(_mi_page_ptr_unalign(page,block),block));
-  #if MI_PAGE_META_SMALL_IS_ALIGNED
-  // we should never allocate something allocated as small in a non-small page or otherwise aligned mi_free_small may fail.
-  // (that is why we need to limit the profiler_data_size as well)
-   // we should never allocate something allocated as small in a non-small page or otherwise aligned mi_free_small may fail.
-  if (size <= MI_SMALL_SIZE_MAX) { mi_assert_internal(mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE); }
-  #endif
+  const size_t req_size = size - MI_PADDING_SIZE;
 
-  // Set up the profiled block
-  mi_page_set_has_interior_pointers(page, true);
-  block->next = MI_BLOCK_TAG_PROFILED;  
-  const size_t usable_size = _mi_page_usable_size(page,block) - profiler_user_offset;
-  void* const p = (uint8_t*)block + profiler_user_offset;
-  mi_profiler_data_t* profiler_data = (mi_profiler_data_t*)((uint8_t*)block + profiler_data_offset);
-  profiler_data->requested_size = size - MI_PADDING_SIZE;
-  profiler_data->usable_size = usable_size;
-
-  // and call the profiler on_alloc
-  if (prof->on_alloc!=NULL) { 
-    const size_t new_sample_rate = (*prof->on_alloc)(profiler_data, p, theap->profile_sample_rate, requested_since_last_sample, _mi_theap_heap(theap), prof->profiler_arg);
-    if (new_sample_rate!=0 && new_sample_rate != (size_t)theap->profile_sample_rate) { 
-      _mi_theap_set_profile_sample_rate(theap,new_sample_rate);
+  void* p = NULL;
+  size_t new_sample_rate = 0;
+  if (prof->on_free==NULL) { 
+    // just allocate without profiler data
+    p = _mi_malloc_generic_no_sample(size,theap,zero,ppage);
+    if (p==NULL) { return p; }
+    if (prof->on_alloc!=NULL) {
+      new_sample_rate = (*prof->on_alloc)(NULL, p, req_size, theap->profile_sample_rate, requested_since_last_sample, _mi_theap_heap(theap), prof->profiler_arg);
     }
-    mi_theap_stat_counter_increase(theap,profile_samples,1);
   }
+  else {
+    // Overallocate a larger block to store the profiler data
+    // [MI_BLOCK_TAG_PROFILE] [usable size] [ ... profile data ... ] [... user data ...]
+    const size_t profiler_data_offset = sizeof(mi_block_t);
+    size_t profiler_data_size = sizeof(mi_profiler_data_t);
+    if (prof->profiler_data_size > 2*sizeof(size_t)) { profiler_data_size = (prof->profiler_data_size > MI_PROFILE_DATA_MAX_SIZE ? MI_PROFILE_DATA_MAX_SIZE : prof->profiler_data_size); };
+    const size_t profiler_user_offset = _mi_align_up(profiler_data_offset + profiler_data_size, MI_MAX_ALIGN_SIZE);
+    const size_t oversize = profiler_user_offset + size;
+    mi_page_t* page = NULL;
+    mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(oversize,theap,zero,&page); 
+    if (block==NULL) return NULL;
+    mi_assert_internal(page!=NULL);
+    if (ppage!=NULL) { *ppage = page; }
+    mi_assert_internal(!mi_block_ptr_is_guarded(_mi_page_ptr_unalign(page,block),block));
+    #if MI_PAGE_META_SMALL_IS_ALIGNED
+    // we should never allocate something allocated as small in a non-small page or otherwise aligned mi_free_small may fail.
+    // (that is why we need to limit the profiler_data_size as well)
+    // we should never allocate something allocated as small in a non-small page or otherwise aligned mi_free_small may fail.
+    if (size <= MI_SMALL_SIZE_MAX) { mi_assert_internal(mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE); }
+    #endif
+
+    // Set up the profiled block
+    mi_page_set_has_interior_pointers(page, true);
+    block->next = MI_BLOCK_TAG_PROFILED;  
+    p = (uint8_t*)block + profiler_user_offset;
+    mi_profiler_data_t* profiler_data = (mi_profiler_data_t*)((uint8_t*)block + profiler_data_offset);
+    profiler_data->profiler_data_size = profiler_data_size;
+    profiler_data->requested_size = req_size;
+    
+    // and call the profiler on_alloc
+    if (prof->on_alloc!=NULL) { 
+      new_sample_rate = (*prof->on_alloc)(profiler_data, p, req_size, theap->profile_sample_rate, requested_since_last_sample, _mi_theap_heap(theap), prof->profiler_arg);      
+    }
+  }
+  if (new_sample_rate!=0 && new_sample_rate != (size_t)theap->profile_sample_rate) { 
+    _mi_theap_set_profile_sample_rate(theap,new_sample_rate);
+  }
+  mi_theap_stat_counter_increase(theap,profile_samples,1);  
   return p;
 }
 
