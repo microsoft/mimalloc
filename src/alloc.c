@@ -165,7 +165,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero_non
   #endif
   
   // get page in constant time 
-  mi_page_t* page = _mi_theap_get_free_small_page(theap, xsize + (is_wsize ? _mi_wsize_from_size(MI_PADDING_SIZE) : MI_PADDING_SIZE), is_wsize);
+  mi_page_t* page = _mi_theap_get_free_small_page(theap, xsize + (is_wsize ? mi_wsize_from_size(MI_PADDING_SIZE) : MI_PADDING_SIZE), is_wsize);
 
   // and allocate  
   void* const p = mi_page_malloc_zero(theap, page, size + MI_PADDING_SIZE, theap->sample_countdown, zero, ppage);
@@ -216,31 +216,22 @@ static mi_decl_forceinline mi_decl_restrict void* mi_theap_malloc_small_zero(mi_
   return mi_theap_malloc_small_zero_ex(theap,size,false,zero,ppage);
 }
 
-static mi_decl_forceinline mi_decl_restrict void* mi_theap_wmalloc_small_zero(mi_theap_t* theap, size_t wsize, bool zero, mi_page_t** ppage) mi_attr_noexcept {
-  return mi_theap_malloc_small_zero_ex(theap,wsize,true,zero,ppage);
-}
-
 // allocate a small block
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_malloc_small(mi_theap_t* theap, size_t size) mi_attr_noexcept {
   return mi_theap_malloc_small_zero(theap, size, false, NULL);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* __mi_theap_wmalloc_small(mi_theap_t* theap, size_t wsize) mi_attr_noexcept {
-  return mi_theap_malloc_small_zero_ex(theap, wsize, true, false, NULL);
-}
-
-mi_decl_nodiscard mi_decl_restrict void* __mi_theap_wmalloc_small_nonnull(mi_theap_t* theap, size_t wsize) mi_attr_noexcept {
   mi_assert(theap!=NULL);
   return mi_theap_malloc_small_zero_nonnull(theap, wsize, true, false, NULL);
 }
-
 
 mi_decl_nodiscard mi_decl_restrict void* mi_malloc_small(size_t size) mi_attr_noexcept {
   return mi_theap_malloc_small(_mi_theap_default(), size);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* __mi_wmalloc_small(size_t wsize) mi_attr_noexcept {
-  return mi_theap_malloc_small_zero_ex(_mi_theap_default(), wsize, true, false, NULL);  
+  return mi_theap_malloc_small_zero_ex(_mi_theap_default(), wsize, true, false, NULL );  
 }
 
 mi_decl_nodiscard static mi_decl_noinline mi_decl_restrict void* mi_heap_init_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
@@ -316,7 +307,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_zalloc_small(size_t size) mi_attr_no
 }
 
 mi_decl_nodiscard mi_decl_restrict void* __mi_wzalloc_small(size_t size) mi_attr_noexcept {
-  return mi_theap_wmalloc_small_zero(_mi_theap_default(), size, true, NULL);
+  return mi_theap_malloc_small_zero_ex(_mi_theap_default(), size, true, true, NULL);
 }
 
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_zalloc_small(mi_theap_t* theap, size_t size) mi_attr_noexcept {
@@ -324,14 +315,9 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_zalloc_small(mi_
 }
 
 mi_decl_nodiscard mi_decl_restrict void* __mi_theap_wzalloc_small(mi_theap_t* theap, size_t size) mi_attr_noexcept {
-  return mi_theap_malloc_small_zero_ex(theap, size, true, true, NULL);
-}
-
-mi_decl_nodiscard mi_decl_restrict void* __mi_theap_wzalloc_small_nonnull(mi_theap_t* theap, size_t size) mi_attr_noexcept {
   mi_assert(theap!=NULL);
   return mi_theap_malloc_small_zero_nonnull(theap, size, true, true, NULL);
 }
-
 
 mi_decl_nodiscard static mi_decl_noinline mi_decl_restrict void* mi_heap_init_zalloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept {
   return mi_theap_malloc_small_zero_nonnull(_mi_heap_theap_get_or_init(heap), size, false, true, NULL);

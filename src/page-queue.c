@@ -62,7 +62,7 @@ static inline size_t mi_page_queue_count(const mi_page_queue_t* pq) {
 // We use `wsize` for the size in "machine word sizes",
 // i.e. byte size == `wsize*sizeof(void*)`.
 static size_t mi_bin(size_t size) {
-  size_t wsize = _mi_wsize_from_size(size);
+  size_t wsize = mi_wsize_from_size(size);
 #if defined(MI_ALIGN4W)
   if mi_likely(wsize <= 4) {
     return (wsize <= 1 ? 1 : (wsize+1)&~1); // round to double word sizes
@@ -152,10 +152,10 @@ bool _mi_page_queue_is_valid(mi_theap_t* theap, const mi_page_queue_t* pq) {
   for (mi_page_t* page = pq->first; page != NULL; page = page->next) {
     mi_assert_internal(page->prev == prev);
     if (mi_page_is_in_full(page)) {
-      mi_assert_internal(_mi_wsize_from_size(pq->block_size) == MI_LARGE_MAX_OBJ_WSIZE + 2);
+      mi_assert_internal(mi_wsize_from_size(pq->block_size) == MI_LARGE_MAX_OBJ_WSIZE + 2);
     }
     else if (mi_page_is_huge(page)) {
-      mi_assert_internal(_mi_wsize_from_size(pq->block_size) == MI_LARGE_MAX_OBJ_WSIZE + 1);
+      mi_assert_internal(mi_wsize_from_size(pq->block_size) == MI_LARGE_MAX_OBJ_WSIZE + 1);
     }
     else {
       mi_assert_internal(mi_page_block_size(page) == pq->block_size);
@@ -215,7 +215,7 @@ static inline void mi_theap_queue_first_update(mi_theap_t* theap, const mi_page_
   if (pq->first == NULL) page = _mi_page_empty_get();
 
   // find index in the right direct page array
-  const size_t idx = _mi_wsize_from_size(size);
+  const size_t idx = mi_wsize_from_size(size);
   mi_page_t** const pages_free = theap->pages_free_direct;
   if (pages_free[idx] == page) return;  // already set
 
@@ -232,7 +232,7 @@ static inline void mi_theap_queue_first_update(mi_theap_t* theap, const mi_page_
     while( bin == mi_bin(prev->block_size) && prev > &theap->pages[0]) {
       prev--;
     }
-    start = 1 + _mi_wsize_from_size(prev->block_size);
+    start = 1 + mi_wsize_from_size(prev->block_size);
     if (start > idx) start = idx;
   }
 

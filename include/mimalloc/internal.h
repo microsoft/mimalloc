@@ -600,13 +600,6 @@ static inline bool mi_mem_is_zero(const void* p, size_t size) {
   return true;
 }
 
-// Align a byte size to a size in _machine words_,
-// i.e. byte size == `wsize*sizeof(void*)`.
-static inline size_t _mi_wsize_from_size(size_t size) {
-  mi_assert_internal(size <= SIZE_MAX - sizeof(uintptr_t));
-  return (size + sizeof(uintptr_t) - 1) / sizeof(uintptr_t);
-}
-
 // Overflow detecting multiply
 #if __has_builtin(__builtin_umul_overflow) || (defined(__GNUC__) && (__GNUC__ >= 5))
 #include <limits.h>      // UINT_MAX, ULONG_MAX
@@ -683,7 +676,7 @@ static inline mi_subproc_t* _mi_theap_subproc(const mi_theap_t* theap) {
 
 static inline mi_page_t* _mi_theap_get_free_small_page(mi_theap_t* theap, size_t xsize, bool is_wsize) {
   mi_assert_internal(is_wsize ? xsize <= (MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE) : xsize <= (MI_SMALL_SIZE_MAX + MI_PADDING_SIZE));
-  const size_t idx = (is_wsize ? xsize : _mi_wsize_from_size(xsize));
+  const size_t idx = (is_wsize ? xsize : mi_wsize_from_size(xsize));
   mi_assert_internal(idx < MI_PAGES_DIRECT);
   return theap->pages_free_direct[idx];
 }
