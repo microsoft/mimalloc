@@ -56,13 +56,13 @@ static void* mi_theap_malloc_zero_no_guarded(mi_theap_t* theap, size_t size, boo
   // const size_t rate = theap->guarded_sample_rate;
   // only write if `rate!=0` so we don't write to the constant `_mi_theap_empty`
   // if (rate != 0) { theap->guarded_sample_rate = 0; }
-  void* p = _mi_theap_malloc_zero(theap, size, zero, ppage);
+  void* p = _mi_theap_malloc_zero(theap, size, zero, 0, ppage);
   // if (rate != 0) { theap->guarded_sample_rate = rate; }
   return p;
 }
 #else
 static void* mi_theap_malloc_zero_no_guarded(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) {
-  return _mi_theap_malloc_zero(theap, size, zero, ppage);
+  return _mi_theap_malloc_zero(theap, size, zero, 0, ppage);
 }
 #endif
 
@@ -86,7 +86,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
     }
     oversize = (size <= MI_SMALL_SIZE_MAX ? MI_SMALL_SIZE_MAX + 1 /* ensure we use generic malloc path */ : size);
     // note: no guarded as alignment > 0
-    p = _mi_theap_malloc_zero_ex(theap, oversize, zero, alignment, &page); // the page block size should be large enough to align in the single huge page block
+    p = _mi_theap_malloc_zero(theap, oversize, zero, alignment, &page); // the page block size should be large enough to align in the single huge page block
     if (p == NULL) return NULL;
   }
   else {
