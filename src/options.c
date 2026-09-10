@@ -49,7 +49,7 @@ int mi_version(void) {
 
 // in KiB
 #ifndef MI_DEFAULT_ARENA_RESERVE
- #if (MI_INTPTR_SIZE>4)
+ #if (MI_SIZE_SIZE>4)
   #define MI_DEFAULT_ARENA_RESERVE 1024L*1024L
  #else
   #define MI_DEFAULT_ARENA_RESERVE 128L*1024L
