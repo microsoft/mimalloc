@@ -65,8 +65,7 @@ static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t*
 static my_profiler_t my_profiler = {
   { // profiler_t
     NULL,            // reserved
-    NULL,            // profiler_heap
-    sizeof(void*),   // needed data size (default)
+    sizeof(void*),   // needed sample data size
     0,               // initial sample rate (default)        
     &on_alloc,       
     &on_free,

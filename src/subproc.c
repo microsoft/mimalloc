@@ -229,8 +229,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
   }
 
   subproc->theap_meta = NULL;     // theap meta stats are merged during heap_destroy of the main heap
-  mi_atomic_store_ptr_relaxed(mi_heap_t,&subproc->heap_profiler,NULL);
-
+  
   if (!_mi_subproc_is_main(subproc)) {
     // merge stats back into the main subproc  
     _mi_stats_merge_into(&mi_process_subproc_main.stats, &subproc->stats);

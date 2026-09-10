@@ -12,15 +12,20 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdbool.h>  // bool
 #include <stdint.h>   // uint64_t
 
+//---------------------------------------------------------------------------
+// Initial support for profiling hooks; still experimental
+//---------------------------------------------------------------------------
+
 #define MI_PROFILE_SAMPLE_DATA_MAX_SIZE  (1024)
+
+// User defined profiler; see `test_profile.c` for an example.
+typedef struct mi_profiler_s mi_profiler_t;
 
 // Profiler data is stored together with each sampled allocation (unless the `on_free` field in the profiler is NULL.)
 typedef struct mi_profiler_sample_data_s {
   size_t user_data_size;      // size of the user_data (should be the `mi_profiler_t.sample_data_size`)  
   void*  user_data[1];        // default, but can be less or more (up to 1KiB), depending on `sample_data_size`
 } mi_profiler_sample_data_t;
-
-typedef struct mi_profiler_s mi_profiler_t;
 
 // Profiling callback invoked on each sampled allocation.
 // If `profiler_data!=NULL` (i.e. when `on_free` is not NULL), then `profiler_data->requested_size == requested_size`.
@@ -36,9 +41,8 @@ typedef void   (mi_cdecl mi_profiler_on_free_fun   )(mi_profiler_t* profiler, mi
 // All fields are considered immutable such that they can be copied and accessed concurrently. All fields can be NULL/0.
 struct mi_profiler_s {
   void*                       reserved;           // opaque; reserved by mimalloc
-  mi_heap_t*                  profiler_heap;      // if initially NULL, it is filled in by mimalloc when the profiler is attached; this heap will not be sampled.
-  size_t                      sample_data_size;   // size of required profiler data for each sampled allocation
-  size_t                      initial_sample_rate;// initial sample rate (set to at least 1 or higher) (can be adjusted by `on_alloc`)
+  size_t                      sample_data_size;   // size of required profiler data for each sampled allocation (or zero for no data)
+  size_t                      initial_sample_rate;// initial sample rate in bytes (set to at least 1 or higher) (can be adjusted by `on_alloc`)
   mi_profiler_on_alloc_fun*   on_alloc;           // called on a sampled allocation (may be called concurrently)  
   mi_profiler_on_free_fun*    on_free;            // called on when previous sampled allocation is freed (may be called concurrently)
   mi_profiler_on_realloc_inplace_fun* on_realloc_inplace;  // (as yet unused) called on in-place reallocation of a previous sampled allocation (may be called concurrently)
@@ -50,17 +54,23 @@ struct mi_profiler_s {
 extern "C" {
 #endif
 
-// attach a profiler to a heap.
+// attach a profiler to a particular heap only.
 mi_decl_export bool mi_heap_profile(mi_heap_t* heap, mi_profiler_t* profiler);
-// attach a profiler to all heaps in a sub-process.
+
+// disable profiling for a particular heap; useful for a heap that the profiler uses itself for metadata.
+mi_decl_export void mi_heap_profile_disable(mi_heap_t* heap);
+
+// attach a profiler to any (current and future) heaps in a sub-process (unless those heaps disabled profiling)
 mi_decl_export bool mi_subproc_profile(mi_subproc_id_t subproc_id, mi_profiler_t* profiler);
-// attach a profiler to the main sub-process.
+
+// attach a profiler to any heaps in the main sub-process 
 mi_decl_export bool mi_profile(mi_profiler_t* profiler);
 
 // start sampling
-mi_decl_export bool mi_profiler_start(const mi_profiler_t* profiler);
+mi_decl_export bool mi_profiler_start(mi_profiler_t* profiler);
+
 // end sampling
-mi_decl_export bool mi_profiler_stop(const mi_profiler_t* profiler);
+mi_decl_export bool mi_profiler_stop(mi_profiler_t* profiler);
 
 #ifdef __cplusplus
 }

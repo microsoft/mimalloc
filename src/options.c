@@ -246,20 +246,7 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
     _mi_fprintf(out, arg, "option '%s': %ld %s\n", desc->name, desc->value, (mi_option_has_size_in_kib(option) ? "KiB" : ""));
   }
 
-  // show build configuration
-  _mi_fprintf(out, arg, "debug level : %d\n", MI_DEBUG );
-  _mi_fprintf(out, arg, "secure level: %d\n", MI_SECURE );
-  _mi_fprintf(out, arg, "mem tracking: %s\n", MI_TRACK_TOOL);
-  #if MI_GUARDED
-  _mi_fprintf(out, arg, "guarded mode: %s, rate=%ld\n",  MI_SAMPLE==2 ? "fine-grained" : "enabled", mi_option_get(mi_option_guarded_sample_rate));
-  #endif  
-  #if MI_TSAN
-  _mi_fprintf(out, arg, "thread santizer enabled\n");
-  #endif
-  #if MI_PROFILE
-  _mi_fprintf(out, arg, "profiling   : %s\n", MI_SAMPLE==2 ? "fine-grained" : "enabled");
-  #endif
-
+  // show build configuration  
   #if MI_PAGE_META_IS_ALIGNED && MI_PAGE_META_SMALL_IS_ALIGNED
   _mi_fprintf(out, arg, "free mode   : (small) aligned, page size: %zu\n", sizeof(mi_page_t));
   #elif MI_PAGE_META_IS_ALIGNED
@@ -274,6 +261,18 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
   #if MI_ENCODE_FREELIST
   _mi_fprintf(out, arg, "free lists  : encoded with %d key(s)\n", MI_PAGE_KEY_COUNT);
   #endif
+  #if MI_GUARDED
+  _mi_fprintf(out, arg, "guarded mode: %s, rate=%ld\n",  MI_SAMPLE==2 ? "fine-grained" : "enabled", mi_option_get(mi_option_guarded_sample_rate));
+  #endif  
+  #if MI_PROFILE
+  _mi_fprintf(out, arg, "profiling   : %s\n", MI_SAMPLE==2 ? "fine-grained" : "enabled");
+  #endif
+  #if MI_TSAN
+  _mi_fprintf(out, arg, "thread santizer enabled\n");
+  #endif
+  _mi_fprintf(out, arg, "mem tracking: %s\n", MI_TRACK_TOOL);  
+  _mi_fprintf(out, arg, "debug level : %d\n", MI_DEBUG );
+  _mi_fprintf(out, arg, "secure level: %d\n", MI_SECURE );
 }
 
 mi_decl_export void mi_options_print(void) mi_attr_noexcept {
