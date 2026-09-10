@@ -23,50 +23,60 @@ terms of the MIT license. A copy of the license can be found in the file
 // ---------------------------------------------------------------------------
 
 typedef struct {
+  mi_profiler_t profiler;
   uint64_t  alloc_count;
   uint64_t  free_count;
   size_t    last_size;
   uint64_t  last_upscaled;
   void*     last_ptr;
-} profile_state_t;
+} my_profiler_t;
+
+static inline my_profiler_t* downcast( mi_profiler_t* prof ) { 
+  return (my_profiler_t*)prof; 
+} 
 
 // We store ptr in user_data so on_free can verify the round-trip.
 
-static profile_state_t g_state;
-
 #define TEST_THRESHOLD (16 * 1024)
 
-static size_t mi_cdecl on_alloc(mi_profiler_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, const mi_heap_t* heap, void* profiler_arg) {
-  MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(profiler_arg); MI_UNUSED(requested_size);
-  assert(profiler_arg==&g_state);
-  assert(bytes_since_last_sample >= requested_size);
-  assert(requested_size == data->requested_size);
-  g_state.alloc_count++;
-  g_state.last_ptr      = ptr;
-  g_state.last_size     = requested_size;
-  g_state.last_upscaled = bytes_since_last_sample;   
-  // store ptr to verify round-trip
+static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, const mi_heap_t* heap) {
+  MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(requested_size);
+  my_profiler_t* prof = downcast(profiler);
+  assert(bytes_since_last_sample >= requested_size);  
+  prof->alloc_count++;
+  prof->last_ptr      = ptr;
+  prof->last_size     = requested_size;
+  prof->last_upscaled = bytes_since_last_sample;   
+  // store ptr to verify round-trip 
+  assert(data->user_data_size >= sizeof(void*));
+  assert(data->user_data_size >= prof->profiler.sample_data_size);
   data->user_data[0] = ptr; 
   return TEST_THRESHOLD;
 }
 
-static void mi_cdecl on_free(mi_profiler_data_t* data, void* ptr, const mi_heap_t* heap, void* profiler_arg) {
-  MI_UNUSED(heap); MI_UNUSED_RELEASE(profiler_arg); MI_UNUSED_RELEASE(data);
-  assert(profiler_arg==&g_state);
-  g_state.free_count++;
+static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, const mi_heap_t* heap) {
+  MI_UNUSED(heap); MI_UNUSED_RELEASE(data); MI_UNUSED_RELEASE(ptr);
+  my_profiler_t* prof = downcast(profiler);
+  prof->free_count++;
   // verify the user_data round-trip
-  assert(data->user_data[0] == ptr);
-  if (g_state.last_ptr == ptr) { assert(data->requested_size == g_state.last_size); }
+  assert(data->user_data[0] == ptr);  
 }
 
-mi_profiler_t my_profiler = {
-  NULL, NULL, NULL,  // reserved
-  &g_state,          // profiler_arg
-  3*sizeof(void*),   // needed data size
-  &on_alloc,       
-  &on_free,
-  NULL
+static my_profiler_t my_profiler = {
+  { // profiler_t
+    NULL,            // reserved
+    NULL,            // profiler_heap
+    sizeof(void*),   // needed data size (default)
+    0,               // initial sample rate (default)        
+    &on_alloc,       
+    &on_free,
+    NULL
+  },
+  0, 0, 0, 0, NULL
 };
+
+
+
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -89,9 +99,9 @@ static void allocate_past_threshold(void) {
 
 bool test_profiler_samples(void) {
   CHECK_BODY("profiler: on_alloc called after threshold") {
-    uint64_t before = g_state.alloc_count;
+    uint64_t before = my_profiler.alloc_count;
     allocate_past_threshold();
-    result = (g_state.alloc_count > before);
+    result = (my_profiler.alloc_count > before);
   }
   return true;
 }
@@ -100,51 +110,51 @@ bool test_profiler_samples(void) {
 
 bool test_profiler_record_fields(void) {
   CHECK_BODY("profiler: record ptr and size are non-zero") {
-    uint64_t before = g_state.alloc_count;
+    uint64_t before = my_profiler.alloc_count;
     int count;
-    for (count = 0; g_state.alloc_count == before && count < MAXLOOP; count++) {
+    for (count = 0; my_profiler.alloc_count == before && count < MAXLOOP; count++) {
       void* p = mi_malloc(1024);
       mi_free(p);
     }
     assert(count!=MAXLOOP);    
-    result = (g_state.last_ptr != NULL && g_state.last_size > 0 && g_state.last_upscaled > 0 && count!=MAXLOOP);
+    result = (my_profiler.last_ptr != NULL && my_profiler.last_size > 0 && my_profiler.last_upscaled > 0 && count!=MAXLOOP);
   }
   return true;
 }
 
 bool test_profiler_on_free_called(void) {
   CHECK_BODY("profiler: on_free called for sampled allocation") {
-    uint64_t alloc_before = g_state.alloc_count;
-    uint64_t free_before  = g_state.free_count;
+    uint64_t alloc_before = my_profiler.alloc_count;
+    uint64_t free_before  = my_profiler.free_count;
 
     // Keep the pointer live until we confirm a sample was taken, then free it.
     void* sampled = NULL;
     int count;
-    for (count = 0; g_state.alloc_count == alloc_before && count < MAXLOOP; count++) {
+    for (count = 0; my_profiler.alloc_count == alloc_before && count < MAXLOOP; count++) {
       if (sampled) { mi_free(sampled); }
       sampled = mi_malloc(1024);
     }
-    // At this point g_state.last_ptr is the sampled pointer.
+    // At this point my_profiler.last_ptr is the sampled pointer.
     // Free it and check on_free fires.
-    void* expected = g_state.last_ptr;
+    void* expected = my_profiler.last_ptr;
     mi_free(expected);
     sampled = NULL;
     assert(count!=MAXLOOP);
-    result = (g_state.free_count > free_before && count!=MAXLOOP);
+    result = (my_profiler.free_count > free_before && count!=MAXLOOP);
   }
   return true;
 }
 
 bool test_profiler_upscaled_at_least_size(void) {
   CHECK_BODY("profiler: upscaled_size >= size") {
-    uint64_t before = g_state.alloc_count;
+    uint64_t before = my_profiler.alloc_count;
     int count;
-    for (count = 0; g_state.alloc_count == before && count < MAXLOOP; count++) {
+    for (count = 0; my_profiler.alloc_count == before && count < MAXLOOP; count++) {
       void* p = mi_malloc(256);
       mi_free(p);
     }
     assert(count!=MAXLOOP);
-    result = (g_state.last_upscaled >= g_state.last_size && count!=MAXLOOP);
+    result = (my_profiler.last_upscaled >= my_profiler.last_size && count!=MAXLOOP);
   }
   return true;
 }
@@ -154,7 +164,7 @@ bool test_profiler_free_count_le_alloc_count(void) {
     // Free can only fire for sampled allocations, so free_count <= alloc_count
     // must hold at all times.
     allocate_past_threshold();
-    result = (g_state.free_count <= g_state.alloc_count);
+    result = (my_profiler.free_count <= my_profiler.alloc_count);
   }
   return true;
 }
@@ -165,8 +175,8 @@ bool test_profiler_free_count_le_alloc_count(void) {
 // ---------------------------------------------------------------------------
 
 int main(void) {
-  mi_profile(&my_profiler);
-  mi_profiler_start(&my_profiler);
+  mi_profile(&my_profiler.profiler);
+  mi_profiler_start(&my_profiler.profiler);
 
   test_profiler_upscaled_at_least_size();
   test_profiler_samples();
@@ -174,7 +184,7 @@ int main(void) {
   test_profiler_on_free_called();
   test_profiler_free_count_le_alloc_count();
 
-  mi_profiler_stop(&my_profiler);
+  mi_profiler_stop(&my_profiler.profiler);
 
   return print_test_summary();
 }

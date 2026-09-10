@@ -714,6 +714,7 @@ struct mi_subproc_s {
   _Atomic(int64_t)      purge_expire;                   // expiration is set if any arenas can be purged
 
   _Atomic(mi_heap_t*)   heap_main;                      // main heap for this sub process
+  _Atomic(mi_heap_t*)   heap_profiler;                  // heap for an attached profiler
   mi_heap_t*            heaps;                          // heaps belonging to this sub-process
   mi_lock_t             heaps_lock;
 

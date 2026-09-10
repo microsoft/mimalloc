@@ -118,7 +118,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
   mi_assert_internal(size<=requested_since_last_sample);
   mi_assert_internal(size>=MI_PADDING_SIZE);
   mi_profiler_t* const prof = mi_theap_get_enabled_profiler(theap);
-  if (prof == NULL) { return _mi_malloc_generic_no_sample(size,theap,zero,ppage); }
+  if (prof == NULL || prof->on_alloc == NULL) { return _mi_malloc_generic_no_sample(size,theap,zero,ppage); }
   const size_t req_size = size - MI_PADDING_SIZE;
 
   void* p = NULL;
@@ -128,23 +128,24 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
     p = _mi_malloc_generic_no_sample(size,theap,zero,ppage);
     if (p==NULL) { return p; }
     if (prof->on_alloc!=NULL) {
-      new_sample_rate = (*prof->on_alloc)(NULL, p, req_size, theap->profile_sample_rate, requested_since_last_sample, _mi_theap_heap(theap), prof->profiler_arg);
+      // we are just allocation profiling (not heap profiling as on_free == NULL)
+      new_sample_rate = (*prof->on_alloc)(prof, NULL /* no data */, p, req_size, theap->profile_sample_rate, requested_since_last_sample, _mi_theap_heap(theap) );
     }
   }
   else {
     // Overallocate a larger block to store the profiler data
     // [MI_BLOCK_TAG_PROFILE] [usable size] [ ... profile data ... ] [... user data ...]
-    const size_t profiler_data_offset = sizeof(mi_block_t);
-    size_t profiler_data_size = sizeof(mi_profiler_data_t);
-    if (prof->profiler_data_size > 2*sizeof(size_t)) { profiler_data_size = (prof->profiler_data_size > MI_PROFILE_DATA_MAX_SIZE ? MI_PROFILE_DATA_MAX_SIZE : prof->profiler_data_size); };
-    const size_t profiler_user_offset = _mi_align_up(profiler_data_offset + profiler_data_size, MI_MAX_ALIGN_SIZE);
-    const size_t oversize = profiler_user_offset + size;
+    const size_t sample_data_offset = sizeof(mi_block_t);
+    size_t sample_user_data_size = 0;
+    if (prof->sample_data_size > 0) { sample_user_data_size = (prof->sample_data_size > MI_PROFILE_SAMPLE_DATA_MAX_SIZE ? MI_PROFILE_SAMPLE_DATA_MAX_SIZE : prof->sample_data_size); };
+    const size_t sample_data_size = sizeof(mi_profiler_sample_data_t) + sample_user_data_size;
+    const size_t user_offset = _mi_align_up(sample_data_offset + sample_data_size, MI_MAX_ALIGN_SIZE);
+    const size_t oversize = user_offset + size;
     mi_page_t* page = NULL;
     mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(oversize,theap,zero,&page); 
     if (block==NULL) return NULL;
     mi_assert_internal(page!=NULL);
-    if (ppage!=NULL) { *ppage = page; }
-    mi_assert_internal(!mi_block_ptr_is_guarded(_mi_page_ptr_unalign(page,block),block));
+    if (ppage!=NULL) { *ppage = page; }    
     #if MI_PAGE_META_SMALL_IS_ALIGNED
     // we should never allocate something allocated as small in a non-small page or otherwise aligned mi_free_small may fail.
     // (that is why we need to limit the profiler_data_size as well)
@@ -155,14 +156,13 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
     // Set up the profiled block
     mi_page_set_has_interior_pointers(page, true);
     block->next = MI_BLOCK_TAG_PROFILED;  
-    p = (uint8_t*)block + profiler_user_offset;
-    mi_profiler_data_t* profiler_data = (mi_profiler_data_t*)((uint8_t*)block + profiler_data_offset);
-    profiler_data->profiler_data_size = profiler_data_size;
-    profiler_data->requested_size = req_size;
-    
+    p = (uint8_t*)block + user_offset;
+    mi_profiler_sample_data_t* sample_data = (mi_profiler_sample_data_t*)((uint8_t*)block + sample_data_offset);
+    sample_data->user_data_size = sample_user_data_size;
+
     // and call the profiler on_alloc
     if (prof->on_alloc!=NULL) { 
-      new_sample_rate = (*prof->on_alloc)(profiler_data, p, req_size, theap->profile_sample_rate, requested_since_last_sample, _mi_theap_heap(theap), prof->profiler_arg);      
+      new_sample_rate = (*prof->on_alloc)(prof, sample_data, p, req_size, theap->profile_sample_rate, requested_since_last_sample, _mi_theap_heap(theap) );      
     }
   }
   if (new_sample_rate!=0 && new_sample_rate != (size_t)theap->profile_sample_rate) { 
@@ -182,14 +182,32 @@ void _mi_page_profile_free(mi_page_t* page, mi_block_t* block, void* p) {
   if (prof==NULL || !mi_profiler_is_enabled(prof) || prof->on_free==NULL) return;
   
   // call the on_free callback
-  mi_profiler_data_t* const profiler_data = (mi_profiler_data_t*)((uint8_t*)block + sizeof(mi_block_t));
-  prof->on_free(profiler_data, p, heap, prof->profiler_arg);
+  mi_profiler_sample_data_t* const sample_data = (mi_profiler_sample_data_t*)((uint8_t*)block + sizeof(mi_block_t));
+  prof->on_free(prof, sample_data, p, heap);
 }
 
 
 //----------------------------------------------------------------------------
 // Profiling API
 //-----------------------------------------------------------------------------*
+
+static mi_profiler_t mi_nosample_profiler = { MI_ATOMIC_VAR_INIT(NULL), NULL, 0, MI_SAMPLE_RATE_MAX, NULL, NULL, NULL };
+
+static mi_heap_t* mi_subproc_get_heap_profiler(mi_subproc_t* subproc) {
+  mi_heap_t* heap = mi_atomic_load_ptr_acquire(mi_heap_t, &subproc->heap_profiler);
+  if (heap!=NULL) return heap;
+
+  heap = mi_heap_new();
+  mi_atomic_store_ptr_release(mi_profiler_t,&heap->profiler, &mi_nosample_profiler);
+  mi_heap_t* prev_heap = NULL;
+  if (!mi_atomic_cas_ptr_strong_acq_rel(mi_heap_t, &subproc->heap_profiler, &prev_heap, heap)) {
+    // already set by someone else
+    mi_heap_delete(heap);
+    heap = prev_heap;
+  }
+  mi_assert_internal(heap!=NULL && heap == mi_atomic_load_ptr_acquire(mi_heap_t, &subproc->heap_profiler));
+  return heap;
+}
 
 size_t _mi_theap_set_profile_sample_rate(mi_theap_t* theap, size_t sample_rate) {
   const size_t old_sample_rate = theap->profile_sample_rate;
@@ -201,26 +219,34 @@ size_t _mi_theap_set_profile_sample_rate(mi_theap_t* theap, size_t sample_rate) 
   return old_sample_rate;
 }
 
-bool mi_heap_profile(mi_heap_t* heap, const mi_profiler_t* profiler) {
-  // if (mi_heap_profiler(heap)!=NULL) return false;  // always overwrite?
-  mi_atomic_store_ptr_release(mi_profiler_t,&heap->profiler,(mi_profiler_t*)profiler);  
+static bool mi_heap_set_profiler(mi_heap_t* heap, mi_profiler_t* profiler) {
+  mi_profiler_t* previous = NULL;  // never overwrite
+  return mi_atomic_cas_ptr_strong_acq_rel(mi_heap_t, &heap->profiler, &previous, profiler);
+}
+
+bool mi_heap_profile(mi_heap_t* heap, mi_profiler_t* profiler) {
+  mi_profiler_stop(profiler);
+  if (!mi_heap_set_profiler(heap,profiler)) return false;
+  profiler->profiler_heap = mi_subproc_get_heap_profiler(heap->subproc);
   return true;
 }
 
-bool mi_subproc_profile(mi_subproc_id_t subproc_id, const mi_profiler_t* profiler) {
+bool mi_subproc_profile(mi_subproc_id_t subproc_id, mi_profiler_t* profiler) {
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
-  if (subproc==NULL) return false; 
-  // if (mi_subproc_profiler(subproc)!=NULL) return false;  // always overwrite?
-  mi_atomic_store_ptr_release(mi_profiler_t,&subproc->profiler, (mi_profiler_t*)profiler);
+  if (subproc==NULL) return false;   
+  mi_profiler_stop(profiler);  
+  mi_profiler_t* previous = NULL;
+  if (!mi_atomic_cas_ptr_strong_acq_rel(mi_profiler_t,&subproc->profiler, &previous, profiler)) { return false; }  // never overwrite  
+  profiler->profiler_heap = mi_subproc_get_heap_profiler(subproc);
   mi_lock(&subproc->heaps_lock) {
     for (mi_heap_t* heap = subproc->heaps; heap!=NULL; heap = heap->next) {
-      mi_heap_profile(heap,profiler);
+      mi_heap_set_profiler(heap,profiler);
     }
   }
   return true;
 }
 
-bool mi_profile(const mi_profiler_t* profiler) {
+bool mi_profile( mi_profiler_t* profiler) {
   return mi_subproc_profile(mi_subproc_main(),profiler);
 }
 
