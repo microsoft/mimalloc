@@ -924,7 +924,6 @@ mi_decl_nodiscard void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
 void* _mi_externs[] = {
   (void*)&_mi_page_malloc_zero,
   (void*)&_mi_theap_malloc_zero,
-  (void*)&_mi_theap_malloc_zero_ex,
   (void*)&mi_theap_malloc,
   (void*)&mi_theap_zalloc,
   (void*)&mi_theap_malloc_small,

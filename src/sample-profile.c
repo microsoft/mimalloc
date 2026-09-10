@@ -191,7 +191,7 @@ void _mi_page_profile_free(mi_page_t* page, mi_block_t* block, void* p) {
 // Profiling API
 //-----------------------------------------------------------------------------*
 
-static mi_profiler_t mi_nosample_profiler = { MI_ATOMIC_VAR_INIT(NULL), NULL, 0, MI_SAMPLE_RATE_MAX, NULL, NULL, NULL };
+static mi_profiler_t mi_nosample_profiler = { NULL, NULL, 0, MI_SAMPLE_RATE_MAX, NULL, NULL, NULL };
 
 static mi_heap_t* mi_subproc_get_heap_profiler(mi_subproc_t* subproc) {
   mi_heap_t* heap = mi_atomic_load_ptr_acquire(mi_heap_t, &subproc->heap_profiler);
@@ -221,7 +221,7 @@ size_t _mi_theap_set_profile_sample_rate(mi_theap_t* theap, size_t sample_rate) 
 
 static bool mi_heap_set_profiler(mi_heap_t* heap, mi_profiler_t* profiler) {
   mi_profiler_t* previous = NULL;  // never overwrite
-  return mi_atomic_cas_ptr_strong_acq_rel(mi_heap_t, &heap->profiler, &previous, profiler);
+  return mi_atomic_cas_ptr_strong_acq_rel(mi_profiler_t, &heap->profiler, &previous, profiler);
 }
 
 bool mi_heap_profile(mi_heap_t* heap, mi_profiler_t* profiler) {
