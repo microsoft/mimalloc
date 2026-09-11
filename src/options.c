@@ -273,6 +273,7 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
   _mi_fprintf(out, arg, "mem tracking: %s\n", MI_TRACK_TOOL);  
   _mi_fprintf(out, arg, "debug level : %d\n", MI_DEBUG );
   _mi_fprintf(out, arg, "secure level: %d\n", MI_SECURE );
+  _mi_fprintf(out, arg, "padding     : %d\n", MI_PADDING );
 }
 
 mi_decl_export void mi_options_print(void) mi_attr_noexcept {

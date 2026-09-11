@@ -1564,7 +1564,7 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
   mi_assert_internal(_mi_is_aligned(dst,MI_SIZE_SIZE));
   mi_assert_internal(bsize < MI_MAX_ALIGN_SIZE || _mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
   
-  #if MI_USE_MEMZERO128  // 64-bit with 128-bit stores (arm64 and x64)
+  #if 0 && MI_USE_MEMZERO128  // 64-bit with 128-bit stores (arm64 and x64)
     // fast memzero based on overlapping writes (and assuming non-zero size_t-multiple size, and size_t aligned)
     #if defined(_MSC_VER) && defined(__AVX2__)
       typedef __m128i __int128_t;
