@@ -30,10 +30,8 @@ terms of the MIT license. A copy of the license can be found in the file
 static mi_decl_noinline void mi_page_block_setup_padding(mi_page_t* page, mi_block_t* block, size_t size) mi_attr_noexcept {
   const size_t bsize = mi_page_usable_block_size(page);
   mi_padding_t* const padding = (mi_padding_t*)((uint8_t*)block + bsize);
-  ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
-  #if (MI_DEBUG>=2)
+  const ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
   mi_assert_internal(delta >= 0 && bsize >= (size - MI_PADDING_SIZE + delta));
-  #endif
   mi_track_mem_defined(padding,sizeof(mi_padding_t));  // note: re-enable since mi_page_usable_block_size may set noaccess
   padding->canary = mi_ptr_encode_canary(page,block,page->keys);
   padding->delta  = (uint32_t)(delta);

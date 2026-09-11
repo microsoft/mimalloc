@@ -141,7 +141,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
 // Remove guard page when building with MI_GUARDED
 #if MI_GUARDED
 void _mi_page_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
-  if (!mi_block_ptr_is_guarded(block,p)) return;
+  // if (!mi_block_ptr_is_guarded(block,p)) return;
   mi_assert_internal(mi_block_ptr_is_guarded(block, p));
   mi_assert_internal(mi_page_has_interior_pointers(page));
   mi_assert_internal((uint8_t*)p - (uint8_t*)block >= (ptrdiff_t)sizeof(mi_block_t));

@@ -115,7 +115,7 @@ int main(void) {
   #endif
   CHECK_BODY("calloc-overflow") {
     // use (size_t)&mi_calloc to get some number without triggering compiler warnings
-    result = (mi_calloc((size_t)&mi_calloc,SIZE_MAX/1000) == NULL);
+    result = (mi_calloc((size_t)&mi_calloc,SIZE_MAX/1000) == NULL);    
   };
   CHECK_BODY("malloc-large") {   // see PR #544.
     void* p = mi_malloc(67108872);
@@ -132,7 +132,7 @@ int main(void) {
   CHECK_BODY("mi_urealloc_invalid") {
     void* p = mi_malloc(64);
     size_t pre, post;
-    void* q = mi_urealloc((char*)p + 3, 32, &pre, &post);
+    void* q = mi_urealloc((char*)p + 3, 40, &pre, &post);
     mi_free(p);
     result = (q==NULL || q==(uint8_t*)p+3);
   }
