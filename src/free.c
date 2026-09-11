@@ -97,7 +97,7 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was
 // note: this can be called from `mi_free_generic_mt` where a non-owning thread accesses the
 // `page_woffset` and `block_size` fields; however these are constant and the page won't be
 // deallocated (as the block we are freeing keeps it alive) and thus safe to read concurrently.
-mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
+static inline mi_block_t* mi_page_ptr_unalign_ex(const mi_page_t* page, const void* p, size_t* poffset) {
   mi_assert_internal(page!=NULL && p!=NULL);
 
   const size_t diff = (uint8_t*)p - mi_page_start(page);
@@ -106,7 +106,12 @@ mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
   if mi_unlikely(!_mi_is_power_of_two(block_size)) {
     adjust = diff % block_size;     
   }
+  if (poffset!=NULL) { *poffset = adjust; }
   return (mi_block_t*)((uintptr_t)p - adjust);
+}
+
+mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
+  return mi_page_ptr_unalign_ex(page,p,NULL);
 }
 
 static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, const void* p ) {
@@ -126,13 +131,13 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
     return mi_validate_block_from_ptr(page,p);
   }
   else {
-    mi_block_t* const block = _mi_page_ptr_unalign(page,p);
+    size_t offset;
+    mi_block_t* const block = mi_page_ptr_unalign_ex(page,p,&offset);
     #if MI_GUARDED || MI_PROFILE
-    const size_t offset = (uint8_t*)p - (uint8_t*)block;
     if (offset >= sizeof(mi_block_t)) {
       #if MI_PROFILE
       if (block->next == MI_BLOCK_TAG_PROFILED) {
-        _mi_page_profile_free(page,block,p); 
+        _mi_page_profile_on_free(page,block,p); 
       }
       else 
       #endif
@@ -141,8 +146,9 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
         _mi_page_block_unguard(page, block, p); 
         *was_guarded = true; 
       }
+      else
       #else
-      { }
+      { /* nothing */}
       #endif
     }
     #endif

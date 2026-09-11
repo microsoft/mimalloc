@@ -349,7 +349,7 @@ mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* theap, size_t req_si
 size_t        _mi_theap_update_sample_rate(mi_theap_t* theap);
 
 mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* theap, size_t size, uint64_t requested_since_last_sample, bool zero, mi_page_t** ppage) mi_attr_noexcept;
-void          _mi_page_profile_free(mi_page_t* page, mi_block_t* block, void* p);
+void          _mi_page_profile_on_free(mi_page_t* page, mi_block_t* block, void* p);
 size_t        _mi_theap_set_profile_sample_rate(mi_theap_t* theap, size_t sample_rate);
 
 
@@ -1516,7 +1516,7 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
   // fast memzero for small sizes based on overlapping writes (and assuming non-zero size_t-multiple size, and size_t aligned)
   // assumes constant memset(p,0,N) gets optimized to fast simd stores by the compiler
   // (compile with -DMI_USE_MEMZERO16X=0 to disable this)
-  #if !defined(MI_USE_MEMZERO16X) || (MI_USE_MEMZERO16X != 0) // 16x MI_SIZE_SIZE 
+  #if !defined(MI_USE_MEMZERO16X) || (MI_USE_MEMZERO16X != 0) // 16x MI_SIZE_SIZE (128 bytes on 64-bit)
     if mi_unlikely(bsize < 2*MI_SIZE_SIZE) { // bsize < 16 (8)
       *((size_t*)dst) = 0;
       return dst;

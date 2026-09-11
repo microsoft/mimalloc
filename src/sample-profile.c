@@ -179,7 +179,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
   return p;
 }
 
-void _mi_page_profile_free(mi_page_t* page, mi_block_t* block, void* p) {
+void _mi_page_profile_on_free(mi_page_t* page, mi_block_t* block, void* p) {
   mi_assert_internal(mi_block_ptr_is_sampled(block,p));
 
   // get the heap and profiler
