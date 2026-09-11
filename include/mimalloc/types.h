@@ -113,8 +113,12 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Reserve extra padding at the end of each block to be more resilient against theap block overflows.
 // The padding can detect heap-block overflow on free, and provides byte-precise `mi_usable_size`.
-#if !defined(MI_PADDING) && (MI_SECURE>=3 || MI_DEBUG>=1 || (MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_TRACK_ETW))
+#if !defined(MI_PADDING) 
+#if (MI_SECURE>=3 || MI_DEBUG>=1 || (MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_TRACK_ETW))
 #define MI_PADDING  1
+#else
+#define MI_PADDING  0
+#endif
 #endif
 
 // Check for byte-precise buffer overflow?
