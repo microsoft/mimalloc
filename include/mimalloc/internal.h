@@ -1566,33 +1566,26 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
   
   #if MI_USE_MEMZERO128  // 64-bit with 128-bit stores (arm64 and x64)
     // fast memzero based on overlapping writes (and assuming non-zero size_t-multiple size, and size_t aligned)
-    #if defined(_MSC_VER) && defined(__AVX2__)
-      typedef __m128i __int128_t;
-      const __int128_t zero = _mm_setzero_si128();
-    #else
-      const __int128_t zero = 0;
-    #endif
+    // assumes constant memset(p,0,N) gets optimized to fast simd stores.
     if mi_unlikely(bsize < 16) {
       *((uint64_t*)dst) = 0;
       return dst;
     }
     mi_assert_internal(_mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
-    mi_assert_internal(bsize%16 == 0);  
-    void* const adst = mi_assume_aligned(dst, MI_MAX_ALIGN_SIZE);
-    __int128_t* const start = (__int128_t*)adst;
-    __int128_t* const end   = (__int128_t*)((uint8_t*)adst + bsize);
+    uint8_t* const start = mi_assume_aligned((uint8_t*)dst, MI_MAX_ALIGN_SIZE);
+    uint8_t* const end   = start + bsize;  // note: if bsize is always a multiple of 16 then end is always aligned as well (but due to padding this does not hold)
     mi_assert_internal(_mi_is_aligned(end,16));
     if mi_likely(bsize < 64) {
-      const size_t ofs = (bsize>>5)&1; mi_assert_internal(bsize < 32 ? ofs==0 : ofs==1);
-      __int128_t* const end0 = end - ofs;
-      start[0] = zero; start[ofs] = zero;
-      end0[-1] = zero; end[-1] = zero;
-      return adst;
+      const size_t ofs = (bsize>>1)&16; mi_assert_internal(bsize < 32 ? ofs==0 : ofs==16);
+      uint8_t* const end0 = end - ofs;
+      memset(start,0,16);   memset(start+ofs,0,16);
+      memset(end0-16,0,16); memset(end-16,0,16);
+      return dst;
     }
     if mi_likely(bsize <= 128) {
-      start[0] = zero; start[1] = zero; start[2] = zero; start[3] = zero;
-      end[-4] = zero; end[-3] = zero; end[-2] = zero; end[-1] = zero;
-      return adst;
+      memset(start,0,64);
+      memset(end-64,0,64);
+      return dst;
     }
   #endif
 
