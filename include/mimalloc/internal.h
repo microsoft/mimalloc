@@ -1472,7 +1472,7 @@ static inline size_t _mi_random_shuffle(size_t x) {
 // Todo: we see improvements on win32 but less with glibc; we might want to only enable this on windows.
 // ---------------------------------------------------------------------------------
 
-#if !MI_TRACK_ENABLED && (MI_ARCH_ARM64 || MI_ARCH_X64) && (defined(__SIZEOF_INT128__) || (defined(_MSC_VER) && defined(__AVX2__))) // any 64-bit platform with 128-bit stores can benefit.
+#if 0 && !MI_TRACK_ENABLED && (MI_ARCH_ARM64 || MI_ARCH_X64) && (defined(__SIZEOF_INT128__) || (defined(_MSC_VER) && defined(__AVX2__))) // any 64-bit platform with 128-bit stores can benefit.
 #define MI_USE_MEMZERO128  1
 #endif
 
