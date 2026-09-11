@@ -1272,10 +1272,13 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
   if (page_alignment > 0 && segment->allow_decommit && page->is_committed) {
     uint8_t* aligned_p = (uint8_t*)_mi_align_up((uintptr_t)start, page_alignment);
     mi_assert_internal(_mi_is_aligned(aligned_p, page_alignment));
+    mi_assert_internal(aligned_p >= start);
     mi_assert_internal(psize - (aligned_p - start) >= size);
     uint8_t* decommit_start = start + sizeof(mi_block_t); // for the free list
-    ptrdiff_t decommit_size = aligned_p - decommit_start;
-    _mi_os_reset(decommit_start, decommit_size);  // do not decommit as it may be in a region
+    if (aligned_p > decommit_start) { //  any room for alignment ?
+      size_t decommit_size = (size_t)(aligned_p - decommit_start);
+      _mi_os_reset(decommit_start, decommit_size);  // do not decommit as it may be in a region
+    }
   }
 
   return page;
