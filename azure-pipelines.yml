@@ -92,7 +92,7 @@ jobs:
         CC: gcc
         CXX: g++
         BuildType: release
-        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_DEBUG=ON
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMI_OPT_ARCH=ON
       # Secure:
       #   CC: gcc
       #   CXX: g++
@@ -166,6 +166,7 @@ jobs:
     displayName: CTest
     env:
       MIMALLOC_GUARDED_SAMPLE_RATE: 1000
+      MIMALLOC_VERBOSE: 2
 #  - upload: $(Build.SourcesDirectory)/$(BuildType)
 #    artifact: mimalloc-ubuntu-$(BuildType)
 
