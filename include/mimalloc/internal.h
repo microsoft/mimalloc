@@ -1577,9 +1577,11 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
       return dst;
     }
     mi_assert_internal(_mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
+    mi_assert_internal(bsize%16 == 0);  
     void* const adst = mi_assume_aligned(dst, MI_MAX_ALIGN_SIZE);
     __int128_t* const start = (__int128_t*)adst;
-    __int128_t* const end   = (__int128_t*)((uint8_t*)dst + bsize);
+    __int128_t* const end   = (__int128_t*)((uint8_t*)adst + bsize);
+    mi_assert_internal(_mi_is_aligned(end,16));
     if mi_likely(bsize < 64) {
       const size_t ofs = (bsize>>5)&1; mi_assert_internal(bsize < 32 ? ofs==0 : ofs==1);
       __int128_t* const end0 = end - ofs;

@@ -125,7 +125,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
       #if !MI_PADDING
       return // use tail-call       
       #endif
-      _mi_memzero_block(block,bsize);
+      _mi_memzero_block(block,bsize + MI_PADDING_SIZE); // ensure bsize is a MI_MAX_ALIGN_SIZE multiple
     }
     else {
       block->next = 0; 
