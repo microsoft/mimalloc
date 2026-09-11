@@ -87,7 +87,7 @@ jobs:
         CC: gcc
         CXX: g++
         BuildType: release
-        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release 
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Release  -DMI_GUARDED=ON
       Release opt arch debug:
         CC: gcc
         CXX: g++
