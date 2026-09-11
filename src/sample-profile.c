@@ -78,17 +78,17 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* the
     if (req_size >= theap->guarded_size_min && req_size <= theap->guarded_size_max) {
       // use guarded allocation
       theap->guarded_sample_countdown = theap->guarded_sample_rate; // reset countdown
-      // #if MI_GUARDED
+      #if MI_GUARDED
       return _mi_theap_malloc_guarded(theap,size,zero,ppage);
-      // #endif
+      #endif
     }
-    // #if MI_GUARDED
+    #if MI_GUARDED
     else {
       // failed size criteria, rewind the sample countdown so we sample asap again
       // todo: can we do better here as this will cause many samples until it fits the size..
       theap->sample_countdown = 0;
     }
-    // #endif
+    #endif
   }
   // take generic path
   return _mi_malloc_generic_no_sample(theap,size,zero,ppage);

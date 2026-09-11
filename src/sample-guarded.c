@@ -28,12 +28,16 @@ mi_decl_export void mi_theap_guarded_set_size_bound(mi_theap_t* theap, size_t mi
 }
 
 void _mi_theap_guarded_init(mi_theap_t* theap) {
+  #if MI_GUARDED
   mi_theap_guarded_set_sample_rate(theap,
     (size_t)mi_option_get_clamp(mi_option_guarded_sample_rate, 0, LONG_MAX),
     (size_t)mi_option_get(mi_option_guarded_sample_seed));
   mi_theap_guarded_set_size_bound(theap,
     (size_t)mi_option_get_clamp(mi_option_guarded_min, 0, LONG_MAX),
     (size_t)mi_option_get_clamp(mi_option_guarded_max, 0, LONG_MAX) );
+  #else
+  mi_theap_guarded_set_sample_rate(theap,0,0);
+  #endif
 }
 
 
@@ -87,7 +91,7 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size, size_t
 
 // Allocate a block with a guard page behind it.
 mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept
-{
+{  
   // allocate multiple of page size ending in a guard page
   // ensure minimal alignment requirement?
   if mi_unlikely(size >= MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE) {  // check up front so the `req_size` won't overflow    
