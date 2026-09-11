@@ -147,9 +147,8 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
         *was_guarded = true; 
       }
       else
-      #else
-      { /* nothing */}
       #endif
+      { /* nothing */ }
     }
     #endif
     return block;
@@ -550,8 +549,8 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
 // ------------------------------------------------------
 
 // Bytes available in a block
-static size_t mi_decl_noinline mi_page_usable_aligned_size_of(const mi_page_t* page, const void* p) mi_attr_noexcept {
-  const mi_block_t* block = _mi_page_ptr_unalign(page, p);
+static size_t mi_decl_noinline mi_page_usable_aligned_size_of(const mi_page_t* page, const void* p, const mi_block_t* block) mi_attr_noexcept {
+  // const mi_block_t* block = _mi_page_ptr_unalign(page, p);
   const bool is_guarded = mi_block_ptr_is_guarded(block,p);
   const size_t size = mi_page_usable_size_of(page, block, is_guarded);
   mi_assert_internal((void*)p >= (void*)block);
@@ -564,13 +563,13 @@ static size_t mi_decl_noinline mi_page_usable_aligned_size_of(const mi_page_t* p
 size_t _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr_noexcept {
   if mi_unlikely(page==NULL) return 0;
   mi_assert_internal(mi_ptr_page_validate(p,"_mi_page_usable_size") == page);
-  if mi_likely(!mi_page_has_interior_pointers(page)) {
-    const mi_block_t* block = mi_validate_block_from_ptr(page,p);
+  const mi_block_t* block = _mi_page_ptr_unalign(page, p); // for safety, always unalign
+  if mi_likely((const void*)block==page) {
     return mi_page_usable_size_of(page, block, false /* is guarded */);
   }
   else {
     // split out to separate routine for improved code generation
-    return mi_page_usable_aligned_size_of(page, p);
+    return mi_page_usable_aligned_size_of(page, p, block);
   }
 }
 
