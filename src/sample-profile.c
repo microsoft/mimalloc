@@ -51,7 +51,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* the
 
   const uint64_t requested = theap->sample_requested = (uint64_t)theap->sample_rate + (uint64_t)(req_size - theap->sample_countdown) + theap->sample_requested;
   mi_assert_internal(requested > 0);
-  mi_assert_internal(requested >= size);
+  mi_assert_internal(requested >= req_size);
   theap->sample_countdown = theap->sample_rate;      // reset sampling
 
   // update derived countdowns
@@ -116,9 +116,9 @@ static mi_profiler_t* mi_theap_get_enabled_profiler(const mi_theap_t* theap) {
 mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* theap, size_t size, uint64_t requested_since_last_sample, bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
   mi_assert_internal(theap!=NULL);  
-  mi_assert_internal(size<=requested_since_last_sample);
   mi_assert_internal(size>=MI_PADDING_SIZE);
   const size_t req_size = size - MI_PADDING_SIZE;
+  mi_assert_internal(req_size<=requested_since_last_sample);
   mi_profiler_t* const prof = mi_theap_get_enabled_profiler(theap);
   if (prof == NULL) { return _mi_malloc_generic_no_sample(theap,size,zero,ppage); }
   mi_assert_internal(prof!=NULL && prof->on_alloc!=NULL && mi_profiler_is_enabled(prof));

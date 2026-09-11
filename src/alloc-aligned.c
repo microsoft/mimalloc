@@ -123,7 +123,8 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
       block->next = MI_BLOCK_TAG_ALIGNED;
     }
     #endif
-    _mi_padding_shrink(page, (mi_block_t*)p, adjust + size);
+    mi_block_t* const base = _mi_page_ptr_unalign(page, p);
+    _mi_padding_shrink(page, base, adjust + size);
   }
   // todo: expand padding if overallocated ?
 

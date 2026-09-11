@@ -676,6 +676,7 @@ static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* bl
 // contain the pointer for the delayed list, then shrink the padding (by decreasing delta)
 // so it will later not trigger an overflow error in `mi_free_block`.
 void _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size) {
+  if (mi_block_ptr_is_guarded(block,block + 1)) return;
   size_t bsize;
   size_t delta;
   bool ok = mi_page_decode_padding(page, block, &delta, &bsize, NULL);

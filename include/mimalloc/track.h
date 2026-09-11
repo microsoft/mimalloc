@@ -132,19 +132,10 @@ defined, undefined, or not accessible at all:
 #define mi_track_mem_noaccess(p,size)
 #endif
 
-
-#if MI_PADDING
-#define mi_track_malloc(p,reqsize,zero) \
-  do { if ((p)!=NULL) { \
-    mi_assert_internal(mi_usable_size(p)==(reqsize)); \
-    mi_track_malloc_size(p,reqsize,reqsize,zero); \
-  } } while(0)
-#else
 #define mi_track_malloc(p,reqsize,zero) \
   do { if ((p)!=NULL) { \
     mi_assert_internal(mi_usable_size(p)>=(reqsize)); \
     mi_track_malloc_size(p,reqsize,mi_usable_size(p),zero); \
   } } while(0)
-#endif
 
 #endif // MI_TRACK_H
