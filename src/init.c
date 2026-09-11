@@ -446,6 +446,11 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
 static void mi_process_setup_auto_thread_done(void) {
   mi_atomic_do_once {
     _mi_prim_thread_init_auto_done();
+    mi_theap_t* theap = _mi_theap_default();
+    mi_assert_internal(mi_theap_is_initialized(theap));
+    if (mi_theap_is_initialized(theap)) {
+      _mi_theap_default_set(theap);
+    }
   }
 }
 
@@ -454,7 +459,7 @@ void mi_thread_done(void) mi_attr_noexcept {
 }
 
 void _mi_thread_done(mi_theap_t* _theap_main)
-{
+{  
   // NULL can be passed on some platforms
   if (_theap_main==NULL) {
     _theap_main = _mi_theap_default();
@@ -511,7 +516,6 @@ void _mi_auto_process_init(void) {
   os_preloading = false;
 
   mi_process_init();
-  mi_process_setup_auto_thread_done();
 
   _mi_options_post_init();  // now we can print to stderr
   if (_mi_is_redirected()) _mi_verbose_message("malloc is redirected.\n");
@@ -556,6 +560,7 @@ static void mi_process_init_once(void) {
   // the following can potentially allocate (on freeBSD for pthread keys)
   _mi_tls_slots_init();      // pthread key create
   _mi_thread_locals_init();  // pthread key create
+  mi_process_setup_auto_thread_done();  // after the above mi_thread_init so it can add the current theap  
   _mi_process_is_initialized = true;
 
   #if defined(_WIN32) && defined(MI_WIN_INIT_USE_FLS)
