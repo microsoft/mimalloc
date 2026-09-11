@@ -722,6 +722,13 @@ if(MI_ARCH MATCHES "riscv")
   endif()
 endif()
 
+if(NOT WIN32)
+  CHECK_INCLUDE_FILES("execinfo.h" MI_HAS_EXECINFOH)
+  if(MI_HAS_EXECINFOH) 
+    list(APPEND mi_defines MI_HAS_EXECINFOH=1)
+  endif()
+endif()
+
 # On Haiku use `-DCMAKE_INSTALL_PREFIX` instead, issue #788
 # if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
 #   SET(CMAKE_INSTALL_LIBDIR ~/config/non-packaged/lib)
