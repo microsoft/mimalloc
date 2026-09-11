@@ -1917,8 +1917,7 @@ static int mi_reserve_os_memory_ex2(mi_subproc_t* subproc, size_t size, bool com
   }
   mi_memid_t memid;
   void* start = _mi_os_alloc_aligned(subproc, size, MI_ARENA_ALIGNMENT, commit, allow_large, &memid);
-  if (start == NULL) return ENOMEM;
-  _mi_raw_message("os alloc aligned: %p, size %zu\n", start, size);
+  if (start == NULL) return ENOMEM;  
   if (!mi_manage_os_memory_ex2(subproc, start, size, -1 /* numa node */, exclusive, memid, NULL, NULL, arena_id)) {
     _mi_os_free_ex(subproc, start, size, commit, memid);
     _mi_verbose_message("failed to reserve %zu KiB memory\n", _mi_divide_up(size, 1024));

@@ -1472,7 +1472,7 @@ static inline size_t _mi_random_shuffle(size_t x) {
 // Todo: we see improvements on win32 but less with glibc; we might want to only enable this on windows.
 // ---------------------------------------------------------------------------------
 
-#if 0 && !MI_TRACK_ENABLED && (MI_ARCH_ARM64 || MI_ARCH_X64) && (defined(__SIZEOF_INT128__) || (defined(_MSC_VER) && defined(__AVX2__))) // any 64-bit platform with 128-bit stores can benefit.
+#if !MI_TRACK_ENABLED && (MI_ARCH_ARM64 || MI_ARCH_X64) && (defined(__SIZEOF_INT128__) || (defined(_MSC_VER) && defined(__AVX2__))) // any 64-bit platform with 128-bit stores can benefit.
 #define MI_USE_MEMZERO128  1
 #endif
 
@@ -1577,7 +1577,6 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
       return dst;
     }
     mi_assert_internal(_mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
-    mi_assert_internal(bsize % 16 == 0);
     void* const adst = mi_assume_aligned(dst, MI_MAX_ALIGN_SIZE);
     __int128_t* const start = (__int128_t*)adst;
     __int128_t* const end = (__int128_t*)((uint8_t*)adst + bsize);

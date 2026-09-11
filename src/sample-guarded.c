@@ -91,7 +91,7 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size, size_t
 
 // Allocate a block with a guard page behind it.
 mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept
-{  
+{
   // allocate multiple of page size ending in a guard page
   // ensure minimal alignment requirement?
   if mi_unlikely(size >= MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE) {  // check up front so the `req_size` won't overflow    
@@ -110,13 +110,11 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   void* const p = mi_block_ptr_set_guarded(block, obj_size, &usable_size);
   if (p == NULL) return NULL;
   if (zero) {
-    mi_page_t* page = _mi_ptr_page(p);
-    _mi_raw_message("guarded memzero: %p, size: %zu, block=%p, usable_size:%zu, block_size:%zu\n", p, obj_size, block, usable_size, page->block_size);
     _mi_memzero(p,obj_size);  // we have to zero afterwards as padding might have written inside the block (if the `blocksize > reqsize + os_page_size`)
   }
 
   // stats
-  // mi_track_malloc(p, usable_size, zero);    
+  mi_track_malloc(p, usable_size, zero);    
   if (!mi_theap_is_initialized(theap)) { theap = _mi_theap_default(); }
   mi_theap_stat_counter_increase(theap, malloc_guarded_count, 1);
   #if MI_STATS

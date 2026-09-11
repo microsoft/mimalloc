@@ -132,10 +132,21 @@ defined, undefined, or not accessible at all:
 #define mi_track_mem_noaccess(p,size)
 #endif
 
+
+#if MI_PADDING_CHECK_BYTES && !MI_GUARDED
 #define mi_track_malloc(p,reqsize,zero) \
   do { if ((p)!=NULL) { \
-    mi_assert_internal(mi_usable_size(p)>=(reqsize)); \
-    mi_track_malloc_size(p,reqsize,mi_usable_size(p),zero); \
+    const size_t __usize = mi_usable_size(p); MI_UNUSED(__usize); \
+    mi_assert_internal(__usize==(reqsize)); \
+    mi_track_malloc_size(p,reqsize,reqsize,zero); \
   } } while(0)
+#else
+#define mi_track_malloc(p,reqsize,zero) \
+  do { if ((p)!=NULL) { \
+    const size_t __usize = mi_usable_size(p); MI_UNUSED(__usize); \
+    mi_assert_internal(__usize>=(reqsize)); \
+    mi_track_malloc_size(p,reqsize,__usize,zero); \
+  } } while(0)
+#endif
 
 #endif // MI_TRACK_H
