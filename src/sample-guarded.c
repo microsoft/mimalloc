@@ -112,7 +112,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   }
 
   // stats
-  mi_track_malloc(p, usable_size, zero);    
+  // mi_track_malloc(p, usable_size, zero);    
   if (!mi_theap_is_initialized(theap)) { theap = _mi_theap_default(); }
   mi_theap_stat_counter_increase(theap, malloc_guarded_count, 1);
   #if MI_STATS
