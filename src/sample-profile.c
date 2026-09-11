@@ -39,7 +39,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* the
     if (!_mi_is_empty_theap(theap)) {                    // avoid writing to the initial empty theap 
       theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX; // avoid the sampling path for a long time 
     }
-    return _mi_malloc_generic_no_sample(size,theap,zero,ppage);
+    return _mi_malloc_generic_no_sample(theap,size,zero,ppage);
   }
   
   // update countdown and total accummulated requested bytes since the last sample
@@ -85,7 +85,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* the
     }
   }
   // take generic path
-  return _mi_malloc_generic_no_sample(size,theap,zero,ppage);
+  return _mi_malloc_generic_no_sample(theap,size,zero,ppage);
 }
 
 
@@ -120,14 +120,14 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
   mi_assert_internal(size>=MI_PADDING_SIZE);
   const size_t req_size = size - MI_PADDING_SIZE;
   mi_profiler_t* const prof = mi_theap_get_enabled_profiler(theap);
-  if (prof == NULL) { return _mi_malloc_generic_no_sample(size,theap,zero,ppage); }
+  if (prof == NULL) { return _mi_malloc_generic_no_sample(theap,size,zero,ppage); }
   mi_assert_internal(prof!=NULL && prof->on_alloc!=NULL && mi_profiler_is_enabled(prof));
   
   void* p = NULL;
   size_t new_sample_rate = 0;
   if (prof->on_free==NULL || prof->sample_data_size==0) { 
     // just allocate without profiler data
-    p = _mi_malloc_generic_no_sample(size,theap,zero,ppage);
+    p = _mi_malloc_generic_no_sample(theap,size,zero,ppage);
     if (p==NULL) { return p; }
     if (prof->on_alloc!=NULL) {
       // we are just allocation profiling (not heap profiling as on_free == NULL)    
@@ -143,7 +143,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
     const size_t user_offset           = _mi_align_up(sample_data_offset + sample_data_size, MI_MAX_ALIGN_SIZE);
     const size_t oversize              = user_offset + size;
     mi_page_t* page = NULL;
-    mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(oversize,theap,zero,&page); 
+    mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(theap,oversize,zero,&page); 
     if (block==NULL) return NULL;
     mi_assert_internal(page!=NULL);
     if (ppage!=NULL) { *ppage = page; }    

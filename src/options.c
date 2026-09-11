@@ -78,7 +78,7 @@ int mi_version(void) {
 
 #ifndef MI_DEFAULT_GUARDED_SAMPLE_RATE
 #if MI_GUARDED && MI_DEBUG
-#define MI_DEFAULT_GUARDED_SAMPLE_RATE  MI_MiB
+#define MI_DEFAULT_GUARDED_SAMPLE_RATE  0  /* MI_MiB */
 #else
 #define MI_DEFAULT_GUARDED_SAMPLE_RATE  0
 #endif

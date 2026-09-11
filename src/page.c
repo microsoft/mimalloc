@@ -1356,7 +1356,7 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
   return mi_malloc_generic_fallback(theap,size,zero,huge_alignment,ppage);
 }
 
-void* _mi_malloc_generic_no_sample(size_t size, mi_theap_t* theap, bool zero, mi_page_t** ppage) mi_attr_noexcept {
+void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept {
   theap = mi_theap_init(theap);
   if (theap==NULL) return NULL;
   const size_t sample_rate = theap->sample_rate;
