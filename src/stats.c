@@ -64,9 +64,9 @@ void __mi_stat_decrease(mi_stat_count_t* stat, uint64_t amount) {
 static void mi_stat_adjust_mt(mi_stat_count_t* stat, int64_t amount) {
   if (amount == 0) return;
   // adjust atomically
-  const size_t peak = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&stat->peak);
+  const int64_t peak = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&stat->peak);
   mi_atomic_addi64_relaxed(&stat->current, amount);
-  const size_t prev_total = mi_atomic_addi64_relaxed(&stat->total, amount);
+  const int64_t prev_total = mi_atomic_addi64_relaxed(&stat->total, amount);
   if (prev_total == peak) { mi_atomic_addi64_relaxed(&stat->peak, amount); }
 }
 

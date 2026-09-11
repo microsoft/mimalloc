@@ -171,7 +171,7 @@ static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page,
   const size_t alloc_diff = alloc_count - last_alloc;
   const uint64_t requested = (uint64_t)alloc_diff * (uint64_t)(bsize - MI_PADDING_SIZE);
   if (requested <= SIZE_MAX && theap->sample_countdown >= (size_t)requested) {
-    theap->sample_countdown -= requested;
+    theap->sample_countdown -= (size_t)requested;
   }
   else {
     theap->sample_requested   += (requested - theap->sample_countdown);
@@ -247,6 +247,7 @@ static void mi_theap_page_update_stats(mi_theap_t* theap, mi_page_t* page) {
   const size_t alloc_count = mi_page_alloc_count(page);
   const size_t last_used = mi_page_last_used(page);    
   mi_assert_internal(last_used + alloc_count >= used);
+  mi_assert_internal(used <= UINT16_MAX);
   const size_t free_count = last_used + alloc_count - used;  
 
   #if MI_SAMPLE==1  // for ==2 it is already counted in every `alloc.c:mi_page_alloc_zero`
@@ -264,7 +265,7 @@ static void mi_theap_page_update_stats(mi_theap_t* theap, mi_page_t* page) {
   page->xused.used_alloc = (used << 32) | used;
   #else
   page->xused.used_alloc = used;
-  page->xlast_used = used;
+  page->xlast_used = (uint16_t)used;
   page->xlast_alloc = 0;
   #endif
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
@@ -299,11 +300,11 @@ static void mi_page_update_sample_countdown(mi_page_t* page)
     if (theap==NULL) return;
     mi_theap_adjust_sample_countdown(theap,page,alloc_count);
     // update last_alloc to alloc_count
+    mi_assert_internal(alloc_count <= UINT16_MAX);      
     #if MI_SIZE_SIZE >= 8
-      mi_assert_internal(alloc_count <= UINT16_MAX);
       page->xused.used_alloc = (alloc_count << 48) | (page->xused.used_alloc & (~MI_ZU(0) >> 16));
     #else
-      page->xlast_alloc = alloc_count;
+      page->xlast_alloc = (uint16_t)alloc_count;
     #endif
     mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
     mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
