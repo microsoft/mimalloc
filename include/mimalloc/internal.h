@@ -1572,7 +1572,7 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
       return dst;
     }
     mi_assert_internal(_mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
-    uint8_t* const start = mi_assume_aligned((uint8_t*)dst, MI_MAX_ALIGN_SIZE);
+    uint8_t* const start = (uint8_t*)mi_assume_aligned(dst, MI_MAX_ALIGN_SIZE);
     uint8_t* const end   = start + bsize;  // note: if bsize is always a multiple of 16 then end is always aligned as well (but due to padding this does not hold)    
     if mi_likely(bsize < 64) {
       const size_t ofs = (bsize>>1)&16; mi_assert_internal(bsize < 32 ? ofs==0 : ofs==16);
