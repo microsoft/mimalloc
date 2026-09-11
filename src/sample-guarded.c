@@ -106,7 +106,8 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   void* const p = mi_block_ptr_set_guarded(block, obj_size, &usable_size);
   if (p == NULL) return NULL;
   if (zero) {
-    _mi_raw_message("guarded memzero: %p, size: %zu, block=%p, usable_size:%zu\n", p, obj_size, block, usable_size);
+    mi_page_t* page = _mi_ptr_page(p);
+    _mi_raw_message("guarded memzero: %p, size: %zu, block=%p, usable_size:%zu, block_size:%zu\n", p, obj_size, block, usable_size, page->block_size);
     _mi_memzero(p,obj_size);  // we have to zero afterwards as padding might have written inside the block (if the `blocksize > reqsize + os_page_size`)
   }
 
