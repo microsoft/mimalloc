@@ -208,7 +208,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_theap_xmalloc_small_zero(mi
     return mi_theap_malloc_generic(theap, (is_wsize ? xsize * MI_SIZE_SIZE : xsize), zero, 0, ppage);    // tailcall
   }
   #else
-  return mi_theap_malloc_xsmall_zero_nonnull(theap, xsize, is_wsize, zero, ppage);
+  return mi_theap_xmalloc_small_zero_nonnull(theap, xsize, is_wsize, zero, ppage);
   #endif
 }
 
