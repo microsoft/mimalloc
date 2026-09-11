@@ -1526,14 +1526,14 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
     uint8_t* const end   = start + bsize;    // note: if bsize is always a multiple of 16 then end is always aligned as well (but due to padding this does not hold)    
     if mi_likely(bsize < 8*MI_SIZE_SIZE) {   // bsize < 64 (32)
       const size_t ofs = (bsize>>1)&(2*MI_SIZE_SIZE); mi_assert_internal(bsize < 4*MI_SIZE_SIZE ? ofs==0 : ofs==2*MI_SIZE_SIZE);  // ofs == 16 (8)
-      _mi_memzero(start,     2*MI_SIZE_SIZE); 
-      _mi_memzero(start+ofs, 2*MI_SIZE_SIZE);
+      _mi_memzero(start,            2*MI_SIZE_SIZE); 
+      _mi_memzero(start+ofs,        2*MI_SIZE_SIZE);
       _mi_memzero_backward(end-ofs, 2*MI_SIZE_SIZE); 
       _mi_memzero_backward(end,     2*MI_SIZE_SIZE);
       return dst;
     }
     if mi_likely(bsize <= 16*MI_SIZE_SIZE) {  // bsize < 128 (64)
-      _mi_memzero(start, 8*MI_SIZE_SIZE);
+      _mi_memzero(start,        8*MI_SIZE_SIZE);
       _mi_memzero_backward(end, 8*MI_SIZE_SIZE);
       return dst;
     }

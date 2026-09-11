@@ -77,7 +77,7 @@ jobs:
           ctest --test-dir out/release-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Release
 
       - name: Release, Asm
-        if: matrix.tests == 'basic' && runner.os == 'Linux'
+        if: matrix.tests == 'basic' && runner.os == 'Linux' && matrix.c_or_cxx == 'c'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.os }}-${{ matrix.c_or_cxx }}-asm
@@ -509,9 +509,17 @@ jobs:
         if: matrix.tests == 'alpine-arm32'
         shell: alpine-arm32.sh {0}
         run: |
-          cmake . -B out/release-arm32 -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON 
+          cmake . -B out/release-arm32 -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON -DMI_SEE_ASM=ON
           cmake --build out/release-arm32 --parallel 4 --config Release
           ctest --test-dir out/release-arm32 --verbose --timeout 240 -C Release
+
+      - name: Alpine arm32, Asm
+        if: matrix.tests == 'alpine-arm32'
+        shell: alpine-arm32.sh {0}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: alpine-arm32-c-asm
+          path: out/release-arm32/CMakeFiles/mimalloc-static.dir/src/*.s
 
       - name: Alpine arm32, Secure
         if: matrix.tests == 'alpine-arm32'
