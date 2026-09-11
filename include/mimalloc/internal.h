@@ -1465,59 +1465,7 @@ static inline size_t _mi_random_shuffle(size_t x) {
 
 // ---------------------------------------------------------------------------------
 // Provide our own `_mi_memcpy/set` for potential performance optimizations.
-//
-// For now, only on x64/x86 we optimize to `rep movsb/stosb`.
-// Generally, we check for "fast short rep movsb/stosb" (FSRM/FSRS) or "fast enhanced rep movsb" (ERMS) support
-// (AMD Zen3+ (~2020) or Intel Ice Lake+ (~2017). See also issue #201 and pr #253.
-// Todo: we see improvements on win32 but less with glibc; we might want to only enable this on windows.
 // ---------------------------------------------------------------------------------
-
-#if !MI_TRACK_ENABLED && (MI_ARCH_ARM64 || MI_ARCH_X64) && (defined(__SIZEOF_INT128__) || (defined(_MSC_VER) && defined(__AVX2__))) // any 64-bit platform with 128-bit stores can benefit.
-#define MI_USE_MEMZERO128  1
-#endif
-
-#if !MI_TRACK_ENABLED && !MI_USE_MEMZERO128 && (MI_ARCH_X64 || MI_ARCH_X86) && (defined(_WIN32) || defined(__GNUC__))
-
-extern mi_decl_hidden size_t _mi_cpu_movsb_max;  // in init.c
-extern mi_decl_hidden size_t _mi_cpu_stosb_max;
-
-static inline void mi_rep_movsb(void* dst, const void* src, size_t n) {
-  #if defined(__GNUC__)
-  __asm volatile("rep movsb" : "+D"(dst), "+c"(n), "+S"(src) : : "memory");
-  #else
-  __movsb((unsigned char*)dst, (const unsigned char*)src, n);
-  #endif
-}
-
-static inline void mi_rep_stosb(void* dst, uint8_t val, size_t n) {
-  #if defined(__GNUC__)
-  __asm volatile("rep stosb" : "+D"(dst), "+c"(n) : "a"(val) : "memory");
-  #else
-  __stosb((unsigned char*)dst, val, n);
-  #endif
-}
-
-static inline void* _mi_memcpy(void* dst, const void* src, size_t n) {
-  if mi_likely(n <= _mi_cpu_movsb_max) {  // has fsrm && n <= 127  (todo: and maybe has erms?)
-    mi_rep_movsb(dst, src, n);
-    return dst;
-  }
-  else {
-    return memcpy(dst, src, n);
-  }
-}
-
-static inline void* _mi_memset(void* dst, int val, size_t n) {
-  if mi_likely(n <= _mi_cpu_stosb_max) {  // has fsrs && n <= 127
-    mi_rep_stosb(dst, (uint8_t)val, n);
-    return dst;
-  }
-  else {
-    return memset(dst, val, n);
-  }
-}
-
-#else
 
 static inline void* _mi_memcpy(void* dst, const void* src, size_t n) {
   return memcpy(dst, src, n);
@@ -1527,15 +1475,21 @@ static inline void* _mi_memset(void* dst, int val, size_t n) {
   return memset(dst, val, n);
 }
 
-#endif
+static inline void* _mi_memset_backward(void* dst, int val, size_t n) {
+  memset((uint8_t*)dst - n, val, n);
+  return dst;
+}
 
-// -------------------------------------------------------------------------------
-// The `_mi_memcpy_aligned` can be used if the pointers are machine-word (size_t) aligned
-// This is used for example in `mi_realloc`.
-// -------------------------------------------------------------------------------
+static inline void* _mi_memzero(void* dst, size_t n) {
+  return _mi_memset(dst, 0, n);
+}
 
-// On GCC/CLang we provide a hint that the pointers are word aligned.
+static inline void* _mi_memzero_backward(void* dst, size_t n) {
+  return _mi_memset_backward(dst, 0, n);
+}
+
 static inline void* _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
+  // on gcc/clang we can provide a hint that the pointers are word aligned.
   mi_assert_internal(_mi_is_aligned(dst,MI_SIZE_SIZE) && _mi_is_aligned(src,MI_SIZE_SIZE));
   void* adst = mi_assume_aligned(dst, MI_SIZE_SIZE);
   const void* asrc = mi_assume_aligned(src, MI_SIZE_SIZE);
@@ -1548,14 +1502,9 @@ static inline void* _mi_memset_aligned(void* dst, int val, size_t n) {
   return _mi_memset(adst, val, n);
 }
 
-static inline void* _mi_memzero(void* dst, size_t n) {
-  return _mi_memset(dst, 0, n);
-}
-
 static inline void* _mi_memzero_aligned(void* dst, size_t n) {
   return _mi_memset_aligned(dst, 0, n);
 }
-
 
 // Zero a block: blocks are always aligned with a positive bsize in machine-word bytes.
 static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize) {
@@ -1564,33 +1513,34 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
   mi_assert_internal(_mi_is_aligned(dst,MI_SIZE_SIZE));
   mi_assert_internal(bsize < MI_MAX_ALIGN_SIZE || _mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
   
-  #if MI_USE_MEMZERO128  // 64-bit with 128-bit stores (arm64 and x64)
-    // fast memzero based on overlapping writes (and assuming non-zero size_t-multiple size, and size_t aligned)
-    // assumes constant memset(p,0,N) gets optimized to fast simd stores.
-    if mi_unlikely(bsize < 16) {
-      *((uint64_t*)dst) = 0;
+  // fast memzero for small sizes based on overlapping writes (and assuming non-zero size_t-multiple size, and size_t aligned)
+  // assumes constant memset(p,0,N) gets optimized to fast simd stores by the compiler
+  // (compile with -DMI_USE_MEMZERO16X=0 to disable this)
+  #if !defined(MI_USE_MEMZERO16X) || (MI_USE_MEMZERO16X != 0) // 16x MI_SIZE_SIZE 
+    if mi_unlikely(bsize < 2*MI_SIZE_SIZE) { // bsize < 16 (8)
+      *((size_t*)dst) = 0;
       return dst;
     }
     mi_assert_internal(_mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
     uint8_t* const start = (uint8_t*)mi_assume_aligned(dst, MI_MAX_ALIGN_SIZE);
-    uint8_t* const end   = start + bsize;  // note: if bsize is always a multiple of 16 then end is always aligned as well (but due to padding this does not hold)    
-    if mi_likely(bsize < 64) {
-      const size_t ofs = (bsize>>1)&16; mi_assert_internal(bsize < 32 ? ofs==0 : ofs==16);
-      uint8_t* const end0 = end - ofs;
-      memset(start,0,16);   memset(start+ofs,0,16);
-      memset(end0-16,0,16); memset(end-16,0,16);
+    uint8_t* const end   = start + bsize;    // note: if bsize is always a multiple of 16 then end is always aligned as well (but due to padding this does not hold)    
+    if mi_likely(bsize < 8*MI_SIZE_SIZE) {   // bsize < 64 (32)
+      const size_t ofs = (bsize>>1)&(2*MI_SIZE_SIZE); mi_assert_internal(bsize < 4*MI_SIZE_SIZE ? ofs==0 : ofs==2*MI_SIZE_SIZE);  // ofs == 16 (8)
+      _mi_memzero(start,     2*MI_SIZE_SIZE); 
+      _mi_memzero(start+ofs, 2*MI_SIZE_SIZE);
+      _mi_memzero_backward(end-ofs, 2*MI_SIZE_SIZE); 
+      _mi_memzero_backward(end,     2*MI_SIZE_SIZE);
       return dst;
     }
-    if mi_likely(bsize <= 128) {
-      memset(start,0,64);
-      memset(end-64,0,64);
+    if mi_likely(bsize <= 16*MI_SIZE_SIZE) {  // bsize < 128 (64)
+      _mi_memzero(start, 8*MI_SIZE_SIZE);
+      _mi_memzero_backward(end, 8*MI_SIZE_SIZE);
       return dst;
     }
   #endif
-
-  // regular memset
+  // fallback to regular memset for larger sizes
   void* const wdst = mi_assume_aligned(dst,MI_SIZE_SIZE);
-  return _mi_memset_aligned(wdst, 0, bsize);
+  return _mi_memzero_aligned(wdst, bsize);
 }
 
 #endif  // MI_INTERNAL_H
