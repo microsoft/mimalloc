@@ -1564,7 +1564,7 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
   mi_assert_internal(_mi_is_aligned(dst,MI_SIZE_SIZE));
   mi_assert_internal(bsize < MI_MAX_ALIGN_SIZE || _mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
   
-  #if 0 && MI_USE_MEMZERO128  // 64-bit with 128-bit stores (arm64 and x64)
+  #if MI_USE_MEMZERO128  // 64-bit with 128-bit stores (arm64 and x64)
     // fast memzero based on overlapping writes (and assuming non-zero size_t-multiple size, and size_t aligned)
     #if defined(_MSC_VER) && defined(__AVX2__)
       typedef __m128i __int128_t;
@@ -1579,7 +1579,7 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
     mi_assert_internal(_mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
     void* const adst = mi_assume_aligned(dst, MI_MAX_ALIGN_SIZE);
     __int128_t* const start = (__int128_t*)adst;
-    __int128_t* const end = (__int128_t*)((uint8_t*)adst + bsize);
+    __int128_t* const end = mi_assume_aligned((__int128_t*)((uint8_t*)adst + bsize), MI_SIZE_SIZE);
     if mi_likely(bsize < 64) {
       const size_t ofs = (bsize>>5)&1; mi_assert_internal(bsize < 32 ? ofs==0 : ofs==1);
       __int128_t* const end0 = end - ofs;
