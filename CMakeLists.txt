@@ -423,7 +423,7 @@ endif()
 if(MI_DEBUG STREQUAL "DEFAULT")
   if(CMAKE_CONFIGURATION_TYPES)
     # Multi-config generators: Choose debug flags using generator expression
-    list(APPEND mi_defines $<IF:$<CONFIG:Debug>,MI_DEBUG=2 MI_GUARDED=1,MI_DEBUG=0>)
+    list(APPEND mi_defines $<IF:$<CONFIG:Debug>,MI_DEBUG=2,MI_DEBUG=0 NDEBUG=1>)
     set(MI_DEBUG OFF) # don't go into further MI_DEBUG checks below...
   else()
     if(CMAKE_BUILD_TYPE MATCHES "Debug")
@@ -447,7 +447,7 @@ elseif(MI_DEBUG STREQUAL "INTERNAL")
 elseif(MI_DEBUG)
   message(STATUS "Set debug level to assertion checking (MI_DEBUG=${MI_DEBUG})")
   list(APPEND mi_defines MI_DEBUG=1)   # assertion checking (mi_assert)
-else()
+elseif(NOT CMAKE_CONFIGURATION_TYPES)
   message(STATUS "Disable assertion checks (MI_DEBUG=${MI_DEBUG})")
   list(APPEND mi_defines NDEBUG=1)
 endif()
@@ -587,7 +587,7 @@ if(MI_DEBUG_TSAN)
 endif()
 
 if(MI_DEBUG_UBSAN)
-  if(CMAKE_BUILD_TYPE MATCHES "Debug")
+  if(CMAKE_BUILD_TYPE MATCHES "Debug" OR CMAKE_CONFIGURATION_TYPES)
     if(MI_USE_CXX)
       if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         message(STATUS "Build with undefined-behavior sanitizer (MI_DEBUG_UBSAN=ON)")
@@ -933,16 +933,15 @@ if(MI_TRACK STREQUAL "ASAN")
 endif()
 if (CMAKE_CONFIGURATION_TYPES)
   # multi-config builds
-
   # generator expression lower-case build type
-  set(_mi_gx_build_type_lc $<STRING:TOLOWER,$<CONFIG>>)
+  set(mi_gx_build_type_lc $<STRING:TOLOWER,$<CONFIG>>)
   # generator expression for "is this a release build?"
-  set(_mi_gx_release $<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>,$<CONFIG:none>>)
+  set(mi_gx_release $<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>,$<CONFIG:none>>)
 
-  list(APPEND mi_defines "MI_CMAKE_BUILD_TYPE=${_mi_gx_build_type_lc}")
-  list(APPEND mi_defines $<${_mi_gx_release}:MI_BUILD_RELEASE>)
+  list(APPEND mi_defines "MI_CMAKE_BUILD_TYPE=${mi_gx_build_type_lc}")
+  list(APPEND mi_defines $<${mi_gx_release}:MI_BUILD_RELEASE>)
   # append build type (e.g. -debug) if not a release version
-  set(mi_libname "${mi_libname}$<$<NOT:${_mi_gx_release}>:-${_mi_gx_build_type_lc}>")
+  set(mi_libname "${mi_libname}$<$<NOT:${mi_gx_release}>:-${mi_gx_build_type_lc}>")
 else()
   # single-config builds
   string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
