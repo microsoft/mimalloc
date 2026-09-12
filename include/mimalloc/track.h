@@ -96,7 +96,7 @@ defined, undefined, or not accessible at all:
 #define MI_TRACK_HEAP_DESTROY 0
 #define MI_TRACK_TOOL         "custom"
 
-#define mi_track_malloc_size(p,reqsize,size,zero) mi_track_malloc_hook((p),(reqsize))
+#define mi_track_malloc_size(p,reqsize,size,zero) mi_track_malloc_hook((p),(reqsize),(size),(zero))
 #define mi_track_free_size(p,size)                mi_track_free_hook((p),(size))
 
 #else

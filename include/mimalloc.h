@@ -138,7 +138,7 @@ mi_decl_nodiscard mi_decl_export size_t mi_good_size(size_t size)     mi_attr_no
 mi_decl_export void mi_free_size(void* p, size_t size) mi_attr_noexcept;
 
 #if defined(MI_TRACK_CUSTOM)
-void mi_track_malloc_hook(const void* p, size_t reqsize) mi_attr_noexcept;
+void mi_track_malloc_hook(const void* p, size_t reqsize, size_t size, bool zero) mi_attr_noexcept;
 void mi_track_free_hook(const void* p, size_t size) mi_attr_noexcept;
 #endif
 
