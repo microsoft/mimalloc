@@ -979,9 +979,9 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   if (page_meta!=NULL) {
     mi_assert_internal(page_meta->block_size == 0);
     #if MI_PAGE_META_SMALL_IS_ALIGNED
-    // if `block_size <= MI_SMALL_SIZE_MAX` we put the page info in front of the slice,
+    // if `block_size <= MI_SMALL_MAX_OBJ_SIZE` we put the page info in front of the slice,
     // (note: it is important that `page_meta->block_size == 0` for `mi_arena_page_at_slice`)
-    if (block_size <= MI_SMALL_SIZE_MAX) {
+    if (!os_align && block_size <= MI_SMALL_MAX_OBJ_SIZE) {
       // put page info in front of the slice
       page = (mi_page_t*)slice_start;
       block_start = mi_page_block_start(block_size, os_align);
