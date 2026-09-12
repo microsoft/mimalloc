@@ -934,7 +934,7 @@ endif()
 if (CMAKE_CONFIGURATION_TYPES)
   # multi-config builds
   # generator expression lower-case build type
-  set(mi_gx_build_type_lc $<STRING:TOLOWER,$<CONFIG>>)
+  set(mi_gx_build_type_lc $<LOWER_CASE:$<CONFIG>>)
   # generator expression for "is this a release build?"
   set(mi_gx_release $<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>,$<CONFIG:none>>)
 
