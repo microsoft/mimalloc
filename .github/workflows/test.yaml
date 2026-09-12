@@ -55,7 +55,7 @@ jobs:
     steps:
       # Checkout: https://github.com/actions/checkout
       - name: Checkout repository
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Choose MI_USE_CXX setting
       - name: Set default cmake options
@@ -77,7 +77,7 @@ jobs:
           ctest --test-dir out/release-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Release
 
       - name: Release, Asm
-        if: matrix.tests == 'basic' && runner.os == 'Linux'
+        if: matrix.tests == 'basic' && runner.os == 'Linux' && matrix.c_or_cxx == 'c'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.os }}-${{ matrix.c_or_cxx }}-asm
@@ -238,20 +238,20 @@ jobs:
       - name: Debug, Guarded
         if: matrix.tests == 'extra' && runner.os != 'macOS'
         run: |
-          cmake . -B out/debug-guarded -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_GUARDED=ON 
+          cmake . -B out/debug-guarded -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_GUARDED=FULL
           cmake --build out/debug-guarded --parallel 8 --config Debug
           ctest --test-dir out/debug-guarded --verbose --timeout 240 -C Debug
         env:
-          MIMALLOC_GUARDED_SAMPLE_RATE: 10
+          MIMALLOC_GUARDED_SAMPLE_RATE: 1024
 
       - name: Release, Guarded
         if: matrix.tests == 'extra' && runner.os == 'Linux' && startsWith(github.ref_name,'dev3')
         run: |
-          cmake . -B out/release-guarded -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_GUARDED=ON
+          cmake . -B out/release-guarded -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_GUARDED=FULL
           cmake --build out/release-guarded --parallel 8 --config Release
           ctest --test-dir out/release-guarded --verbose --timeout 240 -C Release
         env:
-          MIMALLOC_GUARDED_SAMPLE_RATE: 10
+          MIMALLOC_GUARDED_SAMPLE_RATE: 128
 
       - name: Debug, Use pagemap
         if: matrix.tests == 'extra' && runner.os == 'Linux' && startsWith(github.ref_name,'dev3')
@@ -314,7 +314,7 @@ jobs:
       # VM: FreeBSD (arm64 and x64)
       - name: FreeBSD arm64, Setup
         if: matrix.tests == 'freebsd-arm64'
-        uses: vmactions/freebsd-vm@83b151f58c6047089f4c80eb5ba2039d158ce093 # v1.5.3
+        uses: vmactions/freebsd-vm@f0552d3b69211736abd97f02ff3d4674c56b73b1 # v1.5.5
         with:
           arch: arm64
           custom-shell-name: freebsd-arm64
@@ -353,7 +353,7 @@ jobs:
 
       - name: FreeBSD x64, Setup
         if: matrix.tests == 'freebsd-x64'
-        uses: vmactions/freebsd-vm@83b151f58c6047089f4c80eb5ba2039d158ce093 # v1.5.3
+        uses: vmactions/freebsd-vm@f0552d3b69211736abd97f02ff3d4674c56b73b1 # v1.5.5
         with:
           arch: x86_64
           usesh: true
@@ -509,9 +509,16 @@ jobs:
         if: matrix.tests == 'alpine-arm32'
         shell: alpine-arm32.sh {0}
         run: |
-          cmake . -B out/release-arm32 -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON 
+          cmake . -B out/release-arm32 -DCMAKE_BUILD_TYPE=Release  -DMI_OPT_ARCH=ON -DMI_SEE_ASM=ON
           cmake --build out/release-arm32 --parallel 4 --config Release
           ctest --test-dir out/release-arm32 --verbose --timeout 240 -C Release
+
+      - name: Alpine arm32, Asm
+        if: matrix.tests == 'alpine-arm32'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: alpine-arm32-c-asm
+          path: out/release-arm32/CMakeFiles/mimalloc-static.dir/src/*.s
 
       - name: Alpine arm32, Secure
         if: matrix.tests == 'alpine-arm32'

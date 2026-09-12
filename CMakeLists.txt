@@ -10,7 +10,9 @@ set_property(CACHE MI_SECURE PROPERTY STRINGS "OFF" "ON" "FULL")
 option(MI_OVERRIDE          "Override the standard malloc interface (i.e. define entry points for 'malloc', 'free', etc)" ON)
 option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
 option(MI_SHOW_ERRORS       "Show error and warning messages by default (only enabled by default in DEBUG mode)" OFF)
-option(MI_GUARDED           "Build with guard pages behind certain object allocations (enabled by default in a debug build)" OFF)
+
+set(MI_GUARDED "DEFAULT" CACHE STRING "Build with ability to put guard pages behind certain object allocations")
+set_property(CACHE MI_GUARDED PROPERTY STRINGS "OFF" "ON" "FULL" "DEFAULT")
 
 set(MI_USE_CXX "DEFAULT" CACHE STRING "Use the C++ compiler to compile the library (instead of the C compiler)")
 set_property(CACHE MI_USE_CXX PROPERTY STRINGS "OFF" "ON" "DEFAULT")
@@ -18,19 +20,25 @@ set_property(CACHE MI_USE_CXX PROPERTY STRINGS "OFF" "ON" "DEFAULT")
 set(MI_OPT_ARCH "DEFAULT" CACHE STRING "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell;-mavx2' (2013), for arm64: '-march=armv8.1-a' (2016), for riscV: '-march=rv64gcb_zacas' (2023))")
 set_property(CACHE MI_OPT_ARCH PROPERTY STRINGS "OFF" "ON" "avx2" "armv8.1" "armv8.3" "rva22" "rva23" "rv64gcb_zacas" "rv64gcb_zacas_zalasr" "DEFAULT")
 
-option(MI_OPT_SIMD          "Use SIMD instructions (requires MI_OPT_ARCH to be enabled)" OFF)
-
-set(MI_FREE_IS_CHECKED "DEFAULT" CACHE STRING "Check for invalid pointers in 'mi_free': OFF, SHARED, ON, DEFAULT. 'SHARED' enables it only for the dynamic/shared library when MI_OVERRIDE is ON")
-set_property(CACHE MI_FREE_IS_CHECKED PROPERTY STRINGS "OFF" "SHARED" "ON" "DEFAULT")
-
 set(MI_DEBUG "DEFAULT" CACHE STRING "Enable assertion checks: OFF, ON, INTERNAL, FULL, DEFAULT. INTERNAL adds extra internal invariant checks, while FULL adds expensive heap invariant checks")
 set_property(CACHE MI_DEBUG PROPERTY STRINGS "OFF" "ON" "INTERNAL" "FULL" "DEFAULT")
 
 set(MI_TRACK "OFF" CACHE STRING "Enable tracking: OFF, ASAN (address sanitizer), VALGRIND, ETW (Windows event tracing). Adds a small overhead.")
 set_property(CACHE MI_TRACK PROPERTY STRINGS "OFF" "ASAN" "VALGRIND" "ETW")
 
+set(MI_STATS "DEFAULT" CACHE STRING "Enable statistics.")
+set_property(CACHE MI_STATS PROPERTY STRINGS "OFF" "ON" "FULL" "DEFAULT")
+
+set(MI_PROFILE "DEFAULT" CACHE STRING "Enable profiling.")
+set_property(CACHE MI_PROFILE PROPERTY STRINGS "OFF" "ON" "FULL" "DEFAULT")
+
+set(MI_FREE_IS_CHECKED "DEFAULT" CACHE STRING "Check for invalid pointers in 'mi_free': OFF, SHARED, ON, DEFAULT. 'SHARED' enables it only for the dynamic/shared library when MI_OVERRIDE is ON")
+set_property(CACHE MI_FREE_IS_CHECKED PROPERTY STRINGS "OFF" "SHARED" "ON" "DEFAULT")
+
 set(MI_ALLOW_THP "DEFAULT" CACHE STRING "Enable transparent huge pages on Linux: OFF, ON, FULL, DEFAULT. 'FULL' enables THP and also avoids splitting up huge pages during purging.")
 set_property(CACHE MI_ALLOW_THP PROPERTY STRINGS "OFF" "ON" "FULL" "DEFAULT")
+
+option(MI_OPT_SIMD          "Use SIMD instructions (requires MI_OPT_ARCH to be enabled)" OFF)
 
 option(MI_DEBUG_TSAN        "Build with thread sanitizer (needs clang)" OFF)
 option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clang++)" OFF)
@@ -72,7 +80,6 @@ set_property(CACHE MI_TLS_MODEL PROPERTY STRINGS "LOCAL" "PTHREADS" "LOCAL_DYNAM
 
 # deprecated options
 option(MI_USE_LIBATOMIC       "Deprecated: Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
-option(MI_OPT_FREE_SMALL      "Deprecated: Use aligned `mi_free_small` without pagemap lookup (can only be used if SECURE or GUARDED mode are off)" OFF)
 option(MI_DEBUG_INTERNAL      "Deprecated: Enable assertion and internal invariant checks (use MI_DEBUG=INTERNAL instead)" OFF)
 option(MI_DEBUG_FULL          "Deprecated: Enable assertion checks and expensive internal heap invariant checking (use MI_DEBUG=FULL instead)" OFF)
 option(MI_CHECK_FULL          "Deprecated: Use full internal invariant checking in DEBUG mode (use MI_DEBUG=FULL instead)" OFF)
@@ -89,6 +96,8 @@ option(MI_TRACK_VALGRIND      "Deprecated: Compile with Valgrind support (adds a
 option(MI_TRACK_ASAN          "Deprecated: Compile with address sanitizer support (adds a small overhead) (use MI_TRACK=ASAN instead)" OFF)
 option(MI_TRACK_ETW           "Deprecated: Compile with Windows event tracing (ETW) support (adds a small overhead) (use MI_TRACK=ETW instead)" OFF)
 
+set(MI_OPT_FREE_SMALL "DEFAULT" CACHE STRING "Deprecated: Use aligned `mi_free_small` without pagemap lookup (can only be used if SECURE or GUARDED mode are off)")
+set_property(CACHE MI_OPT_FREE_SMALL PROPERTY STRINGS "OFF" "ON" "DEFAULT")
 
 include(CheckLinkerFlag)    # requires cmake 3.18
 include(CheckIncludeFiles)
@@ -107,14 +116,16 @@ set(mi_sources
     src/options.c
     src/os.c
     src/page.c
-    src/page-map.c
+    src/page-map.c   
+    src/prim/prim.c
+    src/prim/prim-tls.c 
     src/random.c
+    src/sample-guarded.c
+    src/sample-profile.c
     src/stats.c
     src/subproc.c
     src/theap.c
-    src/threadlocal.c
-    src/prim/prim.c
-    src/prim/prim-tls.c)
+    src/threadlocal.c)  
 
 set(mi_cflags "")
 set(mi_cflags_static "")            # extra flags for a static library build
@@ -156,7 +167,7 @@ endfunction()
 # -----------------------------------------------------------------------------
 
 message(STATUS "")
-if(NOT CMAKE_BUILD_TYPE)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   if ("${CMAKE_BINARY_DIR}" MATCHES ".*((D|d)ebug|asan|tsan|ubsan|valgrind)$")
     message(STATUS "No build type selected, default to 'Debug'")
     set(CMAKE_BUILD_TYPE "Debug")
@@ -241,7 +252,7 @@ if(MI_USE_CXX STREQUAL "DEFAULT")
   if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL)
     # force C++ compilation with msvc or clang-cl to use modern C++ atomics
     set(MI_USE_CXX "ON")
-  elseif(MI_DEBUG_UBSAN AND CMAKE_BUILD_TYPE MATCHES "Debug")  # ubsan needs C++
+  elseif(MI_DEBUG_UBSAN AND (CMAKE_BUILD_TYPE MATCHES "Debug" OR NOT CMAKE_CONFIGURATION_TYPES))  # ubsan needs C++
     set(MI_USE_CXX "ON")
   else()
     set(MI_USE_CXX "OFF")
@@ -410,10 +421,16 @@ elseif(MI_DEBUG_INTERNAL)
 endif()
 
 if(MI_DEBUG STREQUAL "DEFAULT")
-  if(CMAKE_BUILD_TYPE MATCHES "Debug")
-    set(MI_DEBUG "INTERNAL")
+  if(CMAKE_CONFIGURATION_TYPES)
+    # Multi-config generators: Choose debug flags using generator expression
+    list(APPEND mi_defines $<IF:$<CONFIG:Debug>,MI_DEBUG=2,MI_DEBUG=0 NDEBUG=1>)
+    set(MI_DEBUG OFF) # don't go into further MI_DEBUG checks below...
   else()
-    set(MI_DEBUG "OFF")
+    if(CMAKE_BUILD_TYPE MATCHES "Debug")
+      set(MI_DEBUG "INTERNAL")
+    else()
+      set(MI_DEBUG "OFF")
+    endif()
   endif()
 endif()
 
@@ -430,15 +447,28 @@ elseif(MI_DEBUG STREQUAL "INTERNAL")
 elseif(MI_DEBUG)
   message(STATUS "Set debug level to assertion checking (MI_DEBUG=${MI_DEBUG})")
   list(APPEND mi_defines MI_DEBUG=1)   # assertion checking (mi_assert)
+elseif(NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Disable assertion checks (MI_DEBUG=${MI_DEBUG})")
+  list(APPEND mi_defines NDEBUG=1)
 endif()
 
-if(MI_DEBUG AND !MI_GUARDED)
-  message(STATUS "Enable MI_GUARDED (since MI_DEBUG is enabled)")
-  set(MI_GUARDED=ON)
+if(MI_GUARDED STREQUAL "DEFAULT")
+  if(MI_DEBUG)
+    set(MI_GUARDED "FULL")
+  else()
+    set(MI_GUARDED "OFF")
+  endif()
 endif()
-if(MI_GUARDED)
-  message(STATUS "Compile guard pages behind certain object allocations (MI_GUARDED=ON)")
+
+if(MI_GUARDED STREQUAL "FULL")
+  message(STATUS "Enable fine-grained sampling for guard pages (MI_GUARDED=FULL)")
+  list(APPEND mi_defines MI_GUARDED=2)
+elseif(MI_GUARDED)
+  message(STATUS "Enable sampled guard pages (MI_GUARDED=${MI_GUARDED})")
   list(APPEND mi_defines MI_GUARDED=1)
+else()
+  # message(STATUS "Disable guard pages (MI_GUARDED=${MI_GUARDED})")
+  list(APPEND mi_defines MI_GUARDED=0)
 endif()
 
 if(MI_NO_PADDING)
@@ -473,6 +503,44 @@ else()
   message(STATUS "Invalid value for MI_FREE_IS_CHECKED: ${MI_FREE_IS_CHECKED} (expecting: DEFAULT, OFF, SHARED, or ON)")
 endif()
 
+if(MI_STATS STREQUAL "DEFAULT")
+  if(MI_DEBUG)
+    set(MI_STATS "FULL")
+  else()
+    set(MI_STATS "ON")
+  endif()
+endif()
+
+if(MI_STATS STREQUAL "FULL")
+  message(STATUS "Enable detailed statistics including precise requested bytes (expensive) (MI_STATS=FULL)")
+  list(APPEND mi_defines MI_STATS=2)
+elseif(MI_STATS)
+  message(STATUS "Enable detailed statistics (MI_STATS=${MI_STATS})")
+  list(APPEND mi_defines MI_STATS=1)
+else()
+  message(STATUS "Disable detailed statistics (MI_STATS=${MI_STATS})")
+  list(APPEND mi_defines MI_STATS=0)
+endif()
+
+if(MI_PROFILE STREQUAL "DEFAULT")
+  if(MI_DEBUG)
+    set(MI_PROFILE "FULL")
+  else()
+    set(MI_PROFILE "ON")
+  endif()
+endif()
+
+if(MI_PROFILE STREQUAL "FULL")
+  message(STATUS "Enable fine-grained sampled profiling (MI_PROFILE=FULL)")
+  list(APPEND mi_defines MI_PROFILE=2)
+elseif(MI_PROFILE)
+  message(STATUS "Enable sampled profiling (MI_PROFILE=${MI_PROFILE})")
+  list(APPEND mi_defines MI_PROFILE=1)
+else()
+  message(STATUS "Disable profiling (MI_PROFILE=${MI_PROFILE})")
+  list(APPEND mi_defines MI_PROFILE=0)
+endif()
+
 if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
   message(STATUS "Enabling MI_FREE_USE_PAGEMAP since the target (WASI) does not support large OS aligned allocations well")
   set(MI_FREE_USE_PAGEMAP ON)
@@ -483,13 +551,18 @@ if(MI_FREE_USE_PAGEMAP)
 endif()  
 
 # deprecated
-if(MI_OPT_FREE_SMALL) 
+if(MI_OPT_FREE_SMALL STREQUAL "DEFAULT")
+  # do nothing
+elseif(MI_OPT_FREE_SMALL) 
   if(MI_GUARDED OR MI_SECURE)
     message(STATUS "Cannot enable MI_OPT_FREE_SMALL in secure or guarded mode (MI_OPT_FREE_SMALL=OFF)")
   else()
     message(STATUS "Use aligned `mi_free_small` (MI_OPT_FREE_SMALL=ON)")
     list(APPEND mi_defines MI_OPT_FREE_SMALL=1)
   endif()
+else()
+  message(STATUS "Disable aligned `mi_free_small` (MI_OPT_FREE_SMALL=OFF)")
+  list(APPEND mi_defines MI_OPT_FREE_SMALL=0)
 endif()
 
 if(MI_XMALLOC)
@@ -514,7 +587,7 @@ if(MI_DEBUG_TSAN)
 endif()
 
 if(MI_DEBUG_UBSAN)
-  if(CMAKE_BUILD_TYPE MATCHES "Debug")
+  if(CMAKE_BUILD_TYPE MATCHES "Debug" OR CMAKE_CONFIGURATION_TYPES)
     if(MI_USE_CXX)
       if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         message(STATUS "Build with undefined-behavior sanitizer (MI_DEBUG_UBSAN=ON)")
@@ -652,6 +725,13 @@ if(MI_ARCH MATCHES "riscv")
   CHECK_INCLUDE_FILES("sys/hwprobe.h" MI_HAS_SYS_HWPROBEH)
   if (MI_HAS_SYS_HWPROBEH)
     list(APPEND mi_defines MI_HAS_SYS_HWPROBEH=1)
+  endif()
+endif()
+
+if(NOT WIN32)
+  CHECK_INCLUDE_FILES("execinfo.h" MI_HAS_EXECINFOH)
+  if(MI_HAS_EXECINFOH) 
+    list(APPEND mi_defines MI_HAS_EXECINFOH=1)
   endif()
 endif()
 
@@ -818,7 +898,7 @@ endif()
 # set language for source files now
 if(MI_USE_CXX)
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
-  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-profile.c PROPERTIES LANGUAGE CXX )
 endif()
 
 
@@ -851,12 +931,26 @@ endif()
 if(MI_TRACK STREQUAL "ASAN")
   set(mi_libname "${mi_libname}-asan")
 endif()
-string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
-list(APPEND mi_defines "MI_CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE_LC}")  #todo: multi-config project needs $<CONFIG> ?
-if(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel|none)$")
-  list(APPEND mi_defines MI_BUILD_RELEASE)
+if (CMAKE_CONFIGURATION_TYPES)
+  # multi-config builds
+  # generator expression lower-case build type
+  set(mi_gx_build_type_lc $<LOWER_CASE:$<CONFIG>>)
+  # generator expression for "is this a release build?"
+  set(mi_gx_release $<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>,$<CONFIG:none>>)
+
+  list(APPEND mi_defines "MI_CMAKE_BUILD_TYPE=${mi_gx_build_type_lc}")
+  list(APPEND mi_defines $<${mi_gx_release}:MI_BUILD_RELEASE>)
+  # append build type (e.g. -debug) if not a release version
+  set(mi_libname "${mi_libname}$<$<NOT:${mi_gx_release}>:-${mi_gx_build_type_lc}>")
 else()
-  set(mi_libname "${mi_libname}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
+  # single-config builds
+  string(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_LC)
+  list(APPEND mi_defines "MI_CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE_LC}")  #todo: multi-config project needs $<CONFIG> ?
+  if(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel|none)$")
+    list(APPEND mi_defines MI_BUILD_RELEASE)
+  else()
+    set(mi_libname "${mi_libname}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
+  endif()
 endif()
 string(REGEX REPLACE "^mimalloc[-]?" "" mi_libsuffix "${mi_libname}")
 
@@ -877,7 +971,9 @@ endif()
 message(STATUS "")
 message(STATUS "Library name     : ${mi_libname}")
 message(STATUS "Version          : ${mi_version}.${mi_version_patch}")
-message(STATUS "Build type       : ${CMAKE_BUILD_TYPE_LC}")
+if(CMAKE_BUILD_TYPE_LC)
+  message(STATUS "Build type       : ${CMAKE_BUILD_TYPE_LC}")
+endif()
 if(MI_USE_CXX)
   message(STATUS "C++ Compiler     : ${CMAKE_CXX_COMPILER}")
 else()
@@ -986,11 +1082,7 @@ if (MI_BUILD_OBJECT)
   )
 
   # Copy the generated object file (`static.o`) to the output directory (as `mimalloc.o`)
-  if(CMAKE_GENERATOR MATCHES "^Visual Studio.*$")
-    set(mimalloc-obj-static "${CMAKE_CURRENT_BINARY_DIR}/mimalloc-obj.dir/$<CONFIG>/static${CMAKE_C_OUTPUT_EXTENSION}")
-  else()
-    set(mimalloc-obj-static "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}")
-  endif()
+  set(mimalloc-obj-static "$<TARGET_OBJECTS:mimalloc-obj>")
   set(mimalloc-obj-out "${CMAKE_CURRENT_BINARY_DIR}/${mi_libname}${CMAKE_C_OUTPUT_EXTENSION}")
   add_custom_command(OUTPUT ${mimalloc-obj-out} DEPENDS mimalloc-obj mimalloc-static COMMAND "${CMAKE_COMMAND}" -E copy "${mimalloc-obj-static}" "${mimalloc-obj-out}")
   add_custom_target(mimalloc-obj-target ALL DEPENDS ${mimalloc-obj-out})
@@ -1035,7 +1127,7 @@ if (MI_BUILD_TESTS)
   enable_testing()
 
   # static link tests
-  foreach(TEST_NAME api api-fill stress-heaps stress-subprocs stress)
+  foreach(TEST_NAME api api-fill stress-heaps stress-subprocs stress profile)
     add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
     target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
     target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})
@@ -1047,10 +1139,12 @@ if (MI_BUILD_TESTS)
     else()
       message(STATUS "cannot build TSAN tests without MI_BUILD_SHARED being enabled")
     endif()
-    if(MI_GUARDED)
-    add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_GUARDED_SAMPLE_RATE=1 $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
+    if(MI_GUARDED AND NOT (TEST_NAME STREQUAL "profile"))
+    add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_GUARDED_SAMPLE_RATE=1024 $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
     elseif(TEST_NAME STREQUAL "stress-heaps")
     add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_ARENA_EAGER_COMMIT=0 MIMALLOC_PAGE_COMMIT_ON_DEMAND=0 $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
+    elseif(NOT MI_PROFILE AND (TEST_NAME STREQUAL "profile"))
+    # don't add as a test
     else()
     add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
     endif()
