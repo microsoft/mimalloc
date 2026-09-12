@@ -89,6 +89,16 @@ defined, undefined, or not accessible at all:
 #define mi_track_malloc_size(p,reqsize,size,zero) EventWriteETW_MI_ALLOC((UINT64)(p), size)
 #define mi_track_free_size(p,size)                EventWriteETW_MI_FREE((UINT64)(p), size)
 
+#elif defined(MI_TRACK_CUSTOM)
+// application-defined hooks
+
+#define MI_TRACK_ENABLED      0
+#define MI_TRACK_HEAP_DESTROY 0
+#define MI_TRACK_TOOL         "custom"
+
+#define mi_track_malloc_size(p,reqsize,size,zero) mi_track_malloc_hook((p),(reqsize))
+#define mi_track_free_size(p,size)                mi_track_free_hook((p),(size))
+
 #else
 // no tracking
 
