@@ -15,9 +15,9 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.5.1`  (2026-09-01) recommended.  
-Latest v2 release: `v2.5.1`  (2026-09-01) stable, legacy.  
-Latest v1 release: `v1.15.1` (2026-09-01) legacy.
+Latest release   : `v3.5.2`  (2026-09-12) recommended.  
+Latest v2 release: `v2.5.2`  (2026-09-12) stable, legacy.  
+Latest v1 release: `v1.15.2` (2026-09-12) legacy.
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -89,6 +89,9 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
         __Send PR's against this version if possible.__
 
 ### Releases
+* 2026-09-12, `v3.5.2`, `v2.5.2`, `v1.15.2`: (v3) Reduced cache contention, improved `mi_malloc_csize`,
+  improved zero'ing of small blocks, `mi_wmalloc` variants for runtime systems, always enable detailed
+  statistics. Initial experimental support for profiling hooks (`mimalloc-profile.h`).
 * 2026-09-01, `v3.5.1`, `v2.5.1`, `v1.15.1`: (v3) Yet better performance for `free` calls.
   (v3) Added `mi_free_small(_nonnull)` for runtimes, and `mi_free_csize(_nonnull)` for inlined constant size free-ing.
   (v3) Improved MI_OPT_ARCH options; on arm64, defaults to armv8.3 on Apple and armv8.1 otherwise. Improved cache
