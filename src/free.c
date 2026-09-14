@@ -344,9 +344,9 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
     const mi_page_t* const page = mi_ptr_page_validate(p,"mi_free_size");
     if (page==NULL) return;
     mi_assert(p!=NULL);
-    const size_t usable = _mi_page_usable_size(page,p);
+    const mi_block_t* block = _mi_page_ptr_unalign(page, p);      
+    const size_t usable = mi_page_usable_size(page,p);
     if mi_unlikely(size > usable) { 
-      const mi_block_t* block = _mi_page_ptr_unalign(page, p);
       const bool is_guarded = mi_block_ptr_is_guarded(block,p);
       if (!is_guarded) {
         _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the size %zu is greater than the usable size %zu\n", p, size, usable);
@@ -354,8 +354,8 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
         return;
       }
     }
-    if mi_unlikely(size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size(MI_SMALL_SIZE_MAX)) { 
-      const mi_block_t* block = _mi_page_ptr_unalign(page, p);
+    const size_t is_aligned = ((void*)block != p);
+    if mi_unlikely(size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size((is_aligned ? 2 : 1)*MI_SMALL_SIZE_MAX)) { // note: we check *2 in case it was over-aligned
       const bool is_guarded = mi_block_ptr_is_guarded(block,p);
       if (!is_guarded) {
         _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n  (maybe a `new[]` was matched with `delete` instead of `delete[]`?)\n", p, size, mi_page_block_size(page));
@@ -377,9 +377,9 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
 
 void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept {
   mi_assert(((uintptr_t)p % alignment) == 0);
-  // An alignment larger than the object size is handled by over-allocation and
-  // can place an otherwise small object in a non-small page. In that case,
-  // avoid the aligned-page lookup used by mi_free_size's small fast path.
+  // If the alignment is smaller than the `size`, then for `size <= MI_SMALL_SIZE_MAX`
+  // the block must be allocated within a small page and can thus be handled safely by `mi_free_size`.
+  // (since even with over-allocation the block size will be less than 2*MI_SMALL_SIZE_MAX <= MI_SMALL_OBJ_SIZE_MAX)
   if mi_likely(alignment <= size) {
     mi_free_size(p,size);
   }
