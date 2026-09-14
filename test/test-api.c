@@ -193,6 +193,20 @@ int main(void) {
     }
     result = ok;
   };
+  CHECK_BODY("free-size-aligned-overaligned") { // issue #1400
+    const size_t size = 8;
+    const size_t alignment = 16 * 1024;
+    void* p[200];
+    bool ok = true;
+    for (size_t i = 0; i < 200; i++) {
+      p[i] = mi_malloc_aligned(size, alignment);
+      ok = ok && (p[i] != NULL) && ((uintptr_t)p[i] % alignment == 0);
+    }
+    for (size_t i = 0; i < 200; i++) {
+      mi_free_size_aligned(p[i], size, alignment);
+    }
+    result = ok;
+  };
   CHECK_BODY("malloc-aligned5") {
     void* p = mi_malloc_aligned(4097,4096);
     size_t usable = mi_usable_size(p);
@@ -723,6 +737,5 @@ static bool test_zero_aligned_first(void) {
   mi_free(p);
   return res;
 }
-
 
 

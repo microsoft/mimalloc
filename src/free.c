@@ -12,6 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim-tls.h"   // _mi_prim_thread_id()
 #endif
 
+
 // forward declarations
 mi_decl_nodiscard static bool mi_check_padding_on_free(const mi_page_t* page, const mi_block_t* block, bool is_guarded, size_t* usable_size);
 mi_decl_nodiscard static bool mi_check_double_free(const mi_page_t* page, const mi_block_t* block);
@@ -366,9 +367,16 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
 }
 
 void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept {
-  MI_UNUSED_RELEASE(alignment);
   mi_assert(((uintptr_t)p % alignment) == 0);
-  mi_free_size(p,size);
+  // An alignment larger than the object size is handled by over-allocation and
+  // can place an otherwise small object in a non-small page. In that case,
+  // avoid the aligned-page lookup used by mi_free_size's small fast path.
+  if mi_likely(alignment <= size) {
+    mi_free_size(p,size);
+  }
+  else {
+    mi_free(p);
+  }
 }
 
 void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
@@ -813,5 +821,3 @@ void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(page); MI_UNUSED(block);
 }
 #endif
-
-
