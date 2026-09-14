@@ -363,7 +363,7 @@ static void mi_page_thread_free_collect(mi_page_t* page)
   do {
     head = mi_tf_block(tfree);
     if mi_likely(head == NULL) return; // return if the list is empty
-    tfreex = mi_tf_create(NULL,mi_tf_is_owned(tfree));  // set the thread free list to NULL
+    tfreex = mi_tf_create(NULL,mi_tf_is_owned(tfree),1);  // set the thread free list to NULL
   } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tfree, tfreex));  // release is enough?
   mi_assert_internal(head != NULL);
 

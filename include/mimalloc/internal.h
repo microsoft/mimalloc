@@ -1154,13 +1154,46 @@ static inline bool _mi_is_process_heap_main(const mi_heap_t* heap) {
 
 // Thread free flag helpers
 static inline mi_block_t* mi_tf_block(mi_thread_free_t tf) {
+  #if MI_INTPTR_BITS - MI_MAX_VABITS >= 16
+  return (mi_block_t*)(((tf & ~1) << 16) >> 16);
+  #else
   return (mi_block_t*)(tf & ~1);
+  #endif
 }
 static inline bool mi_tf_is_owned(mi_thread_free_t tf) {
   return ((tf & 1) == 1);
 }
-static inline mi_thread_free_t mi_tf_create(mi_block_t* block, bool owned) {
-  return (mi_thread_free_t)((uintptr_t)block | (owned ? 1 : 0));
+static inline size_t mi_tf_counter(mi_thread_free_t tf) {
+  #if MI_INTPTR_BITS - MI_MAX_VABITS >= 16
+  return (size_t)((uintptr_t)tf >> (MI_INTPTR_BITS - 16));
+  #else
+  return 1;
+  #endif
+}
+static inline mi_thread_free_t mi_tf_create(mi_block_t* block, bool owned, size_t counter) {
+  uintptr_t base = (uintptr_t)block | (owned ? 1 : 0);
+  #if MI_INTPTR_BITS - MI_MAX_VABITS >= 16
+  mi_assert_internal(((base << 16) >> 16) == base);
+  base |= (uintptr_t)(counter) << (MI_INTPTR_BITS - 16);
+  #else
+  MI_UNUSED(counter);
+  #endif
+  return (mi_thread_free_t)base;
+}
+
+// Create a new thread-free entry for the given page and block, with an appropriate counter based on the page's usage.
+static inline mi_thread_free_t mi_page_tf_create(mi_page_t* page, mi_block_t* new_thread_free, bool owned) {
+  if (owned) {
+    return mi_tf_create(new_thread_free, owned, 0);
+  }
+  else {
+    size_t counter = mi_page_used(page);  // after this many mt free's we should free the page
+    if (mi_page_is_full(page)) {
+      const uint16_t frac18 = 7 * (page->reserved / 8U);
+      if (frac18 < counter) { counter = (frac18 > 0 ? frac18 : 1); }  // after this many mt free's we should reabandon to mapped
+    }
+    return mi_tf_create(new_thread_free, owned, counter);
+  }
 }
 
 // Thread free access
