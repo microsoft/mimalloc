@@ -487,7 +487,7 @@ typedef struct mi_page_s {
  
   // next cache line
   _Atomic(mi_thread_free_t) xthread_free;      // list of deferred free blocks freed by other threads (= `mi_block_t* | (1 if owned)`)
-  _Atomic(mi_theap_t*)      xtheap;            // the theap owning this page (may not be valid or NULL for abandoned pages)
+  mi_theap_t*               theap;             // the theap owning this page (may not be valid or NULL for abandoned pages)
   mi_heap_t*                heap;              // const: the heap owning this page
 
   struct mi_page_s*         next;              // next page owned by the theap with the same `block_size`

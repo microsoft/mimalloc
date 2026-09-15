@@ -78,13 +78,13 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was
   #endif
 
   // push atomically on the page thread free list
-  mi_theap_t* theap = _mi_page_associated_theap_peek(page);
+  // mi_theap_t* theap = _mi_page_associated_theap_peek(page);
   mi_thread_free_t tf_new;
   mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
   do {
     mi_block_set_next(page, block, mi_tf_block(tf_old));
     const size_t counter = mi_tf_counter(tf_old); 
-    const bool try_reclaim = (allow_reclaim && (counter==1 || theap==mi_page_theap(page))) || // always try to reclaim in our own heap
+    const bool try_reclaim = (allow_reclaim && (counter==1 /*|| theap==page->theap*/)) || // always try to reclaim in our own heap
                              (counter==1 && !mi_tf_is_owned(tf_old));        // must try to reclaim if this is (possibly) the last block in an unowned page so we can free it
     const bool new_owned = (try_reclaim ? true : mi_tf_is_owned(tf_old));    // if allow collection then always try to claim it if the page is abandoned 
     tf_new = mi_tf_create(block, new_owned, (counter<=1 ? counter : counter - 1));
@@ -497,7 +497,7 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
   // todo: cache `is_in_threadpool` and `exclusive_arena` directly in the theap for performance?
   // set max_reclaim limit
   long max_reclaim = 0;
-  if mi_likely(theap == mi_page_theap(page)) {  // did this page originate from the current theap? (and thus allocated from this thread)
+  if mi_likely(theap == page->theap) {  // did this page originate from the current theap? (and thus allocated from this thread)
     // originating theap
     max_reclaim = _mi_option_get_fast(theap->tld->is_in_threadpool ? mi_option_page_cross_thread_max_reclaim : mi_option_page_max_reclaim);
   }

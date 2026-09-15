@@ -160,7 +160,7 @@ bool _mi_page_queue_is_valid(mi_theap_t* theap, const mi_page_queue_t* pq) {
     else {
       mi_assert_internal(mi_page_block_size(page) == pq->block_size);
     }
-    mi_assert_internal(mi_page_theap(page) == theap);
+    mi_assert_internal(page->theap == theap);
     if (page->next == NULL) {
       mi_assert_internal(pq->last == page);
     }

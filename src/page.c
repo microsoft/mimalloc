@@ -148,7 +148,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
 #if MI_STATS || MI_SAMPLE
 // Gets the theap belonging to a page.
 static mi_theap_t* mi_theap_of_page(mi_page_t* page) {
-  mi_theap_t* theap = mi_page_theap(page);
+  mi_theap_t* theap = page->theap;
   if mi_unlikely(mi_page_thread_id(page) != _mi_prim_thread_id()) { 
     theap = _mi_page_associated_theap_peek(page);
   }
@@ -475,9 +475,9 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   }
   else {
     mi_page_queue_remove(pq, page);
-    mi_theap_t* theap = mi_page_theap(page);
+    mi_theap_t* theap = page->theap;
     mi_page_set_theap(page, NULL);
-    mi_atomic_store_ptr_relaxed(mi_theap_t, &page->xtheap, theap);// don't actually set theap to NULL so we can reclaim_on_free within the same theap
+    page->theap = theap; // don't actually set theap to NULL so we can reclaim_on_free within the same theap
     _mi_arenas_page_abandon(page, theap);
     // _mi_arenas_collect(false, false, theap->tld); // allow purging
   }
@@ -909,7 +909,8 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
 
   mi_assert_internal(page->heap != NULL);
   mi_assert_internal(page->heap == _mi_theap_heap(theap));
-  mi_assert_internal(mi_page_theap(page)!=NULL);
+  mi_assert_internal(page->theap!=NULL);
+  mi_assert_internal(page->theap == mi_page_theap(page));
   mi_assert_internal(page->capacity == 0);
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(mi_page_used(page) == 0);

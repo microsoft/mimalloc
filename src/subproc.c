@@ -83,7 +83,7 @@ void _mi_meta_free(mi_subproc_t* subproc, void* p, mi_memid_t memid) {
 
 bool _mi_meta_is_meta_page(const mi_subproc_t* subproc, const mi_page_t* page) {
   if (page==NULL) return false;
-  mi_theap_t* theap = mi_page_theap(page);
+  mi_theap_t* theap = page->theap;
   return (theap != NULL && theap == subproc->theap_meta);
 }
 
