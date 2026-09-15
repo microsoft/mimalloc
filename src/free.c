@@ -84,7 +84,7 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was
   do {
     mi_block_set_next(page, block, mi_tf_block(tf_old));
     const size_t counter = mi_tf_counter(tf_old); 
-    const bool try_reclaim = (allow_reclaim && (counter==1 || theap==page->theap)) || // always try to reclaim in our own heap
+    const bool try_reclaim = (allow_reclaim && (counter==1 /*|| theap==page->theap*/)) || // always try to reclaim in our own heap
                              (counter==1 && !mi_tf_is_owned(tf_old));        // must try to reclaim if this is (possibly) the last block in an unowned page so we can free it
     const bool new_owned = (try_reclaim ? true : mi_tf_is_owned(tf_old));    // if allow collection then always try to claim it if the page is abandoned 
     tf_new = mi_tf_create(block, new_owned, (counter<=1 ? counter : counter - 1));
