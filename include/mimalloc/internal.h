@@ -1025,6 +1025,14 @@ static inline size_t mi_page_min_commit_size(void) {
 // Page thread id and flags
 //-----------------------------------------------------------
 
+// Get the theap associated with this page.
+static inline mi_theap_t* mi_page_theap(const mi_page_t* page) {
+  // mi_assert_internal(!mi_page_is_abandoned(page));
+  mi_theap_t* theap = mi_atomic_load_ptr_relaxed(mi_theap_t,&page->xtheap);
+  mi_assert_internal(mi_theap_is_initialized(theap));
+  return theap;
+}
+
 // Thread id of thread that owns this page (with flags in the bottom 2 bits)
 static inline mi_threadid_t mi_page_xthread_id(const mi_page_t* page) {
   return mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id);
@@ -1054,7 +1062,7 @@ static inline void mi_page_set_in_full(mi_page_t* page, bool in_full) {
   const bool was_in_full = mi_page_flags_set(page, in_full, MI_PAGE_IN_FULL_QUEUE);
   if (was_in_full != in_full) {
     // optimize: maintain pages_full_size to avoid visiting the full queue (issue #1220)
-    mi_theap_t* const theap = page->theap;
+    mi_theap_t* const theap = mi_page_theap(page);
     mi_assert_internal(theap!=NULL);
     if (theap != NULL) {
       mi_assert_internal(page->capacity==page->reserved);
@@ -1075,7 +1083,7 @@ static inline void mi_page_set_has_interior_pointers(mi_page_t* page, bool has_a
 
 static inline void mi_page_set_theap(mi_page_t* page, mi_theap_t* theap) {
   // mi_assert_internal(!mi_page_is_in_full(page));  // can happen when destroying pages on theap_destroy
-  page->theap = theap;
+  mi_atomic_store_ptr_relaxed(mi_theap_t,&page->xtheap, theap);
   const mi_threadid_t tid = (theap == NULL ? MI_THREADID_ABANDONED : theap->tld->thread_id);
   mi_assert_internal((tid & MI_PAGE_FLAG_MASK) == 0);
 
@@ -1107,18 +1115,11 @@ static inline void mi_page_clear_abandoned_mapped(mi_page_t* page) {
 }
 
 
-static inline mi_theap_t* mi_page_theap(const mi_page_t* page) {
-  mi_assert_internal(!mi_page_is_abandoned(page));
-  mi_assert_internal(page->theap != NULL && page->theap != &_mi_theap_empty);
-  return page->theap;
-}
-
 static inline mi_tld_t* mi_page_tld(const mi_page_t* page) {
   mi_assert_internal(!mi_page_is_abandoned(page));
-  mi_assert_internal(page->theap != NULL);
-  return page->theap->tld;
+  mi_assert_internal(mi_page_theap(page) != NULL);
+  return mi_page_theap(page)->tld;
 }
-
 
 static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
   mi_heap_t* heap = page->heap;

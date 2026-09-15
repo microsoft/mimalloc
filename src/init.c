@@ -33,7 +33,7 @@ static const mi_page_t mi_page_empty = {
   0,                      // retire_expire
   false,                  // is_zero
   MI_ATOMIC_VAR_INIT(0),  // xthread_free
-  NULL,                   // theap
+  MI_ATOMIC_VAR_INIT(NULL), // xtheap
   NULL,                   // heap
   NULL, NULL,             // next, prev
   MI_MEMID_STATIC,        // memid
