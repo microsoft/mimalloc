@@ -1151,7 +1151,7 @@ if (MI_BUILD_TESTS)
   endforeach()
 
   # static override test
-  if(MI_BUILD_OBJECT AND NOT (MI_CYGWIN OR (MI_TRACK STREQUAL "ASAN") OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN))
+  if(MI_BUILD_OBJECT AND MI_OVERRIDE AND NOT (MI_CYGWIN OR (MI_TRACK STREQUAL "ASAN") OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN))
     add_executable(mimalloc-test-stress-static test/test-stress.c)
     target_compile_definitions(mimalloc-test-stress-static PRIVATE ${mi_defines} "USE_STD_MALLOC=1")
     target_compile_options(mimalloc-test-stress-static PRIVATE ${mi_cflags})
@@ -1161,7 +1161,7 @@ if (MI_BUILD_TESTS)
   endif()
 
   # dynamic override test
-  if(MI_BUILD_SHARED AND NOT (MI_CYGWIN OR (MI_TRACK STREQUAL "ASAN") OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN)) # AND NOT (APPLE AND MI_USE_CXX))
+  if(MI_BUILD_SHARED AND MI_OVERRIDE AND NOT (MI_CYGWIN OR (MI_TRACK STREQUAL "ASAN") OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN)) # AND NOT (APPLE AND MI_USE_CXX))
     add_executable(mimalloc-test-stress-dynamic test/test-stress.c)
     target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE ${mi_defines} "USE_STD_MALLOC=1")
     target_compile_options(mimalloc-test-stress-dynamic PRIVATE ${mi_cflags})

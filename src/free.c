@@ -345,7 +345,7 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
     if (page==NULL) return;
     mi_assert(p!=NULL);
     const mi_block_t* block = _mi_page_ptr_unalign(page, p);      
-    const size_t usable = mi_page_usable_size(page,p);
+    const size_t usable = _mi_page_usable_size(page,p);
     if mi_unlikely(size > usable) { 
       const bool is_guarded = mi_block_ptr_is_guarded(block,p);
       if (!is_guarded) {

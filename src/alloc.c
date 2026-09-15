@@ -818,15 +818,15 @@ static mi_decl_noinline void* mi_theap_try_new(mi_theap_t* theap, size_t size, b
   return p;
 }
 
-static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow) {
-  return mi_theap_try_new(_mi_theap_default(), size, nothrow);
-}
+// static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow) {
+//   return mi_theap_try_new(_mi_theap_default(), size, nothrow);
+// }
 
 static mi_decl_noinline void* mi_heap_try_new(mi_heap_t* heap, size_t size, bool nothrow) {
   return mi_theap_try_new(_mi_heap_theap(heap), size, nothrow);
 }
 
-mi_decl_nodiscard static mi_decl_restrict void* mi_theap_alloc_new(mi_theap_t* theap, size_t size) {
+mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new(mi_theap_t* theap, size_t size) {
   void* p = mi_theap_malloc(theap,size);
   if mi_unlikely(p == NULL) return mi_theap_try_new(theap, size, false);
   return p;
@@ -842,7 +842,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size
   return p;
 }
 
-mi_decl_nodiscard static mi_decl_restrict void* mi_theap_alloc_new_n(mi_theap_t* theap, size_t count, size_t size) {
+mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new_n(mi_theap_t* theap, size_t count, size_t size) {
   size_t total;
   if mi_unlikely(mi_count_size_overflow(count, size, &total)) {
     mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
@@ -861,10 +861,15 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new_n(mi_heap_t* heap, si
   return mi_theap_alloc_new_n(_mi_heap_theap(heap), count, size);
 }
 
-mi_decl_nodiscard mi_decl_restrict void* mi_new_nothrow(size_t size) mi_attr_noexcept {
-  void* p = mi_malloc(size);
-  if mi_unlikely(p == NULL) return mi_try_new(size, true);
+
+mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new_nothrow(mi_theap_t* theap, size_t size) mi_attr_noexcept {
+  void* p = mi_theap_malloc(theap,size);
+  if mi_unlikely(p == NULL) return mi_theap_try_new(theap, size, true);
   return p;
+}
+
+mi_decl_nodiscard mi_decl_restrict void* mi_new_nothrow(size_t size) mi_attr_noexcept {
+  return mi_theap_alloc_new_nothrow(_mi_theap_default(), size);
 }
 
 static mi_decl_noinline void* mi_try_new_aligned(size_t size, size_t alignment, bool nothrow) {

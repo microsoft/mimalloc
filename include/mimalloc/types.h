@@ -535,6 +535,13 @@ typedef struct mi_page_s {
 #define MI_MAX_SINGLETON_BIN   MI_BIN_HUGE
 #endif
 
+// The small object max size must be larger than twice the small size max minus one,
+// such that any aligned allocation with `alignment <= size <= MI_SMALL_SIZE_MAX` will
+// be allocated in a small page (so `mi_free_csize` can delegate correctly to `mi_free_small`.
+#if MI_SMALL_MAX_OBJ_SIZE <= (2*(MI_SMALL_WSIZE_MAX * MI_SIZE_SIZE)-1)
+#error "mimalloc internal: the small object max size is too small"
+#endif
+
 // ------------------------------------------------------
 // Page kinds
 // ------------------------------------------------------

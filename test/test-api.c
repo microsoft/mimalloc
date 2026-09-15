@@ -73,26 +73,6 @@ static bool mem_is_zero(const void* p, size_t size) {
 int main(void) {
   mi_option_disable(mi_option_verbose);
 
-  #if 1
-  #if defined(__cplusplus) && !defined(_MSC_VER)
-  CHECK_BODY("c++ new-handler") {
-    std::set_new_handler([]{ throw std::bad_alloc(); });
-    void* p = mi_new_nothrow(SIZE_MAX/2);
-    result = (p==NULL);
-  }
-  CHECK_BODY("c++ new handler2") {
-    try {
-      void* p = mi_new_n(SIZE_MAX/2, 4);
-      (void)(p);
-      result = false;
-    }
-    catch(std::bad_alloc) {
-      result = true;
-    }
-  }
-  #endif
-  #endif
-
   // ---------------------------------------------------
   // Malloc
   // ---------------------------------------------------
@@ -319,12 +299,22 @@ int main(void) {
         for(int i = 0; i < 10 && ok; i++) {
           mi_free(p[i]);
         }
-        /*
-        if (ok && align <= size && ((size + MI_PADDING_SIZE) & (align-1)) == 0) {
-          size_t bsize = mi_good_size(size);
-          ok = (align <= bsize && (bsize & (align-1)) == 0);
+      }
+    }
+    result = ok;
+  }
+  CHECK_BODY("mimalloc-size-aligned14") {
+    bool ok = true;
+    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size++ ) {
+      for(size_t align = 1; align <= 16*size && ok; align *= 2) {
+        void* p[10];
+        for(int i = 0; i < 10 && ok; i++) {
+          p[i] = mi_malloc_aligned(size,align);;
+          ok = (p[i] != NULL && ((uintptr_t)(p[i]) % align) == 0);
         }
-        */
+        for(int i = 0; i < 10 && ok; i++) {
+          mi_free_size_aligned(p[i],size,align);
+        }
       }
     }
     result = ok;
@@ -355,9 +345,7 @@ int main(void) {
       memset(junk, 0xAB, size);
       mi_free(junk);
       uint8_t* z = (uint8_t*)mi_theap_zalloc_csize(theap, size);
-      for (size_t i = 0; i < size; i++) {
-        if (z[i] != 0) { ok = false; break; }
-      }
+      ok = mem_is_zero(z, size);
       mi_free(z);
     }
     result = ok;
@@ -493,6 +481,29 @@ int main(void) {
   #if (MI_SIZE_SIZE > 4)
   CHECK_BODY("arena_reserve") {
     result = (0==mi_reserve_os_memory(16*MI_GiB,false,true));
+  }
+  #endif
+
+
+  // ---------------------------------------------------
+  // C++
+  // ---------------------------------------------------
+  
+  #if defined(__cplusplus) && !defined(_MSC_VER)  
+  CHECK_BODY("c++ new-handler") {
+    std::set_new_handler([]{ throw std::bad_alloc(); });
+    void* p = mi_new_nothrow(SIZE_MAX/2);
+    result = (p==NULL);
+  }
+  CHECK_BODY("c++ new handler2") {
+    try {
+      void* p = mi_new_n(SIZE_MAX/2, 4);
+      (void)(p);
+      result = false;
+    }
+    catch(std::bad_alloc) {
+      result = true;
+    }
   }
   #endif
 
