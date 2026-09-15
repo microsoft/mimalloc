@@ -78,7 +78,7 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was
   #endif
 
   // push atomically on the page thread free list
-  mi_theap_t* theap = _mi_page_associated_theap_peek(page);
+  // mi_theap_t* theap = _mi_page_associated_theap_peek(page);
   mi_thread_free_t tf_new;
   mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
   do {
