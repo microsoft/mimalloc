@@ -48,26 +48,10 @@ static mi_decl_noinline mi_decl_restrict void* mi_theap_malloc_guarded_aligned(m
   return p;
 }
 #endif
-#if MI_GUARDED
-static void* mi_theap_malloc_zero_no_guarded(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) {
-  // #if MI_THEAP_INITASNULL
-  // if mi_unlikely(theap==NULL) { theap = _mi_theap_empty_get(); }
-  // #endif
-  // const size_t rate = theap->guarded_sample_rate;
-  // only write if `rate!=0` so we don't write to the constant `_mi_theap_empty`
-  // if (rate != 0) { theap->guarded_sample_rate = 0; }
-  void* p = _mi_theap_malloc_zero(theap, size, zero, 0, ppage);
-  // if (rate != 0) { theap->guarded_sample_rate = rate; }
-  return p;
-}
-#else
-static void* mi_theap_malloc_zero_no_guarded(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) {
-  return _mi_theap_malloc_zero(theap, size, zero, 0, ppage);
-}
-#endif
+
 
 // Fallback aligned allocation that over-allocates -- split out for better codegen
-static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap_t* const theap, const size_t size, const size_t alignment, const size_t offset, const bool zero, mi_page_t** ppage) mi_attr_noexcept
+static mi_decl_noinline void* mi_xtheap_malloc_zero_aligned_at_overalloc(mi_theap_t* const xtheap, const size_t size, const size_t alignment, const size_t offset, const bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
   mi_assert_internal(size <= (MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE));
   mi_assert_internal(mi_alignment_is_valid(alignment));
@@ -86,7 +70,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
     }
     oversize = (size <= MI_SMALL_SIZE_MAX ? MI_SMALL_SIZE_MAX + 1 /* ensure we use generic malloc path */ : size);
     // note: no guarded as alignment > 0
-    p = _mi_theap_malloc_zero(theap, oversize, zero, alignment, &page); // the page block size should be large enough to align in the single huge page block
+    p = _mi_xtheap_malloc_zero(xtheap, oversize, zero, alignment, &page); // the page block size should be large enough to align in the single huge page block
     if (p == NULL) return NULL;
   }
   else {
@@ -94,7 +78,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
     mi_assert_internal(size <= (MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE) && alignment <= MI_PAGE_MAX_OVERALLOC_ALIGN);
     mi_assert_internal(size < SIZE_MAX - alignment); // `oversize` cannot overflow
     oversize = (size < MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : size) + alignment - 1;  // adjust for size <= 16; with size 0 and alignment 64k, we would allocate a 64k block and pointing just beyond that.
-    p = mi_theap_malloc_zero_no_guarded(theap, oversize, zero, &page);
+    p = _mi_xtheap_malloc_zero(xtheap, oversize, zero, 0, &page);
     if (p == NULL) return NULL;
   }
   mi_assert_internal(page == _mi_ptr_page(p));
@@ -148,7 +132,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
 }
 
 // Generic primitive aligned allocation -- split out for better codegen
-static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_generic(mi_theap_t* const theap, const size_t size, const size_t alignment, const size_t offset, const bool zero, mi_page_t** ppage) mi_attr_noexcept
+static mi_decl_noinline void* mi_xtheap_malloc_zero_aligned_at_generic(mi_theap_t* const xtheap, const size_t size, const size_t alignment, const size_t offset, const bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
   mi_assert_internal(mi_alignment_is_valid(alignment));
   // we don't allocate more than MI_MAX_ALLOC_SIZE (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
@@ -161,17 +145,17 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_generic(mi_theap_t
   // this is important to try as the fast path in `mi_theap_malloc_zero_aligned` only works when there exist
   // a page with the right block size, and if we always use the over-alloc fallback that would never happen.
   #if MI_THEAP_INITASNULL
-  if mi_likely(theap!=NULL)
+  if mi_likely(xtheap!=NULL)
   #endif
   {
     #if MI_SAMPLE  // only try if we would not take a sample
-    if mi_likely(!mi_theap_should_sample(theap,size))
+    if mi_likely(!mi_theap_should_sample(xtheap,size))
     #endif
     {
       if (offset == 0 && mi_malloc_is_naturally_aligned(size,alignment))    
       {
         mi_page_t* page = NULL;
-        void* p = mi_theap_malloc_zero_no_guarded(theap, size, zero, &page);
+        void* p = _mi_xtheap_malloc_zero(xtheap, size, zero, 0,&page);
         if (ppage!=NULL) { *ppage = page; }    
         const bool is_aligned_or_null = (((uintptr_t)p) & (alignment-1))==0;
         if mi_likely(is_aligned_or_null) {
@@ -188,7 +172,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_generic(mi_theap_t
   }
 
   // fall back to over-allocation
-  return mi_theap_malloc_zero_aligned_at_overalloc(theap,size,alignment,offset,zero,ppage);
+  return mi_xtheap_malloc_zero_aligned_at_overalloc(xtheap,size,alignment,offset,zero,ppage);
 }
 
 
@@ -198,7 +182,7 @@ static mi_decl_cold mi_decl_noinline void* mi_error_bad_alignment(size_t size, s
 }
 
 // Primitive aligned allocation
-static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, const size_t size, const size_t alignment, const size_t offset, const bool zero, mi_page_t** ppage) mi_attr_noexcept
+static inline void* mi_xtheap_malloc_zero_aligned_at(mi_theap_t* const xtheap, const size_t size, const size_t alignment, const size_t offset, const bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
   // note: we don't require `size > offset`, we just guarantee that the address at offset is aligned regardless of the allocated size.
   if mi_unlikely(!mi_alignment_is_valid(alignment)) { // require power-of-two and multiple of void* (see <https://en.cppreference.com/w/c/memory/aligned_alloc#Notes>)
@@ -211,22 +195,22 @@ static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, con
   if mi_likely(size <= MI_SMALL_SIZE_MAX && alignment <= size)
   {
     #if MI_THEAP_INITASNULL
-    if mi_likely(theap!=NULL)
+    if mi_likely(xtheap!=NULL)
     #endif
     {
       #if MI_SAMPLE  // check if we shouldn't take a sample
-      if mi_likely(!mi_theap_should_sample(theap,size))
+      if mi_likely(!mi_theap_should_sample(xtheap,size))
       #endif      
       {
         const uintptr_t align_mask = alignment-1;       // for any x, `(x & align_mask) == (x % alignment)`
         const size_t padsize = size + MI_PADDING_SIZE;
-        mi_page_t* page = _mi_theap_get_free_small_page(theap, padsize, false);
+        mi_page_t* page = _mi_theap_get_free_small_page(xtheap, padsize, false);
         if mi_likely(page->free != NULL) {
           const bool is_aligned = (((uintptr_t)page->free + offset) & align_mask)==0;
           if mi_likely(is_aligned)
           {
             if (ppage!=NULL) { *ppage = page; }
-            void* p = _mi_page_malloc_zero(theap, page, padsize, zero);
+            void* p = _mi_page_malloc_zero(xtheap, page, padsize, zero); // xtheap!=NULL
             mi_assert_internal(p != NULL);
             mi_assert_internal(((uintptr_t)p + offset) % alignment == 0);
             mi_track_malloc(p, size, zero);
@@ -238,7 +222,7 @@ static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, con
   }
 
   // fallback to generic aligned allocation
-  return mi_theap_malloc_zero_aligned_at_generic(theap, size, alignment, offset, zero, ppage);
+  return mi_xtheap_malloc_zero_aligned_at_generic(xtheap, size, alignment, offset, zero, ppage);
 }
 
 
@@ -246,30 +230,30 @@ static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, con
 // Internal mi_theap_malloc_aligned / mi_malloc_aligned
 // ------------------------------------------------------
 
-static mi_decl_restrict void* mi_theap_malloc_aligned_at(mi_theap_t* theap, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_malloc_zero_aligned_at(theap, size, alignment, offset, false, NULL);
+static mi_decl_restrict void* mi_theap_malloc_aligned_at(mi_theap_t* xtheap, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
+  return mi_xtheap_malloc_zero_aligned_at(xtheap, size, alignment, offset, false, NULL);
 }
 
-mi_decl_nodiscard mi_decl_restrict void* mi_theap_malloc_aligned(mi_theap_t* theap, size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_theap_malloc_aligned_at(theap, size, alignment, 0);
+mi_decl_nodiscard mi_decl_restrict void* mi_theap_malloc_aligned(mi_theap_t* xtheap, size_t size, size_t alignment) mi_attr_noexcept {
+  return mi_theap_malloc_aligned_at(xtheap, size, alignment, 0);
 }
 
-static mi_decl_restrict void* mi_theap_zalloc_aligned_at(mi_theap_t* theap, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_malloc_zero_aligned_at(theap, size, alignment, offset, true, NULL);
+static mi_decl_restrict void* mi_theap_zalloc_aligned_at(mi_theap_t* xtheap, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
+  return mi_xtheap_malloc_zero_aligned_at(xtheap, size, alignment, offset, true, NULL);
 }
 
-mi_decl_restrict void* mi_theap_zalloc_aligned(mi_theap_t* theap, size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_theap_zalloc_aligned_at(theap, size, alignment, 0);
+mi_decl_restrict void* mi_theap_zalloc_aligned(mi_theap_t* xtheap, size_t size, size_t alignment) mi_attr_noexcept {
+  return mi_theap_zalloc_aligned_at(xtheap, size, alignment, 0);
 }
 
-static mi_decl_restrict void* mi_theap_calloc_aligned_at(mi_theap_t* theap, size_t count, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
+static mi_decl_restrict void* mi_theap_calloc_aligned_at(mi_theap_t* xtheap, size_t count, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
   size_t total;
   if (mi_count_size_overflow(count, size, &total)) return NULL;
-  return mi_theap_zalloc_aligned_at(theap, total, alignment, offset);
+  return mi_theap_zalloc_aligned_at(xtheap, total, alignment, offset);
 }
 
-static mi_decl_restrict void* mi_theap_calloc_aligned(mi_theap_t* theap, size_t count, size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_theap_calloc_aligned_at(theap, count, size, alignment, 0);
+static mi_decl_restrict void* mi_theap_calloc_aligned(mi_theap_t* xtheap, size_t count, size_t size, size_t alignment) mi_attr_noexcept {
+  return mi_theap_calloc_aligned_at(xtheap, count, size, alignment, 0);
 }
 
 
@@ -287,7 +271,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_malloc_aligned(size_t size, size_t a
 
 mi_decl_nodiscard mi_decl_restrict void* mi_umalloc_aligned(size_t size, size_t alignment, size_t* pblock_size) mi_attr_noexcept {
   mi_page_t* page;
-  void* p = mi_theap_malloc_zero_aligned_at(_mi_theap_default(), size, alignment, 0, false, &page);
+  void* p = mi_xtheap_malloc_zero_aligned_at(_mi_theap_default(), size, alignment, 0, false, &page);
   if (p!=NULL && pblock_size!=NULL) { *pblock_size = mi_page_block_size(page); }
   return p;
 }
@@ -302,7 +286,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_zalloc_aligned(size_t size, size_t a
 
 mi_decl_nodiscard mi_decl_restrict void* mi_uzalloc_aligned(size_t size, size_t alignment, size_t* pblock_size) mi_attr_noexcept {
   mi_page_t* page;
-  void* p = mi_theap_malloc_zero_aligned_at(_mi_theap_default(), size, alignment, 0, true, &page);
+  void* p = mi_xtheap_malloc_zero_aligned_at(_mi_theap_default(), size, alignment, 0, true, &page);
   if (p!=NULL && pblock_size!=NULL) { *pblock_size = mi_page_block_size(page); }
   return p;
 }
@@ -345,13 +329,13 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_calloc_aligned(mi_heap_t* heap,
 // Aligned re-allocation
 // ------------------------------------------------------
 
-static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t newsize, size_t alignment, size_t offset, bool zero) mi_attr_noexcept {
+static void* mi_xtheap_realloc_zero_aligned_at(mi_theap_t* xtheap, void* p, size_t newsize, size_t alignment, size_t offset, bool zero) mi_attr_noexcept {
   mi_assert(mi_alignment_is_valid(alignment));
   if mi_unlikely(!mi_alignment_is_valid(alignment)) { // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
     return mi_error_bad_alignment(newsize,alignment,offset);
   }
-  if (alignment <= sizeof(uintptr_t) && offset==0) return _mi_theap_realloc_zero(theap,p,newsize,zero);
-  if (p == NULL) return mi_theap_malloc_zero_aligned_at(theap,newsize,alignment,offset,zero,NULL);
+  if (alignment <= sizeof(uintptr_t) && offset==0) return _mi_xtheap_realloc_zero(xtheap,p,newsize,zero);
+  if (p == NULL) return mi_xtheap_malloc_zero_aligned_at(xtheap,newsize,alignment,offset,zero,NULL);
   const size_t size = mi_usable_size(p);
   if (newsize <= size && newsize >= (size - (size / 2)) && (((uintptr_t)p + offset) & (alignment-1)) == 0) {
     return p;  // reallocation still fits, is aligned and not more than 50% waste
@@ -359,7 +343,7 @@ static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t
   else {
     // note: we don't zero allocate upfront so we only zero initialize the expanded part (at the cost of calling mi_usable_size)
     mi_page_t* newpage;
-    void* const newp = mi_theap_malloc_zero_aligned_at(theap,newsize,alignment,offset,false/*zero?*/,&newpage);
+    void* const newp = mi_xtheap_malloc_zero_aligned_at(xtheap,newsize,alignment,offset,false/*zero?*/,&newpage);
     if (newp != NULL) {
       const size_t copy_size  = (newsize > size ? size : newsize);
       const size_t zero_start = (copy_size >= sizeof(intptr_t) ? copy_size - sizeof(intptr_t) : 0); // also set last word in the previous allocation to zero to ensure any padding is zero-initialized    
@@ -376,88 +360,88 @@ static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t
   }
 }
 
-static void* mi_theap_realloc_zero_aligned(mi_theap_t* theap, void* p, size_t newsize, size_t alignment, bool zero) mi_attr_noexcept {
+static void* mi_xtheap_realloc_zero_aligned(mi_theap_t* xtheap, void* p, size_t newsize, size_t alignment, bool zero) mi_attr_noexcept {
   mi_assert(alignment > 0);
-  if (alignment <= sizeof(uintptr_t)) return _mi_theap_realloc_zero(theap,p,newsize,zero);
-  return mi_theap_realloc_zero_aligned_at(theap,p,newsize,alignment,0,zero);
+  if (alignment <= sizeof(uintptr_t)) return _mi_xtheap_realloc_zero(xtheap,p,newsize,zero);
+  return mi_xtheap_realloc_zero_aligned_at(xtheap,p,newsize,alignment,0,zero);
 }
 
-static void* mi_theap_realloc_aligned_at(mi_theap_t* theap, void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_realloc_zero_aligned_at(theap,p,newsize,alignment,offset,false);
+static void* mi_xtheap_realloc_aligned_at(mi_theap_t* xtheap, void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
+  return mi_xtheap_realloc_zero_aligned_at(xtheap,p,newsize,alignment,offset,false);
 }
 
-static void* mi_theap_realloc_aligned(mi_theap_t* theap, void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
-  return mi_theap_realloc_zero_aligned(theap,p,newsize,alignment,false);
+static void* mi_xtheap_realloc_aligned(mi_theap_t* xtheap, void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
+  return mi_xtheap_realloc_zero_aligned(xtheap,p,newsize,alignment,false);
 }
 
-static void* mi_theap_rezalloc_aligned_at(mi_theap_t* theap, void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_realloc_zero_aligned_at(theap, p, newsize, alignment, offset, true);
+static void* mi_xtheap_rezalloc_aligned_at(mi_theap_t* xtheap, void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
+  return mi_xtheap_realloc_zero_aligned_at(xtheap, p, newsize, alignment, offset, true);
 }
 
-static void* mi_theap_rezalloc_aligned(mi_theap_t* theap, void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
-  return mi_theap_realloc_zero_aligned(theap, p, newsize, alignment, true);
+static void* mi_xtheap_rezalloc_aligned(mi_theap_t* xtheap, void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
+  return mi_xtheap_realloc_zero_aligned(xtheap, p, newsize, alignment, true);
 }
 
-static void* mi_theap_recalloc_aligned_at(mi_theap_t* theap, void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
+static void* mi_xtheap_recalloc_aligned_at(mi_theap_t* xtheap, void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
   size_t total;
   if (mi_count_size_overflow(newcount, size, &total)) return NULL;
-  return mi_theap_rezalloc_aligned_at(theap, p, total, alignment, offset);
+  return mi_xtheap_rezalloc_aligned_at(xtheap, p, total, alignment, offset);
 }
 
-static void* mi_theap_recalloc_aligned(mi_theap_t* theap, void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept {
+static void* mi_xtheap_recalloc_aligned(mi_theap_t* xtheap, void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept {
   size_t total;
   if (mi_count_size_overflow(newcount, size, &total)) return NULL;
-  return mi_theap_rezalloc_aligned(theap, p, total, alignment);
+  return mi_xtheap_rezalloc_aligned(xtheap, p, total, alignment);
 }
 
 
 mi_decl_nodiscard void* mi_realloc_aligned_at(void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_realloc_aligned_at(_mi_theap_default(), p, newsize, alignment, offset);
+  return mi_xtheap_realloc_aligned_at(_mi_theap_default(), p, newsize, alignment, offset);
 }
 
 mi_decl_nodiscard void* mi_realloc_aligned(void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
-  return mi_theap_realloc_aligned(_mi_theap_default(), p, newsize, alignment);
+  return mi_xtheap_realloc_aligned(_mi_theap_default(), p, newsize, alignment);
 }
 
 mi_decl_nodiscard void* mi_rezalloc_aligned_at(void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_rezalloc_aligned_at(_mi_theap_default(), p, newsize, alignment, offset);
+  return mi_xtheap_rezalloc_aligned_at(_mi_theap_default(), p, newsize, alignment, offset);
 }
 
 mi_decl_nodiscard void* mi_rezalloc_aligned(void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
-  return mi_theap_rezalloc_aligned(_mi_theap_default(), p, newsize, alignment);
+  return mi_xtheap_rezalloc_aligned(_mi_theap_default(), p, newsize, alignment);
 }
 
 mi_decl_nodiscard void* mi_recalloc_aligned_at(void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_recalloc_aligned_at(_mi_theap_default(), p, newcount, size, alignment, offset);
+  return mi_xtheap_recalloc_aligned_at(_mi_theap_default(), p, newcount, size, alignment, offset);
 }
 
 mi_decl_nodiscard void* mi_recalloc_aligned(void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_theap_recalloc_aligned(_mi_theap_default(), p, newcount, size, alignment);
+  return mi_xtheap_recalloc_aligned(_mi_theap_default(), p, newcount, size, alignment);
 }
 
 
 mi_decl_nodiscard void* mi_heap_realloc_aligned_at(mi_heap_t* heap, void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_realloc_aligned_at(_mi_heap_theap(heap), p, newsize, alignment, offset);
+  return mi_xtheap_realloc_aligned_at(_mi_heap_theap(heap), p, newsize, alignment, offset);
 }
 
 mi_decl_nodiscard void* mi_heap_realloc_aligned(mi_heap_t* heap, void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
-  return mi_theap_realloc_aligned(_mi_heap_theap(heap), p, newsize, alignment);
+  return mi_xtheap_realloc_aligned(_mi_heap_theap(heap), p, newsize, alignment);
 }
 
 mi_decl_nodiscard void* mi_heap_rezalloc_aligned_at(mi_heap_t* heap, void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_rezalloc_aligned_at(_mi_heap_theap(heap), p, newsize, alignment, offset);
+  return mi_xtheap_rezalloc_aligned_at(_mi_heap_theap(heap), p, newsize, alignment, offset);
 }
 
 mi_decl_nodiscard void* mi_heap_rezalloc_aligned(mi_heap_t* heap, void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
-  return mi_theap_rezalloc_aligned(_mi_heap_theap(heap), p, newsize, alignment);
+  return mi_xtheap_rezalloc_aligned(_mi_heap_theap(heap), p, newsize, alignment);
 }
 
 mi_decl_nodiscard void* mi_heap_recalloc_aligned_at(mi_heap_t* heap, void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
-  return mi_theap_recalloc_aligned_at(_mi_heap_theap(heap), p, newcount, size, alignment, offset);
+  return mi_xtheap_recalloc_aligned_at(_mi_heap_theap(heap), p, newcount, size, alignment, offset);
 }
 
 mi_decl_nodiscard void* mi_heap_recalloc_aligned(mi_heap_t* heap, void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept {
-  return mi_theap_recalloc_aligned(_mi_heap_theap(heap), p, newcount, size, alignment);
+  return mi_xtheap_recalloc_aligned(_mi_heap_theap(heap), p, newcount, size, alignment);
 }
 
 

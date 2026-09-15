@@ -55,6 +55,9 @@ bool test_stl_theap_allocator3(void);
 bool test_stl_theap_allocator4(void);
 
 static bool test_zero_aligned_first(void);
+#ifdef __cplusplus
+static bool test_new_first(void);
+#endif
 
 static bool mem_has_vals(const uint8_t* p, size_t size, uint8_t val) {
   if (p==NULL) return false;
@@ -569,9 +572,15 @@ int main(void) {
   // ---------------------------------------------------
   // Threads
   // ---------------------------------------------------
-  CHECK_BODY("zero_aligned_first") {
+  CHECK_BODY("thread_zero_aligned_first") {
     result = mi_run_on_thread(&test_zero_aligned_first);
   }
+  
+  #ifdef __cplusplus
+  CHECK_BODY("thread_new_first") {
+    result = mi_run_on_thread(&test_new_first);
+  }
+  #endif
   
   //mi_stats_print(NULL);
 
@@ -749,4 +758,13 @@ static bool test_zero_aligned_first(void) {
   return res;
 }
 
+
+#ifdef __cplusplus
+static bool test_new_first(void) {
+  char* p = (char*)mi_new(20);
+  bool res = (p != NULL && (uintptr_t)(p) % 16 == 0);
+  mi_free_csize(p,20);
+  return res;
+}
+#endif
 
