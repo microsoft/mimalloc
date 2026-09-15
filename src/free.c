@@ -248,7 +248,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
   mi_assert_internal(page!=NULL);
   mi_assert(cpage==page /* page_map lookup should be the same as aligned lookup */ );      
   #if !MI_GUARDED
-  if (free_small) { mi_assert_internal(page->block_size <= mi_good_size(MI_SMALL_SIZE_MAX) /* free small should only be called on small pages */); }
+  if (free_small) { mi_assert_internal(page->block_size <= MI_SMALL_MAX_OBJ_SIZE) /* free small should only be called on small pages */); }
   #endif
   *ppage = page;
   return true;
