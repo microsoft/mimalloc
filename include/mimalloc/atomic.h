@@ -98,24 +98,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_atomic_increment_acq_rel(p)           mi_atomic_add_acq_rel(p,(size_t)1)
 #define mi_atomic_decrement_acq_rel(p)           mi_atomic_sub_acq_rel(p,(size_t)1)
 
-static inline mi_ssize_t mi_atomic_addi_acq_rel(_Atomic(mi_ssize_t)*p, mi_ssize_t add) {
-  return (mi_ssize_t)mi_atomic_add_acq_rel((_Atomic(size_t)*)p, (size_t)add);
-}
-static inline mi_ssize_t mi_atomic_subi_acq_rel(_Atomic(mi_ssize_t)*p, mi_ssize_t sub) {
-  return (mi_ssize_t)mi_atomic_addi_acq_rel(p, -sub);
-}
-static inline mi_ssize_t mi_atomic_addi_relaxed(_Atomic(mi_ssize_t)*p, mi_ssize_t add) {
-  return (mi_ssize_t)mi_atomic_add_relaxed((_Atomic(size_t)*)p, (size_t)add);
-}
-static inline mi_ssize_t mi_atomic_subi_relaxed(_Atomic(mi_ssize_t)*p, mi_ssize_t sub) {
-  return (mi_ssize_t)mi_atomic_addi_relaxed(p, -sub);
-}
-static inline void mi_atomic_storess_relaxed(_Atomic(mi_ssize_t)* p, mi_ssize_t x) {
-  mi_atomic_store_relaxed((_Atomic(size_t)*)p, (size_t)x);
-}
-static inline mi_ssize_t mi_atomic_loads_relaxed(_Atomic(mi_ssize_t)* p) {
-  return (mi_ssize_t)mi_atomic_load_relaxed((_Atomic(size_t)*)p);
-}
+static inline mi_ssize_t mi_atomic_addi_acq_rel(_Atomic(mi_ssize_t)*p, mi_ssize_t add);
+static inline mi_ssize_t mi_atomic_subi_acq_rel(_Atomic(mi_ssize_t)*p, mi_ssize_t sub);
+static inline mi_ssize_t mi_atomic_addi_relaxed(_Atomic(mi_ssize_t)*p, mi_ssize_t add);
+static inline mi_ssize_t mi_atomic_subi_relaxed(_Atomic(mi_ssize_t)*p, mi_ssize_t sub);
+static inline void       mi_atomic_storess_relaxed(_Atomic(mi_ssize_t)* p, mi_ssize_t x);
+static inline mi_ssize_t mi_atomic_loads_relaxed(_Atomic(mi_ssize_t)* p);
 
 
 #if defined(__cplusplus) || !defined(_MSC_VER)
@@ -400,6 +388,24 @@ static inline bool mi_atomic_casi64_strong_acq_rel(volatile _Atomic(int64_t)* p,
 
 #endif
 
+static inline mi_ssize_t mi_atomic_addi_acq_rel(_Atomic(mi_ssize_t)*p, mi_ssize_t add) {
+  return (mi_ssize_t)mi_atomic_add_acq_rel((_Atomic(size_t)*)p, (size_t)add);
+}
+static inline mi_ssize_t mi_atomic_subi_acq_rel(_Atomic(mi_ssize_t)*p, mi_ssize_t sub) {
+  return (mi_ssize_t)mi_atomic_addi_acq_rel(p, -sub);
+}
+static inline mi_ssize_t mi_atomic_addi_relaxed(_Atomic(mi_ssize_t)*p, mi_ssize_t add) {
+  return (mi_ssize_t)mi_atomic_add_relaxed((_Atomic(size_t)*)p, (size_t)add);
+}
+static inline mi_ssize_t mi_atomic_subi_relaxed(_Atomic(mi_ssize_t)*p, mi_ssize_t sub) {
+  return (mi_ssize_t)mi_atomic_addi_relaxed(p, -sub);
+}
+static inline void mi_atomic_storess_relaxed(_Atomic(mi_ssize_t)* p, mi_ssize_t x) {
+  mi_atomic_store_relaxed((_Atomic(size_t)*)p, (size_t)x);
+}
+static inline mi_ssize_t mi_atomic_loads_relaxed(_Atomic(mi_ssize_t)* p) {
+  return (mi_ssize_t)mi_atomic_load_relaxed((_Atomic(size_t)*)p);
+}
 
 // ----------------------------------------------------------------------
 // Guard

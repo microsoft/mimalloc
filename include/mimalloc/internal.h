@@ -127,6 +127,8 @@ bool          _mi_strlcat(char* dest, const char* src, size_t dest_size); // ret
 size_t        _mi_strlen(const char* s);
 size_t        _mi_strnlen(const char* s, size_t max_len);
 char*         _mi_strnstr(char* s, size_t max_len, const char* pat);
+const char*   _mi_strchr(const char* s, char c);
+const char*   _mi_strrchr(const char* s, char c);
 bool          _mi_streq(const char* s, const char* t);
 int           _mi_getenv(const char* name, char* result, size_t result_size);
 void          _mi_detect_cpu_features(void);

@@ -117,7 +117,7 @@ void _mi_pprof_profiler_init(void) {
   if (_mi_getenv("mimalloc_profile", fname, sizeof(fname)) != 0 || fname[0] == 0) return;  // `MIMALLOC_PROFILE` not set
   const size_t sample_rate   = mi_option_get_size(mi_option_profile_sample_rate);           // 16 KiB by default
   const size_t interval_size = mi_option_get_size(mi_option_profile_alloc_interval);        // 0 by default (no automatic interval dumps)
-  mi_profiler_t* profiler = mi_pprof_profiler_new(sample_rate, fname, false, interval_size);
+  mi_profiler_t* profiler = mi_pprof_profiler_new(sample_rate, fname, interval_size);
   if (profiler == NULL) return;
   mi_profile_env_profiler = profiler;
   _mi_verbose_message("pprof profiler initialized with base file name: %s\n", fname);
@@ -254,8 +254,11 @@ static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t*
   }
 }
 
-// Create a new profiler
-mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, bool format_text, size_t interval_size) {
+// Create a new profiler. If `base_file_name` ends with a recognized extension (`.heap` or `.text`),
+// that extension selects the text dump format and is stripped from the stored base file name
+// (the actual dump files always get their own `.<seq>.heap`/`.<seq>.pb` extension, see `mi_pprof_profiler_dump`).
+// Any other extension (or none) keeps the default (protobuf) dump format and is left untouched.
+mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, size_t interval_size) {
   // heap just for the profiler itself
   mi_heap_t* heap = mi_heap_new();
   mi_heap_profile_disable(heap);  // don't sample allocations in this heap
@@ -266,7 +269,22 @@ mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_
   prof->sample_threshold = initial_threshold;
   prof->profile_heap = heap;
   prof->base_file_name = (base_file_name != NULL ? mi_heap_strndup(heap, base_file_name, 1024) : NULL);
-  prof->format_text = format_text;
+  prof->format_text = false;  // default: protobuf format, unless overridden by a recognized extension below
+  if (prof->base_file_name != NULL) {
+    // only look for a '.' extension after the last path separator (if any)
+    const char* start = prof->base_file_name;
+    const char* sep = _mi_strrchr(start, '/');
+    if (sep != NULL) start = sep + 1;
+    sep = _mi_strrchr(start, '\\');
+    if (sep != NULL) start = sep + 1;
+    const char* dot = _mi_strrchr(start, '.');
+    if (dot != NULL) {
+      if (_mi_streq(dot + 1, "heap") || _mi_streq(dot + 1, "text")) {
+        prof->format_text = true;
+      }
+      prof->base_file_name[dot - prof->base_file_name] = 0;  // always strip the extension, whether recognized or not
+    }
+  }
   prof->interval_size = (interval_size > (size_t)MI_SSIZE_MAX ? (size_t)MI_SSIZE_MAX : interval_size);  // cap so it always fits in a `mi_ssize_t`
   mi_atomic_storess_relaxed(&prof->interval_countdown, (mi_ssize_t)prof->interval_size);  // 0 if disabled: `on_alloc` never decrements/checks in that case
   if (!mi_locations_init(heap, &prof->locations)) {

@@ -88,6 +88,24 @@ char* _mi_strnstr(char* s, size_t max_len, const char* pat) {
   return NULL;
 }
 
+const char* _mi_strchr(const char* s, char c) {
+  if (s==NULL) return NULL;
+  for (; *s != 0; s++) {
+    if (*s == c) return s;
+  }
+  return (c == 0 ? s : NULL);
+}
+
+// backward search: like `strrchr`, returns the last occurrence of `c` in `s`, or NULL if not found.
+const char* _mi_strrchr(const char* s, char c) {
+  if (s==NULL) return NULL;
+  const char* last = (c == 0 ? s + _mi_strlen(s) : NULL);
+  for (; *s != 0; s++) {
+    if (*s == c) last = s;
+  }
+  return last;
+}
+
 #ifdef MI_NO_GETENV
 int _mi_getenv(const char* name, char* result, size_t result_size) {
   MI_UNUSED(name);
