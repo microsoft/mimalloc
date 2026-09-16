@@ -49,7 +49,7 @@ static mi_decl_noinline void mi_page_block_setup_padding(mi_page_t* page, mi_blo
 // Fast allocation in a page: just pop from the free list.
 // Fall back to generic allocation only if the list is empty.
 // Note: even though there is a lot of checks etc in the source,
-// in release mode the (inlined) routine is about 7 instructions with a single test.
+// in release mode the (inlined) routine is about 7 to 10 instructions with a single test.
 static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, size_t sample_countdown, bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
   if (page->block_size != 0) { // not the empty theap
