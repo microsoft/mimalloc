@@ -454,13 +454,18 @@ static size_t mi_arena_start_idx(mi_heap_t* heap, size_t tseq, size_t arena_cycl
 #define mi_forall_arenas(heap, req_arena, tseq, name_arena) { \
   const size_t _arena_count = mi_arenas_get_count(heap->subproc); \
   const size_t _arena_cycle = (_arena_count == 0 ? 0 : _arena_count - 1); /* first search the arenas below the last one */ \
+  const size_t _arena_iterations = _arena_count + (req_arena == NULL ? 0 : 1); \
   /* always start searching in the arena's below the max */ \
   const size_t _start = mi_arena_start_idx(heap,tseq,_arena_cycle); \
-  for (size_t _i = 0; _i < _arena_count; _i++) { \
+  for (size_t _i = 0; _i < _arena_iterations; _i++) { \
     mi_arena_t* name_arena; \
     if (req_arena != NULL) { \
-      name_arena = req_arena; /* if there is a specific req_arena, only search that one */\
-      if (_i > 0) break;      /* only once */ \
+      name_arena = _i == 0 \
+        ? req_arena \
+        : mi_arena_from_index(heap->subproc,_i - 1); \
+      if (name_arena == req_arena && _i > 0) { \
+        continue; /* parent was searched first, skip it in this cycle */ \
+      } \
     } \
     else { \
       size_t _idx; \
