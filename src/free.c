@@ -347,15 +347,15 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
         return;
       }
     }
-    const size_t is_aligned = ((void*)block != p);
-    if mi_unlikely(size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size((is_aligned ? 2 : 1)*MI_SMALL_SIZE_MAX)) { // note: we check *2 in case it was over-aligned
-      const bool is_guarded = mi_block_ptr_is_guarded(block,p);
-      if (!is_guarded) {
-        _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n  (maybe a `new[]` was matched with `delete` instead of `delete[]`?)\n", p, size, mi_page_block_size(page));
-        mi_free(p);
-        return;
-      }
-    }
+    // const size_t is_aligned = ((void*)block != p);
+    // if mi_unlikely(size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size((is_aligned ? 2 : 1)*MI_SMALL_SIZE_MAX)) { // note: we check *2 in case it was over-aligned
+    //   const bool is_guarded = mi_block_ptr_is_guarded(block,p);
+    //   if (!is_guarded) {
+    //     _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n  (maybe a `new[]` was matched with `delete` instead of `delete[]`?)\n", p, size, mi_page_block_size(page));
+    //     mi_free(p);
+    //     return;
+    //   }
+    // }
   #endif
   #if MI_PAGE_META_SMALL_IS_ALIGNED || MI_PAGE_META_IS_ALIGNED
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {

@@ -385,6 +385,20 @@ int main(void) {
     mi_free(ptr);
   }
 
+  CHECK_BODY("heap_aligned1") {
+    mi_heap_t* heap = mi_heap_new();
+    const size_t alignment = 128 * 1024;  // 128 KiB
+    const size_t buffer_size = 1 * 1024 * 1024;  // 1 MiB
+    void* buffer = mi_heap_malloc_aligned(heap, buffer_size, alignment);
+    bool nonnull = (buffer != NULL);
+    assert(nonnull);
+    const bool is_aligned = ((uintptr_t)buffer % alignment) == 0;
+    assert(is_aligned);
+    mi_free(buffer);
+    mi_heap_destroy(heap);
+    result = (nonnull && is_aligned);
+  }
+
   // ---------------------------------------------------
   // Reallocation
   // ---------------------------------------------------
