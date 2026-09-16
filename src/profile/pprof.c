@@ -100,7 +100,8 @@ static inline pprof_profiler_t* downcast( mi_profiler_t* prof ) {
 // This allows profiling an arbitrary program (with no code changes) by
 // overriding its allocator with a mimalloc shared library build and setting
 // `MIMALLOC_PROFILE=<base_file_name>` 
-// (and optionally `MIMALLOC_PROFILE_ALLOC_INTERVAL=<KiB>` to periodically dump while the program is running).
+// (and optionally `MIMALLOC_PROFILE_ALLOC_INTERVAL=<KiB>` to periodically dump 
+// while the program is running).
 // ---------------------------------------------------------------------------
 
 #if MI_PROFILE
@@ -281,9 +282,17 @@ void mi_pprof_profiler_delete(mi_profiler_t* profiler) {
 #define MI_LOCATIONS_BUCKET_COUNT  (16 * 1024 - 3)  /* 16381, prime */
 
 // FNV-1a hash, mixed over the thread id and the callstack frame pointers.
+#if SIZE_MAX > UINT32_MAX
+#define MI_FNV_OFFSET_BASIS  ((size_t)0xcbf29ce484222325ULL)  // FNV-1a 64-bit offset basis
+#define MI_FNV_PRIME         ((size_t)0x100000001b3ULL)       // FNV-1a 64-bit prime
+#else
+#define MI_FNV_OFFSET_BASIS  ((size_t)0x811c9dc5UL)           // FNV-1a 32-bit offset basis
+#define MI_FNV_PRIME         ((size_t)0x01000193UL)           // FNV-1a 32-bit prime
+#endif
+
 static size_t mi_location_hash(mi_threadid_t thread_id, const mi_callstack_t* callstack) {
-  size_t hash = 0xcbf29ce484222325ULL;   // FNV offset basis
-  const size_t prime = 0x100000001b3ULL; // FNV prime
+  size_t hash = MI_FNV_OFFSET_BASIS;
+  const size_t prime = MI_FNV_PRIME;
   hash = (hash ^ (size_t)thread_id) * prime;
   for (size_t i = 0; i < callstack->count; i++) {
     hash = (hash ^ (size_t)((uintptr_t)callstack->frames[i])) * prime;
@@ -396,7 +405,6 @@ void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
 
 #include <stdio.h>      // FILE, fopen, fprintf, fclose
 #include <inttypes.h>   // PRIxPTR
-#include <string.h>     // strcmp
 #include <time.h>       // time
 
 
@@ -436,7 +444,14 @@ void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
 // Basic backtraces
 // ---------------------------------------------------------------------------
 
-#if MI_HAS_EXECINFOH
+#if _WIN32
+#include <windows.h>    // CaptureStackBackTrace
+static mi_decl_noinline size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
+  // skip this frame itself (1) plus our own internal wrapper frames (`MI_PPROF_SKIP_FRAMES`);
+  // no hash is needed as we compute our own
+  return (size_t)CaptureStackBackTrace((ULONG)(1 + MI_PPROF_SKIP_FRAMES), (ULONG)max_depth, buffer, NULL);
+}
+#elif MI_HAS_EXECINFOH
 #include <execinfo.h>   // backtrace
 static mi_decl_noinline size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
   const size_t skip = 1 + MI_PPROF_SKIP_FRAMES;  // +1 for `mi_prim_backtrace`'s own frame
@@ -446,15 +461,24 @@ static mi_decl_noinline size_t mi_prim_backtrace(void** buffer, size_t max_depth
   memmove(buffer, buffer + skip, depth * sizeof(void*));
   return depth;
 }
-#elif _WIN32
-#include <windows.h>    // CaptureStackBackTrace
+#elif MI_HAS_LIBUNWINDH
+#define UNW_LOCAL_ONLY
+#include <libunwind.h>  // unw_backtrace
 static mi_decl_noinline size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
-  // skip this frame itself (1) plus our own internal wrapper frames (`MI_PPROF_SKIP_FRAMES`);
-  // no hash is needed as we compute our own
-  return (size_t)CaptureStackBackTrace((ULONG)(1 + MI_PPROF_SKIP_FRAMES), (ULONG)max_depth, buffer, NULL);
+  // used as a fallback on platforms without `execinfo.h` (e.g. musl-based Linux
+  // distributions such as Alpine); `unw_backtrace` has the same signature/semantics
+  // as (glibc's) `backtrace`.
+  const size_t skip = 1 + MI_PPROF_SKIP_FRAMES;  // +1 for `mi_prim_backtrace`'s own frame
+  const size_t raw_depth = (size_t)unw_backtrace(buffer, (int)(max_depth + skip));
+  if (raw_depth <= skip) return 0;
+  const size_t depth = raw_depth - skip;
+  memmove(buffer, buffer + skip, depth * sizeof(void*));
+  return depth;
 }
 #else
 static size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
+  MI_UNUSED(buffer);
+  MI_UNUSED(max_depth);
   return 0;
 }
 #endif
@@ -594,7 +618,7 @@ static bool mi_macho_image_range(const struct mach_header* mh, intptr_t slide, u
     const struct load_command* lc = (const struct load_command*)cmd_ptr;
     if (is64 && lc->cmd == LC_SEGMENT_64) {
       const struct segment_command_64* seg = (const struct segment_command_64*)lc;
-      if (strcmp(seg->segname, SEG_TEXT) == 0) {
+      if (_mi_streq(seg->segname, SEG_TEXT)) {
         *start = (uintptr_t)seg->vmaddr + (uintptr_t)slide;
         *end   = *start + (uintptr_t)seg->vmsize;
         return true;
@@ -602,7 +626,7 @@ static bool mi_macho_image_range(const struct mach_header* mh, intptr_t slide, u
     }
     else if (!is64 && lc->cmd == LC_SEGMENT) {
       const struct segment_command* seg = (const struct segment_command*)lc;
-      if (strcmp(seg->segname, SEG_TEXT) == 0) {
+      if (_mi_streq(seg->segname, SEG_TEXT)) {
         *start = (uintptr_t)seg->vmaddr + (uintptr_t)slide;
         *end   = *start + (uintptr_t)seg->vmsize;
         return true;
@@ -924,7 +948,7 @@ static void mi_pb_strings_done(mi_pb_strings_t* strings) {
 static int64_t mi_pb_strings_intern(mi_pb_strings_t* strings, const char* s) {
   if (s == NULL) { s = ""; }
   for (size_t i = 0; i < strings->count; i++) {
-    if (strcmp(strings->entries[i].str, s) == 0) { return strings->entries[i].index; }
+    if (_mi_streq(strings->entries[i].str, s)) { return strings->entries[i].index; }
   }
   if (strings->count == strings->capacity) {
     const size_t new_capacity = (strings->capacity == 0 ? 32 : strings->capacity * 2);

@@ -729,20 +729,6 @@ if(MI_ARCH MATCHES "riscv")
   endif()
 endif()
 
-if(NOT WIN32)
-  CHECK_INCLUDE_FILES("execinfo.h" MI_HAS_EXECINFOH)
-  if(MI_HAS_EXECINFOH) 
-    list(APPEND mi_defines MI_HAS_EXECINFOH=1)
-    if(MI_PROFILE)
-      # On FreeBSD (and some other BSDs) `backtrace`/`backtrace_symbols` are not part of
-      # libc but live in a separate `libexecinfo` that must be linked explicitly.
-      if(CMAKE_SYSTEM_NAME MATCHES "FreeBSD|DragonFly|OpenBSD|NetBSD")
-        list(APPEND mi_libraries execinfo)
-      endif()
-    endif()
-  endif()
-endif()
-
 # On Haiku use `-DCMAKE_INSTALL_PREFIX` instead, issue #788
 # if(CMAKE_SYSTEM_NAME MATCHES "Haiku")
 #   SET(CMAKE_INSTALL_LIBDIR ~/config/non-packaged/lib)
@@ -907,6 +893,34 @@ endif()
 if(MI_USE_CXX)
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
   set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-stress-pprof.c test/test-profile.c test/test-pprof.c PROPERTIES LANGUAGE CXX )
+endif()
+
+# for profiling support
+
+if(NOT WIN32 AND MI_PROFILE)
+  CHECK_INCLUDE_FILES("execinfo.h" MI_HAS_EXECINFOH)
+  if(MI_HAS_EXECINFOH) 
+    list(APPEND mi_defines MI_HAS_EXECINFOH=1)    
+    # On FreeBSD (and some other BSDs) `backtrace`/`backtrace_symbols` are not part of
+    # libc but live in a separate `libexecinfo` that must be linked explicitly.
+    if(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
+      find_link_library("execinfo" MI_LIB_EXECINFO)
+      if(MI_LIB_EXECINFO)
+        list(APPEND mi_libraries "${MI_LIB_EXECINFO}")
+      endif()
+    endif()    
+  else()
+    # No `execinfo.h` available (e.g. musl-based Linux distributions such as Alpine
+    # do not implement `backtrace`); fall back to `libunwind` if it is installed.
+    CHECK_INCLUDE_FILES("libunwind.h" MI_HAS_LIBUNWINDH)
+    if(MI_HAS_LIBUNWINDH)
+      find_link_library("unwind" MI_LIB_UNWIND)
+      if(MI_LIB_UNWIND)
+        list(APPEND mi_defines MI_HAS_LIBUNWINDH=1)
+        list(APPEND mi_libraries "${MI_LIB_UNWIND}")
+      endif()
+    endif()
+  endif()
 endif()
 
 
