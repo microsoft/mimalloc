@@ -28,19 +28,6 @@ terms of the MIT license.
 #ifdef TEST_STRESS_PPROF
 #include <mimalloc-profile.h>
 
-// ---------------------------------------------------------------------------
-// The pprof profiler is not (yet) exposed through a public header;
-// declare the API here as it is exported from `src/profile/pprof.c`
-// (mirrors the declarations in `test/test-pprof.c`).
-// ---------------------------------------------------------------------------
-typedef enum mi_pprof_format_e {
-  MI_PPROF_FORMAT_TEXT = 0,   // original (gperftools-style) textual pprof heap profile format
-  MI_PPROF_FORMAT_PROTO       // modern `perftools.profiles.Profile` protobuf format (uncompressed)
-} mi_pprof_format_t;
-
-mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, mi_pprof_format_t format);
-void           mi_pprof_profiler_delete(mi_profiler_t* profiler);
-void           mi_pprof_profiler_dump(mi_profiler_t* profiler);
 
 #define TEST_STRESS_PPROF_THRESHOLD  (64 * 1024)
 #define TEST_STRESS_PPROF_BASE_NAME  "test-stress-pprof-profile"
@@ -479,7 +466,7 @@ int main(int argc, char** argv) {
   srand(0x7feb352d);
   // mi_stats_reset();
   #ifdef TEST_STRESS_PPROF
-  stress_pprof_profiler = mi_pprof_profiler_new(TEST_STRESS_PPROF_THRESHOLD, TEST_STRESS_PPROF_BASE_NAME, MI_PPROF_FORMAT_PROTO);
+  stress_pprof_profiler = mi_pprof_profiler_new(TEST_STRESS_PPROF_THRESHOLD, TEST_STRESS_PPROF_BASE_NAME, false /* use proto */, 0);
   if (stress_pprof_profiler != NULL) {
     mi_profile(stress_pprof_profiler);
     mi_profiler_start(stress_pprof_profiler);

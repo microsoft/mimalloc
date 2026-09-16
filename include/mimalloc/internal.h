@@ -140,6 +140,8 @@ void          _mi_verbose_message(const char* fmt, ...);
 void          _mi_trace_message(const char* fmt, ...);
 void          _mi_options_init(void);
 void          _mi_options_post_init(void);
+void          mi_profiler_init(void);      // in `src/profile/pprof.c`: starts a `MIMALLOC_PROFILE`-driven profiler if that environment variable is set
+void          mi_profile_done(void);       // in `src/profile/pprof.c`: stops/dumps/deletes the profiler started by `mi_profiler_init` (if any)
 long          _mi_option_get_fast(mi_option_t option);
 void          _mi_error_message(int err, const char* fmt, ...);
 
@@ -351,6 +353,11 @@ size_t        _mi_theap_update_sample_rate(mi_theap_t* theap);
 mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* theap, size_t size, uint64_t requested_since_last_sample, bool zero, mi_page_t** ppage) mi_attr_noexcept;
 void          _mi_page_profile_on_free(mi_page_t* page, mi_block_t* block, void* p);
 size_t        _mi_theap_set_profile_sample_rate(mi_theap_t* theap, size_t sample_rate);
+
+
+// "profile/pprof.c"
+void           _mi_pprof_profiler_init(void);
+void           _mi_pprof_profiler_done(void);
 
 
 // ------------------------------------------------------
@@ -683,6 +690,15 @@ static inline mi_page_t* _mi_theap_get_free_small_page(mi_theap_t* theap, size_t
 
 static inline bool mi_theap_is_detached(mi_theap_t* theap) {
   return (theap!=NULL && theap->tld->thread_id == MI_THREADID_DETACHED);
+}
+
+// permanently exclude a theap from profiling (mirrors `mi_heap_profile_disable` but at the theap level);
+// used for detached/meta theaps used to bootstrap thread/theap metadata, since sampling those can call
+// back into the profiler while allocating on a not yet (re-)initialized thread, causing deadlock.
+static inline void _mi_theap_profile_disable(mi_theap_t* theap) {
+  theap->profile_disabled = true;
+  theap->profile_sample_rate = 0;
+  theap->profile_sample_countdown = 0;
 }
 
 static inline bool mi_theap_matches_thread(mi_theap_t* theap) {

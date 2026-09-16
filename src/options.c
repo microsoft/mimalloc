@@ -182,13 +182,16 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { 0,   MI_OPTION_UNINIT, MI_OPTION(arena_is_numa_local) },      // associate local numa node with an initial arena allocation
   { MI_DEFAULT_COLLECT_MERGES_STATS,
          MI_OPTION_UNINIT, MI_OPTION(collect_merges_stats) },     // on each theap collect, stats are merged with the parent heap
+  { 0,   MI_OPTION_UNINIT, MI_OPTION(profile_alloc_interval) },   // N KiB between automatic dumps of the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`); 0 disables automatic dumping
+  { 512, MI_OPTION_UNINIT, MI_OPTION(profile_sample_rate) },      // sample rate in KiB for the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`) (=512 KiB)
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
 
 static bool mi_option_has_size_in_kib(mi_option_t option) {
   return (option == mi_option_reserve_os_memory || option == mi_option_arena_reserve ||
-          option == mi_option_minimal_purge_size || option == mi_option_arena_max_object_size);
+          option == mi_option_minimal_purge_size || option == mi_option_arena_max_object_size ||
+          option == mi_option_profile_alloc_interval || option == mi_option_profile_sample_rate);
 }
 
 void _mi_options_init(void) {

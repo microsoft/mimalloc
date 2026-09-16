@@ -306,7 +306,7 @@ mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
   return theap;
 }
 
-uintptr_t _mi_theap_random_next(mi_theap_t* theap) {
+size_t _mi_theap_random_next(mi_theap_t* theap) {
   return _mi_random_next(&theap->random);
 }
 

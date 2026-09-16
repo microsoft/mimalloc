@@ -72,6 +72,11 @@ mi_decl_export bool mi_profiler_start(mi_profiler_t* profiler);
 // end sampling
 mi_decl_export bool mi_profiler_stop(mi_profiler_t* profiler);
 
+// builtin pprof profiler
+mi_decl_export mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, bool use_text_format, size_t interval_size);
+mi_decl_export void mi_pprof_profiler_delete(mi_profiler_t* profiler);
+mi_decl_export void mi_pprof_profiler_dump(mi_profiler_t* profiler);
+
 #ifdef __cplusplus
 }
 #endif

@@ -496,6 +496,8 @@ typedef enum mi_option_e {
   mi_option_arena_max_object_size,      // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit). 
   mi_option_arena_is_numa_local,        // experimental: associate local numa node with an initial arena allocation
   mi_option_collect_merges_stats,       // on each theap collection, the theap stats are merged automatically with the parent heap
+  mi_option_profile_alloc_interval,     // number of allocated bytes between automatic dumps of the `MIMALLOC_PROFILE` heap profiler (internally, this value is in KiB; use `mi_option_get_size`) (=0, disabled)
+  mi_option_profile_sample_rate,        // sample rate (in bytes) for the `MIMALLOC_PROFILE` heap profiler (internally, this value is in KiB; use `mi_option_get_size`) (=16 KiB)
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,

@@ -6,7 +6,13 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 // ---------------------------------------------------------------------------
-// This file will implement basic memory profiles using pprof text format
+// This implements a basic memory profiler that outputs pprof-compatible heap 
+// dumps (text or protobuf). 
+// It can be used programmatically (using `mi_pprof_profiler_new` etc.)
+// or be invoked with environment variables. For example:
+//   MIMALLOC_PROFILE=profile MIMALLOC_PROFILE_ALLOC_INTERVAL=1MiB MIMALLOC_PROFILE_SAMPLE_RATE=1Kib ./my_program
+// and then analyze the generated profile using pprof tools:
+//   pprof -http=:8080 ./myprogram  profile.*
 // ---------------------------------------------------------------------------
 
 #include <stdio.h>      // FILE, fopen, fprintf, fclose
@@ -15,26 +21,8 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
+#include "mimalloc/prim-tls.h"   // _mi_theap_default
 #include "mimalloc-profile.h"
-
-// ---------------------------------------------------------------------------
-// API
-// ---------------------------------------------------------------------------
-
-// The on-disk format for a dump: the original (gperftools-style) pprof text
-// format, or the modern `perftools.profiles.Profile` protobuf format (written
-// uncompressed -- pprof falls back to parsing raw protobuf when the input
-// does not start with the gzip magic bytes).
-typedef enum {
-  MI_PPROF_FORMAT_TEXT = 0,
-  MI_PPROF_FORMAT_PROTO
-} mi_pprof_format_t;
-
-mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, mi_pprof_format_t format);
-void           mi_pprof_profiler_delete(mi_profiler_t* profiler);
-void           mi_pprof_profiler_dump(mi_profiler_t* profiler);
-
-
 
 // ---------------------------------------------------------------------------
 // Internal API
@@ -44,7 +32,7 @@ typedef struct mi_location_s  mi_location_t;
 typedef struct mi_locations_s mi_locations_t;
 typedef struct mi_callstack_s mi_callstack_t;
 
-static size_t mi_prim_backtrace(void** buffer, size_t max_depth);
+static size_t mi_prim_backtrace(void** buffer, size_t max_depth);  // `buffer` must have room for `max_depth + MI_PPROF_SKIP_FRAMES + 1` entries (see definition)
 
 static bool mi_locations_init(mi_heap_t* heap, mi_locations_t* locations);
 static void mi_locations_done(mi_heap_t* heap, mi_locations_t* locations);
@@ -56,6 +44,13 @@ static void mi_pprof_write_mapped_libraries(FILE* f);
 // Types
 // ---------------------------------------------------------------------------
 #define MI_MAX_BACKTRACE_DEPTH 64
+
+// Number of stack frames `mi_prim_backtrace` skips *in addition to* its own frame: `mi_location_get`,
+// `on_alloc`, and `_mi_theap_malloc_profiled`. These are all internal profiler/sampling plumbing, not
+// the user's actual allocation call site, and (being either `mi_decl_noinline`, or -- in the case of
+// `on_alloc` -- only ever reached through a function pointer) are guaranteed to appear as distinct
+// stack frames regardless of the optimization level, so this fixed skip count is safe/portable.
+#define MI_PPROF_SKIP_FRAMES  (3)
 
 struct mi_callstack_s {
   size_t  count;
@@ -95,7 +90,9 @@ typedef struct {
   size_t            sample_threshold;     // current sample threshold
   size_t            dump_count;           // number of times `mi_pprof_profiler_dump` was called (used to number the dump files)
   char*             base_file_name;       // base file name for dump files, e.g. "<base_file_name>.<seq>.heap"
-  mi_pprof_format_t format;               // text or protobuf dump format
+  bool              format_text;          // text or protobuf dump format
+  size_t            interval_size;        // if >0, automatically dump every `interval_size` allocated bytes
+  int64_t           interval_countdown;   // bytes remaining until the next automatic dump (can go negative; decremented concurrently by `on_alloc` on any thread via `mi_atomic_addi64_relaxed`)
 } pprof_profiler_t;
 
 static inline pprof_profiler_t* downcast( mi_profiler_t* prof ) { 
@@ -104,14 +101,54 @@ static inline pprof_profiler_t* downcast( mi_profiler_t* prof ) {
 
 
 // ---------------------------------------------------------------------------
+// Automatic profiler driven by the `MIMALLOC_PROFILE` environment variable.
+// This allows profiling an arbitrary program (with no code changes) by
+// overriding its allocator with a mimalloc shared library build and setting
+// `MIMALLOC_PROFILE=<base_file_name>` 
+// (and optionally `MIMALLOC_PROFILE_ALLOC_INTERVAL=<KiB>` to periodically dump while the program is running).
+// ---------------------------------------------------------------------------
+
+static mi_profiler_t* mi_profile_env_profiler;  // NULL if `MIMALLOC_PROFILE` was not set (or initialization failed)
+
+// Called once at process initialization (see `mi_process_init` in `init.c`).
+void _mi_pprof_profiler_init(void) {
+  #if MI_PROFILE
+  char fname[1024];
+  if (_mi_getenv("mimalloc_profile", fname, sizeof(fname)) != 0 || fname[0] == 0) return;  // `MIMALLOC_PROFILE` not set
+  const size_t sample_rate   = mi_option_get_size(mi_option_profile_sample_rate);           // 16 KiB by default
+  const size_t interval_size = mi_option_get_size(mi_option_profile_alloc_interval);        // 0 by default (no automatic interval dumps)
+  mi_profiler_t* profiler = mi_pprof_profiler_new(sample_rate, fname, false, interval_size);
+  if (profiler == NULL) return;
+  mi_profile_env_profiler = profiler;
+  _mi_verbose_message("pprof profiler initialized with base file name: %s\n", fname);
+  mi_profile(profiler);           // attach to the main sub-process (and any current/future heaps in it)
+  mi_profiler_start(profiler);
+  #endif
+}
+
+// Called once at process termination (see `mi_process_done` in `init.c`).
+void _mi_pprof_profiler_done(void) {
+  #if MI_PROFILE
+  mi_profiler_t* profiler = mi_profile_env_profiler;
+  if (profiler == NULL) return;
+  mi_profile_env_profiler = NULL;
+  mi_profiler_stop(profiler);
+  _mi_verbose_message("pprof profiler finalized\n");
+  mi_pprof_profiler_dump(profiler);    // final dump so short-lived processes still get a complete profile
+  mi_profile(NULL);                    // detach from the main sub-process
+  mi_pprof_profiler_delete(profiler);
+  #endif
+}
+
+// ---------------------------------------------------------------------------
 // Get a location
 // ---------------------------------------------------------------------------
 
-static mi_location_t* mi_location_get(pprof_profiler_t* prof) {
-  void* frames[MI_MAX_BACKTRACE_DEPTH];
+static mi_decl_noinline mi_location_t* mi_location_get(pprof_profiler_t* prof) {
+  void* frames[MI_MAX_BACKTRACE_DEPTH + 1 + MI_PPROF_SKIP_FRAMES];  // extra room: `mi_prim_backtrace` captures+shifts out its own frame and `MI_PPROF_SKIP_FRAMES` wrapper frames in-place
   const size_t depth = mi_prim_backtrace(frames, MI_MAX_BACKTRACE_DEPTH);
   if (depth==0) return NULL;
-  mi_callstack_t callstack = { .count = depth, .frames = frames };
+  mi_callstack_t callstack = { depth, frames };
   const mi_threadid_t thread_id = _mi_thread_id();
   mi_location_t* loc = mi_locations_find_or_insert(prof->profile_heap, &prof->locations, thread_id, &callstack);
   return loc;
@@ -121,13 +158,29 @@ static mi_location_t* mi_location_get(pprof_profiler_t* prof) {
 // Profiler callbacks and initialization
 // ---------------------------------------------------------------------------
 
-#define TEST_THRESHOLD (16 * 1024)
+// Draws an integer approximating Exp(scale) to give a poisson distribution,
+// instead of a fixed period, which avoids sampling bias from allocation 
+// patterns that happen to align with a constant period
+static size_t mi_exp_sample(mi_theap_t* theap, size_t scale) {
+  if (scale == 0) return 0;                                     // keep 0
+  #if MI_PROFILE==2
+  if (scale == 1) return 1;                                     // keep 1 as is (to allow sampling every allocation)
+  #endif
+  const size_t r  = (size_t)_mi_theap_random_next(theap) | 1;   
+  const size_t lz = mi_clz(r);                                  // coarse -log2(U): Geometric(1/2)
+  const size_t frac_q8 = (r << (lz + 1)) >> (MI_SIZE_BITS - 8); // next 8 bits: fractional refinement, in [0,256)
+  const size_t bits_q8 = (lz << 8) | frac_q8;                   // Q8 fixed-point estimate of -log2(U)
+  const size_t ln_q8   = (bits_q8 * 177) >> 8;                  // -log2(U) -> -ln(U): *ln(2) (~177/256)
+  size_t next = ((ln_q8 * scale) >> 8) + 1;                     // scale by the mean; +1 avoids a zero threshold
+  const size_t cap = scale * 32;                                // clamp the (rare) long tail
+  return (next > cap ? cap : next);
+}
 
 static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, const mi_heap_t* heap) {
-  MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(bytes_since_last_sample);
+  MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(bytes_since_last_sample); MI_UNUSED(ptr);
   pprof_profiler_t* prof = downcast(profiler);
   mi_location_t* loc = mi_location_get(prof);
-  const size_t new_threshold = prof->sample_threshold; // todo: be more sophisticated in adjusting the sample threshold
+  const size_t new_threshold = mi_exp_sample(_mi_theap_default(), prof->sample_threshold);  // randomized (Poisson) next sample threshold
   const size_t alloc_size = requested_size;            // or mi_heap_usable_size(heap,ptr) ?
   if (data!=NULL) {
     mi_assert(data->user_data_size >= 2*sizeof(void*));
@@ -140,12 +193,19 @@ static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data
     loc->alloc_bytes += (int64_t)alloc_size;
     loc->alloc_count += 1;
   }
+  if (prof->interval_size > 0) { // interval-based profiling enabled
+    const int64_t old_countdown = mi_atomic_addi64_relaxed(&prof->interval_countdown, -(int64_t)alloc_size);
+    if (old_countdown > 0 && old_countdown - (int64_t)alloc_size <= 0) {
+      mi_atomic_addi64_relaxed(&prof->interval_countdown, (int64_t)prof->interval_size);
+      mi_pprof_profiler_dump(profiler);
+    }
+  }
   return new_threshold;
 }
 
 static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, const mi_heap_t* heap) {
-  MI_UNUSED(heap); MI_UNUSED(ptr);
-  pprof_profiler_t* prof = downcast(profiler);
+  MI_UNUSED(heap); MI_UNUSED(ptr); MI_UNUSED(profiler);
+  // pprof_profiler_t* prof = downcast(profiler);
   if (data!=NULL) {
     mi_assert(data->user_data_size >= 2*sizeof(void*));
     mi_location_t* loc = (mi_location_t*)data->user_data[0];
@@ -158,7 +218,7 @@ static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t*
   }
 }
 
-mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, mi_pprof_format_t format) {
+mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, bool format_text, size_t interval_size) {
   // heap just for the profiler itself
   mi_heap_t* heap = mi_heap_new();
   mi_heap_profile_disable(heap);  // don't sample allocations in this heap
@@ -169,7 +229,9 @@ mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_
   prof->sample_threshold = initial_threshold;
   prof->profile_heap = heap;
   prof->base_file_name = (base_file_name != NULL ? mi_heap_strndup(heap, base_file_name, 1024) : NULL);
-  prof->format = format;
+  prof->format_text = format_text;
+  prof->interval_size = interval_size;
+  mi_atomic_storei64_relaxed((_Atomic(int64_t)*)&prof->interval_countdown, (int64_t)interval_size);  // 0 if disabled: `on_alloc` never decrements/checks in that case
   if (!mi_locations_init(heap, &prof->locations)) {
     mi_free(prof);
     return NULL;
@@ -210,7 +272,7 @@ void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
   if (locations->buckets != NULL && prof->base_file_name != NULL) {
     const size_t seq = ++prof->dump_count;
     char fname[1024];
-    if (prof->format == MI_PPROF_FORMAT_PROTO) {
+    if (!prof->format_text) {
       snprintf(fname, sizeof(fname), "%s.%04" PRIu64 ".pb", prof->base_file_name, (uint64_t)seq);
       mi_pprof_dump_proto(prof, fname);
     }
@@ -221,63 +283,8 @@ void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
   }
   if (was_running) { mi_profiler_start(profiler); }
 }
-
 // ---------------------------------------------------------------------------
-// Dumping the profile in the (original, textual) pprof heap profile format
-// ---------------------------------------------------------------------------
-
-// Write out the current profiler data in the pprof heap profile text format:
-// a header line with the totals, followed by one line per unique call
-// location, and a trailer with the mapped libraries (used by `pprof` to
-// symbolize the addresses).
-static void mi_pprof_dump_text(pprof_profiler_t* prof, const char* fname) {
-  mi_locations_t* locations = &prof->locations;
-  FILE* f = fopen(fname, "w");
-  if (f == NULL) return;
-
-  // first pass: compute the totals over all locations
-  // (dump is assumed to run single-threaded while sampling is stopped, so
-  // `alloc_count`/`alloc_bytes` can be read directly; `free_count`/`free_bytes`
-  // are still `_Atomic` fields so we use a relaxed load for those)
-  uint64_t total_inuse_objects = 0;
-  uint64_t total_inuse_bytes   = 0;
-  uint64_t total_alloc_objects = 0;
-  uint64_t total_alloc_bytes   = 0;
-  for (size_t i = 0; i < locations->bucket_count; i++) {
-    for (mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, &locations->buckets[i]); loc != NULL; loc = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next)) {
-      const int64_t free_count = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_count);
-      const int64_t free_bytes = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_bytes);
-      total_inuse_objects += (uint64_t)(loc->alloc_count - free_count);
-      total_inuse_bytes   += (uint64_t)(loc->alloc_bytes - free_bytes);
-      total_alloc_objects += (uint64_t)loc->alloc_count;
-      total_alloc_bytes   += (uint64_t)loc->alloc_bytes;
-    }
-  }
-
-  fprintf(f, "heap profile: %6" PRIu64 ": %8" PRIu64 " [%6" PRIu64 ": %8" PRIu64 "] @ heapprofile\n",
-             total_inuse_objects, total_inuse_bytes, total_alloc_objects, total_alloc_bytes);
-
-  // second pass: write one line per unique call location
-  for (size_t i = 0; i < locations->bucket_count; i++) {
-    for (mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, &locations->buckets[i]); loc != NULL; loc = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next)) {
-      const int64_t free_count = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_count);
-      const int64_t free_bytes = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_bytes);
-      fprintf(f, "%6" PRIu64 ": %8" PRIu64 " [%6" PRIu64 ": %8" PRIu64 "] @",
-                 (uint64_t)(loc->alloc_count - free_count), (uint64_t)(loc->alloc_bytes - free_bytes),
-                 (uint64_t)loc->alloc_count, (uint64_t)loc->alloc_bytes);
-      for (size_t j = 0; j < loc->callstack.count; j++) {
-        fprintf(f, " 0x%" PRIxPTR, (uintptr_t)loc->callstack.frames[j]);
-      }
-      fprintf(f, "\n");
-    }
-  }
-
-  mi_pprof_write_mapped_libraries(f);
-  fclose(f);
-}
-
-// ---------------------------------------------------------------------------
-// A very basic hash table of locations. All memory (the bucket array, the
+// A basic hash table of locations. All memory (the bucket array, the
 // locations, and their callstack frames) is allocated from the profiler's
 // own heap so it does not interfere with the profiled allocations.
 // Collisions are resolved with simple chaining.
@@ -398,20 +405,27 @@ static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_
 
 #if MI_HAS_EXECINFOH
 #include <execinfo.h>   // backtrace
-static size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
-  return (size_t)backtrace(buffer, (int)max_depth);
+static mi_decl_noinline size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
+  const size_t skip = 1 + MI_PPROF_SKIP_FRAMES;  // +1 for `mi_prim_backtrace`'s own frame
+  const size_t raw_depth = (size_t)backtrace(buffer, (int)(max_depth + skip));
+  if (raw_depth <= skip) return 0;
+  const size_t depth = raw_depth - skip;
+  memmove(buffer, buffer + skip, depth * sizeof(void*));
+  return depth;
 }
 #elif _WIN32
 #include <windows.h>    // CaptureStackBackTrace
-static size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
-  // skip this frame itself; no hash is needed as we compute our own
-  return (size_t)CaptureStackBackTrace(1, (ULONG)max_depth, buffer, NULL);
+static mi_decl_noinline size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
+  // skip this frame itself (1) plus our own internal wrapper frames (`MI_PPROF_SKIP_FRAMES`);
+  // no hash is needed as we compute our own
+  return (size_t)CaptureStackBackTrace((ULONG)(1 + MI_PPROF_SKIP_FRAMES), (ULONG)max_depth, buffer, NULL);
 }
 #else
 static size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
   return 0;
 }
 #endif
+
 
 
 // ---------------------------------------------------------------------------
@@ -663,6 +677,62 @@ static void mi_pprof_write_mapped_libraries(FILE* f) {
   mi_write_mapped_libraries_macos(f);
   #endif
 }
+
+
+// ---------------------------------------------------------------------------
+// Dumping the profile in the (original, textual) pprof heap profile format
+// ---------------------------------------------------------------------------
+
+// Write out the current profiler data in the pprof heap profile text format:
+// a header line with the totals, followed by one line per unique call
+// location, and a trailer with the mapped libraries (used by `pprof` to
+// symbolize the addresses).
+static void mi_pprof_dump_text(pprof_profiler_t* prof, const char* fname) {
+  mi_locations_t* locations = &prof->locations;
+  FILE* f = fopen(fname, "w");
+  if (f == NULL) return;
+
+  // first pass: compute the totals over all locations
+  // (dump is assumed to run single-threaded while sampling is stopped, so
+  // `alloc_count`/`alloc_bytes` can be read directly; `free_count`/`free_bytes`
+  // are still `_Atomic` fields so we use a relaxed load for those)
+  uint64_t total_inuse_objects = 0;
+  uint64_t total_inuse_bytes   = 0;
+  uint64_t total_alloc_objects = 0;
+  uint64_t total_alloc_bytes   = 0;
+  for (size_t i = 0; i < locations->bucket_count; i++) {
+    for (mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, &locations->buckets[i]); loc != NULL; loc = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next)) {
+      const int64_t free_count = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_count);
+      const int64_t free_bytes = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_bytes);
+      total_inuse_objects += (uint64_t)(loc->alloc_count - free_count);
+      total_inuse_bytes   += (uint64_t)(loc->alloc_bytes - free_bytes);
+      total_alloc_objects += (uint64_t)loc->alloc_count;
+      total_alloc_bytes   += (uint64_t)loc->alloc_bytes;
+    }
+  }
+
+  fprintf(f, "heap profile: %6" PRIu64 ": %8" PRIu64 " [%6" PRIu64 ": %8" PRIu64 "] @ heapprofile\n",
+             total_inuse_objects, total_inuse_bytes, total_alloc_objects, total_alloc_bytes);
+
+  // second pass: write one line per unique call location
+  for (size_t i = 0; i < locations->bucket_count; i++) {
+    for (mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, &locations->buckets[i]); loc != NULL; loc = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next)) {
+      const int64_t free_count = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_count);
+      const int64_t free_bytes = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_bytes);
+      fprintf(f, "%6" PRIu64 ": %8" PRIu64 " [%6" PRIu64 ": %8" PRIu64 "] @",
+                 (uint64_t)(loc->alloc_count - free_count), (uint64_t)(loc->alloc_bytes - free_bytes),
+                 (uint64_t)loc->alloc_count, (uint64_t)loc->alloc_bytes);
+      for (size_t j = 0; j < loc->callstack.count; j++) {
+        fprintf(f, " 0x%" PRIxPTR, (uintptr_t)loc->callstack.frames[j]);
+      }
+      fprintf(f, "\n");
+    }
+  }
+
+  mi_pprof_write_mapped_libraries(f);
+  fclose(f);
+}
+
 
 // ---------------------------------------------------------------------------
 // Dumping the profile in the modern `pprof` protobuf format
@@ -1039,3 +1109,6 @@ static void mi_pprof_dump_proto(pprof_profiler_t* prof, const char* fname) {
   }
   mi_pb_done(&profile);
 }
+
+
+

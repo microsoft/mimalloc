@@ -1214,15 +1214,17 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
     theap->generic_collect_count += theap->generic_count;
     theap->generic_count = 0;
 
-    // check if the profiler is enabled
-    mi_heap_t* const heap = _mi_theap_heap(theap);
-    mi_profiler_t* prof = mi_atomic_load_ptr_relaxed(mi_profiler_t, &heap->profiler);
-    const bool prof_enabled = (prof!=NULL && mi_profiler_is_enabled(prof));
-    if (prof_enabled && theap->profile_sample_rate==0) { 
-      _mi_theap_set_profile_sample_rate(theap,mi_max(1,prof->initial_sample_rate)); // start profiling
-    }
-    else if (!prof_enabled && theap->profile_sample_rate!=0) {
-      _mi_theap_set_profile_sample_rate(theap,0); // stop profiling
+    // check if the profiler is enabled (unless this theap is permanently excluded, see `_mi_theap_profile_disable`)
+    if (!theap->profile_disabled) {
+      mi_heap_t* const heap = _mi_theap_heap(theap);
+      mi_profiler_t* prof = mi_atomic_load_ptr_relaxed(mi_profiler_t, &heap->profiler);
+      const bool prof_enabled = (prof!=NULL && mi_profiler_is_enabled(prof));
+      if (prof_enabled && theap->profile_sample_rate==0) {
+        _mi_theap_set_profile_sample_rate(theap,mi_max(1,prof->initial_sample_rate)); // start profiling
+      }
+      else if (!prof_enabled && theap->profile_sample_rate!=0) {
+        _mi_theap_set_profile_sample_rate(theap,0); // stop profiling
+      }
     }
 
     // do a full theap collect every once in a while (10000 by default)
