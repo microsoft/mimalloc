@@ -15,10 +15,6 @@ terms of the MIT license. A copy of the license can be found in the file
 //   pprof -http=:8080 ./myprogram  profile.*
 // ---------------------------------------------------------------------------
 
-#include <stdio.h>      // FILE, fopen, fprintf, fclose
-#include <inttypes.h>   // PRIxPTR
-#include <string.h>     // strcmp
-
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
 #include "mimalloc/prim-tls.h"   // _mi_theap_default
@@ -38,7 +34,6 @@ static bool mi_locations_init(mi_heap_t* heap, mi_locations_t* locations);
 static void mi_locations_done(mi_heap_t* heap, mi_locations_t* locations);
 static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_t* locations, mi_threadid_t thread_id, const mi_callstack_t* callstack);
 
-static void mi_pprof_write_mapped_libraries(FILE* f);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -108,6 +103,7 @@ static inline pprof_profiler_t* downcast( mi_profiler_t* prof ) {
 // (and optionally `MIMALLOC_PROFILE_ALLOC_INTERVAL=<KiB>` to periodically dump while the program is running).
 // ---------------------------------------------------------------------------
 
+#if MI_PROFILE
 static mi_profiler_t* mi_profile_env_profiler;  // NULL if `MIMALLOC_PROFILE` was not set (or initialization failed)
 
 // Called once at process initialization (see `mi_process_init` in `init.c`).
@@ -139,6 +135,16 @@ void _mi_pprof_profiler_done(void) {
   mi_pprof_profiler_delete(profiler);
   #endif
 }
+
+#else
+
+void _mi_pprof_profiler_init(void) {
+}
+
+void _mi_pprof_profiler_done(void) {
+}
+
+#endif
 
 // ---------------------------------------------------------------------------
 // Get a location
@@ -177,7 +183,7 @@ static size_t mi_exp_sample(mi_theap_t* theap, size_t scale) {
 }
 
 static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, const mi_heap_t* heap) {
-  MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(bytes_since_last_sample); MI_UNUSED(ptr);
+  MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(ptr);
   pprof_profiler_t* prof = downcast(profiler);
   mi_location_t* loc = mi_location_get(prof);
   const size_t new_threshold = mi_exp_sample(_mi_theap_default(), prof->sample_threshold);  // randomized (Poisson) next sample threshold
@@ -194,9 +200,10 @@ static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data
     loc->alloc_count += 1;
   }
   if (prof->interval_size > 0) { // interval-based profiling enabled
-    const int64_t old_countdown = mi_atomic_addi64_relaxed(&prof->interval_countdown, -(int64_t)alloc_size);
-    if (old_countdown > 0 && old_countdown - (int64_t)alloc_size <= 0) {
-      mi_atomic_addi64_relaxed(&prof->interval_countdown, (int64_t)prof->interval_size);
+    const int64_t sampled_bytes = (int64_t)bytes_since_last_sample;
+    const int64_t new_countdown = mi_atomic_addi64_relaxed(&prof->interval_countdown, -sampled_bytes) - sampled_bytes;
+    if (new_countdown <= 0 && new_countdown + sampled_bytes > 0) {
+      mi_atomic_storei64_relaxed((_Atomic(int64_t)*)&prof->interval_countdown, (int64_t)prof->interval_size);
       mi_pprof_profiler_dump(profiler);
     }
   }
@@ -253,36 +260,6 @@ void mi_pprof_profiler_delete(mi_profiler_t* profiler) {
   mi_heap_delete(heap);
 }
 
-// forward declarations; implemented further below.
-static void mi_pprof_dump_text(pprof_profiler_t* prof, const char* fname);
-static void mi_pprof_dump_proto(pprof_profiler_t* prof, const char* fname);
-
-// Write out the current profiler data to a new dump file named
-// `<base_file_name>.<seq>.<ext>` with an incrementing sequence number
-// (`.heap` for the text format, mimicking the naming used by the original
-// (gperftools) pprof heap profiler; `.pb` for the (uncompressed) protobuf
-// format). The format is chosen when the profiler is created (see
-// `mi_pprof_profiler_new`). The base file name is also set at creation time;
-// if it is NULL, no dump is written and this function does nothing.
-void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
-  if (profiler == NULL) return;
-  bool was_running = mi_profiler_stop(profiler);
-  pprof_profiler_t* prof = downcast(profiler);
-  mi_locations_t* locations = &prof->locations;
-  if (locations->buckets != NULL && prof->base_file_name != NULL) {
-    const size_t seq = ++prof->dump_count;
-    char fname[1024];
-    if (!prof->format_text) {
-      snprintf(fname, sizeof(fname), "%s.%04" PRIu64 ".pb", prof->base_file_name, (uint64_t)seq);
-      mi_pprof_dump_proto(prof, fname);
-    }
-    else {
-      snprintf(fname, sizeof(fname), "%s.%04" PRIu64 ".heap", prof->base_file_name, (uint64_t)seq);
-      mi_pprof_dump_text(prof, fname);
-    }
-  }
-  if (was_running) { mi_profiler_start(profiler); }
-}
 // ---------------------------------------------------------------------------
 // A basic hash table of locations. All memory (the bucket array, the
 // locations, and their callstack frames) is allocated from the profiler's
@@ -400,6 +377,62 @@ static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_
 
 
 // ---------------------------------------------------------------------------
+// Avoid OS specific code when MI_PROFILE is not enabled
+// ---------------------------------------------------------------------------
+
+#if !MI_PROFILE
+
+static size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
+  MI_UNUSED(buffer);
+  MI_UNUSED(max_depth);
+  return 0; 
+}
+
+void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
+  MI_UNUSED(profiler);
+}
+
+#else
+
+#include <stdio.h>      // FILE, fopen, fprintf, fclose
+#include <inttypes.h>   // PRIxPTR
+#include <string.h>     // strcmp
+#include <time.h>       // time
+
+
+// forward declarations; implemented further below.
+static void mi_pprof_write_mapped_libraries(FILE* f);
+static void mi_pprof_dump_text(pprof_profiler_t* prof, const char* fname);
+static void mi_pprof_dump_proto(pprof_profiler_t* prof, const char* fname);
+
+// Write out the current profiler data to a new dump file named
+// `<base_file_name>.<seq>.<ext>` with an incrementing sequence number
+// (`.heap` for the text format, mimicking the naming used by the original
+// (gperftools) pprof heap profiler; `.pb` for the (uncompressed) protobuf
+// format). The format is chosen when the profiler is created (see
+// `mi_pprof_profiler_new`). The base file name is also set at creation time;
+// if it is NULL, no dump is written and this function does nothing.
+void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
+  if (profiler == NULL) return;
+  bool was_running = mi_profiler_stop(profiler);
+  pprof_profiler_t* prof = downcast(profiler);
+  mi_locations_t* locations = &prof->locations;
+  if (locations->buckets != NULL && prof->base_file_name != NULL) {
+    const size_t seq = ++prof->dump_count;
+    char fname[1024];
+    if (!prof->format_text) {
+      snprintf(fname, sizeof(fname), "%s.%04" PRIu64 ".pb", prof->base_file_name, (uint64_t)seq);
+      mi_pprof_dump_proto(prof, fname);
+    }
+    else {
+      snprintf(fname, sizeof(fname), "%s.%04" PRIu64 ".heap", prof->base_file_name, (uint64_t)seq);
+      mi_pprof_dump_text(prof, fname);
+    }
+  }
+  if (was_running) { mi_profiler_start(profiler); }
+}
+
+// ---------------------------------------------------------------------------
 // Basic backtraces
 // ---------------------------------------------------------------------------
 
@@ -425,7 +458,6 @@ static size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
   return 0;
 }
 #endif
-
 
 
 // ---------------------------------------------------------------------------
@@ -1110,5 +1142,4 @@ static void mi_pprof_dump_proto(pprof_profiler_t* prof, const char* fname) {
   mi_pb_done(&profile);
 }
 
-
-
+#endif  // MI_PROFILE

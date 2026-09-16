@@ -733,6 +733,13 @@ if(NOT WIN32)
   CHECK_INCLUDE_FILES("execinfo.h" MI_HAS_EXECINFOH)
   if(MI_HAS_EXECINFOH) 
     list(APPEND mi_defines MI_HAS_EXECINFOH=1)
+    if(MI_PROFILE)
+      # On FreeBSD (and some other BSDs) `backtrace`/`backtrace_symbols` are not part of
+      # libc but live in a separate `libexecinfo` that must be linked explicitly.
+      if(CMAKE_SYSTEM_NAME MATCHES "FreeBSD|DragonFly|OpenBSD|NetBSD")
+        list(APPEND mi_libraries execinfo)
+      endif()
+    endif()
   endif()
 endif()
 
