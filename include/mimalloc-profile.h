@@ -37,19 +37,19 @@ typedef size_t (mi_cdecl mi_profiler_on_realloc_inplace_fun)(mi_profiler_t* prof
 // Profiling callback invoked on a previously sampled allocation.
 typedef void   (mi_cdecl mi_profiler_on_free_fun   )(mi_profiler_t* profiler, mi_profiler_sample_data_t* profiler_data, void* ptr, const mi_heap_t* heap);
 
-// Profiling callback invoked on mi_profile_dump()
-typedef void   (mi_cdecl mi_profiler_on_dump_fun   )(mi_profiler_t* profiler);
+// Profiling callback invoked on mi_profiler_snapshot()
+typedef void   (mi_cdecl mi_profiler_on_snapshot_fun   )(mi_profiler_t* profiler);
 
 // A profiler
 // All fields are considered immutable such that they can be copied and accessed concurrently. All fields can be NULL/0.
 struct mi_profiler_s {
-  void*                       reserved;           // opaque; reserved by mimalloc
-  size_t                      sample_data_size;   // size of required profiler data for each sampled allocation (or zero for no data)
-  size_t                      initial_sample_rate;// initial sample rate in bytes (set to at least 1 or higher) (can be adjusted by `on_alloc`)
-  mi_profiler_on_alloc_fun*   on_alloc;           // called on a sampled allocation (may be called concurrently)  
-  mi_profiler_on_free_fun*    on_free;            // called on when previous sampled allocation is freed (may be called concurrently)
+  void*                         reserved;           // opaque; reserved by mimalloc
+  size_t                        sample_data_size;   // size of required profiler data for each sampled allocation (or zero for no data)
+  size_t                        initial_sample_rate;// initial sample rate in bytes (set to at least 1 or higher) (can be adjusted by `on_alloc`)
+  mi_profiler_on_alloc_fun*     on_alloc;           // called on a sampled allocation (may be called concurrently)  
+  mi_profiler_on_free_fun*      on_free;            // called on when previous sampled allocation is freed (may be called concurrently)
   mi_profiler_on_realloc_inplace_fun* on_realloc_inplace;  // (as yet unused) called on in-place reallocation of a previous sampled allocation (may be called concurrently)
-  mi_profiler_on_dump_fun*    on_dump;            // called on mi_profile_dump() (may be called concurrently)
+  mi_profiler_on_snapshot_fun*  on_snapshot;        // called on mi_profiler_snapshot() (only one thread at a time)
   // ... more user fields allowed
 };
 
@@ -67,7 +67,7 @@ mi_decl_export void mi_heap_profile_disable(mi_heap_t* heap);
 // attach a profiler to any (current and future) heaps in a sub-process (unless those heaps disabled profiling)
 mi_decl_export bool mi_subproc_profile(mi_subproc_id_t subproc_id, mi_profiler_t* profiler);
 
-// attach a profiler to any heaps in the main sub-process 
+// attach a profiler to any heaps in the main sub-process (use NULL to detach)
 mi_decl_export bool mi_profile(mi_profiler_t* profiler);
 
 // start sampling
@@ -76,16 +76,16 @@ mi_decl_export bool mi_profiler_start(mi_profiler_t* profiler);
 // end sampling
 mi_decl_export bool mi_profiler_stop(mi_profiler_t* profiler);
 
-// dump the current profile (may be called concurrently but only one thread will actually perform the dump)
-mi_decl_export void mi_profiler_dump(mi_profiler_t* profiler);
+// snapshot the current profile (may be called concurrently but only one thread will actually call the snapshot callback)
+mi_decl_export void mi_profiler_snapshot(mi_profiler_t* profiler);
 
 // builtin pprof compatible profiler
 // the builtin profiler can also be activated using environment variables (see `src/profile/pprof.c`)
-// `base_file_name` selects the text dump format if it ends in `.heap` or `.text` (the extension is
-// stripped); any other extension, or none, uses the default (protobuf) dump format.
-// `alloc_interval_size`, if >0, automatically dumps every that many allocated bytes.
-// `inuse_interval_size`, if >0, automatically dumps every time the in-use bytes grow by that many bytes.
-// `time_interval_secs`, if >0, automatically dumps every that many seconds (checked from allocation events).
+// `base_file_name` selects the text snapshot format if it ends in `.heap` or `.text` (the extension is
+// stripped); any other extension, or none, uses the default (protobuf) snapshot format.
+// `alloc_interval_size`, if >0, automatically snapshots every that many allocated bytes.
+// `inuse_interval_size`, if >0, automatically snapshots every time the in-use bytes grow by that many bytes.
+// `time_interval_secs`, if >0, automatically snapshots every that many seconds (checked from allocation events).
 mi_decl_export mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, size_t alloc_interval_size, size_t inuse_interval_size, size_t time_interval_secs);
 mi_decl_export void mi_pprof_profiler_delete(mi_profiler_t* profiler);
 

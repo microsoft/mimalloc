@@ -320,9 +320,9 @@ static void test_stress(mi_subproc_id_t subproc) {
     }
 
     #ifdef TEST_STRESS_PPROF
-    // take a profile dump in between each iteration
+    // take a profile snapshot in between each iteration
     if (stress_pprof_profiler != NULL) {
-      mi_profiler_dump(stress_pprof_profiler);
+      mi_profiler_snapshot(stress_pprof_profiler);
     }
     #endif
 
@@ -481,7 +481,7 @@ int main(int argc, char** argv) {
 #endif
   #ifdef TEST_STRESS_PPROF
   if (stress_pprof_profiler != NULL) {
-    mi_profiler_dump(stress_pprof_profiler);  // one final dump after everything is freed
+    mi_profiler_snapshot(stress_pprof_profiler);  // one final snapshot after everything is freed
     mi_profiler_stop(stress_pprof_profiler);
     mi_profile(NULL);  // unregister before deleting
     mi_pprof_profiler_delete(stress_pprof_profiler);
