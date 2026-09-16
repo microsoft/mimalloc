@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <stdio.h>      // FILE, fopen, fprintf, fclose
 #include <inttypes.h>   // PRIxPTR
+#include <string.h>     // strcmp
 
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
@@ -40,6 +41,7 @@ static bool mi_locations_init(mi_heap_t* heap, mi_locations_t* locations);
 static void mi_locations_done(mi_heap_t* heap, mi_locations_t* locations);
 static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_t* locations, mi_threadid_t thread_id, const mi_callstack_t* callstack);
 
+static void mi_pprof_write_mapped_libraries(FILE* f);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -169,27 +171,8 @@ void mi_pprof_profiler_delete(mi_profiler_t* profiler) {
 }
 
 // ---------------------------------------------------------------------------
-// Dumping the profile in the (original, textual) pprof heap profile format,
-// see e.g. https://gaultier.github.io/blog/roll_your_own_memory_profiling.html
+// Dumping the profile in the (original, textual) pprof heap profile format
 // ---------------------------------------------------------------------------
-
-// On Linux, `pprof` can symbolize addresses using the `MAPPED_LIBRARIES` trailer
-// which is just a copy of `/proc/self/maps`. On other platforms we leave this
-// section empty (`pprof` can still work without it if not using PIE, or when
-// combined with tools like `addr2line` / a symbol server).
-static void mi_pprof_write_mapped_libraries(FILE* f) {
-  fprintf(f, "MAPPED_LIBRARIES:\n");
-  #if defined(__linux__)
-  FILE* maps = fopen("/proc/self/maps", "r");
-  if (maps != NULL) {
-    char line[512];
-    while (fgets(line, sizeof(line), maps) != NULL) {
-      fputs(line, f);
-    }
-    fclose(maps);
-  }
-  #endif
-}
 
 // Write out the current profiler data in the pprof heap profile text format:
 // a header line with the totals, followed by one line per unique call
@@ -346,3 +329,144 @@ static size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
   return 0;
 }
 #endif
+
+
+// ---------------------------------------------------------------------------
+// Write out mapped libraries
+// ---------------------------------------------------------------------------
+
+// On Linux, `pprof` can symbolize addresses using the `MAPPED_LIBRARIES` trailer
+// which is just a copy of `/proc/self/maps`. On macOS there is no equivalent
+// file so we reconstruct a similarly formatted line (`start-end perm ... path`)
+// per loaded Mach-O image using the dyld APIs: the range is taken from the
+// image's `__TEXT` segment, which is also the "load address" that tools like
+// `atos` use to symbolize addresses (`atos -o <path> -l <start> <addr>`). On
+// Windows we walk the process address space with `VirtualQuery` 
+// On other platforms we leave this section empty (`pprof` can still work
+// without it if not using PIE, or when combined with tools like `atos` /
+// `addr2line` / a symbol server).
+#if defined(_WIN32)
+#include <windows.h>
+
+// Walk the process address space and write one line per loaded module:
+// `<base>-<end> r-xp 00000000 00:00 0            <path>`. Consecutive
+// `MEM_IMAGE` regions that belong to the same module (same allocation base)
+// are merged into a single range.
+static void mi_win32_write_mapped_libraries(FILE* f) {
+  SYSTEM_INFO si;
+  GetSystemInfo(&si);
+  uint8_t* addr = (uint8_t*)si.lpMinimumApplicationAddress;
+  uint8_t* const addr_max = (uint8_t*)si.lpMaximumApplicationAddress;
+  void* cur_base = NULL;
+  uintptr_t cur_end = 0;
+  while (addr < addr_max) {
+    MEMORY_BASIC_INFORMATION mbi;
+    const SIZE_T n = VirtualQuery(addr, &mbi, sizeof(mbi));
+    if (n == 0) break;  // no more (queryable) regions
+    if (mbi.Type == MEM_IMAGE && mbi.State != MEM_FREE) {
+      if (mbi.AllocationBase == cur_base) {
+        // extend the current module's range
+        cur_end = (uintptr_t)mbi.BaseAddress + mbi.RegionSize;
+      }
+      else {
+        // a new module starts: flush the previous one first
+        if (cur_base != NULL) {
+          char path[MAX_PATH];
+          const DWORD len = GetModuleFileNameA((HMODULE)cur_base, path, (DWORD)sizeof(path));
+          fprintf(f, "%" PRIxPTR "-%" PRIxPTR " r-xp 00000000 00:00 0            %s\n",
+                  (uintptr_t)cur_base, cur_end, (len > 0 ? path : ""));
+        }
+        cur_base = mbi.AllocationBase;
+        cur_end  = (uintptr_t)mbi.BaseAddress + mbi.RegionSize;
+      }
+    }
+    else if (cur_base != NULL) {
+      // the module's regions ended: flush it
+      char path[MAX_PATH];
+      const DWORD len = GetModuleFileNameA((HMODULE)cur_base, path, (DWORD)sizeof(path));
+      fprintf(f, "%" PRIxPTR "-%" PRIxPTR " r-xp 00000000 00:00 0            %s\n",
+              (uintptr_t)cur_base, cur_end, (len > 0 ? path : ""));
+      cur_base = NULL;
+    }
+    const uint8_t* next = (const uint8_t*)mbi.BaseAddress + mbi.RegionSize;
+    if (next <= addr) break;  // guard against a non-advancing region
+    addr = (uint8_t*)next;
+  }
+  if (cur_base != NULL) {
+    char path[MAX_PATH];
+    const DWORD len = GetModuleFileNameA((HMODULE)cur_base, path, (DWORD)sizeof(path));
+    fprintf(f, "%" PRIxPTR "-%" PRIxPTR " r-xp 00000000 00:00 0            %s\n",
+            (uintptr_t)cur_base, cur_end, (len > 0 ? path : ""));
+  }
+}
+
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
+
+// Find the (slid) virtual address range of the `__TEXT` segment of a loaded
+// Mach-O image; this is the image's load address as used for symbolication.
+static bool mi_macho_image_range(const struct mach_header* mh, intptr_t slide, uintptr_t* start, uintptr_t* end) {
+  const bool is64 = (mh->magic == MH_MAGIC_64 || mh->magic == MH_CIGAM_64);
+  const uint8_t* cmd_ptr = (const uint8_t*)mh + (is64 ? sizeof(struct mach_header_64) : sizeof(struct mach_header));
+  for (uint32_t c = 0; c < mh->ncmds; c++) {
+    const struct load_command* lc = (const struct load_command*)cmd_ptr;
+    if (is64 && lc->cmd == LC_SEGMENT_64) {
+      const struct segment_command_64* seg = (const struct segment_command_64*)lc;
+      if (strcmp(seg->segname, SEG_TEXT) == 0) {
+        *start = (uintptr_t)seg->vmaddr + (uintptr_t)slide;
+        *end   = *start + (uintptr_t)seg->vmsize;
+        return true;
+      }
+    }
+    else if (!is64 && lc->cmd == LC_SEGMENT) {
+      const struct segment_command* seg = (const struct segment_command*)lc;
+      if (strcmp(seg->segname, SEG_TEXT) == 0) {
+        *start = (uintptr_t)seg->vmaddr + (uintptr_t)slide;
+        *end   = *start + (uintptr_t)seg->vmsize;
+        return true;
+      }
+    }
+    cmd_ptr += lc->cmdsize;
+  }
+  return false;  // no __TEXT segment found
+}
+
+static void mi_write_mapped_libraries_macos(FILE* f) {
+  const uint32_t count = _dyld_image_count();
+  for (uint32_t i = 0; i < count; i++) {
+    const struct mach_header* mh = _dyld_get_image_header(i);
+    const char* name = _dyld_get_image_name(i);
+    if (mh == NULL || name == NULL) continue;
+    const intptr_t slide = _dyld_get_image_vmaddr_slide(i);
+    uintptr_t start = 0;
+    uintptr_t end = 0;
+    if (!mi_macho_image_range(mh, slide, &start, &end)) continue;
+    fprintf(f, "%" PRIxPTR "-%" PRIxPTR " r-xp 00000000 00:00 0            %s\n", start, end, name);
+  }
+}
+
+#elif defined(__linux__)
+// Copy `/proc/self/maps` verbatim; this is exactly the format `pprof` expects.
+static void mi_write_mapped_libraries_linux(FILE* f) {
+  FILE* maps = fopen("/proc/self/maps", "r");
+  if (maps != NULL) {
+    char line[512];
+    while (fgets(line, sizeof(line), maps) != NULL) {
+      fputs(line, f);
+    }
+    fclose(maps);
+  }
+}
+#endif
+
+static void mi_pprof_write_mapped_libraries(FILE* f) {
+  fprintf(f, "MAPPED_LIBRARIES:\n");
+  #if defined(__linux__)
+  mi_write_mapped_libraries_linux(f);
+  #elif defined(_WIN32)
+  mi_write_mapped_libraries_win32(f);
+  #elif defined(__APPLE__)
+  mi_write_mapped_libraries_macos(f);
+  #endif
+}
