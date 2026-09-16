@@ -459,6 +459,7 @@ jobs:
           packages: |
             build-base
             cmake
+            libunwind-dev
 
       - name: Alpine x64, Debug
         if: matrix.tests == 'alpine-x64'
