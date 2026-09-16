@@ -262,3 +262,9 @@ bool mi_profiler_stop(mi_profiler_t* profiler) {
   if (profiler==NULL) return false;
   return mi_profiler_set_enabled(profiler,false);
 }
+
+void mi_profiler_dump(mi_profiler_t* profiler) {
+  if (profiler==NULL) return;
+  (*profiler->on_dump)(profiler);
+}
+

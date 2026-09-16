@@ -32,7 +32,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define PROFILE_BASE_NAME "test-pprof-profile"
 
 // Build the name of the `seq`-th dump file for `base`, matching the
-// `<base>.<seq>.heap` naming used by `mi_pprof_profiler_dump`.
+// `<base>.<seq>.heap` naming used by `mi_profiler_dump`.
 static void pprof_dump_file_name(char* buf, size_t bufsize, const char* base, unsigned seq) {
   snprintf(buf, bufsize, "%s.%04u.heap", base, seq);
 }
@@ -127,7 +127,7 @@ static void alloc_site_keep_alive(void* p) {
 static void allocate_and_free_multi_site(mi_profiler_t* prof, size_t n, size_t block_size) {
   for (size_t site = 0; site < MI_TEST_PPROF_SITE_COUNT; site++) {
     if (site == MI_TEST_PPROF_SITE_COUNT/2) {
-      mi_pprof_profiler_dump(prof);
+      mi_profiler_dump(prof);
     }
     for (size_t i = 0; i < n; i++) {
       void* p = (*alloc_sites[site])(block_size, i);
@@ -192,7 +192,7 @@ static char* read_file(const char* fname) {
 bool test_pprof_dump_creates_file(void) {
   CHECK_BODY("pprof: dump creates a <base>.0001.heap file") {
     pprof_remove_dump_files(PROFILE_BASE_NAME, 1);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0, 0);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -200,7 +200,7 @@ bool test_pprof_dump_creates_file(void) {
       allocate_and_free(200000, 64);
       mi_profiler_stop(prof);
 
-      mi_pprof_profiler_dump(prof);
+      mi_profiler_dump(prof);
 
       char fname[1024];
       pprof_dump_file_name(fname, sizeof(fname), PROFILE_BASE_NAME, 1);
@@ -219,7 +219,7 @@ bool test_pprof_dump_creates_file(void) {
 bool test_pprof_dump_format(void) {
   CHECK_BODY("pprof: dump uses the pprof heap profile text format") {
     pprof_remove_dump_files(PROFILE_BASE_NAME, 1);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0, 0);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -227,7 +227,7 @@ bool test_pprof_dump_format(void) {
       allocate_and_free(200000, 64);
       mi_profiler_stop(prof);
 
-      mi_pprof_profiler_dump(prof);
+      mi_profiler_dump(prof);
 
       char fname[1024];
       pprof_dump_file_name(fname, sizeof(fname), PROFILE_BASE_NAME, 1);
@@ -297,7 +297,7 @@ bool test_pprof_dump_proto_format(void) {
     char fname[1024];
     snprintf(fname, sizeof(fname), "%s.0001.pb", PROFILE_PROTO_BASE_NAME);
     remove(fname);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_PROTO_BASE_NAME, 0, 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_PROTO_BASE_NAME, 0, 0, 0);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -305,7 +305,7 @@ bool test_pprof_dump_proto_format(void) {
       allocate_and_free(200000, 64);
       mi_profiler_stop(prof);
 
-      mi_pprof_profiler_dump(prof);
+      mi_profiler_dump(prof);
 
       FILE* f = fopen(fname, "rb");
       result = (f != NULL);
@@ -338,12 +338,12 @@ bool test_pprof_dump_proto_format(void) {
 bool test_pprof_dump_interval(void) {
   CHECK_BODY("pprof: interval_size triggers automatic dumps from on_alloc") {
     pprof_remove_dump_files(PROFILE_INTERVAL_BASE_NAME, TEST_INTERVAL_MAX_SEQ);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_INTERVAL_BASE_NAME ".heap", TEST_INTERVAL_SIZE, 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_INTERVAL_BASE_NAME ".heap", TEST_INTERVAL_SIZE, 0, 0);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
       mi_profiler_start(prof);
-      // note: `mi_pprof_profiler_dump` is never called explicitly here -- any
+      // note: `mi_profiler_dump` is never called explicitly here -- any
       // dump files that appear must have been triggered automatically by
       // `on_alloc` once `TEST_INTERVAL_SIZE` sampled bytes have accumulated.
       allocate_and_free(200000, 64);
@@ -386,7 +386,7 @@ bool test_pprof_dump_records_samples(void) {
     #define MI_TEST_PPROF_RECORDS_DUMP_COUNT 4
     #define MI_TEST_PPROF_FINAL_DUMP_SEQ (MI_TEST_PPROF_RECORDS_DUMP_COUNT + 1)
     pprof_remove_dump_files(PROFILE_BASE_NAME, MI_TEST_PPROF_FINAL_DUMP_SEQ);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0, 0);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -394,11 +394,11 @@ bool test_pprof_dump_records_samples(void) {
       // allocate plenty from each of the 10 distinct call sites so every
       // site accumulates enough bytes to trigger at least one sample.
       allocate_and_free_multi_site(prof, 20000, 64);
-      mi_pprof_profiler_dump(prof);
+      mi_profiler_dump(prof);
       allocate_and_free_multi_site(prof, 20000, 64);
-      mi_pprof_profiler_dump(prof);
+      mi_profiler_dump(prof);
       allocate_and_free_multi_site_cleanup();  // free any allocations still kept alive by the ring buffers
-      mi_pprof_profiler_dump(prof);  // final dump, taken after everything was freed
+      mi_profiler_dump(prof);  // final dump, taken after everything was freed
 
       // the intermediate dump (seq 1, taken halfway through the first call)
       // should show a positive inuse count: some allocations are still kept
@@ -439,7 +439,7 @@ bool test_pprof_dump_increments_sequence(void) {
   CHECK_BODY("pprof: repeated dumps use an incrementing sequence number") {
     #define MI_TEST_PPROF_DUMP_COUNT 3
     pprof_remove_dump_files(PROFILE_BASE_NAME, MI_TEST_PPROF_DUMP_COUNT);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0, 0);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -447,7 +447,7 @@ bool test_pprof_dump_increments_sequence(void) {
 
       for (unsigned seq = 1; seq <= MI_TEST_PPROF_DUMP_COUNT && result; seq++) {
         allocate_and_free(20000, 64);
-        mi_pprof_profiler_dump(prof);
+        mi_profiler_dump(prof);
         char fname[1024];
         pprof_dump_file_name(fname, sizeof(fname), PROFILE_BASE_NAME, seq);
         char* contents = read_file(fname);
@@ -467,7 +467,7 @@ bool test_pprof_dump_increments_sequence(void) {
 
 bool test_pprof_profiler_new_delete(void) {
   CHECK_BODY("pprof: profiler can be created and deleted without use") {
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0, 0);
     result = (prof != NULL);
     if (prof != NULL) {
       mi_pprof_profiler_delete(prof);
@@ -546,7 +546,7 @@ static void thread_pool_cleanup(void) {
 bool test_pprof_concurrent_threads(void) {
   CHECK_BODY("pprof: dump is thread safe with concurrently allocating/freeing threads") {
     pprof_remove_dump_files(PROFILE_THREADS_BASE_NAME, MI_TEST_PPROF_THREAD_DUMP_COUNT);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_THREADS_BASE_NAME ".heap", 0, 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_THREADS_BASE_NAME ".heap", 0, 0, 0);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -562,7 +562,7 @@ bool test_pprof_concurrent_threads(void) {
       // take a few dumps while the threads are still running
       for (unsigned seq = 1; seq < MI_TEST_PPROF_THREAD_DUMP_COUNT; seq++) {
         usleep(2000);  // 2ms
-        mi_pprof_profiler_dump(prof);
+        mi_profiler_dump(prof);
       }
 
       for (int t = 0; t < MI_TEST_PPROF_THREAD_COUNT; t++) {
@@ -570,7 +570,7 @@ bool test_pprof_concurrent_threads(void) {
       }
       thread_pool_cleanup();
 
-      mi_pprof_profiler_dump(prof);  // final dump, after all threads have finished
+      mi_profiler_dump(prof);  // final dump, after all threads have finished
 
       // every retained dump should be a valid, well formed pprof dump with a
       // non-negative inuse count (a negative inuse count would indicate a

@@ -498,6 +498,7 @@ typedef enum mi_option_e {
   mi_option_collect_merges_stats,       // on each theap collection, the theap stats are merged automatically with the parent heap
   mi_option_profile_alloc_interval,     // number of allocated bytes between automatic dumps of the `MIMALLOC_PROFILE` heap profiler (internally, this value is in KiB; use `mi_option_get_size`) (=0, disabled)
   mi_option_profile_inuse_interval,     // number of in-use bytes grown between automatic dumps of the `MIMALLOC_PROFILE` heap profiler (internally, this value is in KiB; use `mi_option_get_size`) (=0, disabled)
+  mi_option_profile_time_interval,      // number of seconds between automatic dumps of the `MIMALLOC_PROFILE` heap profiler (=0, disabled)
   mi_option_profile_sample_rate,        // sample rate (in bytes) for the `MIMALLOC_PROFILE` heap profiler (internally, this value is in KiB; use `mi_option_get_size`) (=16 KiB)
   _mi_option_last,
   // legacy option names
