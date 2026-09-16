@@ -536,6 +536,7 @@ void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
 #if defined(_WIN32)
 #include <fcntl.h>      // _O_CREAT, _O_TRUNC, _O_WRONLY, _O_BINARY, _O_TEXT
 #include <io.h>         // _sopen_s, _fdopen, _close
+#include <share.h>      // _SH_DENYNO
 #include <sys/stat.h>   // _S_IREAD, _S_IWRITE
 #elif MI_HAS_UNISTDH
 #include <fcntl.h>      // open, O_CREAT, O_EXCL, O_NOFOLLOW
