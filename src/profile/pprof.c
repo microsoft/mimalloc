@@ -3,6 +3,10 @@ Copyright (c) 2018-2026, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
+
+Disclaimer: Unlike the rest of the considerate hand-crafted mimalloc sources, 
+this file was written with AI assistance (for the process image and protobuf 
+format generation).
 -----------------------------------------------------------------------------*/
 
 // ---------------------------------------------------------------------------
@@ -10,7 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // dumps (text or protobuf). 
 // It can be used programmatically (using `mi_pprof_profiler_new` etc.)
 // or be invoked with environment variables. For example:
-//   MIMALLOC_PROFILE=profile MIMALLOC_PROFILE_ALLOC_INTERVAL=1MiB MIMALLOC_PROFILE_SAMPLE_RATE=1Kib ./my_program
+//   MIMALLOC_PROFILE=profile ./my_program
 // and then analyze the generated profile using pprof tools:
 //   pprof -http=:8080 ./myprogram  profile.*
 // ---------------------------------------------------------------------------
@@ -28,24 +32,25 @@ typedef struct mi_location_s  mi_location_t;
 typedef struct mi_locations_s mi_locations_t;
 typedef struct mi_callstack_s mi_callstack_t;
 
-static size_t  mi_prim_backtrace(void** buffer, size_t max_depth);  // `buffer` must have room for `max_depth + MI_PPROF_SKIP_FRAMES + 1` entries (see definition)
+static size_t  mi_prim_backtrace(void** buffer, size_t max_depth, size_t* hash);  // `buffer` must have room for `max_depth + MI_PPROF_SKIP_FRAMES + 1` entries (see definition)
 static bool    mi_locations_init(mi_heap_t* heap, mi_locations_t* locations);
 static void    mi_locations_done(mi_heap_t* heap, mi_locations_t* locations);
-static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_t* locations, mi_threadid_t thread_id, const mi_callstack_t* callstack);
+static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_t* locations, mi_threadid_t thread_id, const mi_callstack_t* callstack, size_t callstack_hash);
 
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-#define MI_MAX_BACKTRACE_DEPTH 64
+#define MI_MAX_BACKTRACE_DEPTH    (100)
+#define MI_BACKTRACE_SKIP_FRAMES  (3)
 
-// Number of stack frames `mi_prim_backtrace` skips *in addition to* its own frame: `mi_location_get`,
-// `on_alloc`, and `_mi_theap_malloc_profiled`. These are all internal profiler/sampling plumbing, not
-// the user's actual allocation call site, and (being either `mi_decl_noinline`, or -- in the case of
-// `on_alloc` -- only ever reached through a function pointer) are guaranteed to appear as distinct
-// stack frames regardless of the optimization level, so this fixed skip count is safe/portable.
-#define MI_PPROF_SKIP_FRAMES  (3)
+// Threshold (in bytes) for the thread-local interval countdown batching in `on_alloc`
+#ifndef MI_PROFILE_COUNTDOWN_THRESHOLD
+#define MI_PROFILE_COUNTDOWN_THRESHOLD        (8*MI_KiB)
+#endif
+#define MI_PROFILE_COUNTDOWN_MIN_INTERVAL     (8*MI_PROFILE_COUNTDOWN_THRESHOLD)
 
+// A callstack represents a sequence of function call frames captured at a specific point in time.
 struct mi_callstack_s {
   size_t  count;
   void**  frames;
@@ -63,8 +68,8 @@ struct mi_location_s {
   size_t            hash;         // hash of the thread_id and callstack
   int64_t           alloc_count;  // only ever written by the single (allocating) owning thread: not atomic
   int64_t           alloc_bytes;
-  int64_t           free_count;   // can be written concurrently by different freeing threads: always
-  int64_t           free_bytes;   // accessed through `mi_atomic_addi64_relaxed`/`mi_atomic_loadi64_relaxed`
+  _Atomic(int64_t)  free_count;   // can be written concurrently by different freeing threads: always
+  _Atomic(int64_t)  free_bytes;   // accessed through `mi_atomic_addi64_relaxed`/`mi_atomic_loadi64_relaxed`
 };
 
 // A basic hash table of locations. The bucket array is fixed-size (allocated
@@ -85,14 +90,13 @@ typedef struct {
   size_t            dump_count;           // number of times `mi_pprof_profiler_dump` was called (used to number the dump files)
   char*             base_file_name;       // base file name for dump files, e.g. "<base_file_name>.<seq>.heap"
   bool              format_text;          // text or protobuf dump format
-  size_t            interval_size;        // if >0, automatically dump every `interval_size` allocated bytes
-  int64_t           interval_countdown;   // bytes remaining until the next automatic dump (can go negative; decremented concurrently by `on_alloc` on any thread via `mi_atomic_addi64_relaxed`)
+  size_t            interval_size;        // if >0, automatically dump every `interval_size` allocated bytes (capped at `MI_SSIZE_MAX`)
+  _Atomic(mi_ssize_t) interval_countdown; // bytes remaining until the next automatic dump (can go negative; decremented concurrently by `on_alloc` on any thread)
 } pprof_profiler_t;
 
 static inline pprof_profiler_t* downcast( mi_profiler_t* prof ) { 
   return (pprof_profiler_t*)prof; 
 } 
-
 
 // ---------------------------------------------------------------------------
 // Automatic profiler driven by the `MIMALLOC_PROFILE` environment variable.
@@ -151,12 +155,13 @@ void _mi_pprof_profiler_done(void) {
 // ---------------------------------------------------------------------------
 
 static mi_decl_noinline mi_location_t* mi_location_get(pprof_profiler_t* prof) {
-  void* frames[MI_MAX_BACKTRACE_DEPTH + 1 + MI_PPROF_SKIP_FRAMES];  // extra room: `mi_prim_backtrace` captures+shifts out its own frame and `MI_PPROF_SKIP_FRAMES` wrapper frames in-place
-  const size_t depth = mi_prim_backtrace(frames, MI_MAX_BACKTRACE_DEPTH);
+  void* frames[MI_MAX_BACKTRACE_DEPTH + 1 + MI_BACKTRACE_SKIP_FRAMES];  // extra room: `mi_prim_backtrace` captures+shifts out its own frame and `MI_BACKTRACE_SKIP_FRAMES` wrapper frames in-place
+  size_t callstack_hash = 0;
+  const size_t depth = mi_prim_backtrace(frames, MI_MAX_BACKTRACE_DEPTH, &callstack_hash);
   if (depth==0) return NULL;
   mi_callstack_t callstack = { depth, frames };
   const mi_threadid_t thread_id = _mi_thread_id();
-  mi_location_t* loc = mi_locations_find_or_insert(prof->profile_heap, &prof->locations, thread_id, &callstack);
+  mi_location_t* loc = mi_locations_find_or_insert(prof->profile_heap, &prof->locations, thread_id, &callstack, callstack_hash);
   return loc;
 }
 
@@ -182,13 +187,17 @@ static size_t mi_exp_sample(mi_theap_t* theap, size_t scale) {
   return (next > cap ? cap : next);
 }
 
-static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, const mi_heap_t* heap) {
+// Sample allocation event and update profiling data accordingly
+static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, const mi_heap_t* heap) 
+{
   MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(ptr);
   pprof_profiler_t* prof = downcast(profiler);
   mi_location_t* loc = mi_location_get(prof);
   const size_t new_threshold = mi_exp_sample(_mi_theap_default(), prof->sample_threshold);  // randomized (Poisson) next sample threshold
   const size_t alloc_size = requested_size;            // or mi_heap_usable_size(heap,ptr) ?
+
   if (data!=NULL) {
+    // pass the location to the corresponding mi_free (maybe called from another thread)
     mi_assert(data->user_data_size >= 2*sizeof(void*));
     data->user_data[0] = loc;
     data->user_data[1] = (void*)((uintptr_t)alloc_size);
@@ -199,18 +208,38 @@ static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data
     loc->alloc_bytes += (int64_t)alloc_size;
     loc->alloc_count += 1;
   }
+
   if (prof->interval_size > 0) { // interval-based profiling enabled
-    const int64_t sampled_bytes = (int64_t)bytes_since_last_sample;
-    const int64_t new_countdown = mi_atomic_addi64_relaxed(&prof->interval_countdown, -sampled_bytes) - sampled_bytes;
-    if (new_countdown <= 0 && new_countdown + sampled_bytes > 0) {
-      mi_atomic_storei64_relaxed((_Atomic(int64_t)*)&prof->interval_countdown, (int64_t)prof->interval_size);
-      mi_pprof_profiler_dump(profiler);
+    static mi_decl_thread mi_ssize_t interval_pending = 0;
+    mi_ssize_t sampled_bytes = 0;
+    if (prof->interval_size < MI_PROFILE_COUNTDOWN_MIN_INTERVAL) {
+      // interval too small relative to the batching; always adjust
+      sampled_bytes = (mi_ssize_t)bytes_since_last_sample;
+    }
+    else {
+      // batch locally per-thread and only touch the shared (contended) countdown
+      // once the local pending amount reaches `MI_PROFILE_COUNTDOWN_THRESHOLD`.
+      interval_pending += (mi_ssize_t)bytes_since_last_sample;
+      if (interval_pending >= (mi_ssize_t)MI_PROFILE_COUNTDOWN_THRESHOLD) {
+        sampled_bytes = interval_pending;
+        interval_pending = 0;
+      }
+    }
+    // update profile interval countdown if we have sampled bytes
+    if (sampled_bytes > 0) {
+      const mi_ssize_t new_countdown = mi_atomic_addi_relaxed(&prof->interval_countdown, -sampled_bytes) - sampled_bytes;
+      if (new_countdown <= 0 && new_countdown + sampled_bytes > 0) {
+        mi_atomic_storess_relaxed(&prof->interval_countdown, (mi_ssize_t)prof->interval_size);
+        mi_pprof_profiler_dump(profiler);
+      }
     }
   }
   return new_threshold;
 }
 
-static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, const mi_heap_t* heap) {
+// Sample free event and update profiling data accordingly
+static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, const mi_heap_t* heap) 
+{
   MI_UNUSED(heap); MI_UNUSED(ptr); MI_UNUSED(profiler);
   // pprof_profiler_t* prof = downcast(profiler);
   if (data!=NULL) {
@@ -225,6 +254,7 @@ static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t*
   }
 }
 
+// Create a new profiler
 mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, bool format_text, size_t interval_size) {
   // heap just for the profiler itself
   mi_heap_t* heap = mi_heap_new();
@@ -237,8 +267,8 @@ mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_
   prof->profile_heap = heap;
   prof->base_file_name = (base_file_name != NULL ? mi_heap_strndup(heap, base_file_name, 1024) : NULL);
   prof->format_text = format_text;
-  prof->interval_size = interval_size;
-  mi_atomic_storei64_relaxed((_Atomic(int64_t)*)&prof->interval_countdown, (int64_t)interval_size);  // 0 if disabled: `on_alloc` never decrements/checks in that case
+  prof->interval_size = (interval_size > (size_t)MI_SSIZE_MAX ? (size_t)MI_SSIZE_MAX : interval_size);  // cap so it always fits in a `mi_ssize_t`
+  mi_atomic_storess_relaxed(&prof->interval_countdown, (mi_ssize_t)prof->interval_size);  // 0 if disabled: `on_alloc` never decrements/checks in that case
   if (!mi_locations_init(heap, &prof->locations)) {
     mi_free(prof);
     return NULL;
@@ -280,7 +310,7 @@ void mi_pprof_profiler_delete(mi_profiler_t* profiler) {
 // A reasonably large prime bucket count to keep collision chains short 
 #define MI_LOCATIONS_BUCKET_COUNT  (16 * 1024 - 3)  /* 16381, prime */
 
-// FNV-1a hash, mixed over the thread id and the callstack frame pointers.
+// FNV-1a hash, mixed over the thread id and the (precomputed) callstack hash;
 #if SIZE_MAX > UINT32_MAX
 #define MI_FNV_OFFSET_BASIS  ((size_t)0xcbf29ce484222325ULL)  // FNV-1a 64-bit offset basis
 #define MI_FNV_PRIME         ((size_t)0x100000001b3ULL)       // FNV-1a 64-bit prime
@@ -289,13 +319,11 @@ void mi_pprof_profiler_delete(mi_profiler_t* profiler) {
 #define MI_FNV_PRIME         ((size_t)0x01000193UL)           // FNV-1a 32-bit prime
 #endif
 
-static size_t mi_location_hash(mi_threadid_t thread_id, const mi_callstack_t* callstack) {
+static size_t mi_location_hash(mi_threadid_t thread_id, size_t callstack_hash) {
   size_t hash = MI_FNV_OFFSET_BASIS;
   const size_t prime = MI_FNV_PRIME;
   hash = (hash ^ (size_t)thread_id) * prime;
-  for (size_t i = 0; i < callstack->count; i++) {
-    hash = (hash ^ (size_t)((uintptr_t)callstack->frames[i])) * prime;
-  }
+  hash = (hash ^ callstack_hash) * prime;
   return hash;
 }
 
@@ -342,9 +370,9 @@ static bool mi_location_matches(const mi_location_t* loc, size_t hash, mi_thread
 // is a lock-free, read-only traversal using relaxed loads; only inserting a
 // genuinely new location uses a CAS (and even then, only ever races against
 // other threads inserting *different* locations into the same bucket).
-static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_t* locations, mi_threadid_t thread_id, const mi_callstack_t* callstack) {
+static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_t* locations, mi_threadid_t thread_id, const mi_callstack_t* callstack, size_t callstack_hash) {
   if (locations->buckets == NULL) return NULL;
-  const size_t hash = mi_location_hash(thread_id, callstack);
+  const size_t hash = mi_location_hash(thread_id, callstack_hash);
   const size_t idx = hash % locations->bucket_count;
   _Atomic(mi_location_t*)* bucket = &locations->buckets[idx];
 
@@ -390,9 +418,10 @@ static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_
 
 #if !MI_PROFILE
 
-static size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
+static size_t mi_prim_backtrace(void** buffer, size_t max_depth, size_t* hash) {
   MI_UNUSED(buffer);
   MI_UNUSED(max_depth);
+  *hash = 0;
   return 0; 
 }
 
@@ -403,9 +432,6 @@ void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
 #else
 
 #include <stdio.h>      // FILE, fopen, fprintf, fclose
-#include <inttypes.h>   // PRIxPTR
-#include <time.h>       // time
-
 
 // forward declarations; implemented further below.
 static void mi_pprof_write_mapped_libraries(FILE* f);
@@ -421,63 +447,89 @@ static void mi_pprof_dump_proto(pprof_profiler_t* prof, const char* fname);
 // if it is NULL, no dump is written and this function does nothing.
 void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
   if (profiler == NULL) return;
-  bool was_running = mi_profiler_stop(profiler);
-  pprof_profiler_t* prof = downcast(profiler);
-  mi_locations_t* locations = &prof->locations;
-  if (locations->buckets != NULL && prof->base_file_name != NULL) {
-    const size_t seq = ++prof->dump_count;
-    char fname[1024];
-    if (!prof->format_text) {
-      snprintf(fname, sizeof(fname), "%s.%04" PRIu64 ".pb", prof->base_file_name, (uint64_t)seq);
-      mi_pprof_dump_proto(prof, fname);
+  static mi_atomic_guard_t guard;
+  mi_atomic_guard(&guard) {           // make sure only one thread can dump at a time (and otherwise ignore)
+    bool was_running = mi_profiler_stop(profiler);
+    pprof_profiler_t* prof = downcast(profiler);
+    mi_locations_t* locations = &prof->locations;
+    if (locations->buckets != NULL && prof->base_file_name != NULL) {
+      const size_t seq = ++prof->dump_count;
+      char fname[1024];
+      if (!prof->format_text) {
+        _mi_snprintf(fname, sizeof(fname), "%s.%04zu.pb", prof->base_file_name, seq);
+        mi_pprof_dump_proto(prof, fname);
+      }
+      else {
+        _mi_snprintf(fname, sizeof(fname), "%s.%04zu.heap", prof->base_file_name, seq);
+        mi_pprof_dump_text(prof, fname);
+      }
     }
-    else {
-      snprintf(fname, sizeof(fname), "%s.%04" PRIu64 ".heap", prof->base_file_name, (uint64_t)seq);
-      mi_pprof_dump_text(prof, fname);
-    }
+    if (was_running) { mi_profiler_start(profiler); }
   }
-  if (was_running) { mi_profiler_start(profiler); }
 }
 
 // ---------------------------------------------------------------------------
 // Basic backtraces
 // ---------------------------------------------------------------------------
 
+#if MI_HAS_EXECINFOH || MI_HAS_LIBUNWINDH
+static size_t mi_backtrace_hash(void** frames, size_t depth) {
+  size_t hash = MI_FNV_OFFSET_BASIS;
+  for (size_t i = 0; i < depth; i++) {
+    hash = (hash ^ (size_t)((uintptr_t)frames[i])) * MI_FNV_PRIME;
+  }
+  return hash;
+}
+#endif
+
 #if _WIN32
 #include <windows.h>    // CaptureStackBackTrace
-static mi_decl_noinline size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
-  // skip this frame itself (1) plus our own internal wrapper frames (`MI_PPROF_SKIP_FRAMES`);
-  // no hash is needed as we compute our own
-  return (size_t)CaptureStackBackTrace((ULONG)(1 + MI_PPROF_SKIP_FRAMES), (ULONG)max_depth, buffer, NULL);
+static mi_decl_noinline size_t mi_prim_backtrace(void** buffer, size_t max_depth, size_t* hash) {
+  if (max_depth > ULONG_MAX) { max_depth = ULONG_MAX; }
+  // On Windows XP/Server 2003, `FramesToSkip + FramesToCapture` must be less than 63;
+  // clamp defensively so we never exceed this, regardless of the actual OS version.
+  const size_t skip = 1 + MI_BACKTRACE_SKIP_FRAMES;  // +1 for `mi_prim_backtrace`'s own frame
+  const size_t win_limit = 62;                       // strictly less than 63
+  if (skip + max_depth >= win_limit) { max_depth = (skip <= win_limit ? win_limit - skip : 0); }
+  if (max_depth == 0) { *hash = 0; return 0; }
+  DWORD win_hash = 0;
+  const size_t depth = (size_t)CaptureStackBackTrace((ULONG)skip, (ULONG)max_depth, buffer, &win_hash);
+  *hash = (size_t)win_hash;  // use the hash computed by `CaptureStackBackTrace` itself
+  return depth;
 }
 #elif MI_HAS_EXECINFOH
 #include <execinfo.h>   // backtrace
-static mi_decl_noinline size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
-  const size_t skip = 1 + MI_PPROF_SKIP_FRAMES;  // +1 for `mi_prim_backtrace`'s own frame
-  const size_t raw_depth = (size_t)backtrace(buffer, (int)(max_depth + skip));
-  if (raw_depth <= skip) return 0;
+static mi_decl_noinline size_t mi_prim_backtrace(void** buffer, size_t max_depth, size_t* hash) {
+  const size_t skip = 1 + MI_BACKTRACE_SKIP_FRAMES;  // +1 for `mi_prim_backtrace`'s own frame
+  if (max_depth <= skip) { *hash = 0; return 0; }
+  if (max_depth > INT_MAX) { max_depth = INT_MAX; }
+  const size_t raw_depth = (size_t)backtrace(buffer, (int)(max_depth - skip));
+  if (raw_depth <= skip) { *hash = 0; return 0; }
   const size_t depth = raw_depth - skip;
   memmove(buffer, buffer + skip, depth * sizeof(void*));
+  *hash = mi_backtrace_hash(buffer, depth);  // no platform-provided hash, compute our own
   return depth;
 }
 #elif MI_HAS_LIBUNWINDH
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>  // unw_backtrace
-static mi_decl_noinline size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
-  // used as a fallback on platforms without `execinfo.h` (e.g. musl-based Linux
-  // distributions such as Alpine); `unw_backtrace` has the same signature/semantics
-  // as (glibc's) `backtrace`.
-  const size_t skip = 1 + MI_PPROF_SKIP_FRAMES;  // +1 for `mi_prim_backtrace`'s own frame
-  const size_t raw_depth = (size_t)unw_backtrace(buffer, (int)(max_depth + skip));
-  if (raw_depth <= skip) return 0;
+static mi_decl_noinline size_t mi_prim_backtrace(void** buffer, size_t max_depth, size_t* hash) {
+  // used as a fallback on platforms without `execinfo.h` (e.g. musl-based Linux like Alpine)
+  const size_t skip = 1 + MI_BACKTRACE_SKIP_FRAMES;  // +1 for `mi_prim_backtrace`'s own frame
+  if (max_depth <= skip) { *hash = 0; return 0; }
+  if (max_depth > INT_MAX) { max_depth = INT_MAX; }
+  const size_t raw_depth = (size_t)unw_backtrace(buffer, (int)(max_depth - skip));
+  if (raw_depth <= skip) { *hash = 0; return 0; }
   const size_t depth = raw_depth - skip;
   memmove(buffer, buffer + skip, depth * sizeof(void*));
+  *hash = mi_backtrace_hash(buffer, depth);  // no platform-provided hash, compute our own
   return depth;
 }
 #else
-static size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
+static size_t mi_prim_backtrace(void** buffer, size_t max_depth, size_t* hash) {
   MI_UNUSED(buffer);
   MI_UNUSED(max_depth);
+  *hash = 0;
   return 0;
 }
 #endif
@@ -532,6 +584,22 @@ static void mi_pprof_modules_done(mi_pprof_modules_t* mods) {
 // On other platforms we leave this section empty (`pprof` can still work
 // without it if not using PIE, or when combined with tools like `atos` /
 // `addr2line` / a symbol server).
+
+// A small wrapper that formats with our own minimal `_mi_vsnprintf` (so call
+// sites can use its `%l8x`/`%l8d`/`%tx` extensions instead of <inttypes.h>'s
+// `PRIx64`/`PRIu64`/`PRIxPTR` macros) and writes the result directly to a `FILE*`.
+// (Distinct from the existing `_mi_fprintf(mi_output_fun*, void*, ...)`  in
+// `options.c`, which targets mimalloc's redirectable output callback instead
+// of an arbitrary `FILE*`.)
+static void mi_fprintf(FILE* f, const char* fmt, ...) {
+  char buf[512];
+  va_list args;
+  va_start(args, fmt);
+  _mi_vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  fputs(buf, f);
+}
+
 #if defined(_WIN32)
 #include <windows.h>
 
@@ -585,7 +653,7 @@ static void mi_walk_modules_win32(void (*on_module)(void* ctx, uintptr_t base, u
 
 static void mi_write_mapped_libraries_on_module_win32(void* ctx, uintptr_t base, uintptr_t end, const char* path) {
   FILE* f = (FILE*)ctx;
-  fprintf(f, "%" PRIxPTR "-%" PRIxPTR " r-xp 00000000 00:00 0            %s\n", base, end, path);
+  mi_fprintf(f, "%tx-%tx r-xp 00000000 00:00 0            %s\n", base, end, path);
 }
 
 static void mi_write_mapped_libraries_win32(FILE* f) {
@@ -646,7 +714,7 @@ static void mi_write_mapped_libraries_macos(FILE* f) {
     uintptr_t start = 0;
     uintptr_t end = 0;
     if (!mi_macho_image_range(mh, slide, &start, &end)) continue;
-    fprintf(f, "%" PRIxPTR "-%" PRIxPTR " r-xp 00000000 00:00 0            %s\n", start, end, name);
+    mi_fprintf(f, "%tx-%tx r-xp 00000000 00:00 0            %s\n", start, end, name);
   }
 }
 
@@ -725,7 +793,7 @@ static void mi_write_mapped_libraries_bsd(FILE* f) {
   for (int i = 0; i < cnt; i++) {
     const struct kinfo_vmentry* kve = &vmmap[i];
     if (kve->kve_path[0] == 0) continue;  // skip anonymous mappings
-    fprintf(f, "%" PRIx64 "-%" PRIx64 " r-xp 00000000 00:00 0            %s\n", (uint64_t)kve->kve_start, (uint64_t)kve->kve_end, kve->kve_path);
+    mi_fprintf(f, "%l8x-%l8x r-xp 00000000 00:00 0            %s\n", (uint64_t)kve->kve_start, (uint64_t)kve->kve_end, kve->kve_path);
   }
   free(vmmap);
 }
@@ -797,8 +865,8 @@ static void mi_pprof_dump_text(pprof_profiler_t* prof, const char* fname) {
   uint64_t total_alloc_bytes   = 0;
   for (size_t i = 0; i < locations->bucket_count; i++) {
     for (mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, &locations->buckets[i]); loc != NULL; loc = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next)) {
-      const int64_t free_count = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_count);
-      const int64_t free_bytes = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_bytes);
+      const int64_t free_count = mi_atomic_loadi64_relaxed(&loc->free_count);
+      const int64_t free_bytes = mi_atomic_loadi64_relaxed(&loc->free_bytes);
       total_inuse_objects += (uint64_t)(loc->alloc_count - free_count);
       total_inuse_bytes   += (uint64_t)(loc->alloc_bytes - free_bytes);
       total_alloc_objects += (uint64_t)loc->alloc_count;
@@ -806,19 +874,19 @@ static void mi_pprof_dump_text(pprof_profiler_t* prof, const char* fname) {
     }
   }
 
-  fprintf(f, "heap profile: %6" PRIu64 ": %8" PRIu64 " [%6" PRIu64 ": %8" PRIu64 "] @ heapprofile\n",
+  mi_fprintf(f, "heap profile: %6l8d: %8l8d [%6l8d: %8l8d] @ heapprofile\n",
              total_inuse_objects, total_inuse_bytes, total_alloc_objects, total_alloc_bytes);
 
   // second pass: write one line per unique call location
   for (size_t i = 0; i < locations->bucket_count; i++) {
     for (mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, &locations->buckets[i]); loc != NULL; loc = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next)) {
-      const int64_t free_count = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_count);
-      const int64_t free_bytes = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_bytes);
-      fprintf(f, "%6" PRIu64 ": %8" PRIu64 " [%6" PRIu64 ": %8" PRIu64 "] @",
+      const int64_t free_count = mi_atomic_loadi64_relaxed(&loc->free_count);
+      const int64_t free_bytes = mi_atomic_loadi64_relaxed(&loc->free_bytes);
+      mi_fprintf(f, "%6l8d: %8l8d [%6l8d: %8l8d] @",
                  (uint64_t)(loc->alloc_count - free_count), (uint64_t)(loc->alloc_bytes - free_bytes),
                  (uint64_t)loc->alloc_count, (uint64_t)loc->alloc_bytes);
       for (size_t j = 0; j < loc->callstack.count; j++) {
-        fprintf(f, " 0x%" PRIxPTR, (uintptr_t)loc->callstack.frames[j]);
+        mi_fprintf(f, " 0x%tx", (uintptr_t)loc->callstack.frames[j]);
       }
       fprintf(f, "\n");
     }
@@ -1130,8 +1198,8 @@ static void mi_pprof_dump_proto(pprof_profiler_t* prof, const char* fname) {
 
   for (size_t i = 0; i < locations->bucket_count; i++) {
     for (mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, &locations->buckets[i]); loc != NULL; loc = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next)) {
-      const int64_t free_count = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_count);
-      const int64_t free_bytes = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_bytes);
+      const int64_t free_count = mi_atomic_loadi64_relaxed(&loc->free_count);
+      const int64_t free_bytes = mi_atomic_loadi64_relaxed(&loc->free_bytes);
 
       const size_t frame_count = (loc->callstack.count > MI_MAX_BACKTRACE_DEPTH ? MI_MAX_BACKTRACE_DEPTH : loc->callstack.count);
       uint64_t location_ids[MI_MAX_BACKTRACE_DEPTH];
@@ -1189,8 +1257,8 @@ static void mi_pprof_dump_proto(pprof_profiler_t* prof, const char* fname) {
     mi_pb_message_field(&profile, 11, &period_type);
     mi_pb_done(&period_type);
   }
-  mi_pb_int64_field(&profile, 12, (int64_t)prof->sample_threshold);          // period
-  mi_pb_int64_field(&profile, 9, (int64_t)time(NULL) * 1000000000LL);       // time_nanos
+  mi_pb_int64_field(&profile, 12, (int64_t)prof->sample_threshold);      // period
+  mi_pb_int64_field(&profile, 9, (int64_t)_mi_clock_now() * 1000);       // clock_now is in milli-secs
 
   // the string table (Profile.string_table = 6) can only be finalized now,
   // since strings were interned into it while building the message above.

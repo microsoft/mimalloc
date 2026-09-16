@@ -404,7 +404,7 @@ void __mi_stat_adjust_decrease_mt(mi_stat_count_t* stat, uint64_t amount);
 // counters can just be increased
 static inline void __mi_stat_counter_increase_mt(mi_stat_counter_t* stat, uint64_t amount) {
   mi_assert_internal(amount<=INT64_MAX);
-  mi_atomic_addi64_relaxed(&stat->total, (int64_t)amount);
+  mi_atomic_volatile_addi64_relaxed(&stat->total, (int64_t)amount);
 }
 
 static inline void __mi_stat_counter_increase(mi_stat_counter_t* stat, uint64_t amount) {

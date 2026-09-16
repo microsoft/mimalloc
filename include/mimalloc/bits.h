@@ -57,9 +57,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #if SIZE_MAX == UINT64_MAX
 # define MI_SIZE_SHIFT (3)
 typedef int64_t  mi_ssize_t;
+#define MI_SSIZE_MAX  INT64_MAX
 #elif SIZE_MAX == UINT32_MAX
 # define MI_SIZE_SHIFT (2)
 typedef int32_t  mi_ssize_t;
+#define MI_SSIZE_MAX  INT32_MAX
 #else
 #error platform objects must be 32 or 64 bits in size
 #endif

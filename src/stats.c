@@ -24,10 +24,10 @@ terms of the MIT license. A copy of the license can be found in the file
 static void mi_stat_update_mt(mi_stat_count_t* stat, int64_t amount) {
   if (amount == 0) return;
   // add atomically
-  int64_t current = mi_atomic_addi64_relaxed(&stat->current, amount);
-  mi_atomic_maxi64_relaxed(&stat->peak, current + amount);
+  int64_t current = mi_atomic_volatile_addi64_relaxed(&stat->current, amount);
+  mi_atomic_volatile_maxi64_relaxed(&stat->peak, current + amount);
   if (amount > 0) {
-    mi_atomic_addi64_relaxed(&stat->total, amount);
+    mi_atomic_volatile_addi64_relaxed(&stat->total, amount);
   }
 }
 
@@ -65,9 +65,9 @@ static void mi_stat_adjust_mt(mi_stat_count_t* stat, int64_t amount) {
   if (amount == 0) return;
   // adjust atomically
   const int64_t peak = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&stat->peak);
-  mi_atomic_addi64_relaxed(&stat->current, amount);
-  const int64_t prev_total = mi_atomic_addi64_relaxed(&stat->total, amount);
-  if (prev_total == peak) { mi_atomic_addi64_relaxed(&stat->peak, amount); }
+  mi_atomic_volatile_addi64_relaxed(&stat->current, amount);
+  const int64_t prev_total = mi_atomic_volatile_addi64_relaxed(&stat->total, amount);
+  if (prev_total == peak) { mi_atomic_volatile_addi64_relaxed(&stat->peak, amount); }
 }
 
 static void mi_stat_adjust(mi_stat_count_t* stat, int64_t amount) {
@@ -98,10 +98,10 @@ void __mi_stat_adjust_decrease(mi_stat_count_t* stat, uint64_t amount) {
 // must be thread safe as it is called from stats_merge
 static void mi_stat_count_add_mt(mi_stat_count_t* stat, const mi_stat_count_t* src) {
   if (stat==src) return;
-  mi_atomic_void_addi64_relaxed(&stat->total, &src->total);
+  mi_atomic_volatile_void_addi64_relaxed(&stat->total, &src->total);
   const int64_t src_peak = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&src->peak);
   const int64_t src_current = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&src->current);
-  const int64_t prev_current = mi_atomic_addi64_relaxed(&stat->current, src_current);
+  const int64_t prev_current = mi_atomic_volatile_addi64_relaxed(&stat->current, src_current);
 
   // Global current plus thread peak approximates new global peak
   // note: peak scores do not really work across threads.
@@ -109,12 +109,12 @@ static void mi_stat_count_add_mt(mi_stat_count_t* stat, const mi_stat_count_t* s
   // similarly, max does not seem to work well. The current approach
   // by Artem Kharytoniuk (@artem-lunarg) seems to work better, see PR#1112
   // for a longer description.  
-  mi_atomic_maxi64_relaxed(&stat->peak, prev_current + src_peak);
+  mi_atomic_volatile_maxi64_relaxed(&stat->peak, prev_current + src_peak);
 }
 
 static void mi_stat_counter_add_mt(mi_stat_counter_t* stat, const mi_stat_counter_t* src) {
   if (stat==src) return;
-  mi_atomic_void_addi64_relaxed(&stat->total, &src->total);
+  mi_atomic_volatile_void_addi64_relaxed(&stat->total, &src->total);
 }
 
 #define MI_STAT_COUNT(stat)    mi_stat_count_add_mt(&stats->stat, &src->stat);

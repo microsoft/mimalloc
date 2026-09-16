@@ -211,7 +211,7 @@ void _mi_detect_cpu_features(void) {
 // initialized (and to reduce dependencies)
 //
 // format:      d i, p x u, s
-// prec:        z l ll L
+// prec:        z l ll L l8 l4   // l8=64-bit, l4=32-bit
 // width:       10
 // align-left:  -
 // fill:        0
@@ -330,11 +330,16 @@ int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
         }
         if (c == 0) break;  // extra check due to while
       }
-      if (c == 'z' || c == 't' || c == 'L') { numtype = c; MI_NEXTC(); }
+      if (c == 'z' || c == 't' || c == 'L') { 
+        numtype = c; MI_NEXTC(); 
+      }
       else if (c == 'l') {
         numtype = c; MI_NEXTC();
         if (c == 'l') { numtype = 'L'; MI_NEXTC(); }
+        else if (c == '8') { numtype = '8'; MI_NEXTC(); } // 64-bit
+        else if (c == '4') { numtype = '4'; MI_NEXTC(); } // 32-bit
       }
+      
 
       char* start = out;
       if (c == '%') {
@@ -353,6 +358,8 @@ int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
           else if (numtype == 't')  x = va_arg(args, uintptr_t); // unsigned ptrdiff_t
           else if (numtype == 'L')  x = va_arg(args, unsigned long long);
           else if (numtype == 'l')  x = va_arg(args, unsigned long);
+          else if (numtype == '8')  x = va_arg(args, uint64_t);
+          else if (numtype == '4')  x = va_arg(args, uint32_t);        
                                else x = va_arg(args, unsigned int);
         }
         else if (c == 'p') {
@@ -376,6 +383,8 @@ int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
         else if (numtype == 't')  x = va_arg(args, ptrdiff_t);
         else if (numtype == 'L')  x = va_arg(args, long long);
         else if (numtype == 'l')  x = va_arg(args, long);
+        else if (numtype == '8')  x = va_arg(args, int64_t);
+        else if (numtype == '4')  x = va_arg(args, int32_t);
                              else x = va_arg(args, int);
         char pre = 0;
         if (x < 0) {
