@@ -21,7 +21,16 @@ terms of the MIT license. A copy of the license can be found in the file
 // API
 // ---------------------------------------------------------------------------
 
-mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name);
+// The on-disk format for a dump: the original (gperftools-style) pprof text
+// format, or the modern `perftools.profiles.Profile` protobuf format (written
+// uncompressed -- pprof falls back to parsing raw protobuf when the input
+// does not start with the gzip magic bytes).
+typedef enum {
+  MI_PPROF_FORMAT_TEXT = 0,
+  MI_PPROF_FORMAT_PROTO
+} mi_pprof_format_t;
+
+mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, mi_pprof_format_t format);
 void           mi_pprof_profiler_delete(mi_profiler_t* profiler);
 void           mi_pprof_profiler_dump(mi_profiler_t* profiler);
 
@@ -86,6 +95,7 @@ typedef struct {
   size_t            sample_threshold;     // current sample threshold
   size_t            dump_count;           // number of times `mi_pprof_profiler_dump` was called (used to number the dump files)
   char*             base_file_name;       // base file name for dump files, e.g. "<base_file_name>.<seq>.heap"
+  mi_pprof_format_t format;               // text or protobuf dump format
 } pprof_profiler_t;
 
 static inline pprof_profiler_t* downcast( mi_profiler_t* prof ) { 
@@ -148,7 +158,7 @@ static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t*
   }
 }
 
-mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name) {
+mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, mi_pprof_format_t format) {
   // heap just for the profiler itself
   mi_heap_t* heap = mi_heap_new();
   mi_heap_profile_disable(heap);  // don't sample allocations in this heap
@@ -159,6 +169,7 @@ mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_
   prof->sample_threshold = initial_threshold;
   prof->profile_heap = heap;
   prof->base_file_name = (base_file_name != NULL ? mi_heap_strndup(heap, base_file_name, 1024) : NULL);
+  prof->format = format;
   if (!mi_locations_init(heap, &prof->locations)) {
     mi_free(prof);
     return NULL;
@@ -180,6 +191,37 @@ void mi_pprof_profiler_delete(mi_profiler_t* profiler) {
   mi_heap_delete(heap);
 }
 
+// forward declarations; implemented further below.
+static void mi_pprof_dump_text(pprof_profiler_t* prof, const char* fname);
+static void mi_pprof_dump_proto(pprof_profiler_t* prof, const char* fname);
+
+// Write out the current profiler data to a new dump file named
+// `<base_file_name>.<seq>.<ext>` with an incrementing sequence number
+// (`.heap` for the text format, mimicking the naming used by the original
+// (gperftools) pprof heap profiler; `.pb` for the (uncompressed) protobuf
+// format). The format is chosen when the profiler is created (see
+// `mi_pprof_profiler_new`). The base file name is also set at creation time;
+// if it is NULL, no dump is written and this function does nothing.
+void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
+  if (profiler == NULL) return;
+  bool was_running = mi_profiler_stop(profiler);
+  pprof_profiler_t* prof = downcast(profiler);
+  mi_locations_t* locations = &prof->locations;
+  if (locations->buckets != NULL && prof->base_file_name != NULL) {
+    const size_t seq = ++prof->dump_count;
+    char fname[1024];
+    if (prof->format == MI_PPROF_FORMAT_PROTO) {
+      snprintf(fname, sizeof(fname), "%s.%04" PRIu64 ".pb", prof->base_file_name, (uint64_t)seq);
+      mi_pprof_dump_proto(prof, fname);
+    }
+    else {
+      snprintf(fname, sizeof(fname), "%s.%04" PRIu64 ".heap", prof->base_file_name, (uint64_t)seq);
+      mi_pprof_dump_text(prof, fname);
+    }
+  }
+  if (was_running) { mi_profiler_start(profiler); }
+}
+
 // ---------------------------------------------------------------------------
 // Dumping the profile in the (original, textual) pprof heap profile format
 // ---------------------------------------------------------------------------
@@ -187,22 +229,9 @@ void mi_pprof_profiler_delete(mi_profiler_t* profiler) {
 // Write out the current profiler data in the pprof heap profile text format:
 // a header line with the totals, followed by one line per unique call
 // location, and a trailer with the mapped libraries (used by `pprof` to
-// symbolize the addresses). Each call writes a new file named
-// `<base_file_name>.<seq>.heap` with an incrementing sequence number,
-// mimicking the naming used by the original (gperftools) pprof heap profiler.
-// The base file name is set when the profiler is created (see `mi_pprof_profiler_new`);
-// if it is NULL, no dump is written and this function does nothing.
-void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
-  if (profiler == NULL) return;
-  bool was_running = mi_profiler_stop(profiler);
-  pprof_profiler_t* prof = downcast(profiler);
+// symbolize the addresses).
+static void mi_pprof_dump_text(pprof_profiler_t* prof, const char* fname) {
   mi_locations_t* locations = &prof->locations;
-  if (locations->buckets == NULL || prof->base_file_name == NULL) return;
-
-  char fname[1024];
-  const size_t seq = ++prof->dump_count;
-  snprintf(fname, sizeof(fname), "%s.%04" PRIu64 ".heap", prof->base_file_name, (uint64_t)seq);
-
   FILE* f = fopen(fname, "w");
   if (f == NULL) return;
 
@@ -245,7 +274,6 @@ void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
 
   mi_pprof_write_mapped_libraries(f);
   fclose(f);
-  if (was_running) { mi_profiler_start(profiler); }
 }
 
 // ---------------------------------------------------------------------------
@@ -390,6 +418,41 @@ static size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
 // Write out mapped libraries
 // ---------------------------------------------------------------------------
 
+// A loaded module's address range and (if known) its file path; used both to
+// print the `MAPPED_LIBRARIES` trailer of the text format and to build the
+// `Mapping` entries of the protobuf format (see `mi_pprof_dump_proto`).
+typedef struct {
+  uintptr_t start;
+  uintptr_t end;
+  char*     path;  // heap-allocated (owned), or NULL if unknown
+} mi_pprof_module_t;
+
+typedef struct {
+  mi_pprof_module_t* modules;
+  size_t              count;
+  size_t              capacity;
+} mi_pprof_modules_t;
+
+static void mi_pprof_modules_add(mi_heap_t* heap, mi_pprof_modules_t* mods, uintptr_t start, uintptr_t end, const char* path) {
+  if (mods->count == mods->capacity) {
+    const size_t new_capacity = (mods->capacity == 0 ? 16 : mods->capacity * 2);
+    mods->modules = (mi_pprof_module_t*)mi_heap_realloc(heap, mods->modules, new_capacity * sizeof(*mods->modules));
+    mods->capacity = new_capacity;
+  }
+  mi_pprof_module_t* m = &mods->modules[mods->count++];
+  m->start = start;
+  m->end = end;
+  m->path = (path != NULL ? mi_heap_strndup(heap, path, 1024) : NULL);
+}
+
+static void mi_pprof_modules_done(mi_pprof_modules_t* mods) {
+  for (size_t i = 0; i < mods->count; i++) { mi_free(mods->modules[i].path); }
+  mi_free(mods->modules);
+  mods->modules = NULL;
+  mods->count = 0;
+  mods->capacity = 0;
+}
+
 // On Linux, `pprof` can symbolize addresses using the `MAPPED_LIBRARIES` trailer
 // which is just a copy of `/proc/self/maps`. On macOS there is no equivalent
 // file so we reconstruct a similarly formatted line (`start-end perm ... path`)
@@ -403,11 +466,10 @@ static size_t mi_prim_backtrace(void** buffer, size_t max_depth) {
 #if defined(_WIN32)
 #include <windows.h>
 
-// Walk the process address space and write one line per loaded module:
-// `<base>-<end> r-xp 00000000 00:00 0            <path>`. Consecutive
-// `MEM_IMAGE` regions that belong to the same module (same allocation base)
-// are merged into a single range.
-static void mi_win32_write_mapped_libraries(FILE* f) {
+// Walk the process address space, calling `on_module(ctx, base, end, path)`
+// once for each loaded module. Consecutive `MEM_IMAGE` regions that belong to
+// the same module (same allocation base) are merged into a single range.
+static void mi_win32_walk_modules(void (*on_module)(void* ctx, uintptr_t base, uintptr_t end, const char* path), void* ctx) {
   SYSTEM_INFO si;
   GetSystemInfo(&si);
   uint8_t* addr = (uint8_t*)si.lpMinimumApplicationAddress;
@@ -428,8 +490,7 @@ static void mi_win32_write_mapped_libraries(FILE* f) {
         if (cur_base != NULL) {
           char path[MAX_PATH];
           const DWORD len = GetModuleFileNameA((HMODULE)cur_base, path, (DWORD)sizeof(path));
-          fprintf(f, "%" PRIxPTR "-%" PRIxPTR " r-xp 00000000 00:00 0            %s\n",
-                  (uintptr_t)cur_base, cur_end, (len > 0 ? path : ""));
+          on_module(ctx, (uintptr_t)cur_base, cur_end, (len > 0 ? path : ""));
         }
         cur_base = mbi.AllocationBase;
         cur_end  = (uintptr_t)mbi.BaseAddress + mbi.RegionSize;
@@ -439,8 +500,7 @@ static void mi_win32_write_mapped_libraries(FILE* f) {
       // the module's regions ended: flush it
       char path[MAX_PATH];
       const DWORD len = GetModuleFileNameA((HMODULE)cur_base, path, (DWORD)sizeof(path));
-      fprintf(f, "%" PRIxPTR "-%" PRIxPTR " r-xp 00000000 00:00 0            %s\n",
-              (uintptr_t)cur_base, cur_end, (len > 0 ? path : ""));
+      on_module(ctx, (uintptr_t)cur_base, cur_end, (len > 0 ? path : ""));
       cur_base = NULL;
     }
     const uint8_t* next = (const uint8_t*)mbi.BaseAddress + mbi.RegionSize;
@@ -450,9 +510,29 @@ static void mi_win32_write_mapped_libraries(FILE* f) {
   if (cur_base != NULL) {
     char path[MAX_PATH];
     const DWORD len = GetModuleFileNameA((HMODULE)cur_base, path, (DWORD)sizeof(path));
-    fprintf(f, "%" PRIxPTR "-%" PRIxPTR " r-xp 00000000 00:00 0            %s\n",
-            (uintptr_t)cur_base, cur_end, (len > 0 ? path : ""));
+    on_module(ctx, (uintptr_t)cur_base, cur_end, (len > 0 ? path : ""));
   }
+}
+
+static void mi_win32_write_mapped_libraries_on_module(void* ctx, uintptr_t base, uintptr_t end, const char* path) {
+  FILE* f = (FILE*)ctx;
+  fprintf(f, "%" PRIxPTR "-%" PRIxPTR " r-xp 00000000 00:00 0            %s\n", base, end, path);
+}
+
+static void mi_win32_write_mapped_libraries(FILE* f) {
+  mi_win32_walk_modules(&mi_win32_write_mapped_libraries_on_module, f);
+}
+
+typedef struct { mi_heap_t* heap; mi_pprof_modules_t* mods; } mi_pprof_collect_modules_win32_ctx_t;
+
+static void mi_pprof_collect_modules_win32_on_module(void* ctx, uintptr_t base, uintptr_t end, const char* path) {
+  mi_pprof_collect_modules_win32_ctx_t* c = (mi_pprof_collect_modules_win32_ctx_t*)ctx;
+  mi_pprof_modules_add(c->heap, c->mods, base, end, (path[0] != 0 ? path : NULL));
+}
+
+static void mi_pprof_collect_modules_win32(mi_heap_t* heap, mi_pprof_modules_t* mods) {
+  mi_pprof_collect_modules_win32_ctx_t ctx = { heap, mods };
+  mi_win32_walk_modules(&mi_pprof_collect_modules_win32_on_module, &ctx);
 }
 
 #elif defined(__APPLE__)
@@ -501,7 +581,23 @@ static void mi_write_mapped_libraries_macos(FILE* f) {
   }
 }
 
+static void mi_pprof_collect_modules_macos(mi_heap_t* heap, mi_pprof_modules_t* mods) {
+  const uint32_t count = _dyld_image_count();
+  for (uint32_t i = 0; i < count; i++) {
+    const struct mach_header* mh = _dyld_get_image_header(i);
+    const char* name = _dyld_get_image_name(i);
+    if (mh == NULL || name == NULL) continue;
+    const intptr_t slide = _dyld_get_image_vmaddr_slide(i);
+    uintptr_t start = 0;
+    uintptr_t end = 0;
+    if (!mi_macho_image_range(mh, slide, &start, &end)) continue;
+    mi_pprof_modules_add(heap, mods, start, end, name);
+  }
+}
+
 #elif defined(__linux__)
+#include <stdlib.h>   // strtoull
+
 // Copy `/proc/self/maps` verbatim; this is exactly the format `pprof` expects.
 static void mi_write_mapped_libraries_linux(FILE* f) {
   FILE* maps = fopen("/proc/self/maps", "r");
@@ -513,7 +609,49 @@ static void mi_write_mapped_libraries_linux(FILE* f) {
     fclose(maps);
   }
 }
+
+// Parse `/proc/self/maps` lines of the form
+// `<start>-<end> <perms> <offset> <dev> <inode>  <path>` (path may be absent
+// for anonymous mappings, which are skipped here since they are not useful
+// for symbolization).
+static void mi_pprof_collect_modules_linux(mi_heap_t* heap, mi_pprof_modules_t* mods) {
+  FILE* maps = fopen("/proc/self/maps", "r");
+  if (maps == NULL) return;
+  char line[512];
+  while (fgets(line, sizeof(line), maps) != NULL) {
+    char* end_ptr = NULL;
+    const uintptr_t start = (uintptr_t)strtoull(line, &end_ptr, 16);
+    if (end_ptr == NULL || *end_ptr != '-') continue;
+    const uintptr_t end = (uintptr_t)strtoull(end_ptr + 1, &end_ptr, 16);
+    // the path (if present) is the last whitespace-separated field on the line
+    const char* path = strrchr(line, ' ');
+    if (path == NULL) continue;
+    while (*path == ' ') path++;
+    size_t len = strlen(path);
+    while (len > 0 && (path[len-1] == '\n' || path[len-1] == '\r')) { len--; }
+    if (len == 0 || path[0] == '[') continue;  // skip anonymous mappings like `[heap]`, `[stack]`
+    char pathbuf[512];
+    if (len >= sizeof(pathbuf)) { len = sizeof(pathbuf) - 1; }
+    memcpy(pathbuf, path, len);
+    pathbuf[len] = 0;
+    mi_pprof_modules_add(heap, mods, start, end, pathbuf);
+  }
+  fclose(maps);
+}
 #endif
+
+static void mi_pprof_collect_modules(mi_heap_t* heap, mi_pprof_modules_t* mods) {
+  mods->modules = NULL;
+  mods->count = 0;
+  mods->capacity = 0;
+  #if defined(__linux__)
+  mi_pprof_collect_modules_linux(heap, mods);
+  #elif defined(_WIN32)
+  mi_pprof_collect_modules_win32(heap, mods);
+  #elif defined(__APPLE__)
+  mi_pprof_collect_modules_macos(heap, mods);
+  #endif
+}
 
 static void mi_pprof_write_mapped_libraries(FILE* f) {
   fprintf(f, "MAPPED_LIBRARIES:\n");
@@ -524,4 +662,380 @@ static void mi_pprof_write_mapped_libraries(FILE* f) {
   #elif defined(__APPLE__)
   mi_write_mapped_libraries_macos(f);
   #endif
+}
+
+// ---------------------------------------------------------------------------
+// Dumping the profile in the modern `pprof` protobuf format
+// (`perftools.profiles.Profile`, see
+//  https://github.com/google/pprof/blob/main/proto/profile.proto)
+//
+// On-disk, `pprof` profiles are normally gzip-compressed, but `pprof` also
+// accepts a *raw* (uncompressed) serialized `Profile` message: it only tries
+// to gunzip the input if it starts with the gzip magic bytes, and otherwise
+// parses it directly as a protobuf message. We take advantage of that so we
+// don't need to implement a deflate/gzip writer.
+//
+// We still need the locations hash table for this format: samples are
+// aggregated per call site (thread + callstack), exactly as for the text
+// format, rather than emitting one `Sample` per individual allocation. What
+// changes is the *representation* of a callstack: instead of a flat list of
+// hex addresses embedded directly in a text line, each frame address becomes
+// its own (deduplicated) `Location` entry, referenced by id from `Sample.
+// location_id`. The originating thread id -- which the text format doesn't
+// record explicitly (it is only implicit in which addresses got sampled) --
+// is attached to each `Sample` via a numeric `Label` (pprof has no dedicated
+// thread-id field, but labels are the generic mechanism for this).
+// ---------------------------------------------------------------------------
+
+// A simple growable byte buffer, allocated from the profiler's own heap.
+typedef struct {
+  mi_heap_t* heap;
+  uint8_t*   data;
+  size_t     size;
+  size_t     capacity;
+} mi_pb_buf_t;
+
+static void mi_pb_init(mi_pb_buf_t* b, mi_heap_t* heap) {
+  b->heap = heap;
+  b->data = NULL;
+  b->size = 0;
+  b->capacity = 0;
+}
+
+static void mi_pb_done(mi_pb_buf_t* b) {
+  mi_free(b->data);
+  b->data = NULL;
+  b->size = 0;
+  b->capacity = 0;
+}
+
+static void mi_pb_reserve(mi_pb_buf_t* b, size_t extra) {
+  if (b->size + extra <= b->capacity) return;
+  size_t new_capacity = (b->capacity == 0 ? 4096 : b->capacity * 2);
+  while (new_capacity < b->size + extra) { new_capacity *= 2; }
+  b->data = (uint8_t*)mi_heap_realloc(b->heap, b->data, new_capacity);
+  b->capacity = new_capacity;
+}
+
+static void mi_pb_bytes(mi_pb_buf_t* b, const void* p, size_t n) {
+  mi_pb_reserve(b, n);
+  memcpy(b->data + b->size, p, n);
+  b->size += n;
+}
+
+static void mi_pb_byte(mi_pb_buf_t* b, uint8_t byte) {
+  mi_pb_bytes(b, &byte, 1);
+}
+
+// Unsigned LEB128 (protobuf "varint") encoding.
+static void mi_pb_varint(mi_pb_buf_t* b, uint64_t v) {
+  do {
+    uint8_t byte = (uint8_t)(v & 0x7F);
+    v >>= 7;
+    if (v != 0) { byte |= 0x80; }
+    mi_pb_byte(b, byte);
+  } while (v != 0);
+}
+
+static void mi_pb_tag(mi_pb_buf_t* b, uint32_t field, uint32_t wiretype) {
+  mi_pb_varint(b, ((uint64_t)field << 3) | wiretype);
+}
+
+// Scalar varint fields; proto3 encoders may omit fields set to their default
+// (0/false) value, which we do here to keep the output compact.
+static void mi_pb_uint64_field(mi_pb_buf_t* b, uint32_t field, uint64_t v) {
+  if (v == 0) return;
+  mi_pb_tag(b, field, 0);
+  mi_pb_varint(b, v);
+}
+
+static void mi_pb_int64_field(mi_pb_buf_t* b, uint32_t field, int64_t v) {
+  if (v == 0) return;
+  mi_pb_tag(b, field, 0);
+  mi_pb_varint(b, (uint64_t)v);  // proto3 plain int64 is encoded as a varint of its 2's complement bit pattern
+}
+
+// Length-delimited fields (string/bytes/embedded message) are always emitted,
+// even when empty: this matters for `string_table[0]` (which must be the
+// empty string) and for repeated message fields (an empty message is still a
+// valid, distinct list entry).
+static void mi_pb_len_field(mi_pb_buf_t* b, uint32_t field, const void* data, size_t len) {
+  mi_pb_tag(b, field, 2);
+  mi_pb_varint(b, len);
+  mi_pb_bytes(b, data, len);
+}
+
+static void mi_pb_message_field(mi_pb_buf_t* b, uint32_t field, const mi_pb_buf_t* msg) {
+  mi_pb_len_field(b, field, msg->data, msg->size);
+}
+
+// A packed repeated scalar field (used for `Sample.location_id`/`Sample.value`):
+// all elements are varint-encoded and concatenated into one length-delimited blob.
+static void mi_pb_packed_uint64_field(mi_pb_buf_t* b, uint32_t field, const uint64_t* values, size_t count) {
+  if (count == 0) return;
+  mi_pb_buf_t tmp;
+  mi_pb_init(&tmp, b->heap);
+  for (size_t i = 0; i < count; i++) { mi_pb_varint(&tmp, values[i]); }
+  mi_pb_message_field(b, field, &tmp);
+  mi_pb_done(&tmp);
+}
+
+static void mi_pb_packed_int64_field(mi_pb_buf_t* b, uint32_t field, const int64_t* values, size_t count) {
+  mi_pb_packed_uint64_field(b, field, (const uint64_t*)values, count);  // same varint bit pattern
+}
+
+// ---------------------------------------------------------------------------
+// String table: dedups strings into `Profile.string_table` (field 6) and
+// hands back the (1-based; index 0 is reserved for "") index of each string.
+// A linear search is fine here: a profile typically only has a handful to a
+// few hundred distinct strings (sample type names, mapped file paths).
+// ---------------------------------------------------------------------------
+
+typedef struct {
+  char*   str;
+  int64_t index;
+} mi_pb_string_entry_t;
+
+typedef struct {
+  mi_heap_t*            heap;
+  mi_pb_string_entry_t* entries;
+  size_t                count;
+  size_t                capacity;
+  mi_pb_buf_t           table;  // the serialized `string_table` entries (Profile field 6)
+} mi_pb_strings_t;
+
+static void mi_pb_strings_init(mi_pb_strings_t* strings, mi_heap_t* heap) {
+  strings->heap = heap;
+  strings->entries = NULL;
+  strings->count = 0;
+  strings->capacity = 0;
+  mi_pb_init(&strings->table, heap);
+  mi_pb_len_field(&strings->table, 6, "", 0);  // index 0 must always be ""
+}
+
+static void mi_pb_strings_done(mi_pb_strings_t* strings) {
+  for (size_t i = 0; i < strings->count; i++) { mi_free(strings->entries[i].str); }
+  mi_free(strings->entries);
+  mi_pb_done(&strings->table);
+}
+
+static int64_t mi_pb_strings_intern(mi_pb_strings_t* strings, const char* s) {
+  if (s == NULL) { s = ""; }
+  for (size_t i = 0; i < strings->count; i++) {
+    if (strcmp(strings->entries[i].str, s) == 0) { return strings->entries[i].index; }
+  }
+  if (strings->count == strings->capacity) {
+    const size_t new_capacity = (strings->capacity == 0 ? 32 : strings->capacity * 2);
+    strings->entries = (mi_pb_string_entry_t*)mi_heap_realloc(strings->heap, strings->entries, new_capacity * sizeof(*strings->entries));
+    strings->capacity = new_capacity;
+  }
+  const int64_t index = (int64_t)(strings->count + 1);  // index 0 is reserved for ""
+  strings->entries[strings->count].str = mi_heap_strndup(strings->heap, s, 1024);
+  strings->entries[strings->count].index = index;
+  strings->count++;
+  mi_pb_len_field(&strings->table, 6, s, strlen(s));
+  return index;
+}
+
+// ---------------------------------------------------------------------------
+// A small single-threaded hash map from a raw frame address to the id of its
+// (deduplicated) `Location` entry. Only ever built and consulted from within
+// `mi_pprof_dump_proto`, so (unlike the locations hash table) it needs no
+// atomics at all.
+// ---------------------------------------------------------------------------
+
+typedef struct mi_pb_addr_entry_s {
+  struct mi_pb_addr_entry_s* next;
+  uintptr_t                  addr;
+  uint64_t                   id;
+} mi_pb_addr_entry_t;
+
+typedef struct {
+  mi_heap_t*            heap;
+  size_t                bucket_count;
+  mi_pb_addr_entry_t**  buckets;
+} mi_pb_addr_map_t;
+
+static void mi_pb_addr_map_init(mi_pb_addr_map_t* map, mi_heap_t* heap, size_t bucket_count) {
+  map->heap = heap;
+  map->bucket_count = (bucket_count == 0 ? 1 : bucket_count);
+  map->buckets = (mi_pb_addr_entry_t**)mi_heap_zalloc(heap, map->bucket_count * sizeof(*map->buckets));
+}
+
+static void mi_pb_addr_map_done(mi_pb_addr_map_t* map) {
+  if (map->buckets == NULL) return;
+  for (size_t i = 0; i < map->bucket_count; i++) {
+    mi_pb_addr_entry_t* e = map->buckets[i];
+    while (e != NULL) {
+      mi_pb_addr_entry_t* const next = e->next;
+      mi_free(e);
+      e = next;
+    }
+  }
+  mi_free(map->buckets);
+  map->buckets = NULL;
+}
+
+// Returns the existing location id for `addr`, or assigns it `next_id` and
+// returns that (setting `*is_new` to true) if this is the first time `addr`
+// is seen.
+static uint64_t mi_pb_addr_map_find_or_insert(mi_pb_addr_map_t* map, uintptr_t addr, uint64_t next_id, bool* is_new) {
+  if (map->buckets == NULL) { *is_new = false; return 0; }
+  const size_t idx = (size_t)(addr ^ (addr >> 16)) % map->bucket_count;
+  for (mi_pb_addr_entry_t* e = map->buckets[idx]; e != NULL; e = e->next) {
+    if (e->addr == addr) { *is_new = false; return e->id; }
+  }
+  mi_pb_addr_entry_t* e = mi_heap_malloc_tp(mi_pb_addr_entry_t, map->heap);
+  e->addr = addr;
+  e->id = next_id;
+  e->next = map->buckets[idx];
+  map->buckets[idx] = e;
+  *is_new = true;
+  return next_id;
+}
+
+// Find the (1-based) `Mapping` id of the module containing `addr`, or 0 if
+// `addr` doesn't fall within any collected module range.
+static uint64_t mi_pprof_find_mapping_id(const mi_pprof_modules_t* mods, uintptr_t addr) {
+  for (size_t i = 0; i < mods->count; i++) {
+    if (addr >= mods->modules[i].start && addr < mods->modules[i].end) { return (uint64_t)(i + 1); }
+  }
+  return 0;
+}
+
+// Write out the current profiler data as a raw (uncompressed) `perftools.
+// profiles.Profile` protobuf message (see the file-level comment above).
+static void mi_pprof_dump_proto(pprof_profiler_t* prof, const char* fname) {
+  mi_heap_t* heap = prof->profile_heap;
+  mi_locations_t* locations = &prof->locations;
+
+  mi_pb_buf_t profile;
+  mi_pb_init(&profile, heap);
+  mi_pb_strings_t strings;
+  mi_pb_strings_init(&strings, heap);
+
+  const int64_t str_count         = mi_pb_strings_intern(&strings, "count");
+  const int64_t str_bytes         = mi_pb_strings_intern(&strings, "bytes");
+  const int64_t str_alloc_objects = mi_pb_strings_intern(&strings, "alloc_objects");
+  const int64_t str_alloc_bytes   = mi_pb_strings_intern(&strings, "alloc_bytes");
+  const int64_t str_inuse_objects = mi_pb_strings_intern(&strings, "inuse_objects");
+  const int64_t str_inuse_bytes   = mi_pb_strings_intern(&strings, "inuse_bytes");
+  const int64_t str_space         = mi_pb_strings_intern(&strings, "space");
+  const int64_t str_thread        = mi_pb_strings_intern(&strings, "thread");
+
+  // Profile.sample_type = 1: [alloc_objects:count, alloc_bytes:bytes, inuse_objects:count, inuse_bytes:bytes]
+  {
+    const int64_t types[4] = { str_alloc_objects, str_alloc_bytes, str_inuse_objects, str_inuse_bytes };
+    const int64_t units[4] = { str_count,         str_bytes,       str_count,         str_bytes };
+    for (size_t i = 0; i < 4; i++) {
+      mi_pb_buf_t vt;
+      mi_pb_init(&vt, heap);
+      mi_pb_int64_field(&vt, 1, types[i]);
+      mi_pb_int64_field(&vt, 2, units[i]);
+      mi_pb_message_field(&profile, 1, &vt);
+      mi_pb_done(&vt);
+    }
+  }
+
+  // Profile.mapping = 3: the modules loaded into this process, so `pprof` can
+  // symbolize the (raw) addresses recorded in each `Location` below.
+  mi_pprof_modules_t mods;
+  mi_pprof_collect_modules(heap, &mods);
+  for (size_t i = 0; i < mods.count; i++) {
+    const mi_pprof_module_t* m = &mods.modules[i];
+    mi_pb_buf_t mapping;
+    mi_pb_init(&mapping, heap);
+    mi_pb_uint64_field(&mapping, 1, (uint64_t)(i + 1));    // id
+    mi_pb_uint64_field(&mapping, 2, (uint64_t)m->start);   // memory_start
+    mi_pb_uint64_field(&mapping, 3, (uint64_t)m->end);     // memory_limit
+    if (m->path != NULL) {
+      mi_pb_int64_field(&mapping, 5, mi_pb_strings_intern(&strings, m->path));  // filename
+    }
+    mi_pb_message_field(&profile, 3, &mapping);
+    mi_pb_done(&mapping);
+  }
+
+  // Profile.location = 4 and Profile.sample = 2: one (deduplicated) `Location`
+  // per unique frame address, and one `Sample` per unique call site (i.e. one
+  // per entry in our own locations hash table), exactly mirroring the text
+  // format's aggregation.
+  mi_pb_addr_map_t addr_map;
+  mi_pb_addr_map_init(&addr_map, heap, locations->bucket_count);
+  uint64_t next_location_id = 1;
+
+  for (size_t i = 0; i < locations->bucket_count; i++) {
+    for (mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, &locations->buckets[i]); loc != NULL; loc = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next)) {
+      const int64_t free_count = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_count);
+      const int64_t free_bytes = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_bytes);
+
+      const size_t frame_count = (loc->callstack.count > MI_MAX_BACKTRACE_DEPTH ? MI_MAX_BACKTRACE_DEPTH : loc->callstack.count);
+      uint64_t location_ids[MI_MAX_BACKTRACE_DEPTH];
+      for (size_t j = 0; j < frame_count; j++) {
+        const uintptr_t addr = (uintptr_t)loc->callstack.frames[j];
+        bool is_new = false;
+        const uint64_t id = mi_pb_addr_map_find_or_insert(&addr_map, addr, next_location_id, &is_new);
+        location_ids[j] = id;
+        if (is_new) {
+          next_location_id++;
+          mi_pb_buf_t location;
+          mi_pb_init(&location, heap);
+          mi_pb_uint64_field(&location, 1, id);                                    // id
+          mi_pb_uint64_field(&location, 2, mi_pprof_find_mapping_id(&mods, addr));  // mapping_id
+          mi_pb_uint64_field(&location, 3, (uint64_t)addr);                        // address
+          mi_pb_message_field(&profile, 4, &location);
+          mi_pb_done(&location);
+        }
+      }
+
+      mi_pb_buf_t sample;
+      mi_pb_init(&sample, heap);
+      mi_pb_packed_uint64_field(&sample, 1, location_ids, frame_count);  // location_id (leaf-first, matching our capture order)
+      const int64_t values[4] = {
+        loc->alloc_count, loc->alloc_bytes,
+        loc->alloc_count - free_count, loc->alloc_bytes - free_bytes
+      };
+      mi_pb_packed_int64_field(&sample, 2, values, 4);  // value
+      {
+        // attach the originating thread id as a numeric label: pprof has no
+        // dedicated thread-id field, but `Sample.label` is the generic
+        // mechanism for this kind of per-sample metadata.
+        mi_pb_buf_t label;
+        mi_pb_init(&label, heap);
+        mi_pb_int64_field(&label, 1, str_thread);            // key
+        mi_pb_int64_field(&label, 3, (int64_t)loc->thread_id); // num
+        mi_pb_message_field(&sample, 3, &label);
+        mi_pb_done(&label);
+      }
+      mi_pb_message_field(&profile, 2, &sample);
+      mi_pb_done(&sample);
+    }
+  }
+
+  mi_pb_addr_map_done(&addr_map);
+  mi_pprof_modules_done(&mods);
+
+  // Profile.period_type = 11 / Profile.period = 12: matches the convention
+  // used by Go's heap profiles ("space"/"bytes", sampling period in bytes).
+  {
+    mi_pb_buf_t period_type;
+    mi_pb_init(&period_type, heap);
+    mi_pb_int64_field(&period_type, 1, str_space);
+    mi_pb_int64_field(&period_type, 2, str_bytes);
+    mi_pb_message_field(&profile, 11, &period_type);
+    mi_pb_done(&period_type);
+  }
+  mi_pb_int64_field(&profile, 12, (int64_t)prof->sample_threshold);          // period
+  mi_pb_int64_field(&profile, 9, (int64_t)time(NULL) * 1000000000LL);       // time_nanos
+
+  // the string table (Profile.string_table = 6) can only be finalized now,
+  // since strings were interned into it while building the message above.
+  mi_pb_bytes(&profile, strings.table.data, strings.table.size);
+  mi_pb_strings_done(&strings);
+
+  FILE* f = fopen(fname, "wb");
+  if (f != NULL) {
+    fwrite(profile.data, 1, profile.size, f);
+    fclose(f);
+  }
+  mi_pb_done(&profile);
 }

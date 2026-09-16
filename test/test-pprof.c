@@ -27,7 +27,12 @@ terms of the MIT license. A copy of the license can be found in the file
 // The pprof profiler is not (yet) exposed through a public header;
 // declare the API here as it is exported from `src/profile/pprof.c`.
 // ---------------------------------------------------------------------------
-mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name);
+typedef enum mi_pprof_format_e {
+  MI_PPROF_FORMAT_TEXT = 0,   // original (gperftools-style) textual pprof heap profile format
+  MI_PPROF_FORMAT_PROTO       // modern `perftools.profiles.Profile` protobuf format (uncompressed)
+} mi_pprof_format_t;
+
+mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, mi_pprof_format_t format);
 void           mi_pprof_profiler_delete(mi_profiler_t* profiler);
 void           mi_pprof_profiler_dump(mi_profiler_t* profiler);
 
@@ -195,7 +200,7 @@ static char* read_file(const char* fname) {
 bool test_pprof_dump_creates_file(void) {
   CHECK_BODY("pprof: dump creates a <base>.0001.heap file") {
     pprof_remove_dump_files(PROFILE_BASE_NAME, 1);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME, MI_PPROF_FORMAT_TEXT);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -222,7 +227,7 @@ bool test_pprof_dump_creates_file(void) {
 bool test_pprof_dump_format(void) {
   CHECK_BODY("pprof: dump uses the pprof heap profile text format") {
     pprof_remove_dump_files(PROFILE_BASE_NAME, 1);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME, MI_PPROF_FORMAT_TEXT);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -249,6 +254,91 @@ bool test_pprof_dump_format(void) {
   return true;
 }
 
+#define PROFILE_PROTO_BASE_NAME "test-pprof-profile-proto"
+
+// Read a raw protobuf varint starting at `*p` (bounded by `end`), advancing `*p`.
+static uint64_t pb_read_varint(const uint8_t** p, const uint8_t* end) {
+  uint64_t v = 0;
+  int shift = 0;
+  while (*p < end) {
+    const uint8_t byte = *(*p)++;
+    v |= ((uint64_t)(byte & 0x7F)) << shift;
+    if ((byte & 0x80) == 0) break;
+    shift += 7;
+  }
+  return v;
+}
+
+// A very small sanity check that the dumped bytes are plausible protobuf: no
+// C-side protobuf parser is available, so we just walk the top-level
+// `(tag, value)` pairs and check they are well-formed and that at least one
+// `Profile.sample` (field 2) and one `Profile.location` (field 4) entry are
+// present, without fully decoding their contents.
+static bool pb_looks_like_valid_profile(const uint8_t* data, size_t size) {
+  const uint8_t* p = data;
+  const uint8_t* end = data + size;
+  bool saw_sample = false;
+  bool saw_location = false;
+  while (p < end) {
+    const uint64_t tag = pb_read_varint(&p, end);
+    const uint32_t field = (uint32_t)(tag >> 3);
+    const uint32_t wiretype = (uint32_t)(tag & 0x7);
+    if (field == 2) saw_sample = true;
+    if (field == 4) saw_location = true;
+    if (wiretype == 0) {        // varint
+      pb_read_varint(&p, end);
+    }
+    else if (wiretype == 2) {   // length-delimited
+      const uint64_t len = pb_read_varint(&p, end);
+      if ((size_t)(end - p) < len) return false;
+      p += len;
+    }
+    else {
+      return false;  // no other wiretypes are used by this writer
+    }
+  }
+  return (p == end && saw_sample && saw_location);
+}
+
+bool test_pprof_dump_proto_format(void) {
+  CHECK_BODY("pprof: dump can use the protobuf pprof format") {
+    char fname[1024];
+    snprintf(fname, sizeof(fname), "%s.0001.pb", PROFILE_PROTO_BASE_NAME);
+    remove(fname);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_PROTO_BASE_NAME, MI_PPROF_FORMAT_PROTO);
+    result = (prof != NULL);
+    if (result) {
+      mi_profile(prof);
+      mi_profiler_start(prof);
+      allocate_and_free(200000, 64);
+      mi_profiler_stop(prof);
+
+      mi_pprof_profiler_dump(prof);
+
+      FILE* f = fopen(fname, "rb");
+      result = (f != NULL);
+      if (result) {
+        fseek(f, 0, SEEK_END);
+        const long size = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        result = (size > 0);
+        if (result) {
+          uint8_t* buf = (uint8_t*)mi_malloc((size_t)size);
+          const size_t nread = fread(buf, 1, (size_t)size, f);
+          result = (nread == (size_t)size && pb_looks_like_valid_profile(buf, nread));
+          mi_free(buf);
+        }
+        fclose(f);
+      }
+
+      mi_profile(NULL);
+      mi_pprof_profiler_delete(prof);
+    }
+    remove(fname);
+  }
+  return true;
+}
+
 bool test_pprof_dump_records_samples(void) {
   CHECK_BODY("pprof: dump records samples from multiple distinct call sites") {
     // `allocate_and_free_multi_site` itself dumps once, halfway through its
@@ -261,7 +351,7 @@ bool test_pprof_dump_records_samples(void) {
     #define MI_TEST_PPROF_RECORDS_DUMP_COUNT 4
     #define MI_TEST_PPROF_FINAL_DUMP_SEQ (MI_TEST_PPROF_RECORDS_DUMP_COUNT + 1)
     pprof_remove_dump_files(PROFILE_BASE_NAME, MI_TEST_PPROF_FINAL_DUMP_SEQ);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME, MI_PPROF_FORMAT_TEXT);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -314,7 +404,7 @@ bool test_pprof_dump_increments_sequence(void) {
   CHECK_BODY("pprof: repeated dumps use an incrementing sequence number") {
     #define MI_TEST_PPROF_DUMP_COUNT 3
     pprof_remove_dump_files(PROFILE_BASE_NAME, MI_TEST_PPROF_DUMP_COUNT);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME, MI_PPROF_FORMAT_TEXT);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -342,7 +432,7 @@ bool test_pprof_dump_increments_sequence(void) {
 
 bool test_pprof_profiler_new_delete(void) {
   CHECK_BODY("pprof: profiler can be created and deleted without use") {
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME, MI_PPROF_FORMAT_TEXT);
     result = (prof != NULL);
     if (prof != NULL) {
       mi_pprof_profiler_delete(prof);
@@ -421,7 +511,7 @@ static void thread_pool_cleanup(void) {
 bool test_pprof_concurrent_threads(void) {
   CHECK_BODY("pprof: dump is thread safe with concurrently allocating/freeing threads") {
     pprof_remove_dump_files(PROFILE_THREADS_BASE_NAME, MI_TEST_PPROF_THREAD_DUMP_COUNT);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_THREADS_BASE_NAME);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_THREADS_BASE_NAME, MI_PPROF_FORMAT_TEXT);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -480,6 +570,7 @@ int main(void) {
   test_pprof_profiler_new_delete();
   test_pprof_dump_creates_file();
   test_pprof_dump_format();
+  test_pprof_dump_proto_format();
   test_pprof_dump_increments_sequence();
   // last test leaves the pprof files
   test_pprof_dump_records_samples();
