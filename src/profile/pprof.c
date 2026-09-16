@@ -28,10 +28,9 @@ typedef struct mi_location_s  mi_location_t;
 typedef struct mi_locations_s mi_locations_t;
 typedef struct mi_callstack_s mi_callstack_t;
 
-static size_t mi_prim_backtrace(void** buffer, size_t max_depth);  // `buffer` must have room for `max_depth + MI_PPROF_SKIP_FRAMES + 1` entries (see definition)
-
-static bool mi_locations_init(mi_heap_t* heap, mi_locations_t* locations);
-static void mi_locations_done(mi_heap_t* heap, mi_locations_t* locations);
+static size_t  mi_prim_backtrace(void** buffer, size_t max_depth);  // `buffer` must have room for `max_depth + MI_PPROF_SKIP_FRAMES + 1` entries (see definition)
+static bool    mi_locations_init(mi_heap_t* heap, mi_locations_t* locations);
+static void    mi_locations_done(mi_heap_t* heap, mi_locations_t* locations);
 static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_t* locations, mi_threadid_t thread_id, const mi_callstack_t* callstack);
 
 

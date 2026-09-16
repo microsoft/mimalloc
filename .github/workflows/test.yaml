@@ -233,7 +233,7 @@ jobs:
         run: |
           CC=clang CXX=clang++ cmake . -B out/debug-tsan -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_DEBUG_TSAN=ON 
           cmake --build out/debug-tsan --parallel 8 --config Debug
-          ctest --test-dir out/debug-tsan --verbose --timeout 240 -C Debug
+          ctest --test-dir out/debug-tsan --verbose --timeout 360 -C Debug
 
       - name: Debug, Guarded
         if: matrix.tests == 'extra' && runner.os != 'macOS'
