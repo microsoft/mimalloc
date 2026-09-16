@@ -602,14 +602,15 @@ In the source code:
 - Use `mi_free_small` when the pointer was returned from `mi_malloc_small` (and guaranteed to have a
   size of less than `MI_SMALL_SIZE_MAX`). Use `mi_free_small_nonnull` when the pointer is guaranteed to be not `NULL` as well.
 
-For run-time systems and compilers (like Koka, Lean, etc.), we can do slightly better still.
+For run-time systems and compilers (like Koka, Lean, Rust (?) etc.), we can do slightly better still.
 
 - If the allocation size is statically known, use `mi_malloc_csize` and `mi_free_csize` etc. when possible. 
   (or directly `mi_malloc_small`/`mi_free_small`).
 
 - If the runtime already carries thread local state, it may be faster to get the default `theap` for each thread
-  up-front (`mi_theap_get_default()`) and use the very fast `mi_theap_malloc(_small)` etc. passing the theap
-  pointer directly. This avoids having mimalloc look up the thread local pointer all the time. Whether this is 
+  up-front (`mi_theap_get_default()`) and use the bestest `mi_theap_malloc(_small)` etc. passing the theap pointer directly. 
+  This avoids having mimalloc look up the thread local pointer all the time and
+  skips a theap `NULL` check. Whether this is 
   faster depends a bit on the OS implementation of thread local variables. 
 
 
