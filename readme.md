@@ -91,7 +91,7 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 ### Releases
 
 * 2026-09-16, `v3.5.3`: (v3) critical bug fix (where the first new on a thread could
-  fail on some platforms). Fix bug with `mi_free_size` on overaligned small allocations.
+  fail on some platforms #1398). Fix bug with `mi_free_size` on overaligned small allocations (#1400).
 * 2026-09-12, `v3.5.2`, `v2.5.2`, `v1.15.2`: (v3) Reduced cache contention, improved `mi_malloc_csize`,
   improved zero'ing of small blocks, `mi_wmalloc` variants for runtime systems, always enable detailed
   statistics. Experimental support for profiling hooks (`mimalloc-profile.h`).
