@@ -259,6 +259,6 @@ bool mi_profiler_start(mi_profiler_t* profiler ) {
 }
 
 bool mi_profiler_stop(mi_profiler_t* profiler) {
-  if (profiler==NULL) return true;
+  if (profiler==NULL) return false;
   return mi_profiler_set_enabled(profiler,false);
 }

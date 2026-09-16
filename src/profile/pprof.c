@@ -55,22 +55,27 @@ struct mi_callstack_s {
 
 // A location is a unique combination of a thread and runtime callstack for 
 // which we track allocation and deallocation statistics.
+//
+// Locations are only ever inserted, or mutated in-place after publication, and a location is only ever looked up using its own
+// `hash`/`thread_id`/`callstack` which allows a lock-free lookup of locations in the hash table.
 struct mi_location_s {
-  struct mi_location_s* next;    // next location in the same hash bucket (for chaining on collision)
+  _Atomic(struct mi_location_s*) next;  // next location in the same hash bucket (for chaining on collision);
   mi_threadid_t     thread_id;
   mi_callstack_t    callstack;
   size_t            hash;         // hash of the thread_id and callstack
-  uint64_t          alloc_count;
-  uint64_t          alloc_bytes;
-  uint64_t          inuse_count;
-  uint64_t          inuse_bytes;
+  int64_t           alloc_count;  // only ever written by the single (allocating) owning thread: not atomic
+  int64_t           alloc_bytes;
+  int64_t           free_count;   // can be written concurrently by different freeing threads: always
+  int64_t           free_bytes;   // accessed through `mi_atomic_addi64_relaxed`/`mi_atomic_loadi64_relaxed`
 };
 
-// A basic hash table of locations.
+// A basic hash table of locations. The bucket array is fixed-size (allocated
+// once in `mi_locations_init`) and each bucket is a lock-free singly-linked
+// list that only ever grows by prepending (see `mi_locations_find_or_insert`).
 struct mi_locations_s {
-  size_t            bucket_count;      // number of buckets (fixed size)
-  mi_location_t**   buckets;           // array of `bucket_count` chain heads
-  size_t            count;             // number of locations currently stored
+  size_t                      bucket_count;  // number of buckets (fixed size)
+  _Atomic(mi_location_t*)*    buckets;       // array of `bucket_count` chain heads
+  _Atomic(size_t)             count;         // number of locations currently stored (just a statistic)
 };
 
 // Our profiler.
@@ -120,10 +125,10 @@ static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data
     data->user_data[1] = (void*)((uintptr_t)alloc_size);
   }
   if (loc!=NULL) {
-    loc->alloc_bytes += alloc_size;  
+    // `on_alloc` for a given location only ever runs on its one owning (allocating)
+    // thread, so plain increments are safe here (no concurrent writers possible).
+    loc->alloc_bytes += (int64_t)alloc_size;
     loc->alloc_count += 1;
-    loc->inuse_bytes += alloc_size;
-    loc->inuse_count += 1;
   }
   return new_threshold;
 }
@@ -135,8 +140,10 @@ static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t*
     mi_assert(data->user_data_size >= 2*sizeof(void*));
     mi_location_t* loc = (mi_location_t*)data->user_data[0];
     if (loc!=NULL) {
-      loc->inuse_bytes -= (size_t)((uintptr_t)data->user_data[1]);
-      loc->inuse_count -= 1;
+      // different threads can free allocations that share the same (allocating-thread,
+      // callstack) location concurrently, so these updates must be atomic.
+      mi_atomic_addi64_relaxed(&loc->free_bytes, (int64_t)((uintptr_t)data->user_data[1]));
+      mi_atomic_addi64_relaxed(&loc->free_count, 1);
     }
   }
 }
@@ -187,6 +194,7 @@ void mi_pprof_profiler_delete(mi_profiler_t* profiler) {
 // if it is NULL, no dump is written and this function does nothing.
 void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
   if (profiler == NULL) return;
+  bool was_running = mi_profiler_stop(profiler);
   pprof_profiler_t* prof = downcast(profiler);
   mi_locations_t* locations = &prof->locations;
   if (locations->buckets == NULL || prof->base_file_name == NULL) return;
@@ -199,16 +207,21 @@ void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
   if (f == NULL) return;
 
   // first pass: compute the totals over all locations
+  // (dump is assumed to run single-threaded while sampling is stopped, so
+  // `alloc_count`/`alloc_bytes` can be read directly; `free_count`/`free_bytes`
+  // are still `_Atomic` fields so we use a relaxed load for those)
   uint64_t total_inuse_objects = 0;
   uint64_t total_inuse_bytes   = 0;
   uint64_t total_alloc_objects = 0;
   uint64_t total_alloc_bytes   = 0;
   for (size_t i = 0; i < locations->bucket_count; i++) {
-    for (mi_location_t* loc = locations->buckets[i]; loc != NULL; loc = loc->next) {
-      total_inuse_objects += loc->inuse_count;
-      total_inuse_bytes   += loc->inuse_bytes;
-      total_alloc_objects += loc->alloc_count;
-      total_alloc_bytes   += loc->alloc_bytes;
+    for (mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, &locations->buckets[i]); loc != NULL; loc = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next)) {
+      const int64_t free_count = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_count);
+      const int64_t free_bytes = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_bytes);
+      total_inuse_objects += (uint64_t)(loc->alloc_count - free_count);
+      total_inuse_bytes   += (uint64_t)(loc->alloc_bytes - free_bytes);
+      total_alloc_objects += (uint64_t)loc->alloc_count;
+      total_alloc_bytes   += (uint64_t)loc->alloc_bytes;
     }
   }
 
@@ -217,9 +230,12 @@ void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
 
   // second pass: write one line per unique call location
   for (size_t i = 0; i < locations->bucket_count; i++) {
-    for (mi_location_t* loc = locations->buckets[i]; loc != NULL; loc = loc->next) {
+    for (mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, &locations->buckets[i]); loc != NULL; loc = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next)) {
+      const int64_t free_count = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_count);
+      const int64_t free_bytes = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&loc->free_bytes);
       fprintf(f, "%6" PRIu64 ": %8" PRIu64 " [%6" PRIu64 ": %8" PRIu64 "] @",
-                 loc->inuse_count, loc->inuse_bytes, loc->alloc_count, loc->alloc_bytes);
+                 (uint64_t)(loc->alloc_count - free_count), (uint64_t)(loc->alloc_bytes - free_bytes),
+                 (uint64_t)loc->alloc_count, (uint64_t)loc->alloc_bytes);
       for (size_t j = 0; j < loc->callstack.count; j++) {
         fprintf(f, " 0x%" PRIxPTR, (uintptr_t)loc->callstack.frames[j]);
       }
@@ -229,6 +245,7 @@ void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
 
   mi_pprof_write_mapped_libraries(f);
   fclose(f);
+  if (was_running) { mi_profiler_start(profiler); }
 }
 
 // ---------------------------------------------------------------------------
@@ -236,6 +253,16 @@ void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
 // locations, and their callstack frames) is allocated from the profiler's
 // own heap so it does not interfere with the profiled allocations.
 // Collisions are resolved with simple chaining.
+//
+// `on_alloc` and `on_free` (and thus `mi_locations_find_or_insert`) can run
+// concurrently on multiple threads and are made thread-safe without a lock:
+// a bucket is a singly-linked list that only ever grows by prepending a new,
+// fully initialized location; once published, a location's identifying
+// fields (`hash`, `thread_id`, `callstack`) never change again. Moreover,
+// since the hash (and thus the location itself) is derived from the calling
+// thread's own id, a location is only ever looked up by the same thread
+// that creates it, so there is never a concurrent insert race for the
+// same location. 
 // ---------------------------------------------------------------------------
 
 // A reasonably large prime bucket count to keep collision chains short 
@@ -255,19 +282,20 @@ static size_t mi_location_hash(mi_threadid_t thread_id, const mi_callstack_t* ca
 // Initialize a location hash table
 static bool mi_locations_init(mi_heap_t* heap, mi_locations_t* locations) {
   locations->bucket_count = MI_LOCATIONS_BUCKET_COUNT;
-  locations->buckets = (mi_location_t**)mi_heap_zalloc(heap, locations->bucket_count * sizeof(mi_location_t*));
-  locations->count = 0;
+  locations->buckets = (_Atomic(mi_location_t*)*)mi_heap_zalloc(heap, locations->bucket_count * sizeof(*locations->buckets));
+  mi_atomic_store_relaxed(&locations->count, (size_t)0);
   return (locations->buckets != NULL);
 }
 
 // Free all memory associated with the location hash table.
+// Not thread-safe: assumes no concurrent `on_alloc`/`on_free` (see the note above).
 static void mi_locations_done(mi_heap_t* heap, mi_locations_t* locations) {
   MI_UNUSED(heap);
   if (locations->buckets == NULL) return;
   for (size_t i = 0; i < locations->bucket_count; i++) {
-    mi_location_t* loc = locations->buckets[i];
+    mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, &locations->buckets[i]);
     while (loc != NULL) {
-      mi_location_t* next = loc->next;
+      mi_location_t* next = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next);
       if (loc->callstack.frames != NULL) {
         mi_free(loc->callstack.frames);
       }
@@ -277,25 +305,38 @@ static void mi_locations_done(mi_heap_t* heap, mi_locations_t* locations) {
   }
   mi_free(locations->buckets);
   locations->buckets = NULL;
-  locations->count = 0;
+  mi_atomic_store_relaxed(&locations->count, (size_t)0);
+}
+
+// Match a location's identifying fields; these never change after publication.
+static bool mi_location_matches(const mi_location_t* loc, size_t hash, mi_threadid_t thread_id, const mi_callstack_t* callstack) {
+  return (loc->hash == hash && loc->thread_id == thread_id &&
+          loc->callstack.count == callstack->count &&
+          (callstack->count == 0 || _mi_memcmp(loc->callstack.frames, callstack->frames, callstack->count * sizeof(void*)) == 0));
 }
 
 // Find an existing location matching `thread_id` and `callstack`, or insert
 // a fresh, zero-initialized one (with `hash` and identifying fields filled in)
 // if none exists yet. Returns NULL only on allocation failure.
+// Thread-safe (see the note above): the common case (an existing location)
+// is a lock-free, read-only traversal using relaxed loads; only inserting a
+// genuinely new location uses a CAS (and even then, only ever races against
+// other threads inserting *different* locations into the same bucket).
 static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_t* locations, mi_threadid_t thread_id, const mi_callstack_t* callstack) {
   if (locations->buckets == NULL) return NULL;
   const size_t hash = mi_location_hash(thread_id, callstack);
   const size_t idx = hash % locations->bucket_count;
-  for (mi_location_t* loc = locations->buckets[idx]; loc != NULL; loc = loc->next) {
-    if (loc->hash == hash && loc->thread_id == thread_id &&
-        loc->callstack.count == callstack->count &&
-        (callstack->count == 0 || _mi_memcmp(loc->callstack.frames, callstack->frames, callstack->count * sizeof(void*)) == 0))
-    {
-      return loc;
-    }
+  _Atomic(mi_location_t*)* bucket = &locations->buckets[idx];
+
+  // fast path: lock-free, read-only lookup in the (possibly concurrently growing) chain
+  for (mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, bucket); loc != NULL;
+       loc = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next))
+  {
+    if (mi_location_matches(loc, hash, thread_id, callstack)) return loc;
   }
-  // not found: allocate a new location and link it in at the head of the bucket
+
+  // not found: allocate and fully initialize a new location; it is not yet
+  // visible to any other thread so plain (non-atomic) stores are fine here.
   mi_location_t* loc = mi_heap_zalloc_tp(mi_location_t,heap);
   if (loc == NULL) return NULL;
   if (callstack->count > 0) {
@@ -306,9 +347,18 @@ static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_
   loc->callstack.count = callstack->count;
   loc->thread_id = thread_id;
   loc->hash = hash;
-  loc->next = locations->buckets[idx];
-  locations->buckets[idx] = loc;
-  locations->count++;
+
+  // publish the new location at the head of the bucket with a CAS loop. Since
+  // a location's key includes the calling thread's own id, no other thread
+  // can ever race to insert this *same* key -- a CAS can only fail because
+  // some other thread prepended an unrelated location to this bucket in the
+  // meantime, so we simply retry with the updated head (no duplicate check
+  // needed, unlike a typical lock-free insert).
+  mi_location_t* head = mi_atomic_load_ptr_relaxed(mi_location_t, bucket);
+  do {
+    mi_atomic_store_ptr_relaxed(mi_location_t, &loc->next, head);  // `loc` not yet published: plain store is fine
+  } while (!mi_atomic_cas_ptr_weak_release(mi_location_t, bucket, &head, loc));  // `head` is updated to the current value on failure
+  mi_atomic_increment_relaxed(&locations->count);  // just a statistic
   return loc;
 }
 
