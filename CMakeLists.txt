@@ -926,6 +926,15 @@ if(NOT WIN32 AND MI_PROFILE)
       endif()
     endif()
   endif()
+
+  # FreeBSD (and DragonFly) need `kinfo_getvmmap` (in `libutil`) to collect the
+  # process's memory mappings (used for module/library info in dumped profiles).
+  if(CMAKE_SYSTEM_NAME MATCHES "FreeBSD|DragonFly")
+    find_link_library("util" MI_LIB_UTIL)
+    if(MI_LIB_UTIL)
+      list(APPEND mi_libraries "${MI_LIB_UTIL}")
+    endif()
+  endif()
 endif()
 
 

@@ -707,6 +707,40 @@ static void mi_pprof_collect_modules_linux(mi_heap_t* heap, mi_pprof_modules_t* 
   }
   fclose(maps);
 }
+
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
+#include <sys/user.h>   // struct kinfo_vmentry
+#include <libutil.h>    // kinfo_getvmmap
+#include <unistd.h>     // getpid
+#include <stdlib.h>     // free
+
+// FreeBSD (and DragonFly, which forked from FreeBSD) do not reliably provide Linux's
+// `/proc/self/maps` (procfs is optional and rarely mounted by default); use the native
+// `kinfo_getvmmap` API instead (declared in <libutil.h>, requires linking `-lutil`) to
+// enumerate the process's virtual memory mappings.
+static void mi_write_mapped_libraries_bsd(FILE* f) {
+  int cnt = 0;
+  struct kinfo_vmentry* vmmap = kinfo_getvmmap(getpid(), &cnt);
+  if (vmmap == NULL) return;
+  for (int i = 0; i < cnt; i++) {
+    const struct kinfo_vmentry* kve = &vmmap[i];
+    if (kve->kve_path[0] == 0) continue;  // skip anonymous mappings
+    fprintf(f, "%" PRIx64 "-%" PRIx64 " r-xp 00000000 00:00 0            %s\n", (uint64_t)kve->kve_start, (uint64_t)kve->kve_end, kve->kve_path);
+  }
+  free(vmmap);
+}
+
+static void mi_pprof_collect_modules_bsd(mi_heap_t* heap, mi_pprof_modules_t* mods) {
+  int cnt = 0;
+  struct kinfo_vmentry* vmmap = kinfo_getvmmap(getpid(), &cnt);
+  if (vmmap == NULL) return;
+  for (int i = 0; i < cnt; i++) {
+    const struct kinfo_vmentry* kve = &vmmap[i];
+    if (kve->kve_path[0] == 0) continue;  // skip anonymous mappings
+    mi_pprof_modules_add(heap, mods, (uintptr_t)kve->kve_start, (uintptr_t)kve->kve_end, kve->kve_path);
+  }
+  free(vmmap);
+}
 #endif
 
 static void mi_pprof_collect_modules(mi_heap_t* heap, mi_pprof_modules_t* mods) {
@@ -719,6 +753,10 @@ static void mi_pprof_collect_modules(mi_heap_t* heap, mi_pprof_modules_t* mods) 
   mi_pprof_collect_modules_win32(heap, mods);
   #elif defined(__APPLE__)
   mi_pprof_collect_modules_macos(heap, mods);
+  #elif defined(__FreeBSD__) || defined(__DragonFly__)
+  mi_pprof_collect_modules_bsd(heap, mods);
+  #else
+  MI_UNUSED(heap);
   #endif
 }
 
@@ -730,6 +768,8 @@ static void mi_pprof_write_mapped_libraries(FILE* f) {
   mi_write_mapped_libraries_win32(f);
   #elif defined(__APPLE__)
   mi_write_mapped_libraries_macos(f);
+  #elif defined(__FreeBSD__) || defined(__DragonFly__)
+  mi_write_mapped_libraries_bsd(f);
   #endif
 }
 
