@@ -493,6 +493,7 @@ jobs:
           packages: |
             build-base
             cmake
+            libunwind-dev
 
       - name: Alpine arm32, Debug
         if: matrix.tests == 'alpine-arm32'
