@@ -125,7 +125,8 @@ set(mi_sources
     src/stats.c
     src/subproc.c
     src/theap.c
-    src/threadlocal.c)  
+    src/threadlocal.c
+    src/profile/pprof.c)  
 
 set(mi_cflags "")
 set(mi_cflags_static "")            # extra flags for a static library build
@@ -898,7 +899,7 @@ endif()
 # set language for source files now
 if(MI_USE_CXX)
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
-  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-profile.c PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-profile.c test/test-pprof.c PROPERTIES LANGUAGE CXX )
 endif()
 
 
@@ -1127,7 +1128,7 @@ if (MI_BUILD_TESTS)
   enable_testing()
 
   # static link tests
-  foreach(TEST_NAME api api-fill stress-heaps stress-subprocs stress profile)
+  foreach(TEST_NAME api api-fill stress-heaps stress-subprocs stress profile pprof)
     add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
     target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
     target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})
@@ -1139,11 +1140,11 @@ if (MI_BUILD_TESTS)
     else()
       message(STATUS "cannot build TSAN tests without MI_BUILD_SHARED being enabled")
     endif()
-    if(MI_GUARDED AND NOT (TEST_NAME STREQUAL "profile"))
+    if(MI_GUARDED AND NOT (TEST_NAME STREQUAL "profile") AND NOT (TEST_NAME STREQUAL "pprof"))
     add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_GUARDED_SAMPLE_RATE=1024 $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
     elseif(TEST_NAME STREQUAL "stress-heaps")
     add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_ARENA_EAGER_COMMIT=0 MIMALLOC_PAGE_COMMIT_ON_DEMAND=0 $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
-    elseif(NOT MI_PROFILE AND (TEST_NAME STREQUAL "profile"))
+    elseif(NOT MI_PROFILE AND (TEST_NAME STREQUAL "profile" OR TEST_NAME STREQUAL "pprof"))
     # don't add as a test
     else()
     add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})

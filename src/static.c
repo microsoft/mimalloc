@@ -44,3 +44,4 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "subproc.c"
 #include "theap.c"
 #include "threadlocal.c"
+#include "profile/pprof.c"

@@ -1475,6 +1475,10 @@ static inline size_t _mi_random_shuffle(size_t x) {
 // Provide our own `_mi_memcpy/set` for potential performance optimizations.
 // ---------------------------------------------------------------------------------
 
+static inline int _mi_memcmp(const void* dst, const void* src, size_t n) {
+  return memcmp(dst, src, n);
+}
+
 static inline void* _mi_memcpy(void* dst, const void* src, size_t n) {
   return memcpy(dst, src, n);
 }
