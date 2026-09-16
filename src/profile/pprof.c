@@ -21,9 +21,9 @@ terms of the MIT license. A copy of the license can be found in the file
 // API
 // ---------------------------------------------------------------------------
 
-mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold);
+mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name);
 void           mi_pprof_profiler_delete(mi_profiler_t* profiler);
-void           mi_pprof_profiler_dump(mi_profiler_t* profiler, const char* base_file_name);
+void           mi_pprof_profiler_dump(mi_profiler_t* profiler);
 
 
 
@@ -80,6 +80,7 @@ typedef struct {
   mi_locations_t    locations;            // hash table of call locations
   size_t            sample_threshold;     // current sample threshold
   size_t            dump_count;           // number of times `mi_pprof_profiler_dump` was called (used to number the dump files)
+  char*             base_file_name;       // base file name for dump files, e.g. "<base_file_name>.<seq>.heap"
 } pprof_profiler_t;
 
 static inline pprof_profiler_t* downcast( mi_profiler_t* prof ) { 
@@ -140,7 +141,7 @@ static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t*
   }
 }
 
-mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold) {
+mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name) {
   // heap just for the profiler itself
   mi_heap_t* heap = mi_heap_new();
   mi_heap_profile_disable(heap);  // don't sample allocations in this heap
@@ -150,6 +151,7 @@ mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold) {
   if (prof == NULL) return NULL;
   prof->sample_threshold = initial_threshold;
   prof->profile_heap = heap;
+  prof->base_file_name = (base_file_name != NULL ? mi_heap_strndup(heap, base_file_name, 1024) : NULL);
   if (!mi_locations_init(heap, &prof->locations)) {
     mi_free(prof);
     return NULL;
@@ -166,6 +168,7 @@ void mi_pprof_profiler_delete(mi_profiler_t* profiler) {
   pprof_profiler_t* prof = downcast(profiler);
   mi_heap_t* heap = prof->profile_heap;
   mi_locations_done(heap, &prof->locations);
+  mi_free(prof->base_file_name);
   mi_free(prof);
   mi_heap_delete(heap);
 }
@@ -180,15 +183,17 @@ void mi_pprof_profiler_delete(mi_profiler_t* profiler) {
 // symbolize the addresses). Each call writes a new file named
 // `<base_file_name>.<seq>.heap` with an incrementing sequence number,
 // mimicking the naming used by the original (gperftools) pprof heap profiler.
-void mi_pprof_profiler_dump(mi_profiler_t* profiler, const char* base_file_name) {
-  if (profiler == NULL || base_file_name == NULL) return;
+// The base file name is set when the profiler is created (see `mi_pprof_profiler_new`);
+// if it is NULL, no dump is written and this function does nothing.
+void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
+  if (profiler == NULL) return;
   pprof_profiler_t* prof = downcast(profiler);
   mi_locations_t* locations = &prof->locations;
-  if (locations->buckets == NULL) return;
+  if (locations->buckets == NULL || prof->base_file_name == NULL) return;
 
   char fname[1024];
   const size_t seq = ++prof->dump_count;
-  snprintf(fname, sizeof(fname), "%s.%04" PRIu64 ".heap", base_file_name, (uint64_t)seq);
+  snprintf(fname, sizeof(fname), "%s.%04" PRIu64 ".heap", prof->base_file_name, (uint64_t)seq);
 
   FILE* f = fopen(fname, "w");
   if (f == NULL) return;

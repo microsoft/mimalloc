@@ -21,9 +21,9 @@ terms of the MIT license. A copy of the license can be found in the file
 // The pprof profiler is not (yet) exposed through a public header;
 // declare the API here as it is exported from `src/profile/pprof.c`.
 // ---------------------------------------------------------------------------
-mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold);
+mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name);
 void           mi_pprof_profiler_delete(mi_profiler_t* profiler);
-void           mi_pprof_profiler_dump(mi_profiler_t* profiler, const char* base_file_name);
+void           mi_pprof_profiler_dump(mi_profiler_t* profiler);
 
 #define TEST_THRESHOLD (16 * 1024)
 #define PROFILE_BASE_NAME "test-pprof-profile"
@@ -128,7 +128,7 @@ static char* read_file(const char* fname) {
 bool test_pprof_dump_creates_file(void) {
   CHECK_BODY("pprof: dump creates a <base>.0001.heap file") {
     pprof_remove_dump_files(PROFILE_BASE_NAME, 1);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -136,7 +136,7 @@ bool test_pprof_dump_creates_file(void) {
       allocate_and_free(200000, 64);
       mi_profiler_stop(prof);
 
-      mi_pprof_profiler_dump(prof, PROFILE_BASE_NAME);
+      mi_pprof_profiler_dump(prof);
 
       char fname[1024];
       pprof_dump_file_name(fname, sizeof(fname), PROFILE_BASE_NAME, 1);
@@ -155,7 +155,7 @@ bool test_pprof_dump_creates_file(void) {
 bool test_pprof_dump_format(void) {
   CHECK_BODY("pprof: dump uses the pprof heap profile text format") {
     pprof_remove_dump_files(PROFILE_BASE_NAME, 1);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -163,7 +163,7 @@ bool test_pprof_dump_format(void) {
       allocate_and_free(200000, 64);
       mi_profiler_stop(prof);
 
-      mi_pprof_profiler_dump(prof, PROFILE_BASE_NAME);
+      mi_pprof_profiler_dump(prof);
 
       char fname[1024];
       pprof_dump_file_name(fname, sizeof(fname), PROFILE_BASE_NAME, 1);
@@ -185,7 +185,7 @@ bool test_pprof_dump_format(void) {
 bool test_pprof_dump_records_samples(void) {
   CHECK_BODY("pprof: dump records samples from multiple distinct call sites") {
     pprof_remove_dump_files(PROFILE_BASE_NAME, 1);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -194,10 +194,10 @@ bool test_pprof_dump_records_samples(void) {
       // site accumulates enough bytes to trigger at least one sample.
       allocate_and_free_multi_site(20000, 64);
       mi_profiler_stop(prof);      
-      mi_pprof_profiler_dump(prof, PROFILE_BASE_NAME);
+      mi_pprof_profiler_dump(prof);
       mi_profiler_start(prof);
       allocate_and_free_multi_site(20000, 64);
-      mi_pprof_profiler_dump(prof, PROFILE_BASE_NAME);
+      mi_pprof_profiler_dump(prof);
 
       char fname[1024];
       pprof_dump_file_name(fname, sizeof(fname), PROFILE_BASE_NAME, 1);
@@ -219,7 +219,7 @@ bool test_pprof_dump_increments_sequence(void) {
   CHECK_BODY("pprof: repeated dumps use an incrementing sequence number") {
     #define MI_TEST_PPROF_DUMP_COUNT 3
     pprof_remove_dump_files(PROFILE_BASE_NAME, MI_TEST_PPROF_DUMP_COUNT);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -227,7 +227,7 @@ bool test_pprof_dump_increments_sequence(void) {
 
       for (unsigned seq = 1; seq <= MI_TEST_PPROF_DUMP_COUNT && result; seq++) {
         allocate_and_free(20000, 64);
-        mi_pprof_profiler_dump(prof, PROFILE_BASE_NAME);
+        mi_pprof_profiler_dump(prof);
         char fname[1024];
         pprof_dump_file_name(fname, sizeof(fname), PROFILE_BASE_NAME, seq);
         char* contents = read_file(fname);
@@ -247,7 +247,7 @@ bool test_pprof_dump_increments_sequence(void) {
 
 bool test_pprof_profiler_new_delete(void) {
   CHECK_BODY("pprof: profiler can be created and deleted without use") {
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME);
     result = (prof != NULL);
     if (prof != NULL) {
       mi_pprof_profiler_delete(prof);
