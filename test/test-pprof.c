@@ -192,7 +192,7 @@ static char* read_file(const char* fname) {
 bool test_pprof_dump_creates_file(void) {
   CHECK_BODY("pprof: dump creates a <base>.0001.heap file") {
     pprof_remove_dump_files(PROFILE_BASE_NAME, 1);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -219,7 +219,7 @@ bool test_pprof_dump_creates_file(void) {
 bool test_pprof_dump_format(void) {
   CHECK_BODY("pprof: dump uses the pprof heap profile text format") {
     pprof_remove_dump_files(PROFILE_BASE_NAME, 1);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -297,7 +297,7 @@ bool test_pprof_dump_proto_format(void) {
     char fname[1024];
     snprintf(fname, sizeof(fname), "%s.0001.pb", PROFILE_PROTO_BASE_NAME);
     remove(fname);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_PROTO_BASE_NAME, 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_PROTO_BASE_NAME, 0, 0);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -338,7 +338,7 @@ bool test_pprof_dump_proto_format(void) {
 bool test_pprof_dump_interval(void) {
   CHECK_BODY("pprof: interval_size triggers automatic dumps from on_alloc") {
     pprof_remove_dump_files(PROFILE_INTERVAL_BASE_NAME, TEST_INTERVAL_MAX_SEQ);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_INTERVAL_BASE_NAME ".heap", TEST_INTERVAL_SIZE);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_INTERVAL_BASE_NAME ".heap", TEST_INTERVAL_SIZE, 0);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -386,7 +386,7 @@ bool test_pprof_dump_records_samples(void) {
     #define MI_TEST_PPROF_RECORDS_DUMP_COUNT 4
     #define MI_TEST_PPROF_FINAL_DUMP_SEQ (MI_TEST_PPROF_RECORDS_DUMP_COUNT + 1)
     pprof_remove_dump_files(PROFILE_BASE_NAME, MI_TEST_PPROF_FINAL_DUMP_SEQ);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -439,7 +439,7 @@ bool test_pprof_dump_increments_sequence(void) {
   CHECK_BODY("pprof: repeated dumps use an incrementing sequence number") {
     #define MI_TEST_PPROF_DUMP_COUNT 3
     pprof_remove_dump_files(PROFILE_BASE_NAME, MI_TEST_PPROF_DUMP_COUNT);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);
@@ -467,7 +467,7 @@ bool test_pprof_dump_increments_sequence(void) {
 
 bool test_pprof_profiler_new_delete(void) {
   CHECK_BODY("pprof: profiler can be created and deleted without use") {
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_BASE_NAME ".heap", 0, 0);
     result = (prof != NULL);
     if (prof != NULL) {
       mi_pprof_profiler_delete(prof);
@@ -546,7 +546,7 @@ static void thread_pool_cleanup(void) {
 bool test_pprof_concurrent_threads(void) {
   CHECK_BODY("pprof: dump is thread safe with concurrently allocating/freeing threads") {
     pprof_remove_dump_files(PROFILE_THREADS_BASE_NAME, MI_TEST_PPROF_THREAD_DUMP_COUNT);
-    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_THREADS_BASE_NAME ".heap", 0);
+    mi_profiler_t* prof = mi_pprof_profiler_new(TEST_THRESHOLD, PROFILE_THREADS_BASE_NAME ".heap", 0, 0);
     result = (prof != NULL);
     if (result) {
       mi_profile(prof);

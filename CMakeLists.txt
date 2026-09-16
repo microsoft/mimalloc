@@ -895,9 +895,12 @@ if(MI_USE_CXX)
   set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-stress-pprof.c test/test-profile.c test/test-pprof.c PROPERTIES LANGUAGE CXX )
 endif()
 
-# for profiling support
-
+# platform specific headers that are only needed for profiling support
 if(NOT WIN32 AND MI_PROFILE)
+  CHECK_INCLUDE_FILES("unistd.h" MI_HAS_UNISTDH)
+  if(MI_HAS_UNISTDH)
+    list(APPEND mi_defines MI_HAS_UNISTDH=1)
+  endif()
   CHECK_INCLUDE_FILES("execinfo.h" MI_HAS_EXECINFOH)
   if(MI_HAS_EXECINFOH) 
     list(APPEND mi_defines MI_HAS_EXECINFOH=1)    
@@ -926,7 +929,6 @@ if(NOT WIN32 AND MI_PROFILE)
       endif()
     endif()
   endif()
-
   # FreeBSD (and DragonFly) need `kinfo_getvmmap` (in `libutil`) to collect the
   # process's memory mappings (used for module/library info in dumped profiles).
   if(CMAKE_SYSTEM_NAME MATCHES "FreeBSD|DragonFly")

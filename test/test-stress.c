@@ -466,7 +466,7 @@ int main(int argc, char** argv) {
   srand(0x7feb352d);
   // mi_stats_reset();
   #ifdef TEST_STRESS_PPROF
-  stress_pprof_profiler = mi_pprof_profiler_new(TEST_STRESS_PPROF_THRESHOLD, TEST_STRESS_PPROF_BASE_NAME, 0);
+  stress_pprof_profiler = mi_pprof_profiler_new(TEST_STRESS_PPROF_THRESHOLD, TEST_STRESS_PPROF_BASE_NAME, 0, 0);
   if (stress_pprof_profiler != NULL) {
     mi_profile(stress_pprof_profiler);
     mi_profiler_start(stress_pprof_profiler);

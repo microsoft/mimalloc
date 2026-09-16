@@ -76,7 +76,9 @@ mi_decl_export bool mi_profiler_stop(mi_profiler_t* profiler);
 // the builtin profiler can also be activated using environment variables (see `src/profile/pprof.c`)
 // `base_file_name` selects the text dump format if it ends in `.heap` or `.text` (the extension is
 // stripped); any other extension, or none, uses the default (protobuf) dump format.
-mi_decl_export mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, size_t interval_size);
+// `alloc_interval_size`, if >0, automatically dumps every that many allocated bytes.
+// `inuse_interval_size`, if >0, automatically dumps every time the in-use bytes grow by that many bytes.
+mi_decl_export mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, size_t alloc_interval_size, size_t inuse_interval_size);
 mi_decl_export void mi_pprof_profiler_delete(mi_profiler_t* profiler);
 mi_decl_export void mi_pprof_profiler_dump(mi_profiler_t* profiler);  // can be used without starting/stopping the profiler.
 

@@ -68,8 +68,8 @@ struct mi_location_s {
   size_t            hash;         // hash of the thread_id and callstack
   int64_t           alloc_count;  // only ever written by the single (allocating) owning thread: not atomic
   int64_t           alloc_bytes;
-  _Atomic(int64_t)  free_count;   // can be written concurrently by different freeing threads: always
-  _Atomic(int64_t)  free_bytes;   // accessed through `mi_atomic_addi64_relaxed`/`mi_atomic_loadi64_relaxed`
+  _Atomic(size_t)   inuse_count;  // currently in-use (allocated but not yet freed) objects/bytes for this location;
+  _Atomic(size_t)   inuse_bytes;  // incremented in `on_alloc` and decremented in `on_free`, both possibly on any thread
 };
 
 // A basic hash table of locations. The bucket array is fixed-size (allocated
@@ -90,8 +90,11 @@ typedef struct {
   size_t            dump_count;           // number of times `mi_pprof_profiler_dump` was called (used to number the dump files)
   char*             base_file_name;       // base file name for dump files, e.g. "<base_file_name>.<seq>.heap"
   bool              format_text;          // text or protobuf dump format
-  size_t            interval_size;        // if >0, automatically dump every `interval_size` allocated bytes (capped at `MI_SSIZE_MAX`)
-  _Atomic(mi_ssize_t) interval_countdown; // bytes remaining until the next automatic dump (can go negative; decremented concurrently by `on_alloc` on any thread)
+  size_t            alloc_interval_size;        // if >0, automatically dump every `alloc_interval_size` allocated bytes (capped at `MI_SSIZE_MAX`)
+  _Atomic(mi_ssize_t) alloc_interval_countdown; // bytes remaining until the next automatic dump (can go negative; decremented concurrently by `on_alloc` on any thread)
+  size_t            inuse_interval_size;         // if >0, automatically dump every time (sampled) in-use bytes grow by `inuse_interval_size` bytes
+  _Atomic(size_t)   inuse_bytes;                 // running total of (sampled) in-use bytes across all locations (can never exceed the address space); incremented in `on_alloc`, decremented in `on_free`, both possibly on any thread
+  _Atomic(size_t)   inuse_interval_threshold;    // next `inuse_bytes` total that triggers a dump; advanced (monotonically increasing) whenever reached in `on_alloc`
 } pprof_profiler_t;
 
 static inline pprof_profiler_t* downcast( mi_profiler_t* prof ) { 
@@ -107,17 +110,21 @@ static inline pprof_profiler_t* downcast( mi_profiler_t* prof ) {
 // while the program is running).
 // ---------------------------------------------------------------------------
 
-#if MI_PROFILE
+#if MI_PROFILE   // todo: also disable profiling in secure mode?
+
+static bool mi_is_elevated_process(void);
 static mi_profiler_t* mi_profile_env_profiler;  // NULL if `MIMALLOC_PROFILE` was not set (or initialization failed)
 
 // Called once at process initialization (see `mi_process_init` in `init.c`).
 void _mi_pprof_profiler_init(void) {
   #if MI_PROFILE
+  if (mi_is_elevated_process()) return;  // don't let an untrusted environment influence a privileged process
   char fname[1024];
   if (_mi_getenv("mimalloc_profile", fname, sizeof(fname)) != 0 || fname[0] == 0) return;  // `MIMALLOC_PROFILE` not set
   const size_t sample_rate   = mi_option_get_size(mi_option_profile_sample_rate);           // 16 KiB by default
-  const size_t interval_size = mi_option_get_size(mi_option_profile_alloc_interval);        // 0 by default (no automatic interval dumps)
-  mi_profiler_t* profiler = mi_pprof_profiler_new(sample_rate, fname, interval_size);
+  const size_t alloc_interval_size = mi_option_get_size(mi_option_profile_alloc_interval);        // 0 by default (no automatic interval dumps)
+  const size_t inuse_interval_size = mi_option_get_size(mi_option_profile_inuse_interval);        // 0 by default (no automatic interval dumps)
+  mi_profiler_t* profiler = mi_pprof_profiler_new(sample_rate, fname, alloc_interval_size, inuse_interval_size);
   if (profiler == NULL) return;
   mi_profile_env_profiler = profiler;
   _mi_verbose_message("pprof profiler initialized with base file name: %s\n", fname);
@@ -187,6 +194,50 @@ static size_t mi_exp_sample(mi_theap_t* theap, size_t scale) {
   return (next > cap ? cap : next);
 }
 
+// Check if the sampled bytes accumulated so far (batched per-thread) should trigger a shared
+// countdown decrement, and if so, whether that decrement crosses zero (triggering a dump and
+// resetting the countdown to `alloc_interval_size`).
+static bool mi_interval_update(uint64_t ubytes_since_last_sample, size_t alloc_interval_size, _Atomic(mi_ssize_t)* alloc_interval_countdown, mi_ssize_t* interval_pending) {
+  mi_ssize_t sampled_bytes = 0;
+  mi_ssize_t bytes_since_last_sample= (ubytes_since_last_sample > MI_SSIZE_MAX ? MI_SSIZE_MAX : (mi_ssize_t)ubytes_since_last_sample);
+  if (alloc_interval_size < MI_PROFILE_COUNTDOWN_MIN_INTERVAL || MI_SSIZE_MAX - *interval_pending < bytes_since_last_sample /* overflow? */) {
+    // interval too small relative to the batching; always adjust
+    sampled_bytes = bytes_since_last_sample;
+  }
+  else {
+    // batch locally per-thread and only touch the shared (contended) countdown
+    // once the local pending amount reaches `MI_PROFILE_COUNTDOWN_THRESHOLD`.
+    *interval_pending += bytes_since_last_sample;
+    if (*interval_pending >= (mi_ssize_t)MI_PROFILE_COUNTDOWN_THRESHOLD) {
+      sampled_bytes = *interval_pending;
+      *interval_pending = 0;
+    }
+  }
+  // update profile interval countdown if we have sampled bytes
+  if (sampled_bytes > 0) {
+    const mi_ssize_t new_countdown = mi_atomic_addi_relaxed(alloc_interval_countdown, -sampled_bytes) - sampled_bytes;
+    if (new_countdown <= 0 && new_countdown + sampled_bytes > 0) {
+      mi_atomic_storess_relaxed(alloc_interval_countdown, (mi_ssize_t)alloc_interval_size);
+      return true;
+    }
+  }
+  return false;
+}
+
+// Check if the (global) in-use byte total has reached `inuse_interval_threshold`
+static bool mi_inuse_threshold_update(size_t new_total, size_t inuse_interval_size, _Atomic(size_t)* inuse_interval_threshold) {
+  size_t threshold = mi_atomic_load_relaxed(inuse_interval_threshold);
+  while (new_total >= threshold) {
+    size_t next_threshold = threshold + inuse_interval_size;
+    while (next_threshold <= new_total) { next_threshold += inuse_interval_size; }  // skip ahead if we grew by more than one interval
+    if (mi_atomic_cas_weak_relaxed(inuse_interval_threshold, &threshold, next_threshold)) {
+      return true;
+    }
+    // CAS failed: `threshold` now holds the current value; retry (another thread may have already advanced it far enough)
+  }
+  return false;
+}
+
 // Sample allocation event and update profiling data accordingly
 static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, const mi_heap_t* heap) 
 {
@@ -207,31 +258,22 @@ static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data
     // thread, so plain increments are safe here (no concurrent writers possible).
     loc->alloc_bytes += (int64_t)alloc_size;
     loc->alloc_count += 1;
+    // `inuse_count`/`inuse_bytes` can be decremented concurrently by `on_free` on any
+    // thread, so these updates must be atomic.
+    mi_atomic_add_relaxed(&loc->inuse_bytes, alloc_size);
+    mi_atomic_increment_relaxed(&loc->inuse_count);
   }
 
-  if (prof->interval_size > 0) { // interval-based profiling enabled
+  if (prof->alloc_interval_size > 0) { // interval-based profiling enabled
     static mi_decl_thread mi_ssize_t interval_pending = 0;
-    mi_ssize_t sampled_bytes = 0;
-    if (prof->interval_size < MI_PROFILE_COUNTDOWN_MIN_INTERVAL) {
-      // interval too small relative to the batching; always adjust
-      sampled_bytes = (mi_ssize_t)bytes_since_last_sample;
-    }
-    else {
-      // batch locally per-thread and only touch the shared (contended) countdown
-      // once the local pending amount reaches `MI_PROFILE_COUNTDOWN_THRESHOLD`.
-      interval_pending += (mi_ssize_t)bytes_since_last_sample;
-      if (interval_pending >= (mi_ssize_t)MI_PROFILE_COUNTDOWN_THRESHOLD) {
-        sampled_bytes = interval_pending;
-        interval_pending = 0;
-      }
-    }
-    // update profile interval countdown if we have sampled bytes
-    if (sampled_bytes > 0) {
-      const mi_ssize_t new_countdown = mi_atomic_addi_relaxed(&prof->interval_countdown, -sampled_bytes) - sampled_bytes;
-      if (new_countdown <= 0 && new_countdown + sampled_bytes > 0) {
-        mi_atomic_storess_relaxed(&prof->interval_countdown, (mi_ssize_t)prof->interval_size);
-        mi_pprof_profiler_dump(profiler);
-      }
+    if (mi_interval_update(bytes_since_last_sample, prof->alloc_interval_size, &prof->alloc_interval_countdown, &interval_pending)) {
+      mi_pprof_profiler_dump(profiler);
+    }    
+  }
+  if (prof->inuse_interval_size > 0) { // dump whenever (sampled) in-use memory has grown by `inuse_interval_size` bytes
+    const size_t total_inuse_bytes = mi_atomic_add_relaxed(&prof->inuse_bytes, alloc_size) + alloc_size;
+    if (mi_inuse_threshold_update(total_inuse_bytes, prof->inuse_interval_size, &prof->inuse_interval_threshold)) {
+      mi_pprof_profiler_dump(profiler);
     }
   }
   return new_threshold;
@@ -240,16 +282,20 @@ static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data
 // Sample free event and update profiling data accordingly
 static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, const mi_heap_t* heap) 
 {
-  MI_UNUSED(heap); MI_UNUSED(ptr); MI_UNUSED(profiler);
-  // pprof_profiler_t* prof = downcast(profiler);
+  MI_UNUSED(heap); MI_UNUSED(ptr);
+  pprof_profiler_t* prof = downcast(profiler);
   if (data!=NULL) {
     mi_assert(data->user_data_size >= 2*sizeof(void*));
     mi_location_t* loc = (mi_location_t*)data->user_data[0];
+    const size_t freed_bytes = (size_t)((uintptr_t)data->user_data[1]);
     if (loc!=NULL) {
       // different threads can free allocations that share the same (allocating-thread,
       // callstack) location concurrently, so these updates must be atomic.
-      mi_atomic_addi64_relaxed(&loc->free_bytes, (int64_t)((uintptr_t)data->user_data[1]));
-      mi_atomic_addi64_relaxed(&loc->free_count, 1);
+      mi_atomic_sub_relaxed(&loc->inuse_bytes, freed_bytes);
+      mi_atomic_decrement_relaxed(&loc->inuse_count);
+    }
+    if (prof->inuse_interval_size > 0) {  // keep the (global) in-use total in sync while interval-based dumping is enabled
+      mi_atomic_sub_relaxed(&prof->inuse_bytes, freed_bytes);
     }
   }
 }
@@ -258,7 +304,7 @@ static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t*
 // that extension selects the text dump format and is stripped from the stored base file name
 // (the actual dump files always get their own `.<seq>.heap`/`.<seq>.pb` extension, see `mi_pprof_profiler_dump`).
 // Any other extension (or none) keeps the default (protobuf) dump format and is left untouched.
-mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, size_t interval_size) {
+mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, size_t alloc_interval_size, size_t inuse_interval_size) {
   // heap just for the profiler itself
   mi_heap_t* heap = mi_heap_new();
   mi_heap_profile_disable(heap);  // don't sample allocations in this heap
@@ -285,8 +331,10 @@ mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_
       prof->base_file_name[dot - prof->base_file_name] = 0;  // always strip the extension, whether recognized or not
     }
   }
-  prof->interval_size = (interval_size > (size_t)MI_SSIZE_MAX ? (size_t)MI_SSIZE_MAX : interval_size);  // cap so it always fits in a `mi_ssize_t`
-  mi_atomic_storess_relaxed(&prof->interval_countdown, (mi_ssize_t)prof->interval_size);  // 0 if disabled: `on_alloc` never decrements/checks in that case
+  prof->alloc_interval_size = (alloc_interval_size > (size_t)MI_SSIZE_MAX ? (size_t)MI_SSIZE_MAX : alloc_interval_size);  // cap so it always fits in a `mi_ssize_t`
+  mi_atomic_storess_relaxed(&prof->alloc_interval_countdown, (mi_ssize_t)prof->alloc_interval_size);  // 0 if disabled: `on_alloc` never decrements/checks in that case
+  prof->inuse_interval_size = inuse_interval_size;
+  mi_atomic_store_relaxed(&prof->inuse_interval_threshold, prof->inuse_interval_size);  // 0 if disabled (`inuse_interval_size` defaults to 0): `on_alloc` never checks in that case
   if (!mi_locations_init(heap, &prof->locations)) {
     mi_free(prof);
     return NULL;
@@ -450,11 +498,70 @@ void mi_pprof_profiler_dump(mi_profiler_t* profiler) {
 #else
 
 #include <stdio.h>      // FILE, fopen, fprintf, fclose
+#if defined(_WIN32)
+#include <fcntl.h>      // _O_CREAT, _O_TRUNC, _O_WRONLY, _O_BINARY, _O_TEXT
+#include <io.h>         // _sopen_s, _fdopen, _close
+#include <sys/stat.h>   // _S_IREAD, _S_IWRITE
+#elif MI_HAS_UNISTDH
+#include <fcntl.h>      // open, O_CREAT, O_EXCL, O_NOFOLLOW
+#include <unistd.h>     // close, getuid, geteuid, getgid, getegid, issetugid
+#include <sys/stat.h>   // S_IRUSR, S_IWUSR
+#endif
 
 // forward declarations; implemented further below.
 static void mi_pprof_write_mapped_libraries(FILE* f);
 static void mi_pprof_dump_text(pprof_profiler_t* prof, const char* fname);
 static void mi_pprof_dump_proto(pprof_profiler_t* prof, const char* fname);
+
+
+// Detect if we are running with elevated privileges (e.g. a setuid/setgid executable or similar), 
+// in which case we must not trust `MIMALLOC_PROFILE` environment.
+#if defined(_WIN32)
+static bool mi_is_elevated_process(void) {
+  return false;  // no direct setuid/setgid equivalent; a UAC elevation does not inherit the parent's environment
+}
+#elif MI_HAS_UNISTDH && (defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__))
+static bool mi_is_elevated_process(void) {
+  return (issetugid() != 0);
+}
+#elif MI_HAS_UNISTDH
+static bool mi_is_elevated_process(void) {
+  return (getuid() != geteuid() || getgid() != getegid());
+}
+#else
+static bool mi_is_elevated_process(void) {
+  return false;  // no portable way to check without `unistd.h`; assume not elevated
+}
+#endif
+
+
+// Open a dump file for writing, refusing to follow a symlink at `fname` (to avoid an
+// attacker redirecting the write to an arbitrary target) and restricting the file's
+// permissions to the owner only (dumps can contain sensitive address/callstack data).
+// On platforms without these POSIX/Win32 facilities (e.g. wasm/Emscripten), we fall
+// back to a fully portable plain `fopen` (without the symlink/permission hardening).
+static FILE* mi_pprof_fopen(const char* fname, bool binary) {
+  #if defined(_WIN32)
+    int oflag = _O_CREAT | _O_TRUNC | _O_WRONLY | (binary ? _O_BINARY : _O_TEXT);
+    int fd = -1;
+    if (_sopen_s(&fd, fname, oflag, _SH_DENYNO, _S_IREAD | _S_IWRITE) != 0 || fd < 0) return NULL;
+    FILE* f = _fdopen(fd, binary ? "wb" : "w");
+    if (f == NULL) { _close(fd); }
+    return f;
+  #elif MI_HAS_UNISTDH
+    int oflag = O_CREAT | O_TRUNC | O_WRONLY;
+    #if defined(O_NOFOLLOW)
+    oflag |= O_NOFOLLOW;   // fail (ELOOP) if `fname` is a symlink
+    #endif
+    const int fd = open(fname, oflag, S_IRUSR | S_IWUSR);  // restrict to owner read/write only
+    if (fd < 0) return NULL;
+    FILE* f = fdopen(fd, binary ? "wb" : "w");
+    if (f == NULL) { close(fd); }
+    return f;
+  #else
+    return fopen(fname, binary ? "wb" : "w");  // fully portable fallback: no symlink/permission hardening available
+  #endif
+}
 
 // Write out the current profiler data to a new dump file named
 // `<base_file_name>.<seq>.<ext>` with an incrementing sequence number
@@ -870,12 +977,12 @@ static void mi_pprof_write_mapped_libraries(FILE* f) {
 // symbolize the addresses).
 static void mi_pprof_dump_text(pprof_profiler_t* prof, const char* fname) {
   mi_locations_t* locations = &prof->locations;
-  FILE* f = fopen(fname, "w");
+  FILE* f = mi_pprof_fopen(fname, false);
   if (f == NULL) return;
 
   // first pass: compute the totals over all locations
   // (dump is assumed to run single-threaded while sampling is stopped, so
-  // `alloc_count`/`alloc_bytes` can be read directly; `free_count`/`free_bytes`
+  // `alloc_count`/`alloc_bytes` can be read directly; `inuse_count`/`inuse_bytes`
   // are still `_Atomic` fields so we use a relaxed load for those)
   uint64_t total_inuse_objects = 0;
   uint64_t total_inuse_bytes   = 0;
@@ -883,10 +990,8 @@ static void mi_pprof_dump_text(pprof_profiler_t* prof, const char* fname) {
   uint64_t total_alloc_bytes   = 0;
   for (size_t i = 0; i < locations->bucket_count; i++) {
     for (mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, &locations->buckets[i]); loc != NULL; loc = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next)) {
-      const int64_t free_count = mi_atomic_loadi64_relaxed(&loc->free_count);
-      const int64_t free_bytes = mi_atomic_loadi64_relaxed(&loc->free_bytes);
-      total_inuse_objects += (uint64_t)(loc->alloc_count - free_count);
-      total_inuse_bytes   += (uint64_t)(loc->alloc_bytes - free_bytes);
+      total_inuse_objects += (uint64_t)mi_atomic_load_relaxed(&loc->inuse_count);
+      total_inuse_bytes   += (uint64_t)mi_atomic_load_relaxed(&loc->inuse_bytes);
       total_alloc_objects += (uint64_t)loc->alloc_count;
       total_alloc_bytes   += (uint64_t)loc->alloc_bytes;
     }
@@ -898,10 +1003,10 @@ static void mi_pprof_dump_text(pprof_profiler_t* prof, const char* fname) {
   // second pass: write one line per unique call location
   for (size_t i = 0; i < locations->bucket_count; i++) {
     for (mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, &locations->buckets[i]); loc != NULL; loc = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next)) {
-      const int64_t free_count = mi_atomic_loadi64_relaxed(&loc->free_count);
-      const int64_t free_bytes = mi_atomic_loadi64_relaxed(&loc->free_bytes);
+      const size_t inuse_count = mi_atomic_load_relaxed(&loc->inuse_count);
+      const size_t inuse_bytes = mi_atomic_load_relaxed(&loc->inuse_bytes);
       mi_fprintf(f, "%6l8d: %8l8d [%6l8d: %8l8d] @",
-                 (uint64_t)(loc->alloc_count - free_count), (uint64_t)(loc->alloc_bytes - free_bytes),
+                 (uint64_t)inuse_count, (uint64_t)inuse_bytes,
                  (uint64_t)loc->alloc_count, (uint64_t)loc->alloc_bytes);
       for (size_t j = 0; j < loc->callstack.count; j++) {
         mi_fprintf(f, " 0x%tx", (uintptr_t)loc->callstack.frames[j]);
@@ -1216,8 +1321,8 @@ static void mi_pprof_dump_proto(pprof_profiler_t* prof, const char* fname) {
 
   for (size_t i = 0; i < locations->bucket_count; i++) {
     for (mi_location_t* loc = mi_atomic_load_ptr_relaxed(mi_location_t, &locations->buckets[i]); loc != NULL; loc = mi_atomic_load_ptr_relaxed(mi_location_t, &loc->next)) {
-      const int64_t free_count = mi_atomic_loadi64_relaxed(&loc->free_count);
-      const int64_t free_bytes = mi_atomic_loadi64_relaxed(&loc->free_bytes);
+      const size_t inuse_count = mi_atomic_load_relaxed(&loc->inuse_count);
+      const size_t inuse_bytes = mi_atomic_load_relaxed(&loc->inuse_bytes);
 
       const size_t frame_count = (loc->callstack.count > MI_MAX_BACKTRACE_DEPTH ? MI_MAX_BACKTRACE_DEPTH : loc->callstack.count);
       uint64_t location_ids[MI_MAX_BACKTRACE_DEPTH];
@@ -1243,7 +1348,7 @@ static void mi_pprof_dump_proto(pprof_profiler_t* prof, const char* fname) {
       mi_pb_packed_uint64_field(&sample, 1, location_ids, frame_count);  // location_id (leaf-first, matching our capture order)
       const int64_t values[4] = {
         loc->alloc_count, loc->alloc_bytes,
-        loc->alloc_count - free_count, loc->alloc_bytes - free_bytes
+        (int64_t)inuse_count, (int64_t)inuse_bytes
       };
       mi_pb_packed_int64_field(&sample, 2, values, 4);  // value
       {
@@ -1283,7 +1388,7 @@ static void mi_pprof_dump_proto(pprof_profiler_t* prof, const char* fname) {
   mi_pb_bytes(&profile, strings.table.data, strings.table.size);
   mi_pb_strings_done(&strings);
 
-  FILE* f = fopen(fname, "wb");
+  FILE* f = mi_pprof_fopen(fname, true);
   if (f != NULL) {
     fwrite(profile.data, 1, profile.size, f);
     fclose(f);
