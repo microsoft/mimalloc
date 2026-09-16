@@ -483,7 +483,7 @@ static void mi_pprof_modules_done(mi_pprof_modules_t* mods) {
 // Walk the process address space, calling `on_module(ctx, base, end, path)`
 // once for each loaded module. Consecutive `MEM_IMAGE` regions that belong to
 // the same module (same allocation base) are merged into a single range.
-static void mi_win32_walk_modules(void (*on_module)(void* ctx, uintptr_t base, uintptr_t end, const char* path), void* ctx) {
+static void mi_walk_modules_win32(void (*on_module)(void* ctx, uintptr_t base, uintptr_t end, const char* path), void* ctx) {
   SYSTEM_INFO si;
   GetSystemInfo(&si);
   uint8_t* addr = (uint8_t*)si.lpMinimumApplicationAddress;
@@ -528,13 +528,13 @@ static void mi_win32_walk_modules(void (*on_module)(void* ctx, uintptr_t base, u
   }
 }
 
-static void mi_win32_write_mapped_libraries_on_module(void* ctx, uintptr_t base, uintptr_t end, const char* path) {
+static void mi_write_mapped_libraries_on_module_win32(void* ctx, uintptr_t base, uintptr_t end, const char* path) {
   FILE* f = (FILE*)ctx;
   fprintf(f, "%" PRIxPTR "-%" PRIxPTR " r-xp 00000000 00:00 0            %s\n", base, end, path);
 }
 
-static void mi_win32_write_mapped_libraries(FILE* f) {
-  mi_win32_walk_modules(&mi_win32_write_mapped_libraries_on_module, f);
+static void mi_write_mapped_libraries_win32(FILE* f) {
+  mi_walk_modules_win32(&mi_write_mapped_libraries_on_module_win32, f);
 }
 
 typedef struct { mi_heap_t* heap; mi_pprof_modules_t* mods; } mi_pprof_collect_modules_win32_ctx_t;
@@ -546,7 +546,7 @@ static void mi_pprof_collect_modules_win32_on_module(void* ctx, uintptr_t base, 
 
 static void mi_pprof_collect_modules_win32(mi_heap_t* heap, mi_pprof_modules_t* mods) {
   mi_pprof_collect_modules_win32_ctx_t ctx = { heap, mods };
-  mi_win32_walk_modules(&mi_pprof_collect_modules_win32_on_module, &ctx);
+  mi_walk_modules_win32(&mi_pprof_collect_modules_win32_on_module, &ctx);
 }
 
 #elif defined(__APPLE__)
