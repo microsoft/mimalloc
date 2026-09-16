@@ -15,7 +15,7 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.5.2`  (2026-09-12) recommended.  
+Latest release   : `v3.5.3`  (2026-09-16) recommended.  
 Latest v2 release: `v2.5.2`  (2026-09-12) stable, legacy.  
 Latest v1 release: `v1.15.2` (2026-09-12) legacy.
 
@@ -90,6 +90,8 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 
 ### Releases
 
+* 2026-09-16, `v3.5.3`: (v3) critical bug fix (where the first new on a thread could
+  fail on some platforms). Fix bug with `mi_free_size` on overaligned small allocations.
 * 2026-09-12, `v3.5.2`, `v2.5.2`, `v1.15.2`: (v3) Reduced cache contention, improved `mi_malloc_csize`,
   improved zero'ing of small blocks, `mi_wmalloc` variants for runtime systems, always enable detailed
   statistics. Experimental support for profiling hooks (`mimalloc-profile.h`).
