@@ -504,7 +504,7 @@ int main(void) {
       (void)(p);
       result = false;
     }
-    catch(std::bad_alloc) {
+    catch(const std::bad_alloc&) {
       result = true;
     }
   }

@@ -482,7 +482,7 @@ bool _mi_page_map_register(mi_page_t* page) {
 }
 
 void _mi_page_map_unregister(mi_page_t* page) {
-  mi_assert_internal(_mi_page_map != NULL);
+  mi_assert_internal(__mi_page_map != NULL);
   mi_assert_internal(page != NULL);
   mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   mi_page_map_t* const pmap = _mi_page_map();

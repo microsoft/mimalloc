@@ -119,6 +119,9 @@ static mi_decl_cache_align mi_tld_t mi_tld_detached = {
   MI_MEMID_STATIC         // memid
 };
 
+#ifdef __cplusplus
+extern // fix warning in C++ for const variables with internal linkage
+#endif
 mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   MI_SMALL_PAGES_EMPTY,   // direct small pages  
   &mi_tld_detached,       // tld
