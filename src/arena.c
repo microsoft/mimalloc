@@ -455,24 +455,21 @@ static size_t mi_arena_start_idx(mi_heap_t* heap, size_t tseq, size_t arena_cycl
   const size_t _arena_count = mi_arenas_get_count(heap->subproc); \
   const size_t _arena_cycle = (_arena_count == 0 ? 0 : _arena_count - 1); /* first search the arenas below the last one */ \
   /* always start searching in the arena's below the max */ \
-  const size_t _start = mi_arena_start_idx(heap,tseq,_arena_cycle); \
+  const size_t _start = (req_arena==NULL ? mi_arena_start_idx(heap,tseq,_arena_cycle) : ((mi_arena_t*)req_arena)->arena_idx); \
+  mi_assert_internal(_start <= _arena_count); \
   for (size_t _i = 0; _i < _arena_count; _i++) { \
     mi_arena_t* name_arena; \
-    if (req_arena != NULL) { \
-      name_arena = req_arena; /* if there is a specific req_arena, only search that one */\
-      if (_i > 0) break;      /* only once */ \
+    size_t _idx; \
+    if (_i < _arena_cycle) { \
+      _idx = _i + _start; \
+      if (_idx >= _arena_cycle) { _idx -= _arena_cycle; } /* adjust so we rotate through the cycle */ \
     } \
     else { \
-      size_t _idx; \
-      if (_i < _arena_cycle) { \
-        _idx = _i + _start; \
-        if (_idx >= _arena_cycle) { _idx -= _arena_cycle; } /* adjust so we rotate through the cycle */ \
-      } \
-      else { \
-        _idx = _i; /* remaining arena's after the cycle */ \
-      } \
-      name_arena = mi_arena_from_index(heap->subproc,_idx); \
+      _idx = _i; /* remaining arena's after the cycle */ \
     } \
+    name_arena = mi_arena_from_index(heap->subproc,_idx); \
+    if (req_arena != NULL && name_arena != req_arena && \
+        (name_arena == NULL || name_arena->parent != req_arena)) continue; /* only the requested arena or its children */ \
     if (name_arena != NULL) \
     {
 
