@@ -265,6 +265,7 @@ bool mi_profiler_stop(mi_profiler_t* profiler) {
 
 void mi_profiler_snapshot(mi_profiler_t* profiler) {
   if (profiler==NULL) return;
+  if (profiler->on_snapshot==NULL) return;
   static mi_atomic_guard_t guard;
   mi_atomic_guard(&guard) {
     (*profiler->on_snapshot)(profiler);

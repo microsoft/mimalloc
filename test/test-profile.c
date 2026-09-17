@@ -69,7 +69,8 @@ static my_profiler_t my_profiler = {
     0,               // initial sample rate (default)        
     &on_alloc,       
     &on_free,
-    NULL
+    NULL,            // on_realloc
+    NULL,            // on_snapshot
   },
   0, 0, 0, 0, NULL
 };
