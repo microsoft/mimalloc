@@ -499,6 +499,46 @@ int main(void) {
   CHECK_BODY("arena_reserve") {
     result = (0==mi_reserve_os_memory(16*MI_GiB,false,true));
   }
+
+  #if TEST_ARENAS // normally disabled as it takes long and consumes a lot of memory
+  CHECK_BODY("arena_reserve_child") {
+    // With the following setup, the arena size is 24 GiB and the total
+    // allocation requires over 16 GiB. mimalloc arena internally creates
+    // child arenas once the arena size is over 16 GiB so this test will
+    // trigger the creation and access to child arenas to ensure the arena
+    // traversal and space accounting works as expected.
+    const size_t arena_size = 24 * MI_GiB;
+    const size_t allocation_size = 63 * MI_MiB;
+    const size_t allocation_count = 272; 
+    const size_t alignment = mi_arena_min_alignment();
+    
+    mi_arena_id_t arena_id = NULL;
+    bool ok = (0==mi_reserve_os_memory_ex(arena_size,false /* commit */,false /* allow large */,
+                                 true /* exclusive */, &arena_id));
+    if (!ok) {
+      fprintf(stderr, "failed to register the 24 GiB arena\n");
+      ok = true; // don't fail the test on small machines
+    }
+    else {
+      mi_heap_t* heap = mi_heap_new_in_arena(arena_id);
+      for (size_t i = 0; i < allocation_count && ok; i++) {
+        void* p = mi_heap_malloc(heap, allocation_size);
+        if (p == NULL) {
+          fprintf(stderr, "allocation %zu failed after %zu MiB; child arena was not used\n", i, i * allocation_size / MI_MiB);
+          ok = false;
+        }
+        if (!mi_arena_contains(arena_id, p)) {
+          fprintf(stderr, "allocation %zu came from outside the requested arena\n", i);
+          ok = false;
+        }
+      }
+      fprintf(stderr, "allocated %zu MiB from the parent arena and its children\n", allocation_count * allocation_size / MI_MiB);
+      mi_heap_destroy(heap);
+    }
+    // mi_arena_destroy(arena_id); 
+    result = ok;
+  }
+  #endif
   #endif
 
 
