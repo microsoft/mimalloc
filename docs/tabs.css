@@ -1,10 +1,14 @@
 .tabs, .tabs2, .tabs3 {
-    background-image: url('tab_b.png');
+    background-color: white;
     width: 100%;
     z-index: 101;
     font-size: 13px;
     font-family: 'Lucida Grande',Geneva,Helvetica,Arial,sans-serif;
     display: table;
+}
+
+#navrow2, #navrow3, #navrow4 {
+    border-top: 1px solid #90989A;
 }
 
 .tabs2 {
@@ -23,20 +27,17 @@
 .tablist li {
     float: left;
     display: table-cell;
-    background-image: url('tab_b.png');
+    background-color: white;
     line-height: 36px;
     list-style: none;
 }
 
 .tablist a {
     display: block;
-    padding: 0 20px;
-    font-weight: bold;
-    background-image:url('tab_s.png');
-    background-repeat:no-repeat;
-    background-position:right;
+    margin: 5px 0;
+    padding: 0px 20px;
+    background-color: white;
     color: #040404;
-    text-shadow: 0px 1px 1px rgba(255, 255, 255, 0.9);
     text-decoration: none;
     outline: none;
 }
@@ -52,17 +53,29 @@
 }
 
 .tablist a:hover {
-    background-image: url('tab_h.png');
-    background-repeat:repeat-x;
-    color: white;
-    text-shadow: 0px 1px 1px rgba(0, 0, 0, 1.0);
+    background-color: #B7BDBE;
+    border-radius: 5px;
     text-decoration: none;
 }
 
-.tablist li.current a {
-    background-image: url('tab_a.png');
-    background-repeat:repeat-x;
-    color: white;
-    text-shadow: 0px 1px 1px rgba(0, 0, 0, 1.0);
+.tablist li.current {
+	position: relative;
 }
 
+.tablist li.current a:after {   
+	content: '';
+	position: absolute;
+	left: 15px;
+	right: 15px;
+	top: 35px;
+	height: 1px;
+	display: block;
+	background-color: #5B6364;
+	border: 1px solid #5B6364;
+	border-radius: 2px 2px 0px 0px;
+}
+
+#navrow4 .tablist li.current a:after {
+	left: 5px;
+	right: 5px;
+}
