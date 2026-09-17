@@ -55,6 +55,9 @@ bool test_stl_theap_allocator3(void);
 bool test_stl_theap_allocator4(void);
 
 static bool test_zero_aligned_first(void);
+#ifdef __cplusplus
+static bool test_new_first(void);
+#endif
 
 static bool mem_has_vals(const uint8_t* p, size_t size, uint8_t val) {
   if (p==NULL) return false;
@@ -72,26 +75,6 @@ static bool mem_is_zero(const void* p, size_t size) {
 // ---------------------------------------------------------------------------
 int main(void) {
   mi_option_disable(mi_option_verbose);
-
-  #if 1
-  #if defined(__cplusplus) && !defined(_MSC_VER)
-  CHECK_BODY("c++ new-handler") {
-    std::set_new_handler([]{ throw std::bad_alloc(); });
-    void* p = mi_new_nothrow(SIZE_MAX/2);
-    result = (p==NULL);
-  }
-  CHECK_BODY("c++ new handler2") {
-    try {
-      void* p = mi_new_n(SIZE_MAX/2, 4);
-      (void)(p);
-      result = false;
-    }
-    catch(std::bad_alloc) {
-      result = true;
-    }
-  }
-  #endif
-  #endif
 
   // ---------------------------------------------------
   // Malloc
@@ -190,6 +173,20 @@ int main(void) {
     for (int i = 0; i < 8 && ok; i++) {
       p = mi_malloc_aligned(8, 16);
       ok = (p != NULL && (uintptr_t)(p) % 16 == 0); mi_free(p);
+    }
+    result = ok;
+  };
+  CHECK_BODY("free-size-aligned-overaligned") { // issue #1400
+    const size_t size = 8;
+    const size_t alignment = 16 * 1024;
+    void* p[200];
+    bool ok = true;
+    for (size_t i = 0; i < 200; i++) {
+      p[i] = mi_malloc_aligned(size, alignment);
+      ok = ok && (p[i] != NULL) && ((uintptr_t)p[i] % alignment == 0);
+    }
+    for (size_t i = 0; i < 200; i++) {
+      mi_free_size_aligned(p[i], size, alignment);
     }
     result = ok;
   };
@@ -305,12 +302,22 @@ int main(void) {
         for(int i = 0; i < 10 && ok; i++) {
           mi_free(p[i]);
         }
-        /*
-        if (ok && align <= size && ((size + MI_PADDING_SIZE) & (align-1)) == 0) {
-          size_t bsize = mi_good_size(size);
-          ok = (align <= bsize && (bsize & (align-1)) == 0);
+      }
+    }
+    result = ok;
+  }
+  CHECK_BODY("mimalloc-size-aligned14") {
+    bool ok = true;
+    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size++ ) {
+      for(size_t align = 1; align <= 16*size && ok; align *= 2) {
+        void* p[10];
+        for(int i = 0; i < 10 && ok; i++) {
+          p[i] = mi_malloc_aligned(size,align);;
+          ok = (p[i] != NULL && ((uintptr_t)(p[i]) % align) == 0);
         }
-        */
+        for(int i = 0; i < 10 && ok; i++) {
+          mi_free_size_aligned(p[i],size,align);
+        }
       }
     }
     result = ok;
@@ -341,9 +348,7 @@ int main(void) {
       memset(junk, 0xAB, size);
       mi_free(junk);
       uint8_t* z = (uint8_t*)mi_theap_zalloc_csize(theap, size);
-      for (size_t i = 0; i < size; i++) {
-        if (z[i] != 0) { ok = false; break; }
-      }
+      ok = mem_is_zero(z, size);
       mi_free(z);
     }
     result = ok;
@@ -378,6 +383,20 @@ int main(void) {
     assert(mem_has_vals((uint8_t*)ptr,n/2,123));
     result = mem_is_zero((uint8_t*)ptr + n/2, n/2);    
     mi_free(ptr);
+  }
+
+  CHECK_BODY("heap_aligned1") {
+    mi_heap_t* heap = mi_heap_new();
+    const size_t alignment = 128 * 1024;  // 128 KiB
+    const size_t buffer_size = 1 * 1024 * 1024;  // 1 MiB
+    void* buffer = mi_heap_malloc_aligned(heap, buffer_size, alignment);
+    bool nonnull = (buffer != NULL);
+    assert(nonnull);
+    const bool is_aligned = ((uintptr_t)buffer % alignment) == 0;
+    assert(is_aligned);
+    mi_free(buffer);
+    mi_heap_destroy(heap);
+    result = (nonnull && is_aligned);
   }
 
   // ---------------------------------------------------
@@ -480,6 +499,69 @@ int main(void) {
   CHECK_BODY("arena_reserve") {
     result = (0==mi_reserve_os_memory(16*MI_GiB,false,true));
   }
+
+  #if TEST_ARENAS // normally disabled as it takes long and consumes a lot of memory
+  CHECK_BODY("arena_reserve_child") {
+    // With the following setup, the arena size is 24 GiB and the total
+    // allocation requires over 16 GiB. mimalloc arena internally creates
+    // child arenas once the arena size is over 16 GiB so this test will
+    // trigger the creation and access to child arenas to ensure the arena
+    // traversal and space accounting works as expected.
+    const size_t arena_size = 24 * MI_GiB;
+    const size_t allocation_size = 63 * MI_MiB;
+    const size_t allocation_count = 272; 
+    const size_t alignment = mi_arena_min_alignment();
+    
+    mi_arena_id_t arena_id = NULL;
+    bool ok = (0==mi_reserve_os_memory_ex(arena_size,false /* commit */,false /* allow large */,
+                                 true /* exclusive */, &arena_id));
+    if (!ok) {
+      fprintf(stderr, "failed to register the 24 GiB arena\n");
+      ok = true; // don't fail the test on small machines
+    }
+    else {
+      mi_heap_t* heap = mi_heap_new_in_arena(arena_id);
+      for (size_t i = 0; i < allocation_count && ok; i++) {
+        void* p = mi_heap_malloc(heap, allocation_size);
+        if (p == NULL) {
+          fprintf(stderr, "allocation %zu failed after %zu MiB; child arena was not used\n", i, i * allocation_size / MI_MiB);
+          ok = false;
+        }
+        if (!mi_arena_contains(arena_id, p)) {
+          fprintf(stderr, "allocation %zu came from outside the requested arena\n", i);
+          ok = false;
+        }
+      }
+      fprintf(stderr, "allocated %zu MiB from the parent arena and its children\n", allocation_count * allocation_size / MI_MiB);
+      mi_heap_destroy(heap);
+    }
+    // mi_arena_destroy(arena_id); 
+    result = ok;
+  }
+  #endif
+  #endif
+
+
+  // ---------------------------------------------------
+  // C++
+  // ---------------------------------------------------
+  
+  #if defined(__cplusplus) && !defined(_MSC_VER)  
+  CHECK_BODY("c++ new-handler") {
+    std::set_new_handler([]{ throw std::bad_alloc(); });
+    void* p = mi_new_nothrow(SIZE_MAX/2);
+    result = (p==NULL);
+  }
+  CHECK_BODY("c++ new handler2") {
+    try {
+      void* p = mi_new_n(SIZE_MAX/2, 4);
+      (void)(p);
+      result = false;
+    }
+    catch(std::bad_alloc) {
+      result = true;
+    }
+  }
   #endif
 
   // ---------------------------------------------------
@@ -544,9 +626,15 @@ int main(void) {
   // ---------------------------------------------------
   // Threads
   // ---------------------------------------------------
-  CHECK_BODY("zero_aligned_first") {
+  CHECK_BODY("thread_zero_aligned_first") {
     result = mi_run_on_thread(&test_zero_aligned_first);
   }
+  
+  #ifdef __cplusplus
+  CHECK_BODY("thread_new_first") {
+    result = mi_run_on_thread(&test_new_first);
+  }
+  #endif
   
   //mi_stats_print(NULL);
 
@@ -725,4 +813,12 @@ static bool test_zero_aligned_first(void) {
 }
 
 
+#ifdef __cplusplus
+static bool test_new_first(void) {
+  char* p = (char*)mi_new(20);
+  bool res = (p != NULL && (uintptr_t)(p) % 16 == 0);
+  mi_free_csize(p,20);
+  return res;
+}
+#endif
 

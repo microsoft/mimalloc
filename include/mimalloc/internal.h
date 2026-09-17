@@ -654,6 +654,7 @@ extern mi_decl_hidden mi_theap_t _mi_theap_empty_wrong; // read-only empty theap
 
 
 static inline mi_heap_t* _mi_theap_heap_peek(const mi_theap_t* theap) {
+  mi_assert_internal(theap!=NULL);
   return mi_atomic_load_ptr_relaxed(mi_heap_t,&theap->heap);
 }
 
@@ -1154,13 +1155,20 @@ static inline bool _mi_is_process_heap_main(const mi_heap_t* heap) {
 
 // Thread free flag helpers
 static inline mi_block_t* mi_tf_block(mi_thread_free_t tf) {
-  return (mi_block_t*)(tf & ~1);
+  return (mi_block_t*)(tf & ~1);  
 }
+
 static inline bool mi_tf_is_owned(mi_thread_free_t tf) {
   return ((tf & 1) == 1);
 }
+
 static inline mi_thread_free_t mi_tf_create(mi_block_t* block, bool owned) {
-  return (mi_thread_free_t)((uintptr_t)block | (owned ? 1 : 0));
+  const uintptr_t base = (uintptr_t)block | (owned ? 1 : 0);
+  return (mi_thread_free_t)base;
+}
+
+static inline mi_thread_free_t mi_tf_set_owned(mi_thread_free_t tf, bool owned) {
+  return mi_tf_create(mi_tf_block(tf), owned);
 }
 
 // Thread free access
@@ -1515,8 +1523,9 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
   
   // fast memzero for small sizes based on overlapping writes (and assuming non-zero size_t-multiple size, and size_t aligned)
   // assumes constant memset(p,0,N) gets optimized to fast simd stores by the compiler
+  // note: disabled on riscv for now as a constant memset is not always replaced correctly by current compilers.
   // (compile with -DMI_USE_MEMZERO16X=0 to disable this)
-  #if !defined(MI_USE_MEMZERO16X) || (MI_USE_MEMZERO16X != 0) // 16x MI_SIZE_SIZE (128 bytes on 64-bit)
+  #if (!defined(MI_USE_MEMZERO16X) && !MI_ARCH_RISCV) || (MI_USE_MEMZERO16X != 0) // 16x MI_SIZE_SIZE (128 bytes on 64-bit)
     if mi_unlikely(bsize < 2*MI_SIZE_SIZE) { // bsize < 16 (8)
       *((size_t*)dst) = 0;
       return dst;

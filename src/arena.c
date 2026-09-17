@@ -455,24 +455,21 @@ static size_t mi_arena_start_idx(mi_heap_t* heap, size_t tseq, size_t arena_cycl
   const size_t _arena_count = mi_arenas_get_count(heap->subproc); \
   const size_t _arena_cycle = (_arena_count == 0 ? 0 : _arena_count - 1); /* first search the arenas below the last one */ \
   /* always start searching in the arena's below the max */ \
-  const size_t _start = mi_arena_start_idx(heap,tseq,_arena_cycle); \
+  const size_t _start = (req_arena==NULL ? mi_arena_start_idx(heap,tseq,_arena_cycle) : ((mi_arena_t*)req_arena)->arena_idx); \
+  mi_assert_internal(_start <= _arena_count); \
   for (size_t _i = 0; _i < _arena_count; _i++) { \
     mi_arena_t* name_arena; \
-    if (req_arena != NULL) { \
-      name_arena = req_arena; /* if there is a specific req_arena, only search that one */\
-      if (_i > 0) break;      /* only once */ \
+    size_t _idx; \
+    if (_i < _arena_cycle) { \
+      _idx = _i + _start; \
+      if (_idx >= _arena_cycle) { _idx -= _arena_cycle; } /* adjust so we rotate through the cycle */ \
     } \
     else { \
-      size_t _idx; \
-      if (_i < _arena_cycle) { \
-        _idx = _i + _start; \
-        if (_idx >= _arena_cycle) { _idx -= _arena_cycle; } /* adjust so we rotate through the cycle */ \
-      } \
-      else { \
-        _idx = _i; /* remaining arena's after the cycle */ \
-      } \
-      name_arena = mi_arena_from_index(heap->subproc,_idx); \
+      _idx = _i; /* remaining arena's after the cycle */ \
     } \
+    name_arena = mi_arena_from_index(heap->subproc,_idx); \
+    if (req_arena != NULL && name_arena != req_arena && \
+        (name_arena == NULL || name_arena->parent != req_arena)) continue; /* only the requested arena or its children */ \
     if (name_arena != NULL) \
     {
 
@@ -646,7 +643,7 @@ static bool mi_abandoned_page_unown(mi_page_t* page, mi_theap_t* current_theapx)
       tf_old = mi_atomic_load_relaxed(&page->xthread_free);
     }
     mi_assert_internal(mi_tf_block(tf_old)==NULL);
-    tf_new = mi_tf_create(NULL, false);
+    tf_new = mi_tf_create(NULL, false);    
   } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new));
   return false;
 }
@@ -889,10 +886,14 @@ mi_decl_maybe_unused static size_t mi_page_block_start(size_t block_size, bool o
   if (os_align) {
     offset = MI_PAGE_ALIGN;
   }
-  else if (_mi_is_power_of_two(block_size) && block_size <= MI_PAGE_MAX_START_BLOCK_ALIGN2) {
+  else if (block_size != 0 && _mi_is_power_of_two(block_size) && block_size <= MI_PAGE_MAX_START_BLOCK_ALIGN2) {
     // naturally align power-of-2 blocks up to MI_PAGE_MAX_START_BLOCK_ALIGN2 size (4KiB)
     offset = _mi_align_up(mi_page_info_size(), block_size);
     if (block_size < 64) { offset += 3*block_size; }
+  }
+  else if (block_size != 0 && block_size <= MI_SMALL_SIZE_MAX) {
+    // align small blocks to their size
+    offset = _mi_align_up(mi_page_info_size(), block_size);
   }
   else if (block_size != 0 && (block_size % MI_PAGE_OSPAGE_BLOCK_ALIGN2) == 0) {
     // also align large pages that are a multiple of MI_PAGE_OSPAGE_BLOCK_ALIGN2 (4KiB)

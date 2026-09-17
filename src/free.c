@@ -12,6 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim-tls.h"   // _mi_prim_thread_id()
 #endif
 
+
 // forward declarations
 mi_decl_nodiscard static bool mi_check_padding_on_free(const mi_page_t* page, const mi_block_t* block, bool is_guarded, size_t* usable_size);
 mi_decl_nodiscard static bool mi_check_double_free(const mi_page_t* page, const mi_block_t* block);
@@ -77,19 +78,21 @@ static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was
   #endif
 
   // push atomically on the page thread free list
+  // mi_theap_t* theap = _mi_page_associated_theap_peek(page);
   mi_thread_free_t tf_new;
   mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
   do {
-    mi_block_set_next(page, block, mi_tf_block(tf_old));    
-    tf_new = mi_tf_create(block, true /* try to own it */ );
-  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new)); // todo: release is enough?
+    mi_block_set_next(page, block, mi_tf_block(tf_old));
+    tf_new = mi_tf_create(block, true);
+  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new)); 
 
   // and atomically try to collect the page if it was abandoned
-  const bool is_owned_now = !mi_tf_is_owned(tf_old);
-  if (is_owned_now) {
+  const bool is_newly_owned = mi_tf_is_owned(tf_new) && !mi_tf_is_owned(tf_old);
+  if (is_newly_owned) {
     mi_assert_internal(mi_page_is_abandoned(page));
-    mi_free_try_collect_mt(page,block,allow_reclaim);
-  }  
+    // mi_assert_internal(!mi_page_is_abandoned_mapped(page));
+    mi_free_try_collect_mt(page, block, allow_reclaim);
+  }
 }
 
 
@@ -238,7 +241,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
   mi_assert_internal(page!=NULL);
   mi_assert(cpage==page /* page_map lookup should be the same as aligned lookup */ );      
   #if !MI_GUARDED
-  if (free_small) { mi_assert_internal(page->block_size <= mi_good_size(MI_SMALL_SIZE_MAX) /* free small should only be called on small pages */); }
+  if (free_small) { mi_assert_internal(page->block_size <= MI_SMALL_MAX_OBJ_SIZE); /* free small should only be called on small pages */ }
   #endif
   *ppage = page;
   return true;
@@ -334,9 +337,9 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
     const mi_page_t* const page = mi_ptr_page_validate(p,"mi_free_size");
     if (page==NULL) return;
     mi_assert(p!=NULL);
+    const mi_block_t* block = _mi_page_ptr_unalign(page, p);      
     const size_t usable = _mi_page_usable_size(page,p);
     if mi_unlikely(size > usable) { 
-      const mi_block_t* block = _mi_page_ptr_unalign(page, p);
       const bool is_guarded = mi_block_ptr_is_guarded(block,p);
       if (!is_guarded) {
         _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the size %zu is greater than the usable size %zu\n", p, size, usable);
@@ -344,15 +347,15 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
         return;
       }
     }
-    if mi_unlikely(size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size(MI_SMALL_SIZE_MAX)) { 
-      const mi_block_t* block = _mi_page_ptr_unalign(page, p);
-      const bool is_guarded = mi_block_ptr_is_guarded(block,p);
-      if (!is_guarded) {
-        _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n  (maybe a `new[]` was matched with `delete` instead of `delete[]`?)\n", p, size, mi_page_block_size(page));
-        mi_free(p);
-        return;
-      }
-    }
+    // const size_t is_aligned = ((void*)block != p);
+    // if mi_unlikely(size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size((is_aligned ? 2 : 1)*MI_SMALL_SIZE_MAX)) { // note: we check *2 in case it was over-aligned
+    //   const bool is_guarded = mi_block_ptr_is_guarded(block,p);
+    //   if (!is_guarded) {
+    //     _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n  (maybe a `new[]` was matched with `delete` instead of `delete[]`?)\n", p, size, mi_page_block_size(page));
+    //     mi_free(p);
+    //     return;
+    //   }
+    // }
   #endif
   #if MI_PAGE_META_SMALL_IS_ALIGNED || MI_PAGE_META_IS_ALIGNED
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {
@@ -366,9 +369,16 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
 }
 
 void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept {
-  MI_UNUSED_RELEASE(alignment);
   mi_assert(((uintptr_t)p % alignment) == 0);
-  mi_free_size(p,size);
+  // If the alignment is smaller than the `size`, then for `size <= MI_SMALL_SIZE_MAX`
+  // the block must be allocated within a small page and can thus be handled safely by `mi_free_size`.
+  // (since even with over-allocation the block size will be less than 2*MI_SMALL_SIZE_MAX <= MI_SMALL_OBJ_SIZE_MAX)
+  if mi_likely(alignment <= size) {
+    mi_free_size(p,size);
+  }
+  else {
+    mi_free(p);
+  }
 }
 
 void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
@@ -422,14 +432,14 @@ static bool mi_abandoned_page_try_reabandon_to_mapped(mi_page_t* page)
 // Release ownership of a page. This may free or reabandoned the page if other blocks are concurrently
 // freed in the meantime. Returns `true` if the page was freed.
 // By passing the captured `expected_thread_free`, we can often avoid calling `mi_page_free_collect`.
-static void mi_abandoned_page_unown_from_free(mi_page_t* page, mi_block_t* expected_thread_free) {
+static void mi_abandoned_page_unown_from_free(mi_page_t* page, mi_block_t* page_thread_free) {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(!mi_page_all_free(page));
   // try to cas atomically the original free list (`mt_free`) back with the ownership cleared.
-  mi_thread_free_t tf_expect = mi_tf_create(expected_thread_free, true);
-  mi_thread_free_t tf_new    = mi_tf_create(expected_thread_free, false);
-  while mi_unlikely(!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_expect, tf_new)) {
+  mi_thread_free_t tf_expect = mi_tf_create(page_thread_free,true);       
+  mi_thread_free_t tf_new    = mi_tf_set_owned(tf_expect,false);
+  while mi_unlikely(!mi_atomic_cas_strong_acq_rel(&page->xthread_free, &tf_expect, tf_new)) {
     mi_assert_internal(mi_tf_is_owned(tf_expect));
     // while the xthread_free list is not empty..
     while (mi_tf_block(tf_expect) != NULL) {
@@ -438,9 +448,10 @@ static void mi_abandoned_page_unown_from_free(mi_page_t* page, mi_block_t* expec
       if (mi_abandoned_page_try_free(page)) return;
       if (mi_abandoned_page_try_reabandon_to_mapped(page)) return;
       // otherwise continue un-owning
-      tf_expect = mi_atomic_load_relaxed(&page->xthread_free);
+      tf_expect = mi_atomic_load_acquire(&page->xthread_free);
     }
     // and try again to release ownership
+    mi_subproc_stat_counter_increase(mi_page_subproc(page), pages_unabandon_busy_wait, 1);
     mi_assert_internal(mi_tf_block(tf_expect)==NULL);
     tf_new = mi_tf_create(NULL, false);
   }
@@ -813,5 +824,3 @@ void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   MI_UNUSED(page); MI_UNUSED(block);
 }
 #endif
-
-

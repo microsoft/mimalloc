@@ -931,6 +931,8 @@ endif()
 if(MI_TRACK STREQUAL "ASAN")
   set(mi_libname "${mi_libname}-asan")
 endif()
+set(mi_libname_base "${mi_libname}") # capture the base name (without any per-config suffix)
+
 if (CMAKE_CONFIGURATION_TYPES)
   # multi-config builds
   # generator expression lower-case build type
@@ -1008,7 +1010,23 @@ if(MI_BUILD_SHARED)
     # so we postfix the dll import library with `.dll.lib` (and also the .pdb debug file)
     set_property(TARGET mimalloc PROPERTY ARCHIVE_OUTPUT_NAME "${mi_libname}.dll" )
     install(FILES "$<TARGET_FILE_DIR:mimalloc>/${mi_libname}.dll.lib" DESTINATION ${CMAKE_INSTALL_LIBDIR}/mimalloc-${mi_version})
-    set_property(TARGET mimalloc PROPERTY PDB_NAME "${mi_libname}.dll")
+    if (CMAKE_CONFIGURATION_TYPES)
+      # PDB_NAME only supports generator expressions since CMake 4.1; for multi-config
+      # generators (like Visual Studio) we instead set `PDB_NAME_<CONFIG>` for each
+      # known configuration explicitly (mirroring the release/debug suffix logic above).
+      foreach(mi_cfg IN LISTS CMAKE_CONFIGURATION_TYPES)
+        string(TOUPPER "${mi_cfg}" mi_cfg_uc)
+        string(TOLOWER "${mi_cfg}" mi_cfg_lc)
+        if (mi_cfg_lc MATCHES "^(release|relwithdebinfo|minsizerel|none)$")
+          set(mi_libname_pdb "${mi_libname_base}")
+        else()
+          set(mi_libname_pdb "${mi_libname_base}-${mi_cfg_lc}")
+        endif()
+        set_property(TARGET mimalloc PROPERTY "PDB_NAME_${mi_cfg_uc}" "${mi_libname_pdb}.dll")
+      endforeach()
+    else()
+      set_property(TARGET mimalloc PROPERTY PDB_NAME "${mi_libname}.dll")
+    endif()
     # don't try to install the pdb since it may not be generated depending on the configuration
     # install(FILES "$<TARGET_FILE_DIR:mimalloc>/${mi_libname}.dll.pdb" DESTINATION ${CMAKE_INSTALL_LIBDIR})
   endif()
@@ -1151,7 +1169,7 @@ if (MI_BUILD_TESTS)
   endforeach()
 
   # static override test
-  if(MI_BUILD_OBJECT AND NOT (MI_CYGWIN OR (MI_TRACK STREQUAL "ASAN") OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN))
+  if(MI_BUILD_OBJECT AND MI_OVERRIDE AND NOT (MI_CYGWIN OR (MI_TRACK STREQUAL "ASAN") OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN))
     add_executable(mimalloc-test-stress-static test/test-stress.c)
     target_compile_definitions(mimalloc-test-stress-static PRIVATE ${mi_defines} "USE_STD_MALLOC=1")
     target_compile_options(mimalloc-test-stress-static PRIVATE ${mi_cflags})
@@ -1161,7 +1179,7 @@ if (MI_BUILD_TESTS)
   endif()
 
   # dynamic override test
-  if(MI_BUILD_SHARED AND NOT (MI_CYGWIN OR (MI_TRACK STREQUAL "ASAN") OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN)) # AND NOT (APPLE AND MI_USE_CXX))
+  if(MI_BUILD_SHARED AND MI_OVERRIDE AND NOT (MI_CYGWIN OR (MI_TRACK STREQUAL "ASAN") OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN)) # AND NOT (APPLE AND MI_USE_CXX))
     add_executable(mimalloc-test-stress-dynamic test/test-stress.c)
     target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE ${mi_defines} "USE_STD_MALLOC=1")
     target_compile_options(mimalloc-test-stress-dynamic PRIVATE ${mi_cflags})

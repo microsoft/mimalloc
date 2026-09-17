@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 30502   // major + 2 digits minor + 2 digits patch
+#define MI_MALLOC_VERSION 30503   // major + 2 digits minor + 2 digits patch
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -397,43 +397,6 @@ mi_decl_nodiscard mi_decl_export                  void* mi_theap_realloc(mi_thea
 mi_decl_nodiscard mi_decl_export                  void* mi_theap_rezalloc(mi_theap_t* theap, void* p, size_t newsize)             mi_attr_noexcept mi_attr_alloc_size(3);
 
 // ------------------------------------------------------
-// Fast constant size allocations.
-// ------------------------------------------------------
-
-// Machine word size allocation. `wsize` is the allocation size in machine words (`sizeof(size_t)`)
-mi_decl_nodiscard mi_decl_restrict void* mi_wzalloc_small(size_t wsize) mi_attr_noexcept;
-mi_decl_nodiscard mi_decl_restrict void* mi_wmalloc_small(size_t wsize) mi_attr_noexcept;
-mi_decl_nodiscard mi_decl_restrict void* mi_theap_wmalloc_small(mi_theap_t* theap, size_t wsize) mi_attr_noexcept;
-mi_decl_nodiscard mi_decl_restrict void* mi_theap_wzalloc_small(mi_theap_t* theap, size_t wsize) mi_attr_noexcept;
-
-// get the machine word size from a byte size.
-static inline size_t mi_wsize_from_size(size_t size) { 
-  return ((size + sizeof(size_t) - 1) / sizeof(size_t));  
-}
-
-static inline mi_decl_restrict void* mi_malloc_csize(size_t size) mi_attr_noexcept {
-  if (size <= MI_SMALL_SIZE_MAX) { return mi_wmalloc_small(mi_wsize_from_size(size)); } else { return mi_malloc(size); }
-}
-static inline mi_decl_restrict void* mi_zalloc_csize(size_t size) mi_attr_noexcept {
-  if (size <= MI_SMALL_SIZE_MAX) { return mi_wzalloc_small(mi_wsize_from_size(size)); } else { return mi_zalloc(size); }
-}
-static inline mi_decl_restrict void* mi_theap_malloc_csize(mi_theap_t* theap, size_t size) mi_attr_noexcept {  
-  assert(theap!=NULL);
-  if (size <= MI_SMALL_SIZE_MAX) { return mi_theap_wmalloc_small(theap,mi_wsize_from_size(size)); } else { return mi_theap_malloc(theap,size); }
-}
-static inline mi_decl_restrict void* mi_theap_zalloc_csize(mi_theap_t* theap, size_t size) mi_attr_noexcept {
-  assert(theap!=NULL);
-  if (size <= MI_SMALL_SIZE_MAX) { return mi_theap_wzalloc_small(theap,mi_wsize_from_size(size)); } else { return mi_theap_zalloc(theap,size); }
-}
-static inline void mi_free_csize(void* p, size_t size) mi_attr_noexcept {
-  if (size <= MI_SMALL_SIZE_MAX) { mi_free_small(p); } else { mi_free(p); }
-}
-static inline void mi_free_csize_nonnull(void* p, size_t size) mi_attr_noexcept {
-  assert(p!=NULL);
-  if (size <= MI_SMALL_SIZE_MAX) { mi_free_small_nonnull(p); } else { mi_free(p); }
-}
-
-// ------------------------------------------------------
 // Experimental
 // ------------------------------------------------------
 
@@ -588,8 +551,13 @@ mi_decl_export int mi_wdupenv_s(wchar_t** buf, size_t* size, const wchar_t* name
 mi_decl_nodiscard mi_decl_export mi_decl_restrict wchar_t* mi_wcsdup(const wchar_t* s)  mi_attr_noexcept mi_attr_malloc;
 mi_decl_nodiscard mi_decl_export mi_decl_restrict unsigned char* mi_mbsdup(const unsigned char* s)  mi_attr_noexcept mi_attr_malloc;
 
-// The `mi_new` wrappers implement C++ semantics on out-of-memory instead of directly returning `NULL`.
-// (and call `std::get_new_handler` and potentially raise a `std::bad_alloc` exception).
+// --------------------------------------------------------
+// C++ wrappers
+// The `mi_new` wrappers implement C++ semantics on out-of-memory 
+// instead of directly returning `NULL`. (and call `std::get_new_handler` 
+// and potentially raise a `std::bad_alloc` exception).
+// --------------------------------------------------------
+
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_new(size_t size)                   mi_attr_malloc mi_attr_alloc_size(1);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_new_aligned(size_t size, size_t alignment) mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_new_nothrow(size_t size)           mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
@@ -600,6 +568,63 @@ mi_decl_nodiscard mi_decl_export void* mi_new_reallocn(void* p, size_t newcount,
 
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size_t size)                 mi_attr_malloc mi_attr_alloc_size(2);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) mi_attr_malloc mi_attr_alloc_size2(2, 3);
+
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_theap_alloc_new(mi_theap_t* theap, size_t size) mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_theap_alloc_new_n(mi_theap_t* theap, size_t count, size_t size) mi_attr_malloc mi_attr_alloc_size2(2, 3);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_theap_alloc_new_nothrow(mi_theap_t* theap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
+
+
+// --------------------------------------------------------------------------
+// Inlined constant size allocations.
+// These are meant for runtime systems, or overrides where we need the best 
+// performance for small, constant-size allocations.
+// These are only better than the regular functions if the size or alignment 
+// are indeed constant at the call site.
+// --------------------------------------------------------------------------
+
+// Internal machine word size allocation. `wsize` is the allocation size in machine words (`sizeof(size_t)`)
+mi_decl_nodiscard mi_decl_restrict void* mi_wzalloc_small(size_t wsize) mi_attr_noexcept mi_attr_malloc;
+mi_decl_nodiscard mi_decl_restrict void* mi_wmalloc_small(size_t wsize) mi_attr_noexcept mi_attr_malloc;
+mi_decl_nodiscard mi_decl_restrict void* mi_theap_wmalloc_small(mi_theap_t* theap, size_t wsize) mi_attr_noexcept mi_attr_malloc;
+mi_decl_nodiscard mi_decl_restrict void* mi_theap_wzalloc_small(mi_theap_t* theap, size_t wsize) mi_attr_noexcept mi_attr_malloc;
+
+static inline size_t mi_wsize_from_size(size_t size) mi_attr_noexcept {
+  return (size + sizeof(size_t) - 1) / sizeof(size_t);
+}
+
+static inline mi_decl_restrict void* mi_malloc_csize(size_t size) mi_attr_noexcept {
+  if (size <= MI_SMALL_SIZE_MAX) { return mi_wmalloc_small(mi_wsize_from_size(size)); } else { return mi_malloc(size); }
+}
+static inline mi_decl_restrict void* mi_zalloc_csize(size_t size) mi_attr_noexcept {
+  if (size <= MI_SMALL_SIZE_MAX) { return mi_wzalloc_small(mi_wsize_from_size(size)); } else { return mi_zalloc(size); }
+}
+static inline mi_decl_restrict void* mi_theap_malloc_csize(mi_theap_t* theap, size_t size) mi_attr_noexcept {  
+  assert(theap!=NULL);
+  if (size <= MI_SMALL_SIZE_MAX) { return mi_theap_wmalloc_small(theap,mi_wsize_from_size(size)); } else { return mi_theap_malloc(theap,size); }
+}
+static inline mi_decl_restrict void* mi_theap_zalloc_csize(mi_theap_t* theap, size_t size) mi_attr_noexcept {
+  assert(theap!=NULL);
+  if (size <= MI_SMALL_SIZE_MAX) { return mi_theap_wzalloc_small(theap,mi_wsize_from_size(size)); } else { return mi_theap_zalloc(theap,size); }
+}
+
+static inline void mi_free_csize(void* p, size_t size) mi_attr_noexcept {
+  if (size <= MI_SMALL_SIZE_MAX) { mi_free_small(p); } else { mi_free(p); }
+}
+static inline void mi_free_csize_nonnull(void* p, size_t size) mi_attr_noexcept {
+  assert(p!=NULL);
+  if (size <= MI_SMALL_SIZE_MAX) { mi_free_small_nonnull(p); } else { mi_free(p); }
+}
+static inline void mi_free_csize_aligned(void* p, size_t size, size_t aligned) mi_attr_noexcept {
+  if (aligned <= size && size <= MI_SMALL_SIZE_MAX) { mi_free_small(p); } else { mi_free(p); }
+}
+static inline void mi_free_csize_aligned_nonnull(void* p, size_t size, size_t aligned) mi_attr_noexcept {
+  assert(p!=NULL);
+  if (aligned <= size && size <= MI_SMALL_SIZE_MAX) { mi_free_small_nonnull(p); } else { mi_free(p); }
+}
+
+// ------------------------------------------------------
+// C++ standard library allocator interface.
+// ------------------------------------------------------
 
 #ifdef __cplusplus
 }
