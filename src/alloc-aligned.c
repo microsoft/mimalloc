@@ -22,7 +22,7 @@ static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
   if (alignment > size) return false;
   const size_t bsize = mi_good_size(size);
   const bool ok = (bsize <= MI_PAGE_MAX_START_BLOCK_ALIGN2 && _mi_is_power_of_two(bsize)) ||             // power-of-two under N
-                  (alignment==MI_PAGE_OSPAGE_BLOCK_ALIGN2 && (bsize % MI_PAGE_OSPAGE_BLOCK_ALIGN2)==0);  // or multiple of N
+                  (alignment<=MI_PAGE_OSPAGE_BLOCK_ALIGN2 && (bsize % MI_PAGE_OSPAGE_BLOCK_ALIGN2)==0);  // or multiple of N
   if (ok) { mi_assert_internal((bsize & (alignment-1)) == 0); } // since both power of 2 and alignment <= size
   return ok;
 }
@@ -182,11 +182,17 @@ static mi_decl_cold mi_decl_noinline void* mi_error_bad_alignment(size_t size, s
 }
 
 // Primitive aligned allocation
-static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, const size_t size, const size_t alignment, const size_t offset, const bool zero, mi_page_t** ppage) mi_attr_noexcept
+static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, size_t size, const size_t alignment, const size_t offset, const bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
   // note: we don't require `size > offset`, we just guarantee that the address at offset is aligned regardless of the allocated size.
   if mi_unlikely(!mi_alignment_is_valid(alignment)) { // require power-of-two and multiple of void* (see <https://en.cppreference.com/w/c/memory/aligned_alloc#Notes>)
     return mi_error_bad_alignment(size, alignment, offset);
+  }
+
+  // Use a naturally aligned size class instead of over-allocating and adjusting the pointer.
+  // Keep the requested size when padding is enabled for byte-precise overflow checks.
+  if (MI_PADDING_SIZE == 0 && offset == 0 && size < alignment && alignment <= MI_PAGE_MAX_START_BLOCK_ALIGN2) {
+    size = alignment;
   }
 
   // try first if there happens to be a small block available with just the right alignment

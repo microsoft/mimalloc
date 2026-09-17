@@ -70,6 +70,44 @@ static bool mem_is_zero(const void* p, size_t size) {
   return mem_has_vals((const uint8_t*)p,size,0);
 }
 
+// Keep several blocks live so alignment is checked beyond the first block on a page.
+static bool test_natural_alignment(size_t size, size_t alignment, size_t expected_usable_size) {
+  void* blocks[16];
+  const size_t block_count = sizeof(blocks)/sizeof(blocks[0]);
+  bool ok = true;
+
+  for (int round = 0; round < 2; round++) {
+    const bool zero = (round != 0);
+    for (size_t i = 0; i < block_count; i++) {
+      blocks[i] = (zero ? mi_zalloc_aligned(size, alignment) : mi_malloc_aligned(size, alignment));
+      if (blocks[i] == NULL) {
+        ok = false;
+        continue;
+      }
+
+      const size_t usable_size = mi_usable_size(blocks[i]);
+      if ((uintptr_t)blocks[i] % alignment != 0 || usable_size < size) { ok = false; }
+
+      // Padding and sampled guard pages can change the reported usable size.
+      #if !MI_PADDING && !MI_GUARDED
+      if (usable_size != expected_usable_size) { ok = false; }
+      #else
+      (void)expected_usable_size;
+      #endif
+      if (zero && !mem_is_zero(blocks[i], size)) { ok = false; }
+
+      // Dirty the blocks to exercise zeroing when memory is reused.
+      memset(blocks[i], 0xAB, size);
+    }
+
+    for (size_t i = 0; i < block_count; i++) {
+      mi_free(blocks[i]);
+    }
+  }
+
+  return ok;
+}
+
 // ---------------------------------------------------------------------------
 // Main testing
 // ---------------------------------------------------------------------------
@@ -188,6 +226,34 @@ int main(void) {
     for (size_t i = 0; i < 200; i++) {
       mi_free_size_aligned(p[i], size, alignment);
     }
+    result = ok;
+  };
+  CHECK_BODY("malloc-aligned-natural") {
+    const struct {
+      size_t size;
+      size_t alignment;
+      size_t expected_usable_size;
+    } cases[] = {
+      {    0,   16,    16},
+      {    8,   16,    16},
+      {    1,   32,    32},
+      {   64,  256,   256},
+      {    1, 4096,  4096},
+      {  300, 4096,  4096},
+      { 4000, 4096,  4096},
+      { 4096, 4096,  4096},
+      { 8192,   32,  8192},
+      {65536,  256, 65536},
+      {65536, 4096, 65536}
+    };
+    bool ok = true;
+
+    for (size_t i = 0; i < sizeof(cases)/sizeof(cases[0]); i++) {
+      if (!test_natural_alignment(cases[i].size, cases[i].alignment, cases[i].expected_usable_size)) {
+        ok = false;
+      }
+    }
+
     result = ok;
   };
   CHECK_BODY("malloc-aligned5") {
