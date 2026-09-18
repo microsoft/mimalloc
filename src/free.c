@@ -537,7 +537,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
     _mi_page_free_collect(page,false /* no force */);
     mt_free = NULL; // expected page->xthread_free value after collection
   }
-  const long reclaim_on_free = allow_reclaim && _mi_option_get_fast(mi_option_page_reclaim_on_free);
+  const long reclaim_on_free = (allow_reclaim ? _mi_option_get_fast(mi_option_page_reclaim_on_free) : -1);
   #if MI_DEBUG > 1
   if (mi_page_is_singleton(page)) { mi_assert_internal(mi_page_all_free(page)); }
   if (mi_page_is_full(page))      { mi_assert(mi_page_is_mostly_used(page)); }
