@@ -287,14 +287,14 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
 }
 
 void mi_free(void* p) mi_attr_noexcept {  
-  mi_page_t* page; 
+  mi_page_t* page = NULL; 
   if mi_likely(mi_ptr_page_is_valid(p,"mi_free",&page)) {    
     mi_free_nonnull(p, page, NULL, true /* allow reclaim? */);
   }
 }
 
 void mi_ufree(void* p, size_t* pblock_size) mi_attr_noexcept {
-  mi_page_t* page; 
+  mi_page_t* page = NULL; 
   if mi_likely(mi_ptr_page_is_valid(p,"mi_ufree",&page)) {    
     mi_free_nonnull(p, page, pblock_size, true /* allow reclaim? */);
   }
@@ -304,7 +304,7 @@ void mi_ufree(void* p, size_t* pblock_size) mi_attr_noexcept {
 }
 
 void mi_free_small(void* p) mi_attr_noexcept {
-  mi_page_t* page; 
+  mi_page_t* page = NULL; 
   if mi_likely(mi_ptr_page_is_valid_ex(p,"mi_free_small",true /* is_small? */,true /*check p for null*/, &page)) {    
     mi_free_nonnull(p, page, NULL, true /* allow reclaim? */);
   }
@@ -312,7 +312,7 @@ void mi_free_small(void* p) mi_attr_noexcept {
 
 void mi_free_small_nonnull(void* p) mi_attr_noexcept {
   mi_assert(p!=NULL);
-  mi_page_t* page; 
+  mi_page_t* page = NULL; 
   if mi_likely(mi_ptr_page_is_valid_ex(p,"mi_free_small_nonnull",true /* is_small? */,false /*check p for null*/, &page)) {    
     mi_free_nonnull(p, page, NULL, true /* allow reclaim? */);
   }
@@ -320,7 +320,7 @@ void mi_free_small_nonnull(void* p) mi_attr_noexcept {
 
 // Free a pointer that is potentially allocated in a different sub-process
 void _mi_free_subproc_safe(void* p) mi_attr_noexcept {
-  mi_page_t* page; 
+  mi_page_t* page = NULL; 
   if mi_likely(mi_ptr_page_is_valid(p,"_mi_free_subproc_safe",&page)) {
     // const bool allow_reclaim = (_mi_subproc() == mi_page_subproc(page));
     mi_free_nonnull(p, page, NULL, false /* allow reclaim */);
