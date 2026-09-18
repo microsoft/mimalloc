@@ -675,12 +675,35 @@ void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize);
 void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size);
 void* mi_heap_reallocf(mi_heap_t* heap, void* p, size_t newsize);
 
+/// Allocate aligned memory in a specific heap.
+/// @note For a heap created with mi_heap_new_in_arena(), the maximum supported
+/// alignment is 64 KiB. Larger alignments require an OS allocation, but an
+/// arena-bound heap cannot fall back outside its arena, so the allocation returns `NULL`.
+/// @see mi_malloc_aligned(), mi_heap_new_in_arena()
 void* mi_heap_malloc_aligned(mi_heap_t* heap, size_t size, size_t alignment);
 void* mi_heap_malloc_aligned_at(mi_heap_t* heap, size_t size, size_t alignment, size_t offset);
+
+/// Allocate zero-initialized in a specific heap with the requested alignment.
+/// @note For a heap created with mi_heap_new_in_arena(), the maximum supported
+/// alignment is 64 KiB. Larger alignments require an OS allocation, but an
+/// arena-bound heap cannot fall back outside its arena, so the allocation returns `NULL`.
+/// @see mi_zalloc_aligned(), mi_heap_calloc_aligned(), mi_heap_new_in_arena()
 void* mi_heap_zalloc_aligned(mi_heap_t* heap, size_t size, size_t alignment);
 void* mi_heap_zalloc_aligned_at(mi_heap_t* heap, size_t size, size_t alignment, size_t offset);
+
+/// Allocate \a count zero-initialized elements in a specific heap with the requested alignment.
+/// @note For a heap created with mi_heap_new_in_arena(), the maximum supported
+/// alignment is 64 KiB. Larger alignments require an OS allocation, but an
+/// arena-bound heap cannot fall back outside its arena, so the allocation returns `NULL`.
+/// @see mi_calloc_aligned(), mi_heap_zalloc_aligned(), mi_heap_new_in_arena()
 void* mi_heap_calloc_aligned(mi_heap_t* heap, size_t count, size_t size, size_t alignment);
 void* mi_heap_calloc_aligned_at(mi_heap_t* heap, size_t count, size_t size, size_t alignment, size_t offset);
+
+/// Reallocate a block in a specific heap with the requested alignment.
+/// @note For a heap created with mi_heap_new_in_arena(), the maximum supported
+/// alignment is 64 KiB. Larger alignments require an OS allocation, but an
+/// arena-bound heap cannot fall back outside its arena, so the reallocation returns `NULL`.
+/// @see mi_realloc_aligned(), mi_heap_new_in_arena()
 void* mi_heap_realloc_aligned(mi_heap_t* heap, void* p, size_t newsize, size_t alignment);
 void* mi_heap_realloc_aligned_at(mi_heap_t* heap, void* p, size_t newsize, size_t alignment, size_t offset);
 
