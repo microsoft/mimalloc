@@ -185,6 +185,7 @@ static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page,
 static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, size_t alloc_count, size_t free_count ) {
   // get heap (as the theap might be NULL)
   mi_heap_t* const heap = mi_page_heap(page);
+  mi_theap_t* const free_theap = (mi_page_thread_id(page) == _mi_prim_thread_id() ? theap : NULL);
   mi_assert_internal(theap == NULL || (theap->tld != NULL && _mi_thread_id() == theap->tld->thread_id));
   mi_theapx_stat_counter_increase(heap,theap,pages_stat_updates,1);
   mi_theapx_stat_counter_increase(heap,theap,pages_stat_update_count, alloc_count + free_count);
@@ -214,8 +215,8 @@ static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, 
     }
     // frees
     if (free_count > 0) {
-      mi_theapx_stat_decrease(heap, theap, malloc_normal, freed);
-      mi_theapx_stat_decrease(heap, theap, malloc_bins[bin], free_count);      
+      mi_theapx_stat_decrease(heap, free_theap, malloc_normal, freed);
+      mi_theapx_stat_decrease(heap, free_theap, malloc_bins[bin], free_count);
     }
   }
   else {
