@@ -225,7 +225,8 @@ typedef void* mi_nothrow_t;
   #endif
 #endif
 
-#if (defined(__GNUC__) || defined(__clang__)) && !defined(__APPLE__)
+// on macOS export the C++ operators too: interposing them does not work, but as weak definitions an exported one wins.
+#if (defined(__GNUC__) || defined(__clang__))
 #pragma GCC visibility push(default)
 #endif
 
@@ -400,7 +401,7 @@ mi_decl_weak int reallocarr(void* p, size_t count, size_t size)    { return mi_r
 }
 #endif
 
-#if (defined(__GNUC__) || defined(__clang__)) && !defined(__APPLE__)
+#if (defined(__GNUC__) || defined(__clang__))
 #pragma GCC visibility pop
 #endif
 
