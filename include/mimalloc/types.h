@@ -580,7 +580,12 @@ typedef struct mi_page_queue_s {
   mi_page_t* last;
   size_t     count;
   size_t     block_size;
+  uint32_t   xcollect_score;  // how often full pages here are revived by cross-thread frees (adaptive page_full_retain)
 } mi_page_queue_t;
+
+#define MI_XCOLLECT_SCORE_MAX  (256)  // saturation limit for `xcollect_score`
+#define MI_XCOLLECT_SCORE_SHIFT (5)   // retain bonus = score >> shift  (max +8)
+#define MI_XCOLLECT_SCORE_INC   (16)  // a revived page saves a full abandon/reclaim round-trip
 
 // Random context
 typedef struct mi_random_cxt_s {

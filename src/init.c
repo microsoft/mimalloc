@@ -66,7 +66,7 @@ static const mi_page_t mi_page_empty = {
 
 
 // Empty page queues for every bin
-#define QNULL(sz)  { NULL, NULL, 0, (sz)*sizeof(uintptr_t) }
+#define QNULL(sz)  { NULL, NULL, 0, (sz)*sizeof(uintptr_t), 0 }
 #define MI_PAGE_QUEUES_EMPTY \
   { QNULL(1), \
     QNULL(     1), QNULL(     2), QNULL(     3), QNULL(     4), QNULL(     5), QNULL(     6), QNULL(     7), QNULL(     8), /* 8 */ \

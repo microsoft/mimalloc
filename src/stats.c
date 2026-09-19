@@ -397,6 +397,7 @@ void _mi_stats_print(const char* name, size_t id, const mi_stats_t* stats, mi_ou
     mi_stat_counter_print(&stats->pages_reclaim_on_free, "reclaimf", out, arg);
     mi_stat_counter_print(&stats->pages_reabandon_full, "reabandon", out, arg);
     mi_stat_counter_print(&stats->pages_unabandon_busy_wait, "waits", out, arg);
+    mi_stat_counter_print(&stats->pages_unown_cas_retry, "unowncas", out, arg);
     mi_stat_counter_print(&stats->pages_extended, "extended", out, arg);
     mi_stat_counter_print(&stats->pages_retire, "retire", out, arg);
     mi_stat_counter_print(&stats->pages_stat_updates, "stat updates", out, arg);

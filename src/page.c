@@ -354,7 +354,8 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
 }
 
 // Collect the local `thread_free` list using an atomic exchange.
-static void mi_page_thread_free_collect(mi_page_t* page)
+// Returns `true` if a non-empty thread free list was collected.
+static bool mi_page_thread_free_collect(mi_page_t* page)
 {
   // atomically capture the thread free list
   mi_block_t* head;
@@ -362,13 +363,14 @@ static void mi_page_thread_free_collect(mi_page_t* page)
   mi_thread_free_t tfree = mi_atomic_load_relaxed(&page->xthread_free);
   do {
     head = mi_tf_block(tfree);
-    if mi_likely(head == NULL) return; // return if the list is empty
+    if mi_likely(head == NULL) return false; // return if the list is empty
     tfreex = mi_tf_create(NULL,mi_tf_is_owned(tfree));  // set the thread free list to NULL
   } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tfree, tfreex));  // release is enough?
   mi_assert_internal(head != NULL);
 
   // and move it to the local list
   mi_page_thread_collect_to_local(page, head);
+  return true;
 }
 
 
@@ -384,11 +386,11 @@ static inline bool mi_page_free_quick_collect(mi_page_t* page) {
   return true;
 }
 
-void _mi_page_free_collect(mi_page_t* page, bool force) {
+bool _mi_page_free_collect(mi_page_t* page, bool force) {
   mi_assert_internal(page!=NULL);
 
   // collect the thread free list
-  mi_page_thread_free_collect(page);
+  const bool collected_xfree = mi_page_thread_free_collect(page);
 
   // and the local free list
   if (page->local_free != NULL) {
@@ -413,6 +415,7 @@ void _mi_page_free_collect(mi_page_t* page, bool force) {
     mi_page_update_sample_countdown(page);
   }  
   mi_assert_internal(!force || page->local_free == NULL);
+  return collected_xfree;
 }
 
 // Collect elements in the thread-free list starting at `head`. This is an optimized
@@ -947,6 +950,10 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
   size_t count = 0;
   long candidate_limit = 0;          // we reset this on the first candidate to limit the search
   long page_full_retain = (pq->block_size > MI_SMALL_MAX_OBJ_SIZE ? 0 : theap->page_full_retain); // only retain small pages
+  if (page_full_retain >= 0) {
+    // adaptively retain more full pages when cross-thread frees keep reviving them (producer/consumer patterns)
+    page_full_retain += (long)(pq->xcollect_score >> MI_XCOLLECT_SCORE_SHIFT);
+  }
   mi_page_t* page_candidate = NULL;  // a page with free space
   mi_page_t* page = pq->first;
   mi_page_t* const last = pq->last;
@@ -963,8 +970,15 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
     bool immediate_available = mi_page_immediate_available(page);
     if (!immediate_available) {
       // collect freed blocks by us and other threads to we get a proper use count
-      _mi_page_free_collect(page, false);
+      const bool collected_xfree = _mi_page_free_collect(page, false);
       immediate_available = mi_page_immediate_available(page);
+      if (collected_xfree && immediate_available) {
+        // a cross-thread free revived this page: retaining such pages avoids an abandon/reclaim round-trip
+        pq->xcollect_score = (pq->xcollect_score + MI_XCOLLECT_SCORE_INC > MI_XCOLLECT_SCORE_MAX ? MI_XCOLLECT_SCORE_MAX : pq->xcollect_score + MI_XCOLLECT_SCORE_INC);
+      }
+      else if (pq->xcollect_score > 0) {
+        pq->xcollect_score--;
+      }
     }
 
     // if the page is completely full, move it to the `mi_pages_full`

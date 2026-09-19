@@ -451,7 +451,7 @@ static void mi_abandoned_page_unown_from_free(mi_page_t* page, mi_block_t* page_
       tf_expect = mi_atomic_load_acquire(&page->xthread_free);
     }
     // and try again to release ownership
-    mi_subproc_stat_counter_increase(mi_page_subproc(page), pages_unabandon_busy_wait, 1);
+    mi_subproc_stat_counter_increase(mi_page_subproc(page), pages_unown_cas_retry, 1);
     mi_assert_internal(mi_tf_block(tf_expect)==NULL);
     tf_new = mi_tf_create(NULL, false);
   }
