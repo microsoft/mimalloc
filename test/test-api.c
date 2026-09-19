@@ -27,6 +27,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 #include <stdbool.h>
 #include <stdint.h>
 #include <errno.h>
+#include <pthread.h>
 
 #ifdef __cplusplus
 #include <vector>
@@ -69,6 +70,46 @@ static bool mem_has_vals(const uint8_t* p, size_t size, uint8_t val) {
 static bool mem_is_zero(const void* p, size_t size) {
   return mem_has_vals((const uint8_t*)p,size,0);
 }
+
+#if !defined(_WIN32)
+
+typedef struct stats_test_context {
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
+  void* p;
+  size_t size;
+  bool freed;
+  bool release;
+} stats_test_context_t;
+
+static void* stats_test_producer(void* arg) {
+  stats_test_context_t* ctx = (stats_test_context_t*)arg;
+  ctx->p = mi_malloc(4096);
+  ctx->size = mi_usable_size(ctx->p);
+  return NULL;
+}
+
+static void* stats_test_consumer(void* arg) {
+  stats_test_context_t* ctx = (stats_test_context_t*)arg;
+
+  // Initialize this thread's theap.
+  mi_free(mi_malloc(64));
+
+  // Free memory that was allocated by another thread.
+  mi_free(ctx->p);
+  pthread_mutex_lock(&ctx->mutex);
+  ctx->freed = true;
+  pthread_cond_signal(&ctx->cond);
+
+  while (!ctx->release) {
+    pthread_cond_wait(&ctx->cond, &ctx->mutex);
+  }
+
+  pthread_mutex_unlock(&ctx->mutex);
+  return NULL;
+}
+
+#endif
 
 // ---------------------------------------------------------------------------
 // Main testing
@@ -567,6 +608,63 @@ int main(void) {
   // ---------------------------------------------------
   // Heaps
   // ---------------------------------------------------
+
+  // ---------------------------------------------------
+  // Cross-thread statistics
+  // ---------------------------------------------------
+#if !defined(_WIN32)
+  CHECK_BODY("stats-cross-thread-free") {
+    stats_test_context_t ctx = {
+      .mutex = PTHREAD_MUTEX_INITIALIZER,
+      .cond = PTHREAD_COND_INITIALIZER,
+      .p = NULL,
+      .freed = false,
+      .release = false
+    };
+
+    pthread_t producer;
+    pthread_t consumer;
+
+    // Allocate on one thread.
+    pthread_create(&producer, NULL, stats_test_producer, &ctx);
+    pthread_join(producer, NULL);
+
+    mi_stats_t before;
+    mi_stats_init(&before);
+    mi_stats_get(&before);
+
+    // Free on another thread and keep that thread alive.
+    pthread_create(&consumer, NULL, stats_test_consumer, &ctx);
+
+    pthread_mutex_lock(&ctx.mutex);
+    while (!ctx.freed) {
+      pthread_cond_wait(&ctx.cond, &ctx.mutex);
+    }
+    pthread_mutex_unlock(&ctx.mutex);
+
+    mi_stats_t after;
+    mi_stats_init(&after);
+    mi_stats_get(&after);
+
+    result = (after.malloc_normal.current ==
+              before.malloc_normal.current - (int64_t)ctx.size);
+    if (!result) {
+      fprintf(stderr, "stats-cross-thread-free: before=%lld after=%lld size=%zu\n",
+              (long long)before.malloc_normal.current,
+              (long long)after.malloc_normal.current,
+              ctx.size);
+    }
+
+    pthread_mutex_lock(&ctx.mutex);
+    ctx.release = true;
+    pthread_cond_signal(&ctx.cond);
+    pthread_mutex_unlock(&ctx.mutex);
+
+    pthread_join(consumer, NULL);
+    pthread_cond_destroy(&ctx.cond);
+    pthread_mutex_destroy(&ctx.mutex);
+  }
+#endif
 
   CHECK_BODY("heap-os1") {
     // @zoxc opus bug #2.
