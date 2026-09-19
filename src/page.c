@@ -426,6 +426,7 @@ bool _mi_page_free_collect(mi_page_t* page, bool force) {
 // so the `used` count is not fully updated in general. However, if the `head` is
 // the last remaining element, it will be collected and the used count will become `0` (so `mi_page_all_free` becomes true).
 mi_block_t* _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
+  mi_assert_internal(mi_page_is_owned(page));
   if (head == NULL) return NULL;
   mi_block_t* next = mi_block_next(page,head);  // we cannot collect the head element itself as `page->thread_free` may point to it (and we want to avoid atomic ops)
   if (next != NULL) {
