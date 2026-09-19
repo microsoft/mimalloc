@@ -63,7 +63,10 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   mi_block_t* const block = page->free;
   mi_used_t xused = page->xused; 
   xused.used_alloc += 0x10001;  // increment both (16-bit) used count and alloc count 
-  #if defined(__GNUC__) 
+  #if defined(__GNUC__) && defined(__aarch64__)
+  // on arm64 this pairs the `free` and `xused` loads into a single `ldp` (and the stores into an `stp`).
+  // we do _not_ do this on x86-64 where it instead prevents the compiler from folding the
+  // increment into a single `add $0x10001, xused(%page)` read-modify-write instruction.
   __asm("" : : : "memory" );     // always load the `used` field before the test
   #endif  
   if (block == NULL) {
