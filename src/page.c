@@ -272,6 +272,14 @@ static void mi_theap_page_update_stats(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
 
   mi_theap_page_merge_stats(theap, page, alloc_count, free_count);
+
+  // merge the theap stats into the heap once N blocks were allocated or freed since the last merge
+  if (theap != NULL) {
+    const long threshold = mi_option_get(mi_option_stats_merge_threshold);
+    if (threshold > 0 && theap->stats.pages_stat_update_count.total >= (int64_t)threshold) {
+      _mi_theap_merge_stats(theap);
+    }
+  }
 }
 
 void _mi_page_update_stats(mi_page_t* page) {         // called on abandoned pages etc.
