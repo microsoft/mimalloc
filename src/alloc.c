@@ -61,7 +61,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
 
   // check the free list
   mi_block_t* const block = page->free;
-  #if defined(__GNUC__) && defined(MI_ARCH_ARM64)
+  #if defined(__GNUC__) && (defined(MI_ARCH_ARM64) || defined(MI_ARCH_RISCV))
   mi_used_t xused = page->xused; 
   __asm("" : : "r"(xused) : );     // load the `xused` field before the test
   xused.used_alloc += 0x10001;
@@ -81,7 +81,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   #endif
 
   page->free = next;
-  #if defined(__GNUC__) && defined(MI_ARCH_ARM64)
+  #if defined(__GNUC__) && (defined(MI_ARCH_ARM64) || defined(MI_ARCH_RISCV))
   page->xused = xused;
   #else
   page->xused.used_alloc += 0x10001; 

@@ -43,17 +43,17 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   #if MI_ARCH_X64 || (MI_SIZE_BITS <= 32 && !MI_BIG_ENDIAN)
   mi_block_set_next(page, block, page->local_free);
   page->local_free = block;
-  const uint16_t used_count = --page->xused.le.used_count;
+  const bool is_empty = (--page->xused.le.used_count == 0);
   #else // on arm64, riscv64 etc. use whole word decrement
   mi_used_t xused = page->xused;
   mi_block_set_next(page, block, page->local_free);
   page->local_free = block;
   xused.used_alloc--;
   page->xused = xused;
-  const uint16_t used_count = mi_xused_used_count(xused);
+  const bool is_empty = (mi_xused_used_count(xused) == 0);
   #endif
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
-  if mi_unlikely(used_count == 0) {  // is used count zero ?
+  if mi_unlikely(is_empty) {  // is used count zero ?
     if (page->retire_expire==0) { // no need to re-retire retired pages (happens when we alloc/free one block repeatedly in an empty page)
       _mi_page_retire(page); 
     }
