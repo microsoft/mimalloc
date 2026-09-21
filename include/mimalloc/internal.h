@@ -949,18 +949,107 @@ static inline size_t mi_page_committed(const mi_page_t* page) {
   return (slice_committed == 0 ? mi_page_size(page) : slice_committed - mi_page_slice_offset_of(page,0));
 }
 
+
+// The number of blocks that are committed in a page.
+// If `MI_HAS_FREE_LEN` the capacity is stored in the _lower_ 16 bits of the `xthread_id`
+// (which is loaded anyway in the `mi_free` fast path) while the thread id (with the page
+// flags in its lowest bits) is shifted up by 16 bits. This way both the thread id test
+// (`eor xtid, tid, pxtid lsr #16`) and the capacity (`cmp .., pxtid uxth`) come for free
+// as shifted/extended register operands.
+#if MI_HAS_FREE_LEN
+#define MI_PAGE_TID_SHIFT       (16)
+#define MI_PAGE_CAPACITY_MASK   ((mi_threadid_t)0xFFFF)
+#else
+#define MI_PAGE_TID_SHIFT       (0)
+#define MI_PAGE_CAPACITY_MASK   ((mi_threadid_t)0)
+#endif
+
+// the page flags as they are stored in the `xthread_id`
+#define MI_PAGE_XFLAG_MASK      ((mi_threadid_t)MI_PAGE_FLAG_MASK << MI_PAGE_TID_SHIFT)
+
+static inline size_t mi_page_capacity(const mi_page_t* page) {
+  #if !MI_HAS_FREE_LEN
+  return page->xcapacity;
+  #else
+  const mi_threadid_t xtid = mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id);
+  return (size_t)(xtid & MI_PAGE_CAPACITY_MASK);
+  #endif
+}
+
+// Increase the capacity by `delta` blocks.
+static inline void mi_page_capacity_increase(mi_page_t* page, size_t delta) {
+  mi_assert_internal(mi_page_capacity(page) + delta <= page->reserved);
+  #if !MI_HAS_FREE_LEN
+  page->xcapacity += (uint16_t)delta;
+  #else
+  // note: we can use an atomic add as the capacity never overflows into the thread id bits
+  // (and a concurrent thread may still set the `MI_PAGE_HAS_INTERIOR_POINTERS` flag)
+  mi_atomic_add_relaxed(&page->xthread_id, (mi_threadid_t)delta);
+  #endif
+}
+
 static inline size_t mi_page_used(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
+  #if !MI_HAS_FREE_LEN
   return mi_xused_used_count(page->xused);
+  #else
+  mi_assert_internal(mi_page_capacity(page) >= mi_free_len(page->free) + mi_free_len(page->local_free));
+  return mi_page_capacity(page) - mi_free_len(page->free) - mi_free_len(page->local_free);
+  #endif
 }
+
+// Set the `used` count to zero (only used when destroying a page with live blocks)
+static inline size_t mi_page_alloc_count(const mi_page_t* page);
 
 static inline void mi_page_used_reset(mi_page_t* page) {
+  #if !MI_HAS_FREE_LEN
   page->xused = mi_xused_used_reset(page->xused);
+  #else
+  // pretend the capacity equals the free'd blocks so that `mi_page_used(page) == 0`
+  const size_t acc = mi_page_alloc_count(page);
+  const size_t freed = mi_free_len(page->free) + mi_free_len(page->local_free);
+  mi_threadid_t xtid_old = mi_atomic_load_relaxed(&page->xthread_id);
+  mi_threadid_t xtid;
+  do {
+    xtid = (xtid_old & ~MI_PAGE_CAPACITY_MASK) | (mi_threadid_t)freed;
+  } while (!mi_atomic_cas_weak_release(&page->xthread_id, &xtid_old, xtid));
+  page->xused.used_alloc = (page->xused.used_alloc & ~MI_ZU(0xFFFFFFFF)) | (acc << 16) | mi_free_len(page->free);
+  mi_assert_internal(mi_page_used(page) == 0);
+  #endif
 }
 
-static inline size_t mi_page_alloc_count(const mi_page_t* page) {
-  return mi_xused_alloc_count(page->xused);
+static inline size_t mi_page_last_used(const mi_page_t* page);
+
+#if MI_HAS_FREE_LEN
+// The length of the `free` list at the last refill (bits 0..15 of `used_alloc`, unused in this mode).
+static inline size_t mi_page_last_free_len(const mi_page_t* page) {
+  return (page->xused.used_alloc & MI_FREE_LEN_MAX);
 }
+#endif
+
+static inline size_t mi_page_alloc_count(const mi_page_t* page) {
+  #if !MI_HAS_FREE_LEN
+  return mi_xused_alloc_count(page->xused);
+  #else
+  // blocks are only ever allocated from the `free` list (which shrinks by one per allocation),
+  // so the count since the last refill is exactly `last_free_len - |free|`.
+  const size_t acc = mi_xused_alloc_count(page->xused) + ((mi_page_last_free_len(page) - mi_free_len(page->free)) & MI_FREE_LEN_MAX);
+  return (acc > MI_FREE_LEN_MAX ? MI_FREE_LEN_MAX : acc);
+  #endif
+}
+
+#if MI_HAS_FREE_LEN
+// Refill the `free` list: accumulate the allocations done since the last refill and set the new baseline.
+static inline void mi_page_set_free(mi_page_t* page, mi_free_t newfree) {
+  const size_t acc = mi_page_alloc_count(page);
+  page->xused.used_alloc = (page->xused.used_alloc & ~MI_ZU(0xFFFFFFFF)) | (acc << 16) | mi_free_len(newfree);
+  page->free = newfree;
+}
+#else
+static inline void mi_page_set_free(mi_page_t* page, mi_free_t newfree) {
+  page->free = newfree;
+}
+#endif
 
 static inline size_t mi_page_last_used(const mi_page_t* page) {
   #if MI_SIZE_SIZE >= 8
@@ -989,21 +1078,21 @@ static inline bool mi_page_all_free(const mi_page_t* page) {
 // are there immediately available blocks, i.e. blocks available on the free list.
 static inline bool mi_page_immediate_available(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  return (page->free != NULL);
+  return (!mi_free_is_empty(page->free));
 }
 
 
 // is the page not yet used up to its reserved space?
 static inline bool mi_page_is_expandable(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  mi_assert_internal(page->capacity <= page->reserved);
-  return (page->capacity < page->reserved);
+  mi_assert_internal(mi_page_capacity(page) <= page->reserved);
+  return (mi_page_capacity(page) < page->reserved);
 }
 
 
 static inline bool mi_page_is_full(const mi_page_t* page) {
   const bool full = (page->reserved == mi_page_used(page));
-  mi_assert_internal(!full || page->free == NULL);
+  mi_assert_internal(!full || mi_free_is_empty(page->free));
   return full;
 }
 
@@ -1044,8 +1133,10 @@ static inline size_t mi_page_min_commit_size(void) {
 //-----------------------------------------------------------
 
 // Thread id of thread that owns this page (with flags in the bottom 2 bits)
+// (if `MI_HAS_FREE_LEN` the lower 16 bits hold the page capacity and are shifted out)
 static inline mi_threadid_t mi_page_xthread_id(const mi_page_t* page) {
-  return mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id);
+  const mi_threadid_t xtid = mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id);
+  return (xtid >> MI_PAGE_TID_SHIFT);
 }
 
 // Plain thread id of the thread that owns this page
@@ -1058,10 +1149,11 @@ static inline mi_page_flags_t mi_page_flags(const mi_page_t* page) {
 }
 
 static inline bool mi_page_flags_set(mi_page_t* page, bool set, mi_page_flags_t newflag) {
-  mi_page_flags_t old;
-  if (set) { old = mi_atomic_or_relaxed(&page->xthread_id, newflag); }
-      else { old = mi_atomic_and_relaxed(&page->xthread_id, ~newflag); }
-  return ((old & newflag) == newflag);
+  const mi_threadid_t xflag = ((mi_threadid_t)newflag << MI_PAGE_TID_SHIFT);
+  mi_threadid_t old;
+  if (set) { old = mi_atomic_or_relaxed(&page->xthread_id, xflag); }
+      else { old = mi_atomic_and_relaxed(&page->xthread_id, ~xflag); }
+  return ((old & xflag) == xflag);
 }
 
 static inline bool mi_page_is_in_full(const mi_page_t* page) {
@@ -1075,7 +1167,7 @@ static inline void mi_page_set_in_full(mi_page_t* page, bool in_full) {
     mi_theap_t* const theap = page->theap;
     mi_assert_internal(theap!=NULL);
     if (theap != NULL) {
-      mi_assert_internal(page->capacity==page->reserved);
+      mi_assert_internal(mi_page_capacity(page)==page->reserved);
       const size_t size = page->reserved * mi_page_block_size(page);
       if (in_full) { theap->pages_full_size += size; }
               else { mi_assert_internal(size <= theap->pages_full_size); theap->pages_full_size -= size; }
@@ -1096,12 +1188,13 @@ static inline void mi_page_set_theap(mi_page_t* page, mi_theap_t* theap) {
   page->theap = theap;
   const mi_threadid_t tid = (theap == NULL ? MI_THREADID_ABANDONED : theap->tld->thread_id);
   mi_assert_internal((tid & MI_PAGE_FLAG_MASK) == 0);
+  mi_assert_internal(((tid << MI_PAGE_TID_SHIFT) >> MI_PAGE_TID_SHIFT) == tid);   // thread id's must fit when shifted up
 
   // we need to use an atomic cas since a concurrent thread may still set the MI_PAGE_HAS_INTERIOR_POINTERS flag (see `alloc_aligned.c`).
-  mi_threadid_t xtid_old = mi_page_xthread_id(page);
+  mi_threadid_t xtid_old = mi_atomic_load_relaxed(&page->xthread_id);
   mi_threadid_t xtid;
   do {
-    xtid = tid | (xtid_old & MI_PAGE_FLAG_MASK);
+    xtid = (tid << MI_PAGE_TID_SHIFT) | (xtid_old & (MI_PAGE_XFLAG_MASK | MI_PAGE_CAPACITY_MASK));
   } while (!mi_atomic_cas_weak_release(&page->xthread_id, &xtid_old, xtid));
 }
 
@@ -1116,12 +1209,12 @@ static inline bool mi_page_is_abandoned_mapped(const mi_page_t* page) {
 
 static inline void mi_page_set_abandoned_mapped(mi_page_t* page) {
   mi_assert_internal(mi_page_is_abandoned(page));
-  mi_atomic_or_relaxed(&page->xthread_id, (mi_threadid_t)MI_THREADID_ABANDONED_MAPPED);
+  mi_atomic_or_relaxed(&page->xthread_id, (mi_threadid_t)MI_THREADID_ABANDONED_MAPPED << MI_PAGE_TID_SHIFT);
 }
 
 static inline void mi_page_clear_abandoned_mapped(mi_page_t* page) {
   mi_assert_internal(mi_page_is_abandoned_mapped(page));
-  mi_atomic_and_relaxed(&page->xthread_id, (mi_threadid_t)MI_PAGE_FLAG_MASK);
+  mi_atomic_and_relaxed(&page->xthread_id, MI_PAGE_XFLAG_MASK | MI_PAGE_CAPACITY_MASK);
 }
 
 
@@ -1296,29 +1389,29 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
   // return (_mi_ptr_page(p) == _mi_ptr_page(q));
 }
 
-static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {
+static inline uintptr_t mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {
   const uintptr_t k1 = keys[0];
   #if MI_PAGE_KEY_COUNT==2
   const uintptr_t k2 = keys[1];
   #else
   const uintptr_t k2 = mi_rotr(k1,13);
   #endif
-  void* p = (void*)(mi_rotr(x - k1, k1) ^ k2);
-  return (p==null ? NULL : p);
+  uintptr_t p = mi_rotr(x - k1, k1) ^ k2;
+  return (p==((uintptr_t)null) ? 0 : p);
 }
 
-static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const uintptr_t* keys) {
+static inline mi_encoded_t mi_ptr_encode(const void* null, uintptr_t p, const uintptr_t* keys) {
   const uintptr_t k1 = keys[0];
   #if MI_PAGE_KEY_COUNT==2
   const uintptr_t k2 = keys[1];
   #else
   const uintptr_t k2 = mi_rotr(k1,13);
   #endif
-  const uintptr_t x = (uintptr_t)(p==NULL ? null : p);  
+  const uintptr_t x = (uintptr_t)(p==0 ? (uintptr_t)null : p);
   return mi_rotl(x ^ k2, k1) + k1;
 }
 
-static inline uint32_t mi_ptr_encode_canary(const void* null, const void* p, const uintptr_t* keys) {
+static inline uint32_t mi_ptr_encode_canary(const void* null, uintptr_t p, const uintptr_t* keys) {
   const uint32_t x = (uint32_t)(mi_ptr_encode(null,p,keys));
   // make the lowest byte 0 to prevent spurious read overflows which could be a security issue (issue #951)
   // also clear bit 9 which we set only when a block is freed.
@@ -1337,20 +1430,20 @@ static inline bool mi_ptr_decode_canary_is_freed(uint32_t canary) {
   return (canary == mi_ptr_encode_canary_freed());
 }
 
-static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, const uintptr_t* keys ) {
+static inline mi_free_t mi_block_nextx( const void* null, const mi_block_t* block, const uintptr_t* keys ) {
   mi_track_mem_defined(block,sizeof(mi_block_t));
-  mi_block_t* next;
+  mi_free_t next;
   #if MI_ENCODE_FREELIST
-  next = (mi_block_t*)mi_ptr_decode(null, block->next, keys);
+  next = mi_ptr_decode(null, block->next, keys);
   #else
   MI_UNUSED(keys); MI_UNUSED(null);
-  next = (mi_block_t*)block->next;
+  next = block->next;
   #endif
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
   return next;
 }
 
-static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const mi_block_t* next, const uintptr_t* keys) {
+static inline void mi_block_set_nextx(const void* null, mi_block_t* block, mi_free_t next, const uintptr_t* keys) {
   mi_track_mem_undefined(block,sizeof(mi_block_t));
   #if MI_ENCODE_FREELIST
   block->next = mi_ptr_encode(null, next, keys);
@@ -1361,15 +1454,16 @@ static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
 }
 
-mi_block_t* _mi_block_next_is_corrupted(const mi_page_t* page, const mi_block_t* block, const mi_block_t* next); // in options.c
+mi_free_t _mi_block_next_is_corrupted(const mi_page_t* page, const mi_block_t* block, const mi_block_t* next); // in options.c
 
-static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t* block) {
+static inline mi_free_t mi_block_next(const mi_page_t* page, const mi_block_t* block) {
   #if MI_ENCODE_FREELIST
-  mi_block_t* next = mi_block_nextx(page,block,page->keys);
+  mi_free_t next = mi_block_nextx(page,block,page->keys);
   // check for free list corruption: is `next` at least in the same page?
   // todo: check if `next` is `page->block_size` aligned?
-  if mi_unlikely(next!=NULL && !mi_page_contains_address(page,next)) {
-    return _mi_block_next_is_corrupted(page,block,next); // returns NULL
+  mi_block_t* next_block = mi_free_block(next);
+  if mi_unlikely(next_block!=NULL && !mi_page_contains_address(page,next_block)) {
+    return _mi_block_next_is_corrupted(page,block,next_block); // returns NULL
   }
   return next;
   #else
@@ -1378,7 +1472,7 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
   #endif
 }
 
-static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, const mi_block_t* next) {
+static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, mi_free_t next) {
   #if MI_ENCODE_FREELIST
   mi_block_set_nextx(page,block,next, page->keys);
   #else

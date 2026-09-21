@@ -34,7 +34,7 @@ static mi_decl_noinline void mi_page_block_setup_padding(mi_page_t* page, mi_blo
   const ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
   mi_assert_internal(delta >= 0 && bsize >= (size - MI_PADDING_SIZE + delta));
   mi_track_mem_defined(padding,sizeof(mi_padding_t));  // note: re-enable since mi_page_usable_block_size may set noaccess
-  padding->canary = mi_ptr_encode_canary(page,block,page->keys);
+  padding->canary = mi_ptr_encode_canary(page,(uintptr_t)block,page->keys);
   padding->delta  = (uint32_t)(delta);
   #if MI_PADDING_CHECK_BYTES
   if (!mi_page_is_huge(page)) {
@@ -60,15 +60,17 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   }
 
   // check the free list
-  mi_block_t* const block = page->free;
+  mi_block_t* const block = mi_free_block(page->free);
+  #if !MI_HAS_FREE_LEN 
   mi_used_t xused = page->xused; 
   xused.used_alloc += 0x10001;  // increment both (16-bit) used count and alloc count 
-  #if defined(__GNUC__) && defined(__aarch64__)
+  #if defined(__GNUC__) && MI_ARCH_ARM64
   // on arm64 this pairs the `free` and `xused` loads into a single `ldp` (and the stores into an `stp`).
   // we do _not_ do this on x86-64 where it instead prevents the compiler from folding the
   // increment into a single `add $0x10001, xused(%page)` read-modify-write instruction.
   __asm("" : : : "memory" );     // always load the `used` field before the test
   #endif  
+  #endif
   if (block == NULL) {
     return _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage);
   }
@@ -76,7 +78,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   if (ppage != NULL) { *ppage = page; };
 
   // pop from the free list
-  mi_block_t* next = mi_block_next(page,block);
+  mi_free_t next = mi_block_next(page,block);
   mi_track_mem_undefined(block,sizeof(*block));
   
   #if MI_SECURE
@@ -84,8 +86,10 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   #endif
 
   page->free = next;
+  #if !MI_HAS_FREE_LEN
   page->xused = xused;
-  mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
+  #endif
+  mi_assert_internal(mi_free_block(page->free) == NULL || _mi_ptr_page(mi_free_block(page->free)) == page);
   mi_assert_internal(page->block_size < MI_MAX_ALIGN_SIZE || _mi_is_aligned(block, MI_MAX_ALIGN_SIZE));
 
   #if MI_SAMPLE==2 
