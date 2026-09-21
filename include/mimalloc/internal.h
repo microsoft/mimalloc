@@ -261,9 +261,9 @@ void          _mi_arenas_unsafe_destroy_all(mi_subproc_t* subproc);
 
 mi_page_t*    _mi_arenas_page_alloc(mi_theap_t* theap, size_t block_size, size_t page_alignment);
 void          _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx /* can be NULL */);
-void          _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theap);
+void          _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theap, size_t pending);
 void          _mi_arenas_page_unabandon(mi_page_t* page, mi_theap_t* current_theapx /* can be NULL */);
-bool          _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page);
+bool          _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page, size_t pending);
 
 // "page-map.c"
 bool          _mi_page_map_init(void);
@@ -280,13 +280,13 @@ void*         _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool 
 void          _mi_page_retire(mi_page_t* page) mi_attr_noexcept;       // free the page if there are no other pages with many free blocks
 void          _mi_page_unfull(mi_page_t* page);
 void          _mi_page_free(mi_page_t* page, mi_page_queue_t* pq);     // free the page
-void          _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);  // abandon the page, to be picked up by another thread...
+void          _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq, size_t pending);  // abandon the page, to be picked up by another thread...
 void          _mi_deferred_free(mi_theap_t* theap, bool force);
 bool          _mi_page_free_collect(mi_page_t* page, bool force);  // returns `true` if cross-thread free'd blocks were collected
-mi_block_t*   _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
+mi_free_t     _mi_page_free_collect_partly(mi_page_t* page, mi_free_t head_free);
 mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page);
 bool          _mi_page_queue_is_valid(mi_theap_t* theap, const mi_page_queue_t* pq);
-void          _mi_page_update_stats(mi_page_t* page);
+void          _mi_page_update_stats(mi_page_t* page, size_t pending);
 
 size_t        _mi_page_stats_bin(const mi_page_t* page); // for stats
 size_t        _mi_bin_size(size_t bin);                  // for stats
@@ -951,12 +951,12 @@ static inline size_t mi_page_committed(const mi_page_t* page) {
 
 
 // The number of blocks that are committed in a page.
-// If `MI_HAS_FREE_LEN` the capacity is stored in the _lower_ 16 bits of the `xthread_id`
+// If `MI_OPT_FREE_LEN` the capacity is stored in the _lower_ 16 bits of the `xthread_id`
 // (which is loaded anyway in the `mi_free` fast path) while the thread id (with the page
 // flags in its lowest bits) is shifted up by 16 bits. This way both the thread id test
 // (`eor xtid, tid, pxtid lsr #16`) and the capacity (`cmp .., pxtid uxth`) come for free
 // as shifted/extended register operands.
-#if MI_HAS_FREE_LEN
+#if MI_OPT_FREE_LEN
 #define MI_PAGE_TID_SHIFT       (16)
 #define MI_PAGE_CAPACITY_MASK   ((mi_threadid_t)0xFFFF)
 #else
@@ -968,7 +968,7 @@ static inline size_t mi_page_committed(const mi_page_t* page) {
 #define MI_PAGE_XFLAG_MASK      ((mi_threadid_t)MI_PAGE_FLAG_MASK << MI_PAGE_TID_SHIFT)
 
 static inline size_t mi_page_capacity(const mi_page_t* page) {
-  #if !MI_HAS_FREE_LEN
+  #if !MI_OPT_FREE_LEN
   return page->xcapacity;
   #else
   const mi_threadid_t xtid = mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id);
@@ -979,7 +979,7 @@ static inline size_t mi_page_capacity(const mi_page_t* page) {
 // Increase the capacity by `delta` blocks.
 static inline void mi_page_capacity_increase(mi_page_t* page, size_t delta) {
   mi_assert_internal(mi_page_capacity(page) + delta <= page->reserved);
-  #if !MI_HAS_FREE_LEN
+  #if !MI_OPT_FREE_LEN
   page->xcapacity += (uint16_t)delta;
   #else
   // note: we can use an atomic add as the capacity never overflows into the thread id bits
@@ -990,7 +990,7 @@ static inline void mi_page_capacity_increase(mi_page_t* page, size_t delta) {
 
 static inline size_t mi_page_used(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  #if !MI_HAS_FREE_LEN
+  #if !MI_OPT_FREE_LEN
   return mi_xused_used_count(page->xused);
   #else
   mi_assert_internal(mi_page_capacity(page) >= mi_free_len(page->free) + mi_free_len(page->local_free));
@@ -1002,7 +1002,7 @@ static inline size_t mi_page_used(const mi_page_t* page) {
 static inline size_t mi_page_alloc_count(const mi_page_t* page);
 
 static inline void mi_page_used_reset(mi_page_t* page) {
-  #if !MI_HAS_FREE_LEN
+  #if !MI_OPT_FREE_LEN
   page->xused = mi_xused_used_reset(page->xused);
   #else
   // pretend the capacity equals the free'd blocks so that `mi_page_used(page) == 0`
@@ -1020,7 +1020,7 @@ static inline void mi_page_used_reset(mi_page_t* page) {
 
 static inline size_t mi_page_last_used(const mi_page_t* page);
 
-#if MI_HAS_FREE_LEN
+#if MI_OPT_FREE_LEN
 // The length of the `free` list at the last refill (bits 0..15 of `used_alloc`, unused in this mode).
 static inline size_t mi_page_last_free_len(const mi_page_t* page) {
   return (page->xused.used_alloc & MI_FREE_LEN_MAX);
@@ -1028,7 +1028,7 @@ static inline size_t mi_page_last_free_len(const mi_page_t* page) {
 #endif
 
 static inline size_t mi_page_alloc_count(const mi_page_t* page) {
-  #if !MI_HAS_FREE_LEN
+  #if !MI_OPT_FREE_LEN
   return mi_xused_alloc_count(page->xused);
   #else
   // blocks are only ever allocated from the `free` list (which shrinks by one per allocation),
@@ -1038,7 +1038,7 @@ static inline size_t mi_page_alloc_count(const mi_page_t* page) {
   #endif
 }
 
-#if MI_HAS_FREE_LEN
+#if MI_OPT_FREE_LEN
 // Refill the `free` list: accumulate the allocations done since the last refill and set the new baseline.
 static inline void mi_page_set_free(mi_page_t* page, mi_free_t newfree) {
   const size_t acc = mi_page_alloc_count(page);
@@ -1069,10 +1069,16 @@ static inline size_t mi_page_last_alloc(const mi_page_t* page) {
 
 
 // are all blocks in a page freed?
+static inline size_t mi_page_used_ex(const mi_page_t* page, size_t pending);
+static inline bool mi_page_all_free_ex(const mi_page_t* page, size_t pending) {
+  mi_assert_internal(page != NULL);
+  return (mi_page_used_ex(page,pending) == 0);
+}
+
 // note: needs up-to-date used count, (as the `xthread_free` list may not be empty). see `_mi_page_collect_free`.
 static inline bool mi_page_all_free(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  return (mi_page_used(page)==0);
+  return (mi_page_all_free_ex(page,0));
 }
 
 // are there immediately available blocks, i.e. blocks available on the free list.
@@ -1101,6 +1107,23 @@ static inline bool mi_page_is_mostly_used(const mi_page_t* page) {
   if (page==NULL) return true;
   uint16_t frac = page->reserved / 8U;
   return (page->reserved - mi_page_used(page) <= frac);
+}
+
+// used count where `pending` blocks (still in the thread free list) count as free
+static inline size_t mi_page_used_ex(const mi_page_t* page, size_t pending) {
+  const size_t used = mi_page_used(page);
+  mi_assert_internal(used >= pending);
+  return used - pending;
+}
+
+static inline bool mi_page_is_full_ex(const mi_page_t* page, size_t pending) {
+  return (page->reserved == mi_page_used_ex(page,pending));
+}
+
+static inline bool mi_page_is_mostly_used_ex(const mi_page_t* page, size_t pending) {
+  if (page==NULL) return true;
+  uint16_t frac = page->reserved / 8U;
+  return (page->reserved - mi_page_used_ex(page,pending) <= frac);
 }
 
 // is more than (n-1)/n'th of a page in use?
@@ -1133,7 +1156,7 @@ static inline size_t mi_page_min_commit_size(void) {
 //-----------------------------------------------------------
 
 // Thread id of thread that owns this page (with flags in the bottom 2 bits)
-// (if `MI_HAS_FREE_LEN` the lower 16 bits hold the page capacity and are shifted out)
+// (if `MI_OPT_FREE_LEN` the lower 16 bits hold the page capacity and are shifted out)
 static inline mi_threadid_t mi_page_xthread_id(const mi_page_t* page) {
   const mi_threadid_t xtid = mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id);
   return (xtid >> MI_PAGE_TID_SHIFT);
@@ -1265,26 +1288,56 @@ static inline bool _mi_is_process_heap_main(const mi_heap_t* heap) {
 //-----------------------------------------------------------
 
 // Thread free flag helpers
+// the ownership bit sits just above the list length (and is always zero in a shifted block pointer)
+#define MI_TF_OWNED  ((mi_thread_free_t)1 << MI_OPT_FREE_LEN)
+
+// the thread free list as a regular free list (with the ownership bit cleared)
+static inline mi_free_t mi_tf_free(mi_thread_free_t tf) {
+  return (mi_free_t)(tf & ~MI_TF_OWNED);
+}
+
 static inline mi_block_t* mi_tf_block(mi_thread_free_t tf) {
-  return (mi_block_t*)(tf & ~1);  
+  return mi_free_block(mi_tf_free(tf));
 }
 
 static inline bool mi_tf_is_owned(mi_thread_free_t tf) {
-  return ((tf & 1) == 1);
+  return ((tf & MI_TF_OWNED) != 0);
 }
 
-static inline mi_thread_free_t mi_tf_create(mi_block_t* block, bool owned) {
-  const uintptr_t base = (uintptr_t)block | (owned ? 1 : 0);
-  return (mi_thread_free_t)base;
+static inline mi_thread_free_t mi_tf_create_from(mi_free_t free, bool owned) {
+  return (mi_thread_free_t)(free | (owned ? MI_TF_OWNED : 0));
+}
+
+static inline mi_thread_free_t mi_tf_create(mi_block_t* block, size_t len, bool owned) {
+  return mi_tf_create_from(mi_free_create(block, len), owned);
 }
 
 static inline mi_thread_free_t mi_tf_set_owned(mi_thread_free_t tf, bool owned) {
-  return mi_tf_create(mi_tf_block(tf), owned);
+  return mi_tf_create_from(mi_tf_free(tf), owned);
 }
 
 // Thread free access
+static inline mi_thread_free_t mi_page_xthread_free(const mi_page_t* page) {
+  return mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free);
+}
+
+static inline size_t mi_page_pending(const mi_page_t* page) {
+  #if MI_OPT_FREE_LEN
+  return mi_free_len(mi_tf_free(mi_page_xthread_free(page)));
+  #else
+  return 0;
+  #endif
+}
+
+static inline size_t mi_page_pending_collect(mi_page_t* page) {
+  #if !MI_OPT_FREE_LEN
+  _mi_page_free_collect(page, false);
+  #endif
+  return mi_page_pending(page);
+}
+
 static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
-  return mi_tf_block(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free));
+  return mi_tf_block(mi_page_xthread_free(page));
 }
 
 // are there any available blocks?
@@ -1295,13 +1348,13 @@ static inline bool mi_page_has_any_available(const mi_page_t* page) {
 
 // Owned?
 static inline bool mi_page_is_owned(const mi_page_t* page) {
-  return mi_tf_is_owned(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free));
+  return mi_tf_is_owned(mi_page_xthread_free(page));
 }
 
 // get ownership; returns true if the page was not owned before.
 static inline bool mi_page_claim_ownership(mi_page_t* page) {
-  const uintptr_t old = mi_atomic_or_acq_rel(&page->xthread_free, (uintptr_t)1);
-  return ((old&1)==0);
+  const mi_thread_free_t old = mi_atomic_or_acq_rel(&page->xthread_free, MI_TF_OWNED);
+  return ((old & MI_TF_OWNED)==0);
 }
 
 

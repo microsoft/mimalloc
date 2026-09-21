@@ -18,7 +18,7 @@ static const mi_page_t mi_page_empty = {
   MI_ATOMIC_VAR_INIT(NULL),  // self
   #endif
   MI_ATOMIC_VAR_INIT(0),  // xthread_id
-  #if MI_HAS_FREE_LEN
+  #if MI_OPT_FREE_LEN
   0,                      // free
   0,                      // local_free
   {0},                    // xused

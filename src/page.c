@@ -81,7 +81,7 @@ static bool mi_page_list_is_valid(mi_page_t* page, mi_block_t* p) {
   return true;
 }
 
-#if MI_HAS_FREE_LEN
+#if MI_OPT_FREE_LEN
 // every interior `next` field must carry the exact remaining list length
 static bool mi_page_list_lens_are_valid(mi_page_t* page, mi_free_t list) {
   size_t rem = mi_free_len(list);
@@ -112,9 +112,9 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
 
   mi_assert_internal(mi_page_list_is_valid(page,mi_free_block(page->free)));
   mi_assert_internal(mi_page_list_is_valid(page,mi_free_block(page->local_free)));
-  mi_assert_internal(!MI_HAS_FREE_LEN || mi_page_list_count(page,mi_free_block(page->free)) == mi_free_len(page->free));
-  mi_assert_internal(!MI_HAS_FREE_LEN || mi_page_list_count(page,mi_free_block(page->local_free)) == mi_free_len(page->local_free));
-  #if MI_HAS_FREE_LEN
+  mi_assert_internal(!MI_OPT_FREE_LEN || mi_page_list_count(page,mi_free_block(page->free)) == mi_free_len(page->free));
+  mi_assert_internal(!MI_OPT_FREE_LEN || mi_page_list_count(page,mi_free_block(page->local_free)) == mi_free_len(page->local_free));
+  #if MI_OPT_FREE_LEN
   mi_assert_internal(mi_page_list_lens_are_valid(page, page->free));
   mi_assert_internal(mi_page_list_lens_are_valid(page, page->local_free));
   #endif
@@ -138,7 +138,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   size_t free_count = mi_page_list_count(page, mi_free_block(page->free)) + mi_page_list_count(page, mi_free_block(page->local_free));
   mi_assert_internal(mi_page_used(page) + free_count == mi_page_capacity(page));
 
-  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,mi_page_pending(page)));
   return true;
 }
 
@@ -161,7 +161,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
       // mi_assert_internal(mi_theap_contains_queue(mi_page_theap(page),pq));
     }
   }
-  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,mi_page_pending(page)));
   mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
   return true;
 }
@@ -181,7 +181,7 @@ static mi_theap_t* mi_theap_of_page(mi_page_t* page) {
 #if MI_SAMPLE==1 /* for ==2, the countdown is already done at every `alloc.c:mi_page_alloc_zero` */
 static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page, size_t alloc_count) 
 {
-  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));    
+  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,mi_page_pending(page)));
   mi_assert_internal(theap!=NULL);
   if (theap->sample_rate==0) return;
 
@@ -260,12 +260,12 @@ static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, 
 }
 
 // Update stats for a page
-static void mi_theap_page_update_stats(mi_theap_t* theap, mi_page_t* page) {
-  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+static void mi_theap_page_update_stats(mi_theap_t* theap, mi_page_t* page, size_t pending) {
+  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,pending));
   mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
   
   // get stat counts
-  const size_t used = mi_page_used(page);
+  const size_t used = mi_page_used_ex(page,pending);
   const size_t alloc_count = mi_page_alloc_count(page);
   const size_t last_used = mi_page_last_used(page);    
   mi_assert_internal(last_used + alloc_count >= used);
@@ -283,7 +283,7 @@ static void mi_theap_page_update_stats(mi_theap_t* theap, mi_page_t* page) {
   }
 
   // reset the `alloc_count` (and `last_alloc`), and set `last_used` to `used`
-  #if MI_HAS_FREE_LEN
+  #if MI_OPT_FREE_LEN
   page->xused.used_alloc = (used << 32) | mi_free_len(page->free);   // reset the alloc count and re-baseline `|free|`
   #elif MI_SIZE_SIZE >= 8
   page->xused.used_alloc = (used << 32) | used;
@@ -292,19 +292,20 @@ static void mi_theap_page_update_stats(mi_theap_t* theap, mi_page_t* page) {
   page->xlast_used = (uint16_t)used;
   page->xlast_alloc = 0;
   #endif
-  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,mi_page_pending(page)));
   mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
 
   mi_theap_page_merge_stats(theap, page, alloc_count, free_count);
 }
 
-void _mi_page_update_stats(mi_page_t* page) {         // called on abandoned pages etc.
-  mi_theap_page_update_stats(mi_theap_of_page(page),page);
+void _mi_page_update_stats(mi_page_t* page, size_t pending) {         // called on abandoned pages etc.
+  mi_theap_page_update_stats(mi_theap_of_page(page),page, pending);
 }
 
 #else
-void _mi_page_update_stats(mi_page_t* page) {
+void _mi_page_update_stats(mi_page_t* page, size_t pending) {
   MI_UNUSED(page);
+  MI_UNUSED(pending);
 }
 #endif
 
@@ -316,7 +317,7 @@ static void mi_page_update_sample_countdown(mi_page_t* page)
     return; 
   }
   else if mi_unlikely(alloc_count>=0x8000) {  // if the count could overflow, update stats so the counter is reset
-    _mi_page_update_stats(page);
+    _mi_page_update_stats(page, mi_page_pending(page));  // avoid recursion: collection also updates sampling
   }
   #if MI_SAMPLE==1  // if ==2 the countdown is already always counted in `alloc.c:mi_page_alloc_zero_ex`
   else {
@@ -330,7 +331,7 @@ static void mi_page_update_sample_countdown(mi_page_t* page)
     #else
       page->xlast_alloc = (uint16_t)alloc_count;
     #endif
-    mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+    mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,mi_page_pending(page)));
     mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
 
   }
@@ -342,19 +343,55 @@ static void mi_page_update_sample_countdown(mi_page_t* page)
   Page collect the `local_free` and `thread_free` lists
 ----------------------------------------------------------- */
 
-static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
-{
-  if (head == NULL) return;
-
-  // find the last block in the list -- also to get a proper use count (without data races)
-  size_t max_count = mi_page_capacity(page); // cannot collect more than capacity
-  size_t count = 1;
-  mi_block_t* last = head;
+// Concatenate two free lists by appending `second` to the tail of `first` (walking `first`).
+static mi_free_t mi_free_concat(mi_page_t* page, mi_free_t first, mi_free_t second, mi_free_t first_last) {
+  if (mi_free_is_empty(first)) return second;
+  if (mi_free_is_empty(second)) return first;
+  mi_block_t* tail = mi_free_block(first);
   mi_block_t* next;
-  while ((next = mi_free_block(mi_block_next(page, last))) != NULL && count <= max_count) {
-    count++;
-    last = next;
+  #if MI_OPT_FREE_LEN
+  MI_UNUSED(first_last);
+  // the list lengths of the `first` blocks all increase by `|second|`
+  size_t rem = mi_free_len(first) - 1 + mi_free_len(second);
+  while ((next = mi_free_block(mi_block_next(page, tail))) != NULL) {
+    mi_block_set_next(page, tail, mi_free_create(next, rem));
+    rem--;
+    tail = next;
   }
+  mi_assert_internal(rem == mi_free_len(second));
+  #else
+  if (first_last != MI_FREE_NULL) {
+    tail = mi_free_block(first_last);
+  }
+  else {
+    while ((next = mi_free_block(mi_block_next(page, tail))) != NULL) {
+      tail = next;
+    }
+  }
+  #endif
+  mi_block_set_next(page, tail, second);
+  return mi_free_create(mi_free_block(first), mi_free_len(first) + mi_free_len(second));
+}
+
+
+static void mi_page_thread_collect_to_local(mi_page_t* page, mi_free_t thead)
+{
+  if (thead == MI_FREE_NULL) return;
+
+  // Determine the count, caching the tail when lengths are unavailable.
+  size_t max_count = mi_page_capacity(page); // cannot collect more than capacity
+  #if MI_OPT_FREE_LEN && !MI_OPT_FREE_WALK
+  const size_t count = mi_free_len(thead);
+  const mi_free_t tlast = MI_FREE_NULL;
+  #else
+  size_t count = 1;
+  mi_free_t tlast = thead;
+  mi_free_t tnext;
+  while ((tnext = mi_block_next(page, mi_free_block(tlast))) != MI_FREE_NULL && count <= max_count) {
+    count++;
+    tlast = tnext;
+  }
+  #endif
 
   // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
   if mi_unlikely(count > max_count) {
@@ -369,22 +406,24 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
 
   // and append the current local free list
   const mi_free_t lfree = page->local_free;
-  #if MI_HAS_FREE_LEN
-  // the blocks in the thread-free list have no valid list length yet; set them in a second pass
-  size_t rem = count - 1 + mi_free_len(lfree);
-  for (mi_block_t* block = head; block != last; rem--) {
-    mi_block_t* const bnext = mi_free_block(mi_block_next(page, block));
-    mi_block_set_next(page, block, mi_free_create(bnext, rem));
-    block = bnext;
-  }
-  mi_assert_internal(rem == mi_free_len(lfree));
-  #endif
-  mi_block_set_next(page, last, lfree);
-  page->local_free = mi_free_create(head, count + mi_free_len(lfree));
+  page->local_free = mi_free_concat(page, thead, lfree, tlast);
+
+  // #if MI_OPT_FREE_LEN
+  // // the blocks in the thread-free list have no valid list length yet; set them in a second pass
+  // size_t rem = count - 1 + mi_free_len(lfree);
+  // for (mi_block_t* block = head; block != last; rem--) {
+  //   mi_block_t* const bnext = mi_free_block(mi_block_next(page, block));
+  //   mi_block_set_next(page, block, mi_free_create(bnext, rem));
+  //   block = bnext;
+  // }
+  // mi_assert_internal(rem == mi_free_len(lfree));
+  // #endif
+  // mi_block_set_next(page, last, lfree);
+  // page->local_free = mi_free_create(head, count + mi_free_len(lfree));
 
   // update counts now
   mi_assert_internal(count <= UINT16_MAX);
-  #if !MI_HAS_FREE_LEN
+  #if !MI_OPT_FREE_LEN
   page->xused.used_alloc -= count; // page->used = page->used - (uint16_t)count;
   #endif
 }
@@ -396,16 +435,20 @@ static bool mi_page_thread_free_collect(mi_page_t* page)
   // atomically capture the thread free list
   mi_block_t* head;
   mi_thread_free_t tfreex;
-  mi_thread_free_t tfree = mi_atomic_load_relaxed(&page->xthread_free);
+  mi_thread_free_t thead = mi_atomic_load_relaxed(&page->xthread_free);
   do {
-    head = mi_tf_block(tfree);
+    head = mi_tf_block(thead);
     if mi_likely(head == NULL) return false; // return if the list is empty
-    tfreex = mi_tf_create(NULL,mi_tf_is_owned(tfree));  // set the thread free list to NULL
-  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tfree, tfreex));  // release is enough?
+    tfreex = mi_tf_create(NULL,0,mi_tf_is_owned(thead));  // set the thread free list to NULL
+  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &thead, tfreex));  // release is enough?
   mi_assert_internal(head != NULL);
 
+  #if MI_OPT_FREE_LEN
+  page->xthread_walked = 0;
+  #endif
+
   // and move it to the local list
-  mi_page_thread_collect_to_local(page, head);
+  mi_page_thread_collect_to_local(page, mi_tf_free(thead));
   return true;
 }
 
@@ -422,35 +465,21 @@ static inline bool mi_page_free_quick_collect(mi_page_t* page) {
   return true;
 }
 
-// Concatenate two free lists by appending `second` to the tail of `first` (walking `first`).
-static mi_free_t mi_free_concat(mi_page_t* page, mi_free_t first, mi_free_t second) {
-  if (mi_free_is_empty(first)) return second;
-  if (mi_free_is_empty(second)) return first;
-  mi_block_t* tail = mi_free_block(first);
-  mi_block_t* next;
-  #if MI_HAS_FREE_LEN
-  // the list lengths of the `first` blocks all increase by `|second|`
-  size_t rem = mi_free_len(first) - 1 + mi_free_len(second);
-  while ((next = mi_free_block(mi_block_next(page, tail))) != NULL) {
-    mi_block_set_next(page, tail, mi_free_create(next, rem));
-    rem--;
-    tail = next;
-  }
-  mi_assert_internal(rem == mi_free_len(second));
-  #else
-  while ((next = mi_free_block(mi_block_next(page, tail))) != NULL) {
-    tail = next;
-  }
-  #endif
-  mi_block_set_next(page, tail, second);
-  return mi_free_create(mi_free_block(first), mi_free_len(first) + mi_free_len(second));
-}
-
 bool _mi_page_free_collect(mi_page_t* page, bool force) {
   mi_assert_internal(page!=NULL);
 
   // collect the thread free list
-  const bool collected_xfree = mi_page_thread_free_collect(page);
+  #if MI_OPT_FREE_LEN
+  bool collected_xfree = false;
+  if (mi_free_is_empty(page->local_free)) {
+    collected_xfree = mi_page_thread_free_collect(page);
+  }
+  else {
+    collected_xfree = !mi_free_is_empty(mi_page_xthread_free(page));
+  }
+  #else
+  const bool collected_xfree = mi_page_thread_free_collect(page); 
+  #endif
 
   // and the local free list
   if (!mi_free_is_empty(page->local_free)) {
@@ -462,7 +491,7 @@ bool _mi_page_free_collect(mi_page_t* page, bool force) {
     }
     else if (force) {
       // append -- only on shutdown (force) as this is a linear operation
-      mi_page_set_free(page, mi_free_concat(page, page->local_free, page->free));
+      mi_page_set_free(page, mi_free_concat(page, page->local_free, page->free, MI_FREE_NULL));
       page->local_free = MI_FREE_NULL;
       page->free_is_zero = false;
     }
@@ -472,6 +501,7 @@ bool _mi_page_free_collect(mi_page_t* page, bool force) {
   return collected_xfree;
 }
 
+#if !MI_OPT_FREE_LEN
 // Collect elements in the thread-free list starting at `head`. This is an optimized
 // version of `_mi_page_free_collect` to be used from `free.c:_mi_free_collect_mt` that avoids atomic access to `xthread_free`.
 // returns a possibly updated expected value for the thread_free pointer.
@@ -479,11 +509,12 @@ bool _mi_page_free_collect(mi_page_t* page, bool force) {
 // `head` must be in the `xthread_free` list. It will not collect `head` itself
 // so the `used` count is not fully updated in general. However, if the `head` is
 // the last remaining element, it will be collected and the used count will become `0` (so `mi_page_all_free` becomes true).
-mi_block_t* _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
+mi_free_t _mi_page_free_collect_partly(mi_page_t* page, mi_free_t head_free) {
   mi_assert_internal(mi_page_is_owned(page));
-  if (head == NULL) return NULL;
-  mi_block_t* next = mi_free_block(mi_block_next(page,head));  // we cannot collect the head element itself as `page->thread_free` may point to it (and we want to avoid atomic ops)
-  if (next != NULL) {
+  mi_block_t* const head = mi_free_block(head_free);
+  if (head == NULL) return MI_FREE_NULL;
+  mi_free_t next = mi_block_next(page,head);  // we cannot collect the head element itself as `page->thread_free` may point to it (and we want to avoid atomic ops)
+  if (next != MI_FREE_NULL) {
     mi_block_set_next(page, head, MI_FREE_NULL);
     mi_page_thread_collect_to_local(page, next);
     if (!mi_free_is_empty(page->local_free) && mi_free_is_empty(page->free)) {
@@ -491,20 +522,20 @@ mi_block_t* _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
       page->local_free = MI_FREE_NULL;
       page->free_is_zero = false;
       mi_page_update_sample_countdown(page);
-    }    
+    }
   }
   if (mi_page_used(page) == 1) {
     // all elements are free'd since we skipped the `head` element itself
     mi_assert_internal(mi_tf_block(mi_atomic_load_relaxed(&page->xthread_free)) == head);
     mi_assert_internal(mi_free_is_empty(mi_block_next(page,head)));
     _mi_page_free_collect(page, false);  // collect the final element
-    return NULL;
+    return MI_FREE_NULL;
   }
   else {
-    return head;
+    return head_free;   // note: the stored length is now stale (but unused)
   }
 }
-
+#endif
 
 /* -----------------------------------------------------------
   Page fresh and retire
@@ -519,16 +550,18 @@ void _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page)
   mi_assert_internal(mi_page_is_abandoned(page));
 
   mi_page_set_theap(page,theap);
+  #if !MI_OPT_FREE_LEN
   _mi_page_free_collect(page, false); // ensure used count is up to date
+  #endif
   
   mi_page_queue_t* pq = mi_theap_page_queue_of(theap, page);
   mi_page_queue_push_at_end(theap, pq, page);
   mi_assert_expensive(_mi_page_is_valid(page));
 }
 
-void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
-  _mi_page_free_collect(page, false); // ensure used count is up to date
-  if (mi_page_all_free(page)) {
+void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq, size_t pending) {
+  // _mi_page_free_collect(page, false); // ensure used count is up to date
+  if (mi_page_all_free_ex(page, pending)) {
     _mi_page_free(page, pq);
   }
   else {
@@ -536,7 +569,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
     mi_theap_t* theap = page->theap;
     mi_page_set_theap(page, NULL);
     page->theap = theap; // don't actually set theap to NULL so we can reclaim_on_free within the same theap
-    _mi_arenas_page_abandon(page, theap);
+    _mi_arenas_page_abandon(page, theap, pending);
     // _mi_arenas_collect(false, false, theap->tld); // allow purging
   }
 }
@@ -560,7 +593,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_theap_t* theap, mi_page_queue_t* pq, si
       if (mi_page_is_expandable(page)) {
         if (!mi_page_extend_free(theap, page)) {
           // cannot commit
-          _mi_page_abandon(page,pq);
+          _mi_page_abandon(page,pq, mi_page_pending_collect(page));
           return NULL;
         };
       }
@@ -614,16 +647,17 @@ static void mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_internal(!mi_page_immediate_available(page));
   mi_assert_internal(!mi_page_is_in_full(page));
 
+  const size_t pending = mi_page_pending_collect(page);
   mi_theap_t* theap = mi_page_theap(page);
   if (theap->allow_page_abandon) {
     // abandon full pages (this is the usual case in order to allow for sharing of memory between theaps)
-    _mi_page_abandon(page, pq);
+    _mi_page_abandon(page, pq, pending);
   }
   else if (!mi_page_is_in_full(page)) {
     // put full pages in a theap local queue (this is for theaps that cannot abandon, for example, if the theap can be destroyed)
     mi_page_queue_enqueue_from(&mi_page_theap(page)->pages[MI_BIN_FULL], pq, page);
-    _mi_page_free_collect(page, false);  // try to collect right away in case another thread freed just before MI_USE_DELAYED_FREE was set
-    _mi_page_update_stats(page);         // we must update stats here as mi_theap_collect does not normally visit full pages 
+    // _mi_page_free_collect(page, false);  // try to collect right away in case another thread freed just before MI_USE_DELAYED_FREE was set
+    _mi_page_update_stats(page, pending);         // we must update stats here as mi_theap_collect does not normally visit full pages
   }
 }
 
@@ -633,7 +667,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_internal(page != NULL);
   mi_assert_expensive(_mi_page_is_valid(page));
   mi_assert_internal(pq == mi_page_queue_of(page));
-  mi_assert_internal(mi_page_all_free(page));
+  mi_assert_internal(mi_page_all_free_ex(page,mi_page_pending(page)));
   // mi_assert_internal(mi_page_thread_free_flag(page)!=MI_DELAYED_FREEING);
 
   // no more aligned blocks in here
@@ -801,7 +835,7 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
   size_t current = r % slice_count;
   counts[current]--;
   mi_block_t* const free_start = blocks[current];
-  // the remaining list length after each block (only used if `MI_HAS_FREE_LEN`)
+  // the remaining list length after each block (only used if `MI_OPT_FREE_LEN`)
   size_t rem = extend - 1 + mi_free_len(page->free);
   // and iterate through the rest; use `random_shuffle` for performance
   size_t rnd = _mi_random_shuffle(r|1); // ensure not 0
@@ -981,7 +1015,7 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_internal(mi_page_used(page) == 0);
   mi_assert_internal(page->xused.used_alloc == 0);
   mi_assert_internal(mi_page_is_owned(page));
-  mi_assert_internal(page->xthread_free == 1);
+  mi_assert_internal(page->xthread_free == MI_TF_OWNED);
   mi_assert_internal(page->next == NULL);
   mi_assert_internal(page->prev == NULL);
   mi_assert_internal(page->retire_expire == 0);

@@ -99,9 +99,10 @@ static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_pag
   MI_UNUSED(theap);
   mi_assert_expensive(mi_theap_page_is_valid(theap, pq, page, NULL, NULL));
   mi_collect_t collect = *((mi_collect_t*)arg_collect);
-  _mi_page_free_collect(page, collect >= MI_FORCE);  // update used count
-  _mi_page_update_stats(page);                       
-  if (mi_page_all_free(page)) {
+  const size_t pending = mi_page_pending_collect(page);
+  // _mi_page_free_collect(page, collect >= MI_FORCE);  // intentionally skip forced list consolidation
+  _mi_page_update_stats(page,pending);
+  if (mi_page_all_free_ex(page,pending)) {
     // no more used blocks, possibly free the page.
     if (collect >= MI_FORCE || page->retire_expire == 0) {  // either forced/abandon, or not already retired
       // note: this will potentially free retired pages as well.
@@ -110,7 +111,7 @@ static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_pag
   }
   else if (collect == MI_ABANDON) {
     // still used blocks but the thread is done; abandon the page
-    _mi_page_abandon(page, pq);
+    _mi_page_abandon(page, pq, pending);
   }
   return true; // don't break
 }
@@ -687,4 +688,3 @@ bool mi_theap_visit_blocks(const mi_theap_t* theap, bool visit_blocks, mi_block_
   mi_visit_blocks_args_t args = { visit_blocks, visitor, arg };
   return mi_theap_visit_areas(theap, &mi_theap_area_visitor, &args);
 }
-

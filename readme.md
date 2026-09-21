@@ -576,6 +576,12 @@ Consider the following build options (v3):
   efficient load-acquire instructions which mimalloc uses. For riscV the corresponding `zalasr` extension 
   can be enabled as `-DMI_OPT_ARCH=rv64gcb_zacas_zalasr` when your hardware supports it.
 
+- `-DMI_OPT_FREE_LEN=DEFAULT`: store free-list lengths in unused pointer bits when
+  `MI_INTPTR_BITS - MI_MAX_VABITS >= 16`. `DEFAULT` adds no compiler definition;
+  the source selects the representation. `ON` defines `MI_OPT_FREE_LEN=16` and
+  requires at least 16 unused pointer bits; `OFF` defines `MI_OPT_FREE_LEN=0`
+  and uses a separate used-block count.
+
 - `-DMI_ALLOW_THP=OFF`: disabling THP can reduce the rss of certain programs significantly.
 
 - `-DMI_ALLOW_THP=FULL`: enabling THP can increase performance of certain programs significantly. This setting

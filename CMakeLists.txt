@@ -99,6 +99,11 @@ option(MI_TRACK_ETW           "Deprecated: Compile with Windows event tracing (E
 set(MI_OPT_FREE_SMALL "DEFAULT" CACHE STRING "Deprecated: Use aligned `mi_free_small` without pagemap lookup (can only be used if SECURE or GUARDED mode are off)")
 set_property(CACHE MI_OPT_FREE_SMALL PROPERTY STRINGS "OFF" "ON" "DEFAULT")
 
+set(MI_OPT_FREE_LEN "DEFAULT" CACHE STRING "Store free-list lengths in unused pointer bits: OFF, ON, DEFAULT. DEFAULT enables this when at least 16 pointer bits are available.")
+set_property(CACHE MI_OPT_FREE_LEN PROPERTY STRINGS "OFF" "ON" "DEFAULT")
+
+option(MI_OPT_FREE_WALK "Walk the free list to count the number of free blocks (OFF)")
+
 include(CheckLinkerFlag)    # requires cmake 3.18
 include(CheckIncludeFiles)
 include(GNUInstallDirs)
@@ -550,6 +555,24 @@ if(MI_FREE_USE_PAGEMAP)
   message(STATUS "Always use the pagemap in mi_free (MI_FREE_USE_PAGEMAP=ON)")
   list(APPEND mi_defines MI_FREE_USE_PAGEMAP=1)
 endif()  
+
+if(MI_OPT_FREE_LEN STREQUAL "DEFAULT")
+  # Let the source select the representation based on the target address width.
+elseif(MI_OPT_FREE_LEN)
+  message(STATUS "Enable free-list lengths (MI_OPT_FREE_LEN=${MI_OPT_FREE_LEN})")
+  list(APPEND mi_defines MI_OPT_FREE_LEN=16)
+else()
+  message(STATUS "Disable free-list lengths (MI_OPT_FREE_LEN=${MI_OPT_FREE_LEN})")
+  list(APPEND mi_defines MI_OPT_FREE_LEN=0)
+endif()
+
+if(MI_OPT_FREE_WALK)
+  message(STATUS "Enable walking the free list to count the number of free blocks (MI_OPT_FREE_WALK=${MI_OPT_FREE_WALK})")
+  list(APPEND mi_defines MI_OPT_FREE_WALK=1)
+else()
+  message(STATUS "Disable walking the free list to count the number of free blocks (MI_OPT_FREE_WALK=${MI_OPT_FREE_WALK})")
+  list(APPEND mi_defines MI_OPT_FREE_WALK=0)
+endif()
 
 # deprecated
 if(MI_OPT_FREE_SMALL STREQUAL "DEFAULT")

@@ -56,12 +56,12 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
     mi_assert_internal(mi_page_block_size(page) >= size);
     mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
     mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
-    mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));    
+    mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,mi_page_pending(page)));
   }
 
   // check the free list
   mi_block_t* const block = mi_free_block(page->free);
-  #if !MI_HAS_FREE_LEN 
+  #if !MI_OPT_FREE_LEN
   mi_used_t xused = page->xused; 
   xused.used_alloc += 0x10001;  // increment both (16-bit) used count and alloc count 
   #if defined(__GNUC__) && MI_ARCH_ARM64
@@ -86,7 +86,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   #endif
 
   page->free = next;
-  #if !MI_HAS_FREE_LEN
+  #if !MI_OPT_FREE_LEN
   page->xused = xused;
   #endif
   mi_assert_internal(mi_free_block(page->free) == NULL || _mi_ptr_page(mi_free_block(page->free)) == page);
@@ -118,7 +118,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   mi_track_mem_undefined(block, bsize);
 
   // track per-block statistics
-  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,mi_page_pending(page)));
   
   // in debug mode initialize with 0xD0
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN

@@ -407,22 +407,23 @@ typedef size_t mi_page_flags_t;
 #define MI_THREADID_ABANDONED_MAPPED    (MI_ZU(1) << MI_PAGE_FLAG_BITS)
 #define MI_THREADID_DETACHED            (MI_ZU(2) << MI_PAGE_FLAG_BITS)
 
-// Thread free list.
-// Points to a list of blocks that are freed by other threads.
-// The least-bit is set if the page is owned by the current thread. (`mi_page_is_owned`).
-// Ownership is required before we can read any non-atomic fields in the page.
-// This way we can push a block on the thread free list and try to claim ownership atomically in `free.c:mi_free_block_mt`.
-typedef uintptr_t mi_thread_free_t;
-
 // A free list is a `mi_free_t`: on 64-bit systems where a user-space address needs at most
 // 48 bits, the lower 16 bits hold the _length_ of the list while the upper bits hold the
 // pointer to the first block. Together with the `capacity` (which is stored in the lower 16
 // bits of `xthread_id`) the `used` count can be derived as `capacity - |free| - |local_free|`
 // and we no longer need to update a `used` field in the `mi_malloc` fast path.
+#ifndef MI_OPT_FREE_LEN
 #if MI_INTPTR_BITS - MI_MAX_VABITS >= 16
-#define MI_HAS_FREE_LEN  (16)
+#define MI_OPT_FREE_LEN  (16)
 #else
-#define MI_HAS_FREE_LEN  (0)
+#define MI_OPT_FREE_LEN  (0)
+#endif
+#endif
+
+#if MI_OPT_FREE_LEN != 0 && MI_OPT_FREE_LEN != 16
+#error "MI_OPT_FREE_LEN must be 0 or 16"
+#elif MI_OPT_FREE_LEN && MI_INTPTR_BITS - MI_MAX_VABITS < 16
+#error "MI_OPT_FREE_LEN requires at least 16 unused pointer bits"
 #endif
 
 typedef uintptr_t mi_free_t;
@@ -430,10 +431,10 @@ typedef uintptr_t mi_free_t;
 #define MI_FREE_NULL    ((mi_free_t)0)
 #define MI_FREE_LEN_MAX (0xFFFF)
 
-#if MI_HAS_FREE_LEN
+#if MI_OPT_FREE_LEN
 static inline size_t mi_free_len(mi_free_t f) { return (f & MI_FREE_LEN_MAX); }
-static inline mi_block_t* mi_free_block(mi_free_t f) { return (mi_block_t*)(f >> MI_HAS_FREE_LEN); }
-static inline mi_free_t mi_free_create(const mi_block_t* block, size_t len) { return (((mi_free_t)block << MI_HAS_FREE_LEN) | len); }
+static inline mi_block_t* mi_free_block(mi_free_t f) { return (mi_block_t*)(f >> MI_OPT_FREE_LEN); }
+static inline mi_free_t mi_free_create(const mi_block_t* block, size_t len) { return (((mi_free_t)block << MI_OPT_FREE_LEN) | len); }
 #else
 static inline size_t mi_free_len(mi_free_t f) { (void)(f); return 0; }
 static inline mi_block_t* mi_free_block(mi_free_t f) { return (mi_block_t*)f; }
@@ -441,6 +442,14 @@ static inline mi_free_t mi_free_create(const mi_block_t* block, size_t len) { (v
 #endif
 
 static inline bool mi_free_is_empty(mi_free_t f) { return (f == MI_FREE_NULL); }
+
+// Thread free list.
+// Points to a list of blocks that are freed by other threads; it is a regular `mi_free_t`
+// list (and thus knows its own length) where the bit just above the length holds the
+// ownership bit (`mi_page_is_owned`) -- this bit is always zero in a shifted block pointer.
+// Ownership is required before we can read any non-atomic fields in the page.
+// This way we can push a block on the thread free list and try to claim ownership atomically in `free.c:mi_free_block_mt`.
+typedef mi_free_t mi_thread_free_t;
 
 // We store the currently used block count together with the total malloc call count as 16-bit numbers.
 // This is done for better codegen `mi_malloc/mi_free` (where we can increment both at once as `used_alloc += 0x10001` for example).
@@ -498,7 +507,7 @@ typedef struct mi_page_s {
   #endif
   _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= `theap->thread_id (or 0 or 4 if abandoned) | page_flags`)
   mi_free_t                 free;              // list of available free blocks (`malloc` allocates from this list)
-  #if MI_HAS_FREE_LEN
+  #if MI_OPT_FREE_LEN
   mi_free_t                 local_free;
   mi_used_t                 xused;             // used field is not used
   #else
@@ -512,10 +521,10 @@ typedef struct mi_page_s {
 
   size_t                    block_size;        // const: size available in each block (always `>0`)
   size_t                    page_offset;       // const: relative offset from the page to the start of the blocks
-  #if !MI_HAS_FREE_LEN
+  #if !MI_OPT_FREE_LEN
   uint16_t                  xcapacity;         // number of blocks committed (see `mi_page_capacity`)
   #else
-  uint16_t                  xcapacity_unused;  // the capacity is in the low 16 bits of `xthread_id`
+  uint16_t                  xthread_walked;    // length of the already visited thread-free suffix
   #endif
   uint16_t                  reserved;          // number of blocks reserved in memory
   uint16_t                  slice_pcommitted;  // committed size in OS page sizes relative to the first arena slice of the page data (or 0 if the page is fully committed already)
