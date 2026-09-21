@@ -430,7 +430,7 @@ typedef union mi_used_s {
     uint16_t last_used;
     uint16_t last_alloc;        
     #endif
-  } debug_le;
+  } le;  // little-endian layout
 } mi_used_t;
 
 static inline size_t mi_xused_used_count(mi_used_t xused)    { return (xused.used_alloc & 0xFFFF); }

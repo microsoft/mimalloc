@@ -61,13 +61,10 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
 
   // check the free list
   mi_block_t* const block = page->free;
+  #if defined(__GNUC__) && defined(MI_ARCH_ARM64)
   mi_used_t xused = page->xused; 
-  xused.used_alloc += 0x10001;  // increment both (16-bit) used count and alloc count 
-  #if defined(__GNUC__) && defined(__aarch64__)
-  // on arm64 this pairs the `free` and `xused` loads into a single `ldp` (and the stores into an `stp`).
-  // we do _not_ do this on x86-64 where it instead prevents the compiler from folding the
-  // increment into a single `add $0x10001, xused(%page)` read-modify-write instruction.
-  __asm("" : : : "memory" );     // always load the `used` field before the test
+  __asm("" : : "r"(xused) : );     // load the `xused` field before the test
+  xused.used_alloc += 0x10001;
   #endif  
   if (block == NULL) {
     return _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage);
@@ -84,7 +81,11 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   #endif
 
   page->free = next;
+  #if defined(__GNUC__) && defined(MI_ARCH_ARM64)
   page->xused = xused;
+  #else
+  page->xused.used_alloc += 0x10001; 
+  #endif
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
   mi_assert_internal(page->block_size < MI_MAX_ALIGN_SIZE || _mi_is_aligned(block, MI_MAX_ALIGN_SIZE));
 
