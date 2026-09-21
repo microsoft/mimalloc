@@ -40,7 +40,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   #endif
   
   // actual free: push on the local free list fast-path
-  #if MI_ARCH_X64 || (MI_SIZE_BITS <= 32 && !MI_BIG_ENDIAN)
+  #if MI_ARCH_X64 || MI_ARCH_X86  
   mi_block_set_next(page, block, page->local_free);
   page->local_free = block;
   const bool is_empty = (--page->xused.le.used_count == 0);
