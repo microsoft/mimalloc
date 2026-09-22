@@ -234,7 +234,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
     if (free_small) { mi_assert_internal(page == mi_atomic_load_ptr_acquire(mi_page_t,&page->self)); }
     else
     #endif
-    { page = mi_atomic_load_ptr_acquire(mi_page_t,&page->self); }    
+    { page = mi_atomic_load_ptr_relaxed(mi_page_t,&page->self); }    // can be relaxed here as we free a known pointer
   #endif
 
   mi_assert_internal(page!=NULL);
