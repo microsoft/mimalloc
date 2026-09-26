@@ -834,7 +834,7 @@ static mi_decl_noinline mi_decl_restrict void* mi_try_new_handler_null(void) {
 }
 
 // called when an allocation fails and the new handler needs to be invoked
-void* mi_decl_noinline _mi_theap_new_handler(mi_theap_t* theap, size_t size) {
+mi_decl_noinline void* _mi_theap_new_handler(mi_theap_t* theap, size_t size) {
   void* p = NULL;
   for(int i = 0; i < MI_TRY_NEW_MAX && p == NULL && mi_try_new_handler(); i++) {
     if (size > MI_MAX_ALLOC_SIZE) return NULL; // call try_new_handler at least once
