@@ -70,6 +70,77 @@ static bool mem_is_zero(const void* p, size_t size) {
   return mem_has_vals((const uint8_t*)p,size,0);
 }
 
+static bool test_arena_aligned_ceiling(void) {
+  const size_t arena_size = 64 * MI_MiB;
+  const size_t alignment = 64 * MI_KiB;
+  const size_t over_alignment = 128 * MI_KiB;
+  const size_t allocation_size = MI_MiB;
+  const size_t original_size = 4096;
+
+  if (MI_PAGE_MAX_OVERALLOC_ALIGN != alignment) return false;
+
+  mi_arena_id_t arena_id = NULL;
+  if (mi_reserve_os_memory_ex(arena_size, true, false, true, &arena_id) != 0) {
+    return false;
+  }
+  mi_heap_t* const heap = mi_heap_new_in_arena(arena_id);
+  if (heap == NULL) return false;
+
+  bool test_ok = true;
+  void* p = mi_heap_malloc_aligned(heap, allocation_size, alignment);
+  test_ok = test_ok && p != NULL && mi_arena_contains(arena_id, p) &&
+            ((uintptr_t)p % alignment) == 0;
+  mi_free(p);
+
+  p = mi_heap_calloc_aligned(heap, 1, allocation_size, alignment);
+  test_ok = test_ok && p != NULL && mi_arena_contains(arena_id, p) &&
+            ((uintptr_t)p % alignment) == 0 &&
+            mem_is_zero(p, allocation_size);
+  mi_free(p);
+
+  p = mi_heap_malloc(heap, original_size);
+  if (p == NULL) {
+    test_ok = false;
+  }
+  else {
+    memset(p, 0xA5, original_size);
+    void* const q = mi_heap_realloc_aligned(
+        heap, p, allocation_size, alignment);
+    test_ok = test_ok && q != NULL && mi_arena_contains(arena_id, q) &&
+              ((uintptr_t)q % alignment) == 0 &&
+              mem_has_vals((const uint8_t*)q, original_size, 0xA5);
+    mi_free(q == NULL ? p : q);
+  }
+
+  const bool show_errors = mi_option_is_enabled(mi_option_show_errors);
+  mi_option_disable(mi_option_show_errors);
+  p = mi_heap_malloc_aligned(heap, allocation_size, over_alignment);
+  test_ok = test_ok && p == NULL;
+  mi_free(p);
+
+  p = mi_heap_calloc_aligned(heap, 1, allocation_size, over_alignment);
+  test_ok = test_ok && p == NULL;
+  mi_free(p);
+
+  p = mi_heap_malloc(heap, original_size);
+  if (p == NULL) {
+    test_ok = false;
+  }
+  else {
+    memset(p, 0x5A, original_size);
+    void* const q = mi_heap_realloc_aligned(
+        heap, p, allocation_size, over_alignment);
+    test_ok = test_ok && q == NULL &&
+              mi_arena_contains(arena_id, p) &&
+              mem_has_vals((const uint8_t*)p, original_size, 0x5A);
+    mi_free(q == NULL ? p : q);
+  }
+  mi_option_set_enabled(mi_option_show_errors, show_errors);
+
+  mi_heap_destroy(heap);
+  return test_ok;
+}
+
 // ---------------------------------------------------------------------------
 // Main testing
 // ---------------------------------------------------------------------------
@@ -495,6 +566,8 @@ int main(void) {
     }
   }
 
+  CHECK("arena_aligned_ceiling", test_arena_aligned_ceiling());
+
   #if (MI_SIZE_SIZE > 4)
   CHECK_BODY("arena_reserve") {
     result = (0==mi_reserve_os_memory(16*MI_GiB,false,true));
@@ -821,4 +894,3 @@ static bool test_new_first(void) {
   return res;
 }
 #endif
-
