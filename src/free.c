@@ -42,24 +42,20 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, size_
   // actual free: push on the local free list
   #if !MI_OPT_FREE_LEN
     MI_UNUSED(capacity);
-    mi_used_t xused = page->xused;
-    xused.used_alloc--;              // decrement used count
     // actual free: push on the local free list fast-path
     #if MI_ARCH_X64 || MI_ARCH_X86    // use direct 16-bit decrement 
     mi_block_set_next(page, block, page->local_free);
-    page->local_free = block;
+    page->local_free = mi_free_create(block, 0);
     const bool is_empty = (--page->xused.le.used_count == 0);
     #else // otherwise use whole word decrement
     mi_used_t xused = page->xused;
     mi_block_set_next(page, block, page->local_free);
     xused.used_alloc--;
     page->xused = xused;
-    page->local_free = block;
+    page->local_free = mi_free_create(block, 0);
     const bool is_empty = (mi_xused_used_count(xused) == 0);
     #endif
     mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
-    
-    if mi_unlikely(is_empty) {  // is used count zero ?
   #else
     const mi_free_t free = page->free;
     mi_free_t lfree = page->local_free;
@@ -72,8 +68,9 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, size_
     // `|free| + |local_free| - capacity` equals `-used` modulo 2^16 (which is zero exactly when `used` is zero)
     const size_t nused = (lfree + mi_free_len(free) - capacity) & MI_FREE_LEN_MAX;
     mi_assert_internal((nused == 0) == (mi_page_used(page) == 0));
-    if mi_unlikely(nused == 0) 
+    const bool is_empty = (nused == 0);
   #endif
+  if mi_unlikely(is_empty) 
   {  
     if (page->retire_expire==0) { // no need to re-retire retired pages (happens when we alloc/free one block repeatedly in an empty page)
       _mi_page_retire(page); 

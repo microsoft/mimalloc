@@ -1001,6 +1001,7 @@ static inline size_t mi_page_used(const mi_page_t* page) {
 // Currently freed blocks (excluding thread free blocks) (always 0 if !MI_OPT_FREE_LEN)
 static inline size_t mi_page_freed(const mi_page_t* page) {
   #if !MI_OPT_FREE_LEN
+  MI_UNUSED(page);
   return 0; // not tracked
   #else
   return mi_free_len(page->free) + mi_free_len(page->local_free);
@@ -1346,6 +1347,7 @@ static inline size_t mi_page_pending(const mi_page_t* page) {
   #if MI_OPT_FREE_LEN
   return mi_free_len(mi_tf_free(mi_page_xthread_free(page)));
   #else
+  MI_UNUSED(page);
   return 0;
   #endif
 }
