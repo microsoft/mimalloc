@@ -67,6 +67,9 @@
     <ClCompile Include="..\..\src\prim\prim-tls.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\profile\pprof.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\subproc.c">
       <Filter>Sources</Filter>
     </ClCompile>
