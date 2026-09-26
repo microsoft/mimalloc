@@ -39,12 +39,14 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   _mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);  
   #endif
   
-  // actual free: push on the local free list fast-path
+  // actual free: push on the local free list fast-path (ordered like this for good codegen)
+  mi_used_t xused = page->xused;
   mi_block_set_next(page, block, page->local_free);
+  xused.used_alloc--;
+  page->xused = xused;
   page->local_free = block;
-  page->xused.used_alloc--;
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
-  if mi_unlikely(mi_xused_used_count(page->xused) == 0) {  // is used count zero ?
+  if mi_unlikely(mi_xused_used_count(xused) == 0) {  // is used count zero ?
     if (page->retire_expire==0) { // no need to re-retire retired pages (happens when we alloc/free one block repeatedly in an empty page)
       _mi_page_retire(page); 
     }
