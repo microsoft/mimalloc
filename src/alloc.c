@@ -53,6 +53,15 @@ static mi_decl_noinline void* mi_malloc_generic_new(mi_theap_t* theap, size_t si
   if (p == NULL) { return mi_theap_new_handler(theap, size - MI_PADDING_SIZE); }
   return p;
 }
+#if defined(_MSC_VER) && !MI_CLANG_CL
+// for the msvc compiler to get tail-calls
+static mi_decl_noinline void* mi_malloc_generic_msvc(mi_theap_t* theap, size_t size, size_t zero_new_huge_alignment, mi_page_t** ppage) mi_attr_noexcept {
+  const bool is_new = ((zero_new_huge_alignment & 2) != 0);
+  const size_t zero_huge_alignment = (zero_new_huge_alignment & ~2);
+  if (is_new) { return mi_malloc_generic_new(theap, size, zero_huge_alignment, ppage); }
+         else { return _mi_malloc_generic(theap, size, zero_huge_alignment, ppage); }
+}
+#endif
 
 // C++ new calls a new-handler on failure.
 #if MI_SAMPLE==2
@@ -63,7 +72,7 @@ static mi_decl_noinline mi_decl_restrict void* mi_theap_malloc_sampled_new(mi_th
 // Fall back to generic allocation only if the list is empty.
 // Note: even though there is a lot of checks etc in the source,
 // in release mode the (inlined) routine is about 7 to 10 instructions with a single test.
-static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, size_t sample_countdown, bool zero, bool is_new, mi_page_t** ppage)
+static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, size_t sample_countdown, bool zero, bool is_new, mi_page_t** ppage)
 {
   if (page->block_size != 0) { // not the empty theap
     mi_assert_internal(mi_page_block_size(page) >= size);
@@ -80,8 +89,12 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   xused.used_alloc += 0x10001;
   #endif  
   if mi_unlikely(block == NULL) { 
+    #if defined(_MSC_VER) && !MI_CLANG_CL
+    return mi_malloc_generic_msvc(theap, size, (zero ? 1 : 0) | (is_new ? 2 : 0), ppage);
+    #else
     if (is_new) { return mi_malloc_generic_new(theap, size, (zero ? 1 : 0), ppage); }
            else { return _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage); }
+    #endif
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   if (ppage != NULL) { *ppage = page; };
@@ -160,7 +173,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
 }
 
 // extra entries for improved efficiency in `alloc-aligned.c` (and in `page.c:mi_malloc_generic`.
-extern void* _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept {
+extern mi_decl_restrict void* _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept {
   return mi_page_malloc_zero(theap, page, size, theap->sample_countdown, zero, false, NULL);
 }
 

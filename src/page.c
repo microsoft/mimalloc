@@ -1340,7 +1340,7 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
 // very large requested alignments in which case we use a huge singleton page.
 // Note: we put `bool zero, size_t huge_alignment` into one parameter (with zero in bit 0)
 // to use 4 parameters which compiles better on msvc for the malloc fast path.
-void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, mi_page_t** ppage) mi_attr_noexcept
+mi_decl_restrict void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, mi_page_t** ppage) mi_attr_noexcept
 {
   #if !MI_THEAP_INITASNULL
   mi_assert_internal(theap != NULL);
@@ -1377,7 +1377,7 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
   return mi_malloc_generic_fallback(theap,size,zero,huge_alignment,ppage);
 }
 
-void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept
+mi_decl_restrict void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
   theap = mi_theap_init(theap);
   if (theap==NULL) return NULL;
