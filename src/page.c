@@ -261,7 +261,7 @@ static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, 
 
 // Update stats for a page
 static void mi_theap_page_update_stats(mi_theap_t* theap, mi_page_t* page, size_t pending) {
-  // mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,pending));
+  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,pending));
   mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
   
   // get stat counts
@@ -309,10 +309,10 @@ void _mi_page_update_stats(mi_page_t* page, size_t pending) {
 }
 #endif
 
-static void mi_page_update_sample_countdown(mi_page_t* page) 
+static void mi_page_update_sample_countdown(mi_page_t* page, size_t alloc_count) 
 {  
   // adjust count down  
-  const size_t alloc_count = mi_page_alloc_count(page);  
+  // const size_t alloc_count = mi_page_alloc_count(page);  
   if (alloc_count==0) {
     return; 
   }
@@ -458,10 +458,10 @@ static inline bool mi_page_free_quick_collect(mi_page_t* page) {
   if mi_likely(!mi_free_is_empty(page->free)) return true;
   if (mi_free_is_empty(page->local_free)) return false;
   // move local_free to free
-  mi_page_set_free(page, page->local_free);
+  const size_t alloc_count = mi_page_set_free(page, page->local_free);
   page->local_free = MI_FREE_NULL;
   page->free_is_zero = false;  
-  mi_page_update_sample_countdown(page);
+  mi_page_update_sample_countdown(page,alloc_count);
   return true;
 }
 
@@ -483,19 +483,23 @@ bool _mi_page_free_collect(mi_page_t* page, bool force) {
 
   // and the local free list
   if (!mi_free_is_empty(page->local_free)) {
+    size_t alloc_count;
     if mi_likely(mi_free_is_empty(page->free)) {
       // usual case
-      mi_page_set_free(page, page->local_free);
+      alloc_count = mi_page_set_free(page, page->local_free);
       page->local_free = MI_FREE_NULL;
       page->free_is_zero = false;
     }
     else if (force) {
       // append -- only on shutdown (force) as this is a linear operation
-      mi_page_set_free(page, mi_free_concat(page, page->local_free, page->free, MI_FREE_NULL));
+      alloc_count = mi_page_set_free(page, mi_free_concat(page, page->local_free, page->free, MI_FREE_NULL));
       page->local_free = MI_FREE_NULL;
       page->free_is_zero = false;
     }
-    mi_page_update_sample_countdown(page);
+    else {
+      alloc_count = mi_page_alloc_count(page);
+    }
+    mi_page_update_sample_countdown(page,alloc_count);
   }  
   mi_assert_internal(!force || mi_free_is_empty(page->local_free));
   return collected_xfree;
@@ -518,10 +522,10 @@ mi_free_t _mi_page_free_collect_partly(mi_page_t* page, mi_free_t head_free) {
     mi_block_set_next(page, head, MI_FREE_NULL);
     mi_page_thread_collect_to_local(page, next);
     if (!mi_free_is_empty(page->local_free) && mi_free_is_empty(page->free)) {
-      mi_page_set_free(page, page->local_free);
+      const size_t alloc_count = mi_page_set_free(page, page->local_free);
       page->local_free = MI_FREE_NULL;
       page->free_is_zero = false;
-      mi_page_update_sample_countdown(page);
+      mi_page_update_sample_countdown(page,alloc_count);
     }
   }
   if (mi_page_used(page) == 1) {
@@ -1416,7 +1420,7 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
   if (ppage!=NULL) { *ppage = page; }
   void* const p = _mi_page_malloc_zero(theap,page,size,zero);
   mi_assert_internal(p != NULL);
-  mi_page_update_sample_countdown(page);
+  mi_page_update_sample_countdown(page, mi_page_alloc_count(page));
   
   // move full pages to the full queue
   // this will also call _mi_page_update_stats for huge pages  

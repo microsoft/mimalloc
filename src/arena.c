@@ -2577,7 +2577,8 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(mi_page_is_owned(page));
 
-  if (mi_page_used(page)==0) {
+  const size_t pending = mi_page_pending_collect(page);
+  if (mi_page_all_free_ex(page,pending)) {
     // free the page
     _mi_arenas_page_free(page, theap);
   }
@@ -2634,7 +2635,7 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
     mi_theap_stat_increase(theap_target, pages, 1);
 
     // and abandon in the new heap
-    _mi_arenas_page_abandon(page,theap_target,0);
+    _mi_arenas_page_abandon(page,theap_target,pending);
   }
   return true;
 }

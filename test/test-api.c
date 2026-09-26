@@ -70,6 +70,13 @@ static bool mem_is_zero(const void* p, size_t size) {
   return mem_has_vals((const uint8_t*)p,size,0);
 }
 
+static void* heap_pending_free;
+
+static bool heap_free_on_thread(void) {
+  mi_free(heap_pending_free);
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Main testing
 // ---------------------------------------------------------------------------
@@ -568,6 +575,27 @@ int main(void) {
   // Heaps
   // ---------------------------------------------------
 
+  CHECK_BODY("heap-delete-pending-free") {
+    mi_heap_t* h = mi_heap_new();
+    int* p = (h == NULL ? NULL : (int*)mi_heap_malloc(h, 48));
+    heap_pending_free = (h == NULL ? NULL : mi_heap_malloc(h, 48));
+    if (h == NULL || p == NULL || heap_pending_free == NULL) {
+      result = false;
+      mi_heap_destroy(h);
+    }
+    else {
+      p[0] = 42;
+      result = mi_run_on_thread(&heap_free_on_thread);
+      if (!result) mi_free(heap_pending_free);
+      // Account for the remote free without consuming the thread-free list.
+      mi_heap_collect(h, true);
+      mi_heap_delete(h);
+      result = result && (p[0] == 42);
+      mi_free(p);
+    }
+    heap_pending_free = NULL;
+  }
+
   CHECK_BODY("heap-os1") {
     // @zoxc opus bug #2.
     mi_heap_t* h = mi_heap_new();
@@ -821,4 +849,3 @@ static bool test_new_first(void) {
   return res;
 }
 #endif
-
