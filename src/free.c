@@ -59,13 +59,15 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, mi_bl
 static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t* mt_free, bool allow_reclaim) mi_attr_noexcept;
 
 // Free a block multi-threaded
-static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool allow_reclaim) mi_attr_noexcept
+#if defined(_MSC_VER)
+static mi_decl_noinline  /* ensures mi_free has no stack frame */
+#else
+static inline
+#endif
+void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool allow_reclaim) mi_attr_noexcept
 {
   size_t usable_size;
   if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return;    // checking padding is safe for mt
-  
-  // adjust stats (after padding check )
-  // mi_stat_free(page, block);    // stat_free may access the padding
   mi_track_free_size(block, usable_size);
 
   // _mi_padding_shrink(page, block, sizeof(mi_block_t));

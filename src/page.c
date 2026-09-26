@@ -1338,15 +1338,18 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
 // Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
 // The `huge_alignment` is normally 0 but is set to a multiple of MI_SLICE_SIZE for
 // very large requested alignments in which case we use a huge singleton page.
-// Note: we put `bool zero, size_t huge_alignment` into one parameter (with zero in the low bit)
+// Note: we put `bool zero, bool is_new, size_t huge_alignment` into one parameter 
+// (with zero in bit 0, and is_new in bit 1)
 // to use 4 parameters which compiles better on msvc for the malloc fast path.
-void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, mi_page_t** ppage) mi_attr_noexcept
+void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_new_huge_alignment, mi_page_t** ppage) 
 {
   #if !MI_THEAP_INITASNULL
   mi_assert_internal(theap != NULL);
   #endif
-  const bool zero = ((zero_huge_alignment & 1) != 0);
-  const size_t huge_alignment = (zero_huge_alignment & ~1);
+  const bool zero = ((zero_new_huge_alignment & 1) != 0);
+  const bool is_new = ((zero_new_huge_alignment & 2) != 0);
+  const size_t huge_alignment = (zero_new_huge_alignment & ~3);
+  mi_assert_internal(huge_alignment==0 || huge_alignment > MI_PAGE_MAX_OVERALLOC_ALIGN);
   mi_page_t* page = NULL;
 
   // fast path objects that fit in a small page
@@ -1365,16 +1368,22 @@ void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignm
         if (page!=NULL) {        
           if (ppage!=NULL) { *ppage = page; }
           mi_assert_internal(mi_page_immediate_available(page)); // we should never recurse in _mi_page_malloc_zero
-          return _mi_page_malloc_zero(theap,page,size,zero);
+          void* p = _mi_page_malloc_zero(theap,page,size,zero);  // always succeeds
+          mi_assert_internal(p != NULL);
+          return p;
         }
       }
     }
   }
   // otherwise fallback
-  return mi_malloc_generic_fallback(theap,size,zero,huge_alignment,ppage);
+  void* p = mi_malloc_generic_fallback(theap,size,zero,huge_alignment,ppage);
+  if (is_new && p==NULL) {
+    return _mi_theap_new_handler(theap, size);
+  }
+  return p;
 }
 
-void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept {
+void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) {
   theap = mi_theap_init(theap);
   if (theap==NULL) return NULL;
   const size_t sample_rate = theap->sample_rate;

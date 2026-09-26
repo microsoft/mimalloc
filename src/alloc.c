@@ -47,7 +47,6 @@ static mi_decl_noinline void mi_page_block_setup_padding(mi_page_t* page, mi_blo
 #endif
 
 // C++ new calls a new-handler on failure.
-static mi_decl_noinline mi_decl_restrict void* mi_malloc_generic_new(mi_theap_t* theap, size_t padded_size, bool zero, mi_page_t** ppage);
 #if MI_SAMPLE==2
 static mi_decl_noinline mi_decl_restrict void* mi_theap_malloc_sampled_new(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage);
 #endif
@@ -72,9 +71,8 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   __asm("" : : "r"(xused) : );     // load the `xused` field before the test
   xused.used_alloc += 0x10001;
   #endif  
-  if mi_unlikely(block == NULL) {
-    if (is_new) { return mi_malloc_generic_new(theap, size, zero, ppage); }
-           else { return _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage); }
+  if mi_unlikely(block == NULL) { 
+    return _mi_malloc_generic(theap, size, (zero ? 1 : 0) | (is_new ? 2 : 0), ppage);
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   if (ppage != NULL) { *ppage = page; };
@@ -91,7 +89,7 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   #if defined(__GNUC__) && !(defined(MI_ARCH_X64) || defined(MI_ARCH_X86))
   page->xused = xused;
   #else
-  page->xused.used_alloc += 0x10001; 
+  page->xused.used_alloc += 0x10001;
   #endif
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
   mi_assert_internal(page->block_size < MI_MAX_ALIGN_SIZE || _mi_is_aligned(block, MI_MAX_ALIGN_SIZE));
@@ -835,7 +833,8 @@ static mi_decl_noinline mi_decl_restrict void* mi_try_new_handler_null(void) {
   return NULL;
 }
 
-static mi_decl_noinline void* mi_theap_try_new(mi_theap_t* theap, size_t size) {
+// called when an allocation fails and the new handler needs to be invoked
+void* mi_decl_noinline _mi_theap_new_handler(mi_theap_t* theap, size_t size) {
   void* p = NULL;
   for(int i = 0; i < MI_TRY_NEW_MAX && p == NULL && mi_try_new_handler(); i++) {
     if (size > MI_MAX_ALLOC_SIZE) return NULL; // call try_new_handler at least once
@@ -844,20 +843,16 @@ static mi_decl_noinline void* mi_theap_try_new(mi_theap_t* theap, size_t size) {
   return p;
 }
 
-// called from mi_page_alloc_zero on failure
+// generic allocation that invokes the new handler on failure (through `_mi_theap_new_handler`)
 static mi_decl_noinline void* mi_malloc_generic_new(mi_theap_t* theap, size_t padded_size, bool zero, mi_page_t** ppage) {
-  void* p = _mi_malloc_generic(theap, padded_size, (zero ? 1 : 0), ppage);
-  if mi_unlikely(p == NULL) {
-    return mi_theap_try_new(theap, padded_size - MI_PADDING_SIZE);
-  }
-  return p;
+  return _mi_malloc_generic(theap, padded_size, (zero ? 1 : 0) | 2 /* is_new */, ppage);
 }
 
 #if MI_SAMPLE==2
 static mi_decl_noinline void* mi_theap_malloc_sampled_new(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) {
   void* p = _mi_theap_malloc_sampled(theap, req_size, zero, ppage);
   if mi_unlikely(p == NULL) {
-    return mi_theap_try_new(theap, req_size);
+    return _mi_theap_new_handler(theap, req_size);
   }
   return p;
 }
