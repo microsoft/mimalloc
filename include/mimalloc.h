@@ -500,6 +500,7 @@ typedef enum mi_option_e {
   mi_option_profile_inuse_interval,     // number of in-use bytes grown between automatic dumps of the `MIMALLOC_PROFILE` heap profiler (internally, this value is in KiB; use `mi_option_get_size`) (=0, disabled)
   mi_option_profile_time_interval,      // number of seconds between automatic dumps of the `MIMALLOC_PROFILE` heap profiler (=0, disabled)
   mi_option_profile_sample_rate,        // sample rate (in bytes) for the `MIMALLOC_PROFILE` heap profiler (internally, this value is in KiB; use `mi_option_get_size`) (=16 KiB)
+  mi_option_stats_merge_threshold,      // on a page stats update, merge theap stats into the heap if N blocks were allocated or freed since the last merge (=0, disabled)
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,
