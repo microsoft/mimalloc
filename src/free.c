@@ -572,7 +572,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_free_t m
   #if MI_OPT_FREE_LEN
   size_t pending = mi_free_len(mt_free);
   // Visit new nodes once; leave the captured head for the next visit.
-  #if MI_OPT_FREE_WALK
+  #if 0 && MI_OPT_FREE_WALK
   const size_t walked = page->xthread_walked;
   mi_assert_internal(pending > walked);
   mi_free_t walk = mi_block_next(page, mi_free_block(mt_free));

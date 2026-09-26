@@ -90,7 +90,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
   __asm("" : : : "memory" );     // always load the `used` field before the test
   #endif  
   #endif
-  if (block == NULL) {
+  if mi_unlikely(block == NULL) {
     #if defined(_MSC_VER) && !MI_CLANG_CL
     return mi_malloc_generic_msvc(theap, size, (zero ? 1 : 0) | (is_new ? 2 : 0), ppage);
     #else

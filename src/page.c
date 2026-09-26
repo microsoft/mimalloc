@@ -393,6 +393,7 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_free_t thead)
   }
   #endif
 
+  
   // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
   if mi_unlikely(count > max_count) {
     _mi_error_message(EFAULT, "corrupted thread-free list (possibly due to a cross-thread double free)\n");
@@ -403,6 +404,13 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_free_t thead)
     _mi_error_message(EFAULT, "corrupted meta-data in thread-free list\n");
     return; // the thread-free items cannot be freed
   }
+  #if MI_OPT_FREE_LEN && MI_OPT_FREE_WALK
+  // if `count != mi_free_len(thead)` there was a memory corruption (possibly infinite list due to double multi-threaded free)
+  else if mi_unlikely(count != mi_free_len(thead)) {
+    _mi_error_message(EFAULT, "corrupted thread-free list (possibly due to a cross-thread double free); invalid length %zu != %zu\n", count, mi_free_len(thead));
+    return; // the thread-free items cannot be freed
+  }
+  #endif
 
   // and append the current local free list
   const mi_free_t lfree = page->local_free;
