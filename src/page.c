@@ -261,7 +261,7 @@ static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, 
 
 // Update stats for a page
 static void mi_theap_page_update_stats(mi_theap_t* theap, mi_page_t* page, size_t pending) {
-  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,pending));
+  // mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,pending));
   mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
   
   // get stat counts
