@@ -24,7 +24,7 @@ static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* bl
 
 // regular free of a (thread local) block pointer
 // fast path written carefully to prevent spilling on the stack
-static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, mi_block_t* local_free, mi_used_t xused, bool was_guarded, bool check_full)
+static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool was_guarded, bool check_full)
 {
   // checks  
   size_t usable_size;
@@ -40,12 +40,11 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, mi_bl
   #endif
   
   // actual free: push on the local free list fast-path
-  mi_block_set_next(page, block, local_free);
+  mi_block_set_next(page, block, page->local_free);
   page->local_free = block;
-  xused.used_alloc--;
-  page->xused = xused;
+  page->xused.used_alloc--;
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
-  if mi_unlikely(mi_xused_used_count(xused) == 0) {  // is used count zero ?
+  if mi_unlikely(mi_xused_used_count(page->xused) == 0) {  // is used count zero ?
     if (page->retire_expire==0) { // no need to re-retire retired pages (happens when we alloc/free one block repeatedly in an empty page)
       _mi_page_retire(page); 
     }
@@ -160,14 +159,14 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
 }
 
 // free a local pointer  (page parameter comes first for better codegen)
-static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p, mi_block_t* local_free, mi_used_t xused) mi_attr_noexcept {
+static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_attr_noexcept {
   mi_assert_internal(p!=NULL && page != NULL);
   bool was_guarded = false;
   mi_block_t* block = mi_page_ptr_block_check(page,p,&was_guarded);
   // mi_block_t* const block = (mi_page_has_interior_pointers(page) ? _mi_page_ptr_unalign(page, p) : mi_validate_block_from_ptr(page,p));
   // mi_block_check_profiled(page,block,p);
   // const bool was_guarded = mi_block_check_unguard(page, block, p);
-  mi_free_block_local(page, block, local_free, xused, was_guarded, true /* check for a full page */);
+  mi_free_block_local(page, block, was_guarded, true /* check for a full page */);
 }
 
 // free a pointer owned by another thread (page parameter comes first for better codegen)
@@ -183,7 +182,7 @@ static void mi_decl_noinline mi_free_generic_mt(mi_page_t* page, void* p, bool a
 
 // generic free (for runtime integration)
 void mi_decl_noinline _mi_free_generic(mi_page_t* page, bool is_local, void* p) mi_attr_noexcept {
-  if (is_local) mi_free_generic_local(page,p,page->local_free,page->xused);
+  if (is_local) mi_free_generic_local(page,p);
            else mi_free_generic_mt(page,p,true);
 }
 
@@ -265,17 +264,15 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
   if (pblock_size!=NULL) { *pblock_size = mi_page_block_size(page); }
 
   const mi_threadid_t ptid = mi_page_xthread_id(page);
-  mi_block_t* const local_free = page->local_free;
-  const mi_used_t xused = page->xused;
   const mi_threadid_t xtid = (_mi_prim_thread_id() ^ ptid);  
   if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // thread-local, aligned, and not a full page
     mi_block_t* const block = mi_validate_block_from_ptr(page,p);
-    mi_free_block_local(page, block, local_free, xused, false /* was guarded */, false /* no need to check if the page is full */);
+    mi_free_block_local(page, block, false /* was guarded */, false /* no need to check if the page is full */);
   }
   else if (xtid <= MI_PAGE_FLAG_MASK) {            // `tid == mi_page_thread_id(page) && mi_page_flags(page) != 0`
     // page is local, but is full or contains (inner) aligned blocks; use generic path
-    mi_free_generic_local(page, p, local_free, xused);
+    mi_free_generic_local(page, p);
   }
   // free-ing in a page owned by a theap in another thread, or an abandoned page (not belonging to a theap)
   else if ((xtid & MI_PAGE_FLAG_MASK) == 0) {      // `tid != mi_page_thread_id(page) && mi_page_flags(page) == 0`
