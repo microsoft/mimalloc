@@ -41,28 +41,38 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, size_
   
   // actual free: push on the local free list
   #if !MI_OPT_FREE_LEN
-  MI_UNUSED(capacity);
-  mi_used_t xused = page->xused;
-  xused.used_alloc--;              // decrement used count
-  mi_block_set_next(page, block, page->local_free);
-  page->xused = xused;
-  page->local_free = mi_free_create(block,0);
-  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
-  if mi_unlikely(mi_xused_used_count(xused) == 0) 
+    MI_UNUSED(capacity);
+    mi_used_t xused = page->xused;
+    xused.used_alloc--;              // decrement used count
+    // actual free: push on the local free list fast-path
+    #if MI_ARCH_X64 || MI_ARCH_X86    // use direct 16-bit decrement 
+    mi_block_set_next(page, block, page->local_free);
+    page->local_free = block;
+    const bool is_empty = (--page->xused.le.used_count == 0);
+    #else // otherwise use whole word decrement
+    mi_used_t xused = page->xused;
+    mi_block_set_next(page, block, page->local_free);
+    xused.used_alloc--;
+    page->xused = xused;
+    page->local_free = block;
+    const bool is_empty = (mi_xused_used_count(xused) == 0);
+    #endif
+    mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+    
+    if mi_unlikely(is_empty) {  // is used count zero ?
   #else
-  const mi_free_t free = page->free;
-  mi_free_t lfree = page->local_free;
-  #if defined(__GNUC__) && MI_ARCH_ARM64
-  // pair the `free` and `local_free` loads into a single `ldp`
-  __asm("" : : "r"(free) :  );
-  #endif  
-  mi_block_set_next(page, block, lfree);
-  lfree++;   // whole word increment: the length can never carry into the block bits
-  page->local_free = mi_free_create(block, mi_free_len(lfree));
-  // `|free| + |local_free| - capacity` equals `-used` modulo 2^16 (which is zero exactly when `used` is zero)
-  const size_t nused = (lfree + mi_free_len(free) - capacity) & MI_FREE_LEN_MAX;
-  mi_assert_internal((nused == 0) == (mi_page_used(page) == 0));
-  if mi_unlikely(nused == 0) 
+    const mi_free_t free = page->free;
+    mi_free_t lfree = page->local_free;
+    #if defined(__GNUC__) && MI_ARCH_ARM64
+    __asm("" : : "r"(free) :  );
+    #endif  
+    mi_block_set_next(page, block, lfree);
+    lfree++;   // whole word increment: the length can never carry into the block bits
+    page->local_free = mi_free_create(block, mi_free_len(lfree));
+    // `|free| + |local_free| - capacity` equals `-used` modulo 2^16 (which is zero exactly when `used` is zero)
+    const size_t nused = (lfree + mi_free_len(free) - capacity) & MI_FREE_LEN_MAX;
+    mi_assert_internal((nused == 0) == (mi_page_used(page) == 0));
+    if mi_unlikely(nused == 0) 
   #endif
   {  
     if (page->retire_expire==0) { // no need to re-retire retired pages (happens when we alloc/free one block repeatedly in an empty page)
@@ -78,13 +88,15 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, size_
 static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_free_t mt_free, bool allow_reclaim) mi_attr_noexcept;
 
 // Free a block multi-threaded
-static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool allow_reclaim) mi_attr_noexcept
+#if defined(_MSC_VER)
+static mi_decl_noinline  /* ensures mi_free has no stack frame */
+#else
+static inline
+#endif
+void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool allow_reclaim) mi_attr_noexcept
 {
   size_t usable_size;
   if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return;    // checking padding is safe for mt
-  
-  // adjust stats (after padding check )
-  // mi_stat_free(page, block);    // stat_free may access the padding
   mi_track_free_size(block, usable_size);
 
   // _mi_padding_shrink(page, block, sizeof(mi_block_t));
@@ -181,7 +193,7 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
 static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_attr_noexcept {
   mi_assert_internal(p!=NULL && page != NULL);
   bool was_guarded = false;
-  mi_block_t* block = mi_page_ptr_block_check(page,p,&was_guarded);  
+  mi_block_t* block = mi_page_ptr_block_check(page,p,&was_guarded);
   // mi_block_t* const block = (mi_page_has_interior_pointers(page) ? _mi_page_ptr_unalign(page, p) : mi_validate_block_from_ptr(page,p));
   // mi_block_check_profiled(page,block,p);
   // const bool was_guarded = mi_block_check_unguard(page, block, p);
@@ -254,7 +266,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
     if (free_small) { mi_assert_internal(page == mi_atomic_load_ptr_acquire(mi_page_t,&page->self)); }
     else
     #endif
-    { page = mi_atomic_load_ptr_acquire(mi_page_t,&page->self); }    
+    { page = mi_atomic_load_ptr_relaxed(mi_page_t,&page->self); }    // can be relaxed here as we free a known pointer
   #endif
 
   mi_assert_internal(page!=NULL);
