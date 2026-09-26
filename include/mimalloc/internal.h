@@ -274,8 +274,8 @@ mi_page_t*    _mi_safe_ptr_page(const void* p);
 void          _mi_page_map_unsafe_destroy(void);
 
 // "page.c"
-void*         _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_new_huge_alignment, mi_page_t** ppage)  mi_attr_malloc;
-void*         _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_malloc;
+void*         _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, mi_page_t** ppage) mi_attr_noexcept mi_attr_malloc;
+void*         _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept mi_attr_malloc;
 
 void          _mi_page_retire(mi_page_t* page) mi_attr_noexcept;       // free the page if there are no other pages with many free blocks
 void          _mi_page_unfull(mi_page_t* page);
@@ -331,7 +331,6 @@ void*         _mi_theap_malloc_zero(mi_theap_t* theap, size_t size, bool zero, s
 void*         _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool zero) mi_attr_noexcept;
 mi_block_t*   _mi_page_ptr_unalign(const mi_page_t* page, const void* p);
 void          _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size);
-void*         _mi_theap_new_handler(mi_theap_t* theap, size_t size); 
 
 // "free.c"
 void          _mi_free_subproc_safe(void* p) mi_attr_noexcept;

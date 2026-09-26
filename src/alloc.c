@@ -46,6 +46,14 @@ static mi_decl_noinline void mi_page_block_setup_padding(mi_page_t* page, mi_blo
 }
 #endif
 
+// C++ new handler support
+static void* mi_theap_new_handler(mi_theap_t* theap, size_t size); 
+static mi_decl_noinline void* mi_malloc_generic_new(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, mi_page_t** ppage) {
+  void* p = _mi_malloc_generic(theap, size, zero_huge_alignment, ppage);
+  if (p == NULL) { return mi_theap_new_handler(theap, size - MI_PADDING_SIZE); }
+  return p;
+}
+
 // C++ new calls a new-handler on failure.
 #if MI_SAMPLE==2
 static mi_decl_noinline mi_decl_restrict void* mi_theap_malloc_sampled_new(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage);
@@ -72,7 +80,8 @@ static mi_decl_forceinline void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_
   xused.used_alloc += 0x10001;
   #endif  
   if mi_unlikely(block == NULL) { 
-    return _mi_malloc_generic(theap, size, (zero ? 1 : 0) | (is_new ? 2 : 0), ppage);
+    if (is_new) { return mi_malloc_generic_new(theap, size, (zero ? 1 : 0), ppage); }
+           else { return _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage); }
   }
   mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
   if (ppage != NULL) { *ppage = page; };
@@ -834,18 +843,13 @@ static mi_decl_noinline mi_decl_restrict void* mi_try_new_handler_null(void) {
 }
 
 // called when an allocation fails and the new handler needs to be invoked
-mi_decl_noinline void* _mi_theap_new_handler(mi_theap_t* theap, size_t size) {
+static mi_decl_noinline void* mi_theap_new_handler(mi_theap_t* theap, size_t size) {
   void* p = NULL;
   for(int i = 0; i < MI_TRY_NEW_MAX && p == NULL && mi_try_new_handler(); i++) {
     if (size > MI_MAX_ALLOC_SIZE) return NULL; // call try_new_handler at least once
     p = mi_theap_malloc(theap,size);
   }
   return p;
-}
-
-// generic allocation that invokes the new handler on failure (through `_mi_theap_new_handler`)
-static mi_decl_noinline void* mi_malloc_generic_new(mi_theap_t* theap, size_t padded_size, bool zero, mi_page_t** ppage) {
-  return _mi_malloc_generic(theap, padded_size, (zero ? 1 : 0) | 2 /* is_new */, ppage);
 }
 
 #if MI_SAMPLE==2
@@ -870,7 +874,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new(mi_theap_t* theap, s
     return mi_theap_nonnull_xmalloc_small_zero(theap, size, false /* is wsize? */, false /* zero */, true /* is_new */, NULL);
   }
   else {
-    return mi_malloc_generic_new(theap, size + MI_PADDING_SIZE, false /* zero */, NULL);
+    return mi_malloc_generic_new(theap, size + MI_PADDING_SIZE, 0, NULL);
   }
 }
 
