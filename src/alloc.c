@@ -856,7 +856,7 @@ static mi_decl_noinline void* mi_theap_new_handler(mi_theap_t* theap, size_t siz
 static mi_decl_noinline void* mi_theap_malloc_sampled_new(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) {
   void* p = _mi_theap_malloc_sampled(theap, req_size, zero, ppage);
   if mi_unlikely(p == NULL) {
-    return _mi_theap_new_handler(theap, req_size);
+    return mi_theap_new_handler(theap, req_size);
   }
   return p;
 }
