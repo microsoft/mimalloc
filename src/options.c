@@ -263,6 +263,9 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
   #else 
   _mi_fprintf(out, arg, "free mode   : pagemap, page size: %zu\n", sizeof(mi_page_t));
   #endif
+  #if MI_OPT_FREE_LEN
+  _mi_fprintf(out, arg, "free length : %s%s\n", MI_OPT_FREE_LEN ? "enabled" : "disabled", MI_OPT_FREE_WALK ? " (with walk)" : "");
+  #endif
   #if MI_ENCODE_FREELIST
   _mi_fprintf(out, arg, "free lists  : encoded with %d key(s)\n", MI_PAGE_KEY_COUNT);
   #endif
