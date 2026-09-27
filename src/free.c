@@ -41,8 +41,9 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   
   // actual free: push on the local free list fast-path
   mi_used_t xused = page->xused;
-  mi_block_set_next(page, block, page->local_free);
+  mi_block_t* lfree = page->local_free;
   xused.used_alloc--;
+  mi_block_set_next(page, block, lfree);
   page->xused = xused;
   page->local_free = block;
   const bool is_empty = (mi_xused_used_count(xused) == 0);

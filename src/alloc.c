@@ -83,11 +83,11 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
 
   // check the free list
   mi_block_t* const block = page->free;
-  #if defined(__GNUC__) && !(defined(MI_ARCH_X64) || defined(MI_ARCH_X86))
   mi_used_t xused = page->xused; 
+  #if defined(__GNUC__) 
   __asm("" : : "r"(xused) : );     // load the `xused` field before the test
-  xused.used_alloc += 0x10001;
   #endif  
+  xused.used_alloc += 0x10001;  
   if mi_unlikely(block == NULL) { 
     #if defined(_MSC_VER) && !MI_CLANG_CL
     return mi_malloc_generic_msvc(theap, size, (zero ? 1 : 0) | (is_new ? 2 : 0), ppage);
@@ -107,12 +107,10 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
   if (!zero) block->next = 0;  // don't leak internal data
   #endif
 
-  page->free = next;
-  #if defined(__GNUC__) && !(defined(MI_ARCH_X64) || defined(MI_ARCH_X86))
+  // update the page free list and used count
+  page->free  = next;
   page->xused = xused;
-  #else
-  page->xused.used_alloc += 0x10001;
-  #endif
+
   mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
   mi_assert_internal(page->block_size < MI_MAX_ALIGN_SIZE || _mi_is_aligned(block, MI_MAX_ALIGN_SIZE));
 
