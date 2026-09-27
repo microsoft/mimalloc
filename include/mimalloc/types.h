@@ -54,6 +54,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_TRACK_VALGRIND 1
 // #define MI_TRACK_ASAN     1
 // #define MI_TRACK_ETW      1
+// #define MI_TRACK_CUSTOM   1
 
 // Define MI_STATS as 1 to maintain statistics; set it to 2 to have detailed statistics (but costs some performance).
 // #define MI_STATS 1
