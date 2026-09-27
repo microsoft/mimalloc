@@ -321,6 +321,15 @@ void mi_ufree(void* p, size_t* pblock_size) mi_attr_noexcept {
   }
 }
 
+// Free a pointer that is potentially allocated in a different sub-process
+void _mi_free_subproc_safe(void* p) mi_attr_noexcept {
+  mi_page_t* page = NULL; 
+  if mi_likely(mi_ptr_page_is_valid(p,"_mi_free_subproc_safe",&page)) {
+    // const bool allow_reclaim = (_mi_subproc() == mi_page_subproc(page));
+    mi_free_nonnull(p, page, NULL, false /* allow reclaim */);
+  }
+}
+
 void mi_free_small(void* p) mi_attr_noexcept {
   mi_page_t* page = NULL; 
   if mi_likely(mi_ptr_page_is_valid_ex(p,"mi_free_small",true /* is_small? */,true /*check p for null*/, &page)) {    
@@ -336,14 +345,34 @@ void mi_free_small_nonnull(void* p) mi_attr_noexcept {
   }
 }
 
-// Free a pointer that is potentially allocated in a different sub-process
-void _mi_free_subproc_safe(void* p) mi_attr_noexcept {
+// For runtime systems: Free a pointer that is guaranteed to be small, and in a page owned by the current thread.
+static mi_decl_forceinline void mi_free_small_local_ex(void* p, bool check_p_for_null) mi_attr_noexcept {
+  mi_assert(p!=NULL);
   mi_page_t* page = NULL; 
-  if mi_likely(mi_ptr_page_is_valid(p,"_mi_free_subproc_safe",&page)) {
-    // const bool allow_reclaim = (_mi_subproc() == mi_page_subproc(page));
-    mi_free_nonnull(p, page, NULL, false /* allow reclaim */);
+  if mi_likely(mi_ptr_page_is_valid_ex(p,"mi_free_small_local_ex", true /* is_small? */, check_p_for_null /*check p for null*/, &page)) {    
+    mi_assert_internal(mi_page_thread_id(page) == _mi_thread_id());
+    if mi_likely(mi_page_flags(page) == 0) { 
+      // thread-local, aligned, and not a full page
+      mi_block_t* const block = mi_validate_block_from_ptr(page,p);
+      mi_free_block_local(page, block, false /* was guarded */, false /* no need to check if the page is full */);
+      return;
+    }
+    else {  
+      // page is local, but is full or contains (inner) aligned blocks; use generic path
+      mi_free_generic_local(page, p);
+    }
   }
 }
+
+void mi_free_small_local(void* p) mi_attr_noexcept {
+  mi_free_small_local_ex(p, true /* check null */);
+}
+
+void mi_free_small_local_nonnull(void* p) mi_attr_noexcept {
+  mi_free_small_local_ex(p, false /* check null */);
+}
+
+
 
 // ------------------------------------------------------
 // Free variants
@@ -365,15 +394,6 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
         return;
       }
     }
-    // const size_t is_aligned = ((void*)block != p);
-    // if mi_unlikely(size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size((is_aligned ? 2 : 1)*MI_SMALL_SIZE_MAX)) { // note: we check *2 in case it was over-aligned
-    //   const bool is_guarded = mi_block_ptr_is_guarded(block,p);
-    //   if (!is_guarded) {
-    //     _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n  (maybe a `new[]` was matched with `delete` instead of `delete[]`?)\n", p, size, mi_page_block_size(page));
-    //     mi_free(p);
-    //     return;
-    //   }
-    // }
   #endif
   #if MI_PAGE_META_SMALL_IS_ALIGNED || MI_PAGE_META_IS_ALIGNED
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {
