@@ -66,9 +66,11 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, size_
     lfree++;   // whole word increment: the length can never carry into the block bits
     page->local_free = mi_free_create(block, mi_free_len(lfree));
     // `|free| + |local_free| - capacity` equals `-used` modulo 2^16 (which is zero exactly when `used` is zero)
-    const size_t nused = (lfree + mi_free_len(free) - capacity) & MI_OPT_FREE_MASK;
+    // const size_t nused = (lfree + mi_free_len(free) - capacity) & MI_OPT_FREE_MASK;
+    // const size_t nused = lfree + (free - capacity);
+    const uint16_t nused = ((uint16_t)free - (uint16_t)capacity) + (uint16_t)lfree;
     mi_assert_internal((nused == 0) == (mi_page_used(page) == 0));
-    const bool is_empty = (nused == 0);
+    const bool is_empty = ((int16_t)nused >= 0);
   #endif
   if mi_unlikely(is_empty) 
   {  
@@ -301,7 +303,7 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
 
   const mi_threadid_t pxtid = mi_atomic_load_relaxed(&page->xthread_id);
   #if MI_OPT_FREE_LEN
-  const size_t capacity = (size_t)(pxtid & MI_PAGE_CAPACITY_MASK);
+  const size_t capacity = (size_t)(pxtid); // & MI_PAGE_CAPACITY_MASK);
   #else
   const size_t capacity = 0;
   #endif
