@@ -27,7 +27,7 @@ static const mi_page_t mi_page_empty = {
   {0},                    // xused
   #if MI_SIZE_SIZE < 8
   0,                      // xlast_used
-  0,                      // xlast_alloc
+  0,                      // xsampled_alloc_count
   #endif
   0,                      // local_free
   #endif

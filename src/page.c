@@ -162,7 +162,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
     }
   }
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,mi_page_pending(page)));
-  mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
+  mi_assert_internal(mi_page_alloc_count(page) >= mi_page_sampled_alloc_count(page));
   return true;
 }
 #endif
@@ -185,12 +185,13 @@ static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page,
   mi_assert_internal(theap!=NULL);
   if (theap->sample_rate==0) return;
 
-  const size_t last_alloc = mi_page_last_alloc(page);
-  if (alloc_count <= last_alloc) return;
+  const size_t sampled_alloc_count = mi_page_sampled_alloc_count(page);
+  mi_assert_internal(alloc_count >= sampled_alloc_count);
+  if (alloc_count == sampled_alloc_count) return;
   
   // update countdown
   const size_t bsize = mi_page_usable_block_size(page);  mi_assert_internal(bsize >= MI_PADDING_SIZE);
-  const size_t alloc_diff = alloc_count - last_alloc;
+  const size_t alloc_diff = alloc_count - sampled_alloc_count;
   const uint64_t requested = (uint64_t)alloc_diff * (uint64_t)(bsize - MI_PADDING_SIZE);
   if (requested <= SIZE_MAX && theap->sample_countdown >= (size_t)requested) {
     theap->sample_countdown -= (size_t)requested;
@@ -259,10 +260,12 @@ static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, 
   }
 }
 
-// Update stats for a page
+#endif
+
+// Update accounting even without statistics, so bounded counters cannot overflow.
 static void mi_theap_page_update_stats(mi_theap_t* theap, mi_page_t* page, size_t pending) {
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,pending));
-  mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
+  mi_assert_internal(mi_page_alloc_count(page) >= mi_page_sampled_alloc_count(page));
   
   // get stat counts
   const size_t used = mi_page_used_ex(page,pending);
@@ -282,37 +285,29 @@ static void mi_theap_page_update_stats(mi_theap_t* theap, mi_page_t* page, size_
     return;
   }
 
-  // reset the `alloc_count` (and `last_alloc`), and set `last_used` to `used`
-  #if MI_OPT_FREE_LEN
-  page->xused.used_alloc = (used << 32) | mi_free_len(page->free);   // reset the alloc count and re-baseline `|free|`
-  #elif MI_SIZE_SIZE >= 8
-  page->xused.used_alloc = (used << 32) | used;
-  #else
-  page->xused.used_alloc = used;
-  page->xlast_used = (uint16_t)used;
-  page->xlast_alloc = 0;
-  #endif
+  mi_page_reset_stats(page, used);
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,mi_page_pending(page)));
-  mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
+  mi_assert_internal(mi_page_alloc_count(page) >= mi_page_sampled_alloc_count(page));
 
+  #if MI_STATS
   mi_theap_page_merge_stats(theap, page, alloc_count, free_count);
+  #else
+  MI_UNUSED(theap);
+  #endif
 }
 
 void _mi_page_update_stats(mi_page_t* page, size_t pending) {         // called on abandoned pages etc.
+  #if MI_STATS || MI_SAMPLE
   mi_theap_page_update_stats(mi_theap_of_page(page),page, pending);
+  #else
+  mi_theap_page_update_stats(NULL,page, pending);
+  #endif
 }
-
-#else
-void _mi_page_update_stats(mi_page_t* page, size_t pending) {
-  MI_UNUSED(page);
-  MI_UNUSED(pending);
-}
-#endif
 
 static void mi_page_update_sample_countdown(mi_page_t* page, size_t alloc_count) 
 {  
-  // adjust count down  
-  // const size_t alloc_count = mi_page_alloc_count(page);  
+  mi_assert_internal(alloc_count == mi_page_alloc_count(page));
+  mi_assert_internal(alloc_count >= mi_page_sampled_alloc_count(page));
   if (alloc_count==0) {
     return; 
   }
@@ -324,15 +319,9 @@ static void mi_page_update_sample_countdown(mi_page_t* page, size_t alloc_count)
     mi_theap_t* theap = mi_theap_of_page(page);
     if (theap==NULL) return;
     mi_theap_adjust_sample_countdown(theap,page,alloc_count);
-    // update last_alloc to alloc_count
-    mi_assert_internal(alloc_count <= UINT16_MAX);      
-    #if MI_SIZE_SIZE >= 8
-      page->xused.used_alloc = (alloc_count << 48) | (page->xused.used_alloc & (~MI_ZU(0) >> 16));
-    #else
-      page->xlast_alloc = (uint16_t)alloc_count;
-    #endif
+    mi_page_set_sampled_alloc_count(page, alloc_count);
     mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used_ex(page,mi_page_pending(page)));
-    mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
+    mi_assert_internal(mi_page_alloc_count(page) >= mi_page_sampled_alloc_count(page));
 
   }
   #endif

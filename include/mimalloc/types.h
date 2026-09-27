@@ -407,41 +407,37 @@ typedef size_t mi_page_flags_t;
 #define MI_THREADID_ABANDONED_MAPPED    (MI_ZU(1) << MI_PAGE_FLAG_BITS)
 #define MI_THREADID_DETACHED            (MI_ZU(2) << MI_PAGE_FLAG_BITS)
 
-// A free list is a `mi_free_t`: on 64-bit systems where a user-space address needs at most
-// 48 bits, the lower 16 bits hold the _length_ of the list while the upper bits hold the
+// A free list is represented as a `mi_free_t`: usually this is a `mi_block_t*`,
+// but on 64-bit systems where a user-space address needs at most 48 bits,
+// the lower 16 bits hold the _length_ of the list while the upper bits hold the
 // pointer to the first block. Together with the `capacity` (which is stored in the lower 16
 // bits of `xthread_id`) the `used` count can be derived as `capacity - |free| - |local_free|`
-// and we no longer need to update a `used` field in the `mi_malloc` fast path.
-#ifndef MI_OPT_FREE_LEN
-#if MI_INTPTR_BITS - MI_MAX_VABITS >= 16
-#define MI_OPT_FREE_LEN  (16)
-#else
-#define MI_OPT_FREE_LEN  (0)
-#endif
-#endif
-
-#if MI_OPT_FREE_LEN != 0 && MI_OPT_FREE_LEN != 16
-#error "MI_OPT_FREE_LEN must be 0 or 16"
-#elif MI_OPT_FREE_LEN && MI_INTPTR_BITS - MI_MAX_VABITS < 16
-#error "MI_OPT_FREE_LEN requires at least 16 unused pointer bits"
-#endif
-
+// (and we no longer need to update a `used` field in the `mi_malloc` fast path.)
 typedef uintptr_t mi_free_t;
 
 #define MI_FREE_NULL    ((mi_free_t)0)
-#define MI_FREE_LEN_MAX (0xFFFF)
 
-#if MI_OPT_FREE_LEN
-static inline size_t mi_free_len(mi_free_t f) { return (f & MI_FREE_LEN_MAX); }
-static inline mi_block_t* mi_free_block(mi_free_t f) { return (mi_block_t*)(f >> MI_OPT_FREE_LEN); }
-static inline mi_free_t mi_free_create(const mi_block_t* block, size_t len) { return (((mi_free_t)block << MI_OPT_FREE_LEN) | len); }
+#ifndef MI_OPT_FREE_LEN
+#if MI_INTPTR_BITS - MI_MAX_VABITS >= 16
+#define MI_OPT_FREE_LEN    (1)
 #else
-static inline size_t mi_free_len(mi_free_t f) { (void)(f); return 0; }
-static inline mi_block_t* mi_free_block(mi_free_t f) { return (mi_block_t*)f; }
-static inline mi_free_t mi_free_create(const mi_block_t* block, size_t len) { (void)(len); return (mi_free_t)block; }
+#define MI_OPT_FREE_LEN    (0)
 #endif
+#endif
+#if MI_OPT_FREE_LEN
+#define MI_OPT_FREE_SHIFT  (16)
+#else
+#define MI_OPT_FREE_SHIFT  (0)
+#endif
+#define MI_OPT_FREE_MASK ((MI_ZU(1)<<MI_OPT_FREE_SHIFT)-1)
 
-static inline bool mi_free_is_empty(mi_free_t f) { return (f == MI_FREE_NULL); }
+#if MI_OPT_FREE_SHIFT != 0 && MI_OPT_FREE_SHIFT != 16
+#error "MI_OPT_FREE_SHIFT must be 0 or 16"
+#elif MI_OPT_FREE_LEN && MI_INTPTR_BITS - MI_MAX_VABITS < 16
+#error "MI_OPT_FREE_SHIFT requires at least 16 unused pointer bits"
+#elif MI_OPT_FREE_LEN && MI_OPT_FREE_MASK <= 2*(MI_SMALL_PAGE_SIZE / MI_SIZE_SIZE)
+#error "2^MI_OPT_FREE_SHIFT must be at least twice the maximal amount of blocks in a page"
+#endif
 
 // Thread free list.
 // Points to a list of blocks that are freed by other threads; it is a regular `mi_free_t`
@@ -451,28 +447,34 @@ static inline bool mi_free_is_empty(mi_free_t f) { return (f == MI_FREE_NULL); }
 // This way we can push a block on the thread free list and try to claim ownership atomically in `free.c:mi_free_block_mt`.
 typedef mi_free_t mi_thread_free_t;
 
-// We store the currently used block count together with the total malloc call count as 16-bit numbers.
-// This is done for better codegen `mi_malloc/mi_free` (where we can increment both at once as `used_alloc += 0x10001` for example).
-// The `last_used` is the `used` count since the statistics are last updated; on 32-bit platforms this
-// is a separate field in `mi_page_t` but on 64-bit we use the upper 32-bits to store it.
-// We need the `alloc_count` and `last_used` to efficiently calculate allocation and free statistics even
-// in a release build; this way we can update the stats in the slow path (`_mi_page_update_stats`).
+// All allocation counts are relative to the last statistics update.
+// Without lengths, used_count includes pending frees and alloc_count is exact.
+// With lengths, refill_alloc_count is accumulated at refill_free_len's baseline;
+// the exact count adds refill_free_len - |free|. Statistics updates also re-baseline.
+// last_used is the live count at the last statistics update; sampled_alloc_count
+// is the allocation count already charged to sampling in the current statistics interval.
 typedef union mi_used_s { 
-  size_t      used_alloc;         // used + alloc_count
-  // the following struct is unused but nice for debugging
+  size_t      used_alloc;         // packed accounting fields
+  // the following struct is unused but nice for debugging and documentation purposes.
   struct {
+    #if MI_OPT_FREE_LEN
+    uint16_t refill_free_len;
+    uint16_t refill_alloc_count;
+    #else
     uint16_t used_count;
     uint16_t alloc_count;
+    #endif
     #if MI_SIZE_SIZE >= 8
     uint16_t last_used;
-    uint16_t last_alloc;        
+    uint16_t sampled_alloc_count;
     #endif
   } le;  // little-endian layout
 } mi_used_t;
 
+#if !MI_OPT_FREE_LEN
 static inline size_t mi_xused_used_count(mi_used_t xused)    { return (xused.used_alloc & 0xFFFF); }
-static inline mi_used_t mi_xused_used_reset(mi_used_t xused) { xused.used_alloc =  xused.used_alloc & ~0xFFFF; return xused; }
 static inline size_t mi_xused_alloc_count(mi_used_t xused)   { return ((xused.used_alloc>>16) & 0xFFFF); }
+#endif
 
 // A page contains blocks of one specific size (`block_size`).
 // Each page has three list of free blocks:
@@ -485,11 +487,10 @@ static inline size_t mi_xused_alloc_count(mi_used_t xused)   { return ((xused.us
 // avoiding atomic operations when allocating from the owning thread.
 //
 // `used - |thread_free|` == actual blocks that are in use (alive)
-// `used - |thread_free| + |free| + |local_free| == capacity`
+// `used + |free| + |local_free| == capacity`
 //
-// We don't count "freed" (as |free|) but use only the `used` field to reduce
-// the number of memory accesses in the `mi_page_all_free` function(s).
-// Use `_mi_page_free_collect` to collect the thread_free list and update the `used` count.
+// Used is stored explicitly without lengths and derived otherwise.
+// Collecting thread_free reduces used without changing the actual live count.
 //
 // Notes:
 // - Non-atomic fields can only be accessed if having _ownership_ (low bit of `xthread_free` is 1).
@@ -509,12 +510,12 @@ typedef struct mi_page_s {
   mi_free_t                 free;              // list of available free blocks (`malloc` allocates from this list)
   #if MI_OPT_FREE_LEN
   mi_free_t                 local_free;
-  mi_used_t                 xused;             // used field is not used
+  mi_used_t                 xused;             // refill, statistics, and sampling counts
   #else
   mi_used_t                 xused;             
   #if MI_SIZE_SIZE < 8
   uint16_t                  xlast_used;        // for statistics; on 64-bit platforms it is in bits 32..47 of xused.
-  uint16_t                  xlast_alloc;       // for sampling; on 64-bit platforms it is in bits 48..63 of xused.
+  uint16_t                  xsampled_alloc_count; // on 64-bit platforms it is in bits 48..63 of xused.
   #endif
   mi_free_t                 local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   #endif

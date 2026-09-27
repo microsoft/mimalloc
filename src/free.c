@@ -66,7 +66,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, size_
     lfree++;   // whole word increment: the length can never carry into the block bits
     page->local_free = mi_free_create(block, mi_free_len(lfree));
     // `|free| + |local_free| - capacity` equals `-used` modulo 2^16 (which is zero exactly when `used` is zero)
-    const size_t nused = (lfree + mi_free_len(free) - capacity) & MI_FREE_LEN_MAX;
+    const size_t nused = (lfree + mi_free_len(free) - capacity) & MI_OPT_FREE_MASK;
     mi_assert_internal((nused == 0) == (mi_page_used(page) == 0));
     const bool is_empty = (nused == 0);
   #endif

@@ -560,7 +560,7 @@ if(MI_OPT_FREE_LEN STREQUAL "DEFAULT")
   # Let the source select the representation based on the target address width.
 elseif(MI_OPT_FREE_LEN)
   message(STATUS "Enable free-list lengths (MI_OPT_FREE_LEN=${MI_OPT_FREE_LEN})")
-  list(APPEND mi_defines MI_OPT_FREE_LEN=16)
+  list(APPEND mi_defines MI_OPT_FREE_LEN=1)
 else()
   message(STATUS "Disable free-list lengths (MI_OPT_FREE_LEN=${MI_OPT_FREE_LEN})")
   list(APPEND mi_defines MI_OPT_FREE_LEN=0)
@@ -1204,6 +1204,17 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/mimalloc.pc"
 
 if (MI_BUILD_TESTS)
   enable_testing()
+
+  # Include the implementation to exercise private accounting and sampling helpers.
+  add_executable(mimalloc-test-page-accounting test/test-page-accounting.c)
+  target_compile_definitions(mimalloc-test-page-accounting PRIVATE ${mi_defines} MI_STATIC_LIB)
+  target_compile_options(mimalloc-test-page-accounting PRIVATE ${mi_cflags})
+  target_include_directories(mimalloc-test-page-accounting PRIVATE include)
+  target_link_libraries(mimalloc-test-page-accounting PRIVATE ${mi_libraries})
+  if(MI_USE_CXX)
+    set_source_files_properties(test/test-page-accounting.c PROPERTIES LANGUAGE CXX)
+  endif()
+  add_test(NAME test-page-accounting COMMAND mimalloc-test-page-accounting)
 
   # static link tests
   foreach(TEST_NAME api api-fill stress-heaps stress-subprocs stress stress-pprof profile pprof)

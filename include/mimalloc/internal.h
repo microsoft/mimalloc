@@ -654,6 +654,34 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
 
 
 /*----------------------------------------------------------------------------------------
+  mi_free_t
+------------------------------------------------------------------------------------------- */
+
+#if MI_OPT_FREE_LEN
+static inline size_t      mi_free_len(mi_free_t f)   {
+  return (f & MI_OPT_FREE_MASK);
+}
+static inline mi_block_t* mi_free_block(mi_free_t f) {
+  return (mi_block_t*)(f >> MI_OPT_FREE_SHIFT);
+}
+static inline mi_free_t   mi_free_create(const mi_block_t* block, size_t len) {
+  mi_assert_internal(len <= MI_OPT_FREE_MASK);
+  mi_assert_internal((((mi_free_t)block << MI_OPT_FREE_SHIFT) >> MI_OPT_FREE_SHIFT) == (mi_free_t)block);
+  return (((mi_free_t)block << MI_OPT_FREE_SHIFT) | len);
+}
+#else
+static inline size_t      mi_free_len(mi_free_t f)   {  MI_UNUSED(f); return 0; }
+static inline mi_block_t* mi_free_block(mi_free_t f) { return (mi_block_t*)f; }
+static inline mi_free_t   mi_free_create(const mi_block_t* block, size_t len) { MI_UNUSED(len); return (mi_free_t)block; }
+#endif
+
+// Is the free list empty?
+static inline bool mi_free_is_empty(mi_free_t f) {
+  return (f == MI_FREE_NULL);
+}
+
+
+/*----------------------------------------------------------------------------------------
   Heap functions
 ------------------------------------------------------------------------------------------- */
 
@@ -987,7 +1015,7 @@ static inline void mi_page_capacity_increase(mi_page_t* page, size_t delta) {
   #endif
 }
 
-// Current blocks in use excluding pending cross-thread frees
+// Used blocks before subtracting pending cross-thread frees (identical in both layouts).
 static inline size_t mi_page_used(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
   #if !MI_OPT_FREE_LEN
@@ -998,18 +1026,7 @@ static inline size_t mi_page_used(const mi_page_t* page) {
   #endif
 }
 
-// Currently freed blocks (excluding thread free blocks) (always 0 if !MI_OPT_FREE_LEN)
-static inline size_t mi_page_freed(const mi_page_t* page) {
-  #if !MI_OPT_FREE_LEN
-  MI_UNUSED(page);
-  return 0; // not tracked
-  #else
-  return mi_free_len(page->free) + mi_free_len(page->local_free);
-  #endif
-}
-
-
-// Last used count for the page (for statistics and profiling)
+// Live blocks at the last statistics update.
 static inline size_t mi_page_last_used(const mi_page_t* page) {
   #if MI_SIZE_SIZE >= 8
   return (page->xused.used_alloc >> 32) & 0xFFFF;
@@ -1019,78 +1036,99 @@ static inline size_t mi_page_last_used(const mi_page_t* page) {
 }
 
 #if MI_OPT_FREE_LEN
-// The length of the `free` list at the last refill (bits 0..15 of `used_alloc`, unused in this mode).
-static inline size_t mi_page_last_free_len(const mi_page_t* page) {
-  return (page->xused.used_alloc & MI_FREE_LEN_MAX);
+// Free-list baseline, established at refill or statistics update.
+static inline size_t mi_page_refill_free_len(const mi_page_t* page) {
+  return (page->xused.used_alloc & MI_OPT_FREE_MASK);
+}
+
+static inline size_t mi_page_refill_alloc_count(const mi_page_t* page) {
+  return (page->xused.used_alloc >> 16) & 0xFFFF;
 }
 #endif
 
-// Current allocation count for the page (for statistics and profiling)
-static inline size_t mi_page_last_alloc_count(const mi_page_t* page) {
-  return mi_xused_alloc_count(page->xused);  
-}
-
-
-// Current allocation count for the page (for statistics and profiling)
-static inline size_t mi_page_alloc_count(const mi_page_t* page) {
-  #if !MI_OPT_FREE_LEN
-  return mi_page_last_alloc_count(page);
+// Allocations already charged to sampling since the last statistics update.
+static inline size_t mi_page_sampled_alloc_count(const mi_page_t* page) {
+  #if MI_SIZE_SIZE >= 8
+  return (page->xused.used_alloc >> 48) & 0xFFFF;
   #else
-  // blocks are only ever allocated from the `free` list (which shrinks by one per allocation),
-  // so the count since the last refill is exactly `last_free_len - |free|`.
-  mi_assert_internal(mi_page_last_free_len(page) >= mi_free_len(page->free));
-  const size_t acc = mi_page_last_alloc_count(page) + ((mi_page_last_free_len(page) - mi_free_len(page->free)) & MI_FREE_LEN_MAX);
-  return (acc > MI_FREE_LEN_MAX ? MI_FREE_LEN_MAX : acc);
+  return page->xsampled_alloc_count;
   #endif
 }
 
 
-// Set the `used` count to zero (only used when destroying a page with live blocks)
-static inline void mi_page_used_reset(mi_page_t* page) {
+// Exact allocations since the last statistics update, in either layout.
+static inline size_t mi_page_alloc_count(const mi_page_t* page) {
   #if !MI_OPT_FREE_LEN
-  page->xused = mi_xused_used_reset(page->xused);
+  return mi_xused_alloc_count(page->xused);
   #else
-  // pretend the capacity equals the free'd blocks so that `mi_page_used(page) == 0`
-  const size_t alloc_count = mi_page_alloc_count(page);
-  const size_t freed = mi_free_len(page->free) + mi_free_len(page->local_free);
+  // Blocks are only allocated from `free`, which shrinks by one per allocation.
+  // Add allocations since the refill baseline to those accumulated before it.
+  mi_assert_internal(mi_page_refill_free_len(page) >= mi_free_len(page->free));
+  const size_t alloc_count = mi_page_refill_alloc_count(page) + mi_page_refill_free_len(page) - mi_free_len(page->free);
+  mi_assert_internal(alloc_count <= MI_OPT_FREE_MASK);
+  return alloc_count;
+  #endif
+}
+
+
+// Mark live blocks as freed on heap destruction, preserving pending frees and allocation history.
+static inline void mi_page_mark_all_free(mi_page_t* page, size_t pending) {
+  mi_assert_internal(pending <= mi_page_used(page));
+  #if !MI_OPT_FREE_LEN
+  page->xused.used_alloc = (page->xused.used_alloc & ~MI_ZU(0xFFFF)) | pending;
+  #else
+  const size_t freed = mi_free_len(page->free) + mi_free_len(page->local_free) + pending;
   mi_threadid_t xtid_old = mi_atomic_load_relaxed(&page->xthread_id);
   mi_threadid_t xtid;
   do {
     xtid = (xtid_old & ~MI_PAGE_CAPACITY_MASK) | (mi_threadid_t)freed;
   } while (!mi_atomic_cas_weak_release(&page->xthread_id, &xtid_old, xtid));
-  page->xused.used_alloc = (page->xused.used_alloc & ~MI_ZU(0xFFFFFFFF)) | (alloc_count << 16) | mi_free_len(page->free);
-  mi_assert_internal(mi_page_used(page) == 0);
   #endif
+  mi_assert_internal(mi_page_used(page) == pending);
 }
 
-#if MI_OPT_FREE_LEN
-// Refill the `free` list: accumulate the allocations done since the last refill and set the new baseline.
-// Returns the current total allocation count since the last refill.
+// Replace `free` without changing the exact allocation count or statistics/sampling baselines.
 static inline size_t mi_page_set_free(mi_page_t* page, mi_free_t newfree) {
   const size_t alloc_count = mi_page_alloc_count(page);
+  #if MI_OPT_FREE_LEN
   page->xused.used_alloc = (page->xused.used_alloc & ~MI_ZU(0xFFFFFFFF)) | (alloc_count << 16) | mi_free_len(newfree);
+  #endif
   page->free = newfree;
+  mi_assert_internal(mi_page_alloc_count(page) == alloc_count);
   return alloc_count;
 }
-#else
-static inline size_t mi_page_set_free(mi_page_t* page, mi_free_t newfree) {
-  page->free = newfree;
-  return mi_page_alloc_count(page);
-}
-#endif
 
-
-static inline size_t mi_page_last_alloc(const mi_page_t* page) {
+static inline void mi_page_set_sampled_alloc_count(mi_page_t* page, size_t alloc_count) {
+  mi_assert_internal(alloc_count >= mi_page_sampled_alloc_count(page));
+  mi_assert_internal(alloc_count <= mi_page_alloc_count(page));
   #if MI_SIZE_SIZE >= 8
-  return (page->xused.used_alloc >> 48) & 0xFFFF;
+  page->xused.used_alloc = (alloc_count << 48) | (page->xused.used_alloc & (~MI_ZU(0) >> 16));
   #else
-  return page->xlast_alloc;
+  page->xsampled_alloc_count = (uint16_t)alloc_count;
   #endif
+}
+
+// Start a new statistics interval without changing used (which still includes pending frees).
+static inline void mi_page_reset_stats(mi_page_t* page, size_t live) {
+  mi_assert_internal(live <= mi_page_used(page));
+  #if MI_OPT_FREE_LEN
+  page->xused.used_alloc = (live << 32) | mi_free_len(page->free);
+  #elif MI_SIZE_SIZE >= 8
+  page->xused.used_alloc = (live << 32) | mi_page_used(page);
+  #else
+  page->xused.used_alloc = mi_page_used(page);
+  page->xlast_used = (uint16_t)live;
+  page->xsampled_alloc_count = 0;
+  #endif
+  mi_assert_internal(mi_page_alloc_count(page) == 0);
+  mi_assert_internal(mi_page_sampled_alloc_count(page) == 0);
+  mi_assert_internal(mi_page_last_used(page) == live);
 }
 
 
 // Current blocks in use (given the pending thread-free blocks)
 static inline size_t mi_page_used_ex(const mi_page_t* page, size_t pending);
+
 static inline bool mi_page_all_free_ex(const mi_page_t* page, size_t pending) {
   mi_assert_internal(page != NULL);
   return (mi_page_used_ex(page,pending) == 0);
@@ -1310,7 +1348,7 @@ static inline bool _mi_is_process_heap_main(const mi_heap_t* heap) {
 
 // Thread free flag helpers
 // the ownership bit sits just above the list length (and is always zero in a shifted block pointer)
-#define MI_TF_OWNED  ((mi_thread_free_t)1 << MI_OPT_FREE_LEN)
+#define MI_TF_OWNED  ((mi_thread_free_t)1 << MI_OPT_FREE_SHIFT)
 
 // the thread free list as a regular free list (with the ownership bit cleared)
 static inline mi_free_t mi_tf_free(mi_thread_free_t tf) {
