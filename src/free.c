@@ -263,7 +263,15 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
     if (free_small) { mi_assert_internal(page == mi_atomic_load_ptr_acquire(mi_page_t,&page->self)); }
     else
     #endif
-    { page = mi_atomic_load_ptr_relaxed(mi_page_t,&page->self); }    // can be relaxed here as we free a known pointer
+    { 
+      // The `self` load can be relaxed here as we free a known pointer and thus it has been synchronized.
+      // However, the ThreadSanitizer seems to require an acquire load to properly track memory dependencies.
+      #if MI_TSAN
+      page = mi_atomic_load_ptr_acquire(mi_page_t,&page->self);     
+      #else
+      page = mi_atomic_load_ptr_relaxed(mi_page_t,&page->self); 
+      #endif
+    }
   #endif
 
   mi_assert_internal(page!=NULL);
