@@ -145,6 +145,7 @@ mi_decl_export void mi_free_small(void* p) mi_attr_noexcept;
 mi_decl_export void mi_free_small_nonnull(void* p) mi_attr_noexcept;
 
 
+
 // -------------------------------------------------------------------------------------
 // Aligned allocation
 // Note that `alignment` always follows `size` for consistency with unaligned
@@ -625,6 +626,13 @@ static inline void mi_free_csize_aligned_nonnull(void* p, size_t size, size_t al
   assert(p!=NULL);
   if (aligned <= size && size <= MI_SMALL_SIZE_MAX) { mi_free_small_nonnull(p); } else { mi_free(p); }
 }
+
+// As `mi_free_small` but `p` must be allocated on a page owned by the current thread (be very careful!)
+mi_decl_export void mi_free_small_local(void* p) mi_attr_noexcept;
+
+// As `mi_free_small_local` but `p` cannot be NULL as well.
+mi_decl_export void mi_free_small_local_nonnull(void* p) mi_attr_noexcept;
+
 
 // ------------------------------------------------------
 // C++ standard library allocator interface.

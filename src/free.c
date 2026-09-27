@@ -43,19 +43,14 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, size_
   #if !MI_OPT_FREE_LEN
     MI_UNUSED(capacity);
     // actual free: push on the local free list fast-path
-    #if MI_ARCH_X64 || MI_ARCH_X86    // use direct 16-bit decrement 
-    mi_block_set_next(page, block, page->local_free);
-    page->local_free = mi_free_create(block, 0);
-    const bool is_empty = (--page->xused.le.used_count == 0);
-    #else // otherwise use whole word decrement
     mi_used_t xused = page->xused;
-    mi_block_set_next(page, block, page->local_free);
+    mi_block_t* lfree = page->local_free;
     xused.used_alloc--;
+    mi_block_set_next(page, block, lfree);
     page->xused = xused;
-    page->local_free = mi_free_create(block, 0);
+    page->local_free = block;
     const bool is_empty = (mi_xused_used_count(xused) == 0);
-    #endif
-    mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+    mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));    
   #else
     const mi_free_t free = page->free;
     mi_free_t lfree = page->local_free;
@@ -350,6 +345,15 @@ void mi_ufree(void* p, size_t* pblock_size) mi_attr_noexcept {
   }
 }
 
+// Free a pointer that is potentially allocated in a different sub-process
+void _mi_free_subproc_safe(void* p) mi_attr_noexcept {
+  mi_page_t* page = NULL; 
+  if mi_likely(mi_ptr_page_is_valid(p,"_mi_free_subproc_safe",&page)) {
+    // const bool allow_reclaim = (_mi_subproc() == mi_page_subproc(page));
+    mi_free_nonnull(p, page, NULL, false /* allow reclaim */);
+  }
+}
+
 void mi_free_small(void* p) mi_attr_noexcept {
   mi_page_t* page = NULL; 
   if mi_likely(mi_ptr_page_is_valid_ex(p,"mi_free_small",true /* is_small? */,true /*check p for null*/, &page)) {    
@@ -365,14 +369,37 @@ void mi_free_small_nonnull(void* p) mi_attr_noexcept {
   }
 }
 
-// Free a pointer that is potentially allocated in a different sub-process
-void _mi_free_subproc_safe(void* p) mi_attr_noexcept {
+// For runtime systems: Free a pointer that is guaranteed to be small, and in a page owned by the current thread.
+static mi_decl_forceinline void mi_free_small_local_ex(void* p, bool check_p_for_null) mi_attr_noexcept {
+  mi_assert(p!=NULL);
   mi_page_t* page = NULL; 
-  if mi_likely(mi_ptr_page_is_valid(p,"_mi_free_subproc_safe",&page)) {
-    // const bool allow_reclaim = (_mi_subproc() == mi_page_subproc(page));
-    mi_free_nonnull(p, page, NULL, false /* allow reclaim */);
+  if mi_likely(mi_ptr_page_is_valid_ex(p,"mi_free_small_local_ex", true /* is_small? */, check_p_for_null /*check p for null*/, &page)) {    
+    mi_assert_internal(mi_page_thread_id(page) == _mi_thread_id());
+    const mi_threadid_t pxtid = mi_atomic_load_relaxed(&page->xthread_id);
+    const size_t capacity = (size_t)pxtid & MI_PAGE_CAPACITY_MASK;
+  
+    if mi_likely(((pxtid >> MI_PAGE_TID_SHIFT) & MI_PAGE_FLAG_MASK) == 0) { 
+      // thread-local, aligned, and not a full page
+      mi_block_t* const block = mi_validate_block_from_ptr(page,p);
+      mi_free_block_local(page, block, capacity, false /* was guarded */, false /* no need to check if the page is full */);
+      return;
+    }
+    else {  
+      // page is local, but is full or contains (inner) aligned blocks; use generic path
+      mi_free_generic_local(page, p);
+    }
   }
 }
+
+void mi_free_small_local(void* p) mi_attr_noexcept {
+  mi_free_small_local_ex(p, true /* check null */);
+}
+
+void mi_free_small_local_nonnull(void* p) mi_attr_noexcept {
+  mi_free_small_local_ex(p, false /* check null */);
+}
+
+
 
 // ------------------------------------------------------
 // Free variants
@@ -394,15 +421,6 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
         return;
       }
     }
-    // const size_t is_aligned = ((void*)block != p);
-    // if mi_unlikely(size <= MI_SMALL_SIZE_MAX && mi_page_block_size(page) > mi_good_size((is_aligned ? 2 : 1)*MI_SMALL_SIZE_MAX)) { // note: we check *2 in case it was over-aligned
-    //   const bool is_guarded = mi_block_ptr_is_guarded(block,p);
-    //   if (!is_guarded) {
-    //     _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the given size %zu is less than the allocated block size %zu\n  (maybe a `new[]` was matched with `delete` instead of `delete[]`?)\n", p, size, mi_page_block_size(page));
-    //     mi_free(p);
-    //     return;
-    //   }
-    // }
   #endif
   #if MI_PAGE_META_SMALL_IS_ALIGNED || MI_PAGE_META_IS_ALIGNED
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {
@@ -582,7 +600,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_free_t m
   #if MI_OPT_FREE_LEN
   size_t pending = mi_free_len(mt_free);
   // Visit new nodes once; leave the captured head for the next visit.
-  #if 0 && MI_OPT_FREE_WALK
+  #if (MI_OPT_FREE_WALK==2)
   const size_t walked = page->xthread_walked;
   mi_assert_internal(pending > walked);
   mi_free_t walk = mi_block_next(page, mi_free_block(mt_free));

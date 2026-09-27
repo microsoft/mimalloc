@@ -102,7 +102,9 @@ set_property(CACHE MI_OPT_FREE_SMALL PROPERTY STRINGS "OFF" "ON" "DEFAULT")
 set(MI_OPT_FREE_LEN "DEFAULT" CACHE STRING "Store free-list lengths in unused pointer bits: OFF, ON, DEFAULT. DEFAULT enables this when at least 16 pointer bits are available.")
 set_property(CACHE MI_OPT_FREE_LEN PROPERTY STRINGS "OFF" "ON" "DEFAULT")
 
-option(MI_OPT_FREE_WALK "Walk the free list to count the number of free blocks (OFF)")
+set(MI_OPT_FREE_WALK "DEFAULT" CACHE STRING "Walk the free list to count the number of free blocks: OFF, ON, FULL, DEFAULT.")
+set_property(CACHE MI_OPT_FREE_WALK PROPERTY STRINGS "OFF" "ON" "FULL" "DEFAULT")
+
 
 include(CheckLinkerFlag)    # requires cmake 3.18
 include(CheckIncludeFiles)
@@ -566,7 +568,13 @@ else()
   list(APPEND mi_defines MI_OPT_FREE_LEN=0)
 endif()
 
-if(MI_OPT_FREE_WALK)
+if(MI_OPT_FREE_WALK STREQUAL "DEFAULT")
+  set(MI_OPT_FREE_WALK "ON")
+endif()
+if(MI_OPT_FREE_WALK STREQUAL "FULL")
+  message(STATUS "Enable walking the free list to count the number of free blocks even on cross-threads (MI_OPT_FREE_WALK=${MI_OPT_FREE_WALK})")
+  list(APPEND mi_defines MI_OPT_FREE_WALK=2)
+elseif(MI_OPT_FREE_WALK)
   message(STATUS "Enable walking the free list to count the number of free blocks (MI_OPT_FREE_WALK=${MI_OPT_FREE_WALK})")
   list(APPEND mi_defines MI_OPT_FREE_WALK=1)
 else()
