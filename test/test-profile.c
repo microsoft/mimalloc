@@ -39,7 +39,7 @@ static inline my_profiler_t* downcast( mi_profiler_t* prof ) {
 
 #define TEST_THRESHOLD (16 * 1024)
 
-static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, const mi_heap_t* heap) {
+static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, mi_heap_t* heap) {
   MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(requested_size);
   my_profiler_t* prof = downcast(profiler);
   assert(bytes_since_last_sample >= requested_size);  
@@ -54,7 +54,7 @@ static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data
   return TEST_THRESHOLD;
 }
 
-static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, const mi_heap_t* heap) {
+static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, mi_heap_t* heap) {
   MI_UNUSED(heap); MI_UNUSED_RELEASE(data); MI_UNUSED_RELEASE(ptr);
   my_profiler_t* prof = downcast(profiler);
   prof->free_count++;
