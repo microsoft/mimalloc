@@ -260,10 +260,10 @@ void          _mi_arenas_collect(bool force_purge, bool visit_all, mi_tld_t* tld
 void          _mi_arenas_unsafe_destroy_all(mi_subproc_t* subproc);
 
 mi_page_t*    _mi_arenas_page_alloc(mi_theap_t* theap, size_t block_size, size_t page_alignment);
-void          _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx /* can be NULL */);
+void          _mi_arenas_page_free(mi_page_t* page, size_t pending, mi_theap_t* current_theapx /* can be NULL */);
 void          _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theap);
 void          _mi_arenas_page_unabandon(mi_page_t* page, mi_theap_t* current_theapx /* can be NULL */);
-bool          _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page);
+bool          _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page, size_t pending);
 
 // "page-map.c"
 bool          _mi_page_map_init(void);
@@ -283,7 +283,7 @@ void          _mi_page_free(mi_page_t* page, mi_page_queue_t* pq);     // free t
 void          _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);  // abandon the page, to be picked up by another thread...
 void          _mi_deferred_free(mi_theap_t* theap, bool force);
 bool          _mi_page_free_collect(mi_page_t* page, bool force);  // returns `true` if cross-thread free'd blocks were collected
-mi_block_t*   _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
+mi_thread_free_t _mi_page_free_collect_partly(mi_page_t* page, mi_thread_free_t thead);
 mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page);
 bool          _mi_page_queue_is_valid(mi_theap_t* theap, const mi_page_queue_t* pq);
 void          _mi_page_update_stats(mi_page_t* page);
@@ -977,12 +977,15 @@ static inline size_t mi_page_last_alloc(const mi_page_t* page) {
   #endif
 }
 
+static inline bool mi_page_all_free_ex(const mi_page_t* page, size_t pending) {
+  mi_assert_internal(page != NULL);
+  return (mi_page_used(page)==pending);
+}
 
 // are all blocks in a page freed?
 // note: needs up-to-date used count, (as the `xthread_free` list may not be empty). see `_mi_page_collect_free`.
 static inline bool mi_page_all_free(const mi_page_t* page) {
-  mi_assert_internal(page != NULL);
-  return (mi_page_used(page)==0);
+  return mi_page_all_free_ex(page,0);
 }
 
 // are there immediately available blocks, i.e. blocks available on the free list.
@@ -1000,17 +1003,26 @@ static inline bool mi_page_is_expandable(const mi_page_t* page) {
 }
 
 
-static inline bool mi_page_is_full(const mi_page_t* page) {
-  const bool full = (page->reserved == mi_page_used(page));
+static inline bool mi_page_is_full_ex(const mi_page_t* page, size_t pending) {
+  const bool full = (pending == 0 && page->reserved == mi_page_used(page));
   mi_assert_internal(!full || page->free == NULL);
   return full;
 }
 
+static inline bool mi_page_is_full(const mi_page_t* page) {
+  return mi_page_is_full_ex(page, 0);
+}
+
 // is more than 7/8th of a page in use?
-static inline bool mi_page_is_mostly_used(const mi_page_t* page) {
+static inline bool mi_page_is_mostly_used_ex(const mi_page_t* page, size_t pending) {
   if (page==NULL) return true;
   uint16_t frac = page->reserved / 8U;
-  return (page->reserved - mi_page_used(page) <= frac);
+  return (page->reserved - mi_page_used(page) - pending <= frac);
+}
+
+// is more than 7/8th of a page in use?
+static inline bool mi_page_is_mostly_used(const mi_page_t* page) {
+  return mi_page_is_mostly_used_ex(page, 0);
 }
 
 // is more than (n-1)/n'th of a page in use?
@@ -1170,27 +1182,62 @@ static inline bool _mi_is_process_heap_main(const mi_heap_t* heap) {
 // Thread free list and ownership
 //-----------------------------------------------------------
 
+#if MI_INTPTR_BITS - MI_MAX_VABITS >= 16
+#define MI_THREAD_FREE_HAS_LEN 1
+#else
+#define MI_THREAD_FREE_HAS_LEN 0
+#endif
+
 // Thread free flag helpers
 static inline mi_block_t* mi_tf_block(mi_thread_free_t tf) {
+  #if MI_THREAD_FREE_HAS_LEN
+  tf >>= 16;
+  #endif
   return (mi_block_t*)(tf & ~1);  
 }
 
 static inline bool mi_tf_is_owned(mi_thread_free_t tf) {
+  #if MI_THREAD_FREE_HAS_LEN
+  tf >>= 16;
+  #endif
   return ((tf & 1) == 1);
 }
 
-static inline mi_thread_free_t mi_tf_create(mi_block_t* block, bool owned) {
-  const uintptr_t base = (uintptr_t)block | (owned ? 1 : 0);
-  return (mi_thread_free_t)base;
+static inline size_t mi_tf_len(mi_thread_free_t tf) {
+  #if MI_THREAD_FREE_HAS_LEN
+  return (tf & 0xFFFF);
+  #else
+  return 0;
+  #endif
+}
+
+static inline mi_thread_free_t mi_tf_create(mi_block_t* block, bool owned, size_t len) {
+  mi_thread_free_t tf = (mi_thread_free_t)block | (owned ? 1 : 0);
+  #if MI_THREAD_FREE_HAS_LEN
+  tf = (tf<<16 | (len & 0xFFFF));
+  #else
+  MI_UNUSED(len);
+  #endif
+  mi_assert_internal(mi_tf_block(tf) == block);
+  return tf;
 }
 
 static inline mi_thread_free_t mi_tf_set_owned(mi_thread_free_t tf, bool owned) {
-  return mi_tf_create(mi_tf_block(tf), owned);
+  return mi_tf_create(mi_tf_block(tf), owned, mi_tf_len(tf));
+}
+
+static inline mi_thread_free_t mi_tf_set_len(mi_thread_free_t tf, size_t len) {
+  return mi_tf_create(mi_tf_block(tf), mi_tf_is_owned(tf), len);
 }
 
 // Thread free access
 static inline mi_block_t* mi_page_thread_free(const mi_page_t* page) {
   return mi_tf_block(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free));
+}
+
+// for assertions
+static inline size_t mi_page_pending(const mi_page_t* page) {
+  return mi_tf_len(mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_free));
 }
 
 // are there any available blocks?
@@ -1206,8 +1253,13 @@ static inline bool mi_page_is_owned(const mi_page_t* page) {
 
 // get ownership; returns true if the page was not owned before.
 static inline bool mi_page_claim_ownership(mi_page_t* page) {
-  const uintptr_t old = mi_atomic_or_acq_rel(&page->xthread_free, (uintptr_t)1);
-  return ((old&1)==0);
+  #if MI_THREAD_FREE_HAS_LEN
+  const uintptr_t mask = (uintptr_t)1 << 16;
+  #else
+  const uintptr_t mask = (uintptr_t)1;
+  #endif
+  const uintptr_t old = mi_atomic_or_acq_rel(&page->xthread_free, mask);
+  return ((old&mask)==0);
 }
 
 

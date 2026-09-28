@@ -157,9 +157,8 @@ static mi_theap_t* mi_theap_of_page(mi_page_t* page) {
 #endif
 
 #if MI_SAMPLE==1 /* for ==2, the countdown is already done at every `alloc.c:mi_page_alloc_zero` */
-static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page, size_t alloc_count) 
+static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page, size_t alloc_count)
 {
-  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));    
   mi_assert_internal(theap!=NULL);
   if (theap->sample_rate==0) return;
 
@@ -318,18 +317,30 @@ static void mi_page_update_sample_countdown(mi_page_t* page)
   Page collect the `local_free` and `thread_free` lists
 ----------------------------------------------------------- */
 
-static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
+static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head, size_t pending)
 {
   if (head == NULL) return;
 
-  // find the last block in the list -- also to get a proper use count (without data races)
-  size_t max_count = page->capacity; // cannot collect more than capacity
-  size_t count = 1;
-  mi_block_t* last = head;
-  mi_block_t* next;
-  while ((next = mi_block_next(page, last)) != NULL && count <= max_count) {
-    count++;
-    last = next;
+  const size_t max_count = page->capacity; // cannot collect more than capacity    
+  size_t count;
+  mi_block_t* last;
+  #if !MI_SECURE
+  if (pending > 0 && page->local_free == NULL) {  // MI_THREAD_FREE_HAS_LEN
+    // skip visiting the list if we already know the pending count and the local free list is empty
+    count = pending; 
+    last = NULL;
+  }
+  else 
+  #endif
+  {
+    // find the last block in the list -- also to get a proper use count (without data races)
+    count = 1;
+    last = head;
+    mi_block_t* next;
+    while ((next = mi_block_next(page, last)) != NULL && count <= max_count) {
+      count++;
+      last = next;
+    }
   }
 
   // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
@@ -344,7 +355,13 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
   }
 
   // and append the current local free list
-  mi_block_set_next(page, last, page->local_free);
+  if (last!=NULL) {    
+    mi_block_set_next(page, last, page->local_free);
+  }
+  else {
+    // case where we have MI_THREAD_FREE_HAS_LEN and an empty local_free list
+    mi_assert_internal(page->local_free==NULL);
+  }
   page->local_free = head;
 
   // update counts now
@@ -358,18 +375,19 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
 static bool mi_page_thread_free_collect(mi_page_t* page)
 {
   // atomically capture the thread free list
+  mi_thread_free_t thead = mi_atomic_load_relaxed(&page->xthread_free);
   mi_block_t* head;
-  mi_thread_free_t tfreex;
-  mi_thread_free_t tfree = mi_atomic_load_relaxed(&page->xthread_free);
+  mi_thread_free_t tnull;
+  mi_assert_internal(mi_tf_is_owned(thead));
   do {
-    head = mi_tf_block(tfree);
+    head = mi_tf_block(thead);
     if mi_likely(head == NULL) return false; // return if the list is empty
-    tfreex = mi_tf_create(NULL,mi_tf_is_owned(tfree));  // set the thread free list to NULL
-  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tfree, tfreex));  // release is enough?
+    tnull = mi_tf_create(NULL,mi_tf_is_owned(thead),0);  // set the thread free list to NULL
+  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &thead, tnull));  // release is enough?
   mi_assert_internal(head != NULL);
 
   // and move it to the local list
-  mi_page_thread_collect_to_local(page, head);
+  mi_page_thread_collect_to_local(page, head, mi_tf_len(thead));
   return true;
 }
 
@@ -425,13 +443,19 @@ bool _mi_page_free_collect(mi_page_t* page, bool force) {
 // `head` must be in the `xthread_free` list. It will not collect `head` itself
 // so the `used` count is not fully updated in general. However, if the `head` is
 // the last remaining element, it will be collected and the used count will become `0` (so `mi_page_all_free` becomes true).
-mi_block_t* _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
+mi_thread_free_t _mi_page_free_collect_partly(mi_page_t* page, mi_thread_free_t thead) {
   mi_assert_internal(mi_page_is_owned(page));
-  if (head == NULL) return NULL;
-  mi_block_t* next = mi_block_next(page,head);  // we cannot collect the head element itself as `page->thread_free` may point to it (and we want to avoid atomic ops)
-  if (next != NULL) {
+  mi_assert_internal(mi_tf_is_owned(thead));
+  mi_block_t* const head = mi_tf_block(thead);
+  if (head == NULL) return thead;  
+  mi_block_t* const tail = mi_block_next(page,head);  // we cannot collect the head element itself as `page->thread_free` may point to it (and we want to avoid atomic ops)
+  if (tail != NULL) {
+    // cut the head list
+    const size_t tail_len = (mi_tf_len(thead) > 0 ? mi_tf_len(thead) - 1 : 0);
     mi_block_set_next(page, head, NULL);
-    mi_page_thread_collect_to_local(page, next);
+    thead = mi_tf_set_len(thead, 0);
+    // and collect the tail
+    mi_page_thread_collect_to_local(page, tail, tail_len);
     if (page->local_free != NULL && page->free == NULL) {
       page->free = page->local_free;
       page->local_free = NULL;
@@ -444,10 +468,10 @@ mi_block_t* _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
     mi_assert_internal(mi_tf_block(mi_atomic_load_relaxed(&page->xthread_free)) == head);
     mi_assert_internal(mi_block_next(page,head) == NULL);
     _mi_page_free_collect(page, false);  // collect the final element
-    return NULL;
+    return mi_tf_create(NULL, mi_tf_is_owned(thead), 0);
   }
   else {
-    return head;
+    return thead;
   }
 }
 
@@ -592,7 +616,7 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   // and free it
   mi_theap_t* theap = mi_page_theap(page); mi_assert_internal(theap!=NULL);
   mi_page_set_theap(page,NULL);
-  _mi_arenas_page_free(page, theap);
+  _mi_arenas_page_free(page, 0, theap);  // TODO: is pending correct?
   // _mi_arenas_collect(false, false, theap->tld);  // allow purging
 }
 
@@ -920,7 +944,7 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_internal(mi_page_used(page) == 0);
   mi_assert_internal(page->xused.used_alloc == 0);
   mi_assert_internal(mi_page_is_owned(page));
-  mi_assert_internal(page->xthread_free == 1);
+  mi_assert_internal(page->xthread_free == mi_tf_create(NULL, true, 0));
   mi_assert_internal(page->next == NULL);
   mi_assert_internal(page->prev == NULL);
   mi_assert_internal(page->retire_expire == 0);

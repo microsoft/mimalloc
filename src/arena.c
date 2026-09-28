@@ -637,13 +637,13 @@ static bool mi_abandoned_page_unown(mi_page_t* page, mi_theap_t* current_theapx)
       _mi_page_free_collect(page, false);  // update used
       if (mi_page_all_free(page)) {        // it may become free just before unowning it
         _mi_arenas_page_unabandon(page, current_theapx);
-        _mi_arenas_page_free(page, current_theapx);
+        _mi_arenas_page_free(page, 0, current_theapx);
         return true;
       }
       tf_old = mi_atomic_load_relaxed(&page->xthread_free);
     }
     mi_assert_internal(mi_tf_block(tf_old)==NULL);
-    tf_new = mi_tf_create(NULL, false);    
+    tf_new = mi_tf_create(NULL, false, 0);    
   } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new));
   return false;
 }
@@ -1157,7 +1157,7 @@ static mi_page_t* mi_arenas_page_regular_alloc(mi_theap_t* theap, size_t slice_c
 
   mi_assert_internal(page->memid.memkind != MI_MEM_ARENA || page->memid.mem.arena.slice_count == slice_count);
   if (!_mi_page_init(theap, page)) {
-    _mi_arenas_page_free(page,theap);
+    _mi_arenas_page_free(page,0,theap);
     return NULL;
   }
 
@@ -1184,7 +1184,7 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_theap_t* theap, size_t block
 
   mi_assert(page->reserved == 1);
   if (!_mi_page_init(theap, page)) {
-    _mi_arenas_page_free(page,theap);
+    _mi_arenas_page_free(page,0,theap);
     return NULL;
   }
 
@@ -1229,7 +1229,7 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
   mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
   mi_assert_internal(mi_page_is_owned(page));
-  mi_assert_internal(mi_page_all_free(page));
+  // mi_assert_internal(mi_page_all_free(page));
   mi_assert_internal(page->next==NULL && page->prev==NULL);
   
   #if MI_DEBUG>1
@@ -1297,11 +1297,12 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
   _mi_arenas_free( mi_page_subproc(page), mi_page_slice_start(page), mi_page_full_size(page), page->memid);
 }
 
-void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
+void _mi_arenas_page_free(mi_page_t* page, size_t pending, mi_theap_t* current_theapx) {
+  MI_UNUSED_RELEASE(pending);
   mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
   mi_assert_internal(mi_page_is_owned(page));
-  mi_assert_internal(mi_page_all_free(page));
+  mi_assert_internal(mi_page_all_free_ex(page, pending));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(page->next==NULL && page->prev==NULL);
   mi_assert_internal(mi_theap_matches_thread(current_theapx));
@@ -1309,8 +1310,10 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_heap_t* const heap = mi_page_heap(page);
   mi_theapx_stat_decrease(heap, current_theapx, page_bins[_mi_page_stats_bin(page)], 1);
   mi_theapx_stat_decrease(heap, current_theapx, pages, 1);
-  _mi_page_free_collect(page,false);  // update used count for cross-thread free's
-  _mi_page_update_stats(page);        // and update the stats
+  if (pending==0) {
+    _mi_page_free_collect(page,false);  // update used count for cross-thread free's
+  }
+  _mi_page_update_stats(page);  // and update the stats
   mi_arenas_page_free_prim(page);
 }
 
@@ -1324,6 +1327,7 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(!mi_page_all_free(page));
+  // mi_assert_internal(mi_page_pending(page)==0);  // can happen in a reabandon
   mi_assert_internal(page->next==NULL && page->prev == NULL);
   mi_assert_internal(mi_theap_matches_thread(current_theapx));
   // mi_assert_internal(current_theap == _mi_page_associated_theap(page));
@@ -1379,16 +1383,16 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theapx) {
 
 
 // this is called from `free.c:mi_free_try_collect_mt` only.
-bool _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page) {
+bool _mi_arenas_page_try_reabandon_to_mapped(mi_page_t* page, size_t pending) {
   mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(!mi_page_is_abandoned_mapped(page));
-  mi_assert_internal(!mi_page_is_full(page));
-  mi_assert_internal(!mi_page_all_free(page));
+  mi_assert_internal(!mi_page_is_full_ex(page, pending));
+  mi_assert_internal(!mi_page_all_free_ex(page, pending));
   mi_assert_internal(!mi_page_is_singleton(page));
-  if (mi_page_is_full(page) || mi_page_is_abandoned_mapped(page) || page->memid.memkind != MI_MEM_ARENA) {
+  if (mi_page_is_full_ex(page, pending) || mi_page_is_abandoned_mapped(page) || page->memid.memkind != MI_MEM_ARENA) {
     return false;
   }
   else {
@@ -2570,7 +2574,7 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
 
   if (mi_page_used(page)==0) {
     // free the page
-    _mi_arenas_page_free(page, theap);
+    _mi_arenas_page_free(page, 0, theap);
   }
   else if (heap_target==NULL) {
     #if MI_GUARDED
@@ -2578,7 +2582,7 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
     #endif
     // destroy the page
     mi_page_used_reset(page);           // note: invariant `|local_free| + |free| == reserved - used`  does not hold in this case
-    _mi_arenas_page_free(page, theap);
+    _mi_arenas_page_free(page, 0, theap);
   }
   else {
     // move the page to `heap_target` as an abandoned page
