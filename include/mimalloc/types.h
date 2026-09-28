@@ -640,6 +640,8 @@ struct mi_theap_s {
   size_t                guarded_sample_countdown;            // countdown in requested bytes for guarded objects
   size_t                guarded_size_min;                    // minimal size for guarded objects
   size_t                guarded_size_max;                    // maximal size for guarded objects
+  uintptr_t             profiler_reserved1;                  // two fields available for a profiler (to avoid thread locals)
+  uintptr_t             profiler_reserved2;
   
   // stats
   unsigned long long    heartbeat;                           // monotonic heartbeat count

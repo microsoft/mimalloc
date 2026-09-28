@@ -195,7 +195,7 @@ static size_t mi_exp_sample(mi_theap_t* theap, size_t scale) {
   #if MI_PROFILE==2
   if (scale == 1) return 1;                                     // keep 1 as is (to allow sampling every allocation)
   #endif
-  const size_t r  = (size_t)_mi_theap_random_next(theap) | 1;   
+  const size_t r  = _mi_theap_random_next(theap) | 1;   
   const size_t lz = mi_clz(r);                                  // coarse -log2(U): Geometric(1/2)
   const size_t frac_q8 = (r << (lz + 1)) >> (MI_SIZE_BITS - 8); // next 8 bits: fractional refinement, in [0,256)
   const size_t bits_q8 = (lz << 8) | frac_q8;                   // Q8 fixed-point estimate of -log2(U)
@@ -267,12 +267,13 @@ static bool mi_time_threshold_update(mi_msecs_t now, size_t time_interval_secs, 
 }
 
 // Sample allocation event and update profiling data accordingly
-static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, const mi_heap_t* heap) 
+static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, mi_heap_t* heap) 
 {
   MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(ptr);
   mi_pprof_profiler_t* prof = downcast(profiler);
   mi_location_t* loc = mi_location_get(prof);
-  const size_t new_threshold = mi_exp_sample(_mi_theap_default(), prof->sample_threshold);  // randomized (Poisson) next sample threshold
+  mi_theap_t* theap = _mi_heap_theap(heap);
+  const size_t new_threshold = mi_exp_sample(theap, prof->sample_threshold);  // randomized (Poisson) next sample threshold
   const size_t alloc_size = requested_size;            // or mi_heap_usable_size(heap,ptr) ?
 
   if (data!=NULL) {
@@ -293,8 +294,8 @@ static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data
   }
 
   if (prof->alloc_interval_size > 0) { // interval-based profiling enabled
-    static mi_decl_thread mi_ssize_t interval_pending = 0;
-    if (mi_interval_update(bytes_since_last_sample, prof->alloc_interval_size, &prof->alloc_interval_countdown, &interval_pending)) {
+    mi_ssize_t* pinterval_pending = (mi_ssize_t*)&theap->profiler_reserved1;
+    if (mi_interval_update(bytes_since_last_sample, prof->alloc_interval_size, &prof->alloc_interval_countdown, pinterval_pending)) {
       mi_profiler_snapshot(profiler);
     }    
   }
@@ -313,7 +314,7 @@ static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data
 }
 
 // Sample free event and update profiling data accordingly
-static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, const mi_heap_t* heap) 
+static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, mi_heap_t* heap) 
 {
   MI_UNUSED(heap); MI_UNUSED(ptr);
   mi_pprof_profiler_t* prof = downcast(profiler);

@@ -137,6 +137,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   0, 0,                   // sample rate, requested
   0, 0,                   // profile rate, countdown
   0, 0, 0, 0,             // guarded rate, countdown, min, max
+  0, 0,                   // profiler_reserved1, profiler_reserved2
   0,                      // heartbeat
   { {0}, {0}, 0, true },  // random
   0,                      // page count

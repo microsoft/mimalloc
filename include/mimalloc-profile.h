@@ -29,13 +29,13 @@ typedef struct mi_profiler_sample_data_s {
 
 // Profiling callback invoked on each sampled allocation.
 // If `profiler_data!=NULL` (i.e. when `on_free` is not NULL), then `profiler_data->requested_size == requested_size`.
-typedef size_t (mi_cdecl mi_profiler_on_alloc_fun  )(mi_profiler_t* profiler, mi_profiler_sample_data_t* profiler_data, void* ptr, size_t requested_size, size_t bytes_sample_rate, uint64_t bytes_since_last_sample, const mi_heap_t* heap);
+typedef size_t (mi_cdecl mi_profiler_on_alloc_fun  )(mi_profiler_t* profiler, mi_profiler_sample_data_t* profiler_data, void* ptr, size_t requested_size, size_t bytes_sample_rate, uint64_t bytes_since_last_sample, mi_heap_t* heap);
 
 // Profiling callback invoked on each sampled in-place re-allocation.
-typedef size_t (mi_cdecl mi_profiler_on_realloc_inplace_fun)(mi_profiler_t* profiler, mi_profiler_sample_data_t* profiler_data, void* ptr, size_t old_size, const mi_heap_t* heap);
+typedef size_t (mi_cdecl mi_profiler_on_realloc_inplace_fun)(mi_profiler_t* profiler, mi_profiler_sample_data_t* profiler_data, void* ptr, size_t old_size, mi_heap_t* heap);
 
 // Profiling callback invoked on a previously sampled allocation.
-typedef void   (mi_cdecl mi_profiler_on_free_fun   )(mi_profiler_t* profiler, mi_profiler_sample_data_t* profiler_data, void* ptr, const mi_heap_t* heap);
+typedef void   (mi_cdecl mi_profiler_on_free_fun   )(mi_profiler_t* profiler, mi_profiler_sample_data_t* profiler_data, void* ptr, mi_heap_t* heap);
 
 // Profiling callback invoked on mi_profiler_snapshot()
 typedef void   (mi_cdecl mi_profiler_on_snapshot_fun   )(mi_profiler_t* profiler);
