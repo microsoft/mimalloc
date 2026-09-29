@@ -42,7 +42,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #else
  #define MI_ATOMIC_VAR_INIT(x)    ATOMIC_VAR_INIT(x)
 #endif
-#elif defined(_MSC_VER)
+#elif defined(_MSC_VER) && !defined(__clang__)
 // Use MSVC C wrapper for C11 atomics
 #define  _Atomic(tp)              tp
 #define  MI_ATOMIC_VAR_INIT(x)    x
@@ -106,7 +106,7 @@ static inline void       mi_atomic_storess_relaxed(_Atomic(mi_ssize_t)* p, mi_ss
 static inline mi_ssize_t mi_atomic_loads_relaxed(_Atomic(mi_ssize_t)* p);
 
 
-#if defined(__cplusplus) || !defined(_MSC_VER)
+#if defined(__cplusplus) || !defined(_MSC_VER) || defined(__clang__)
 
 // In C++/C11 atomics we have polymorphic atomics so can use the typed `ptr` variants (where `tp` is the type of atomic value)
 // We use these macros so we can provide a typed wrapper in MSVC in C compilation mode as well
@@ -162,7 +162,7 @@ static inline void mi_atomic_volatile_maxi64_relaxed(volatile int64_t* p, int64_
 #define mi_atomic_addi64_relaxed(p,i)           mi_atomic_add_relaxed(p,i)
 
 
-#elif defined(_MSC_VER)
+#elif defined(_MSC_VER) && !defined(__clang__)
 
 // Deprecated: MSVC plain C compilation wrapper that uses Interlocked operations to model C11 atomics.
 // It is recommended to always compile as C++ when using MSVC.
