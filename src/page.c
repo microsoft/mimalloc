@@ -944,6 +944,11 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   Find pages with free blocks
 -------------------------------------------------------------*/
 
+#define MI_XCOLLECT_SCORE_MAX   (256)  // saturation limit for `xcollect_score`
+#define MI_XCOLLECT_SCORE_SHIFT   (5)  // retain bonus = score >> shift  (max 8)
+#define MI_XCOLLECT_SCORE_INC     (8)  // a revived page saves a full abandon/reclaim round-trip
+
+
 // Find a page with free blocks of `page->block_size`.
 static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap, mi_page_queue_t* pq, bool first_try)
 {
@@ -975,7 +980,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
       immediate_available = mi_page_immediate_available(page);
       if (collected_xfree && immediate_available) {
         // a cross-thread free revived this page: retaining such pages avoids an abandon/reclaim round-trip
-        pq->xcollect_score = (pq->xcollect_score + MI_XCOLLECT_SCORE_INC > MI_XCOLLECT_SCORE_MAX ? MI_XCOLLECT_SCORE_MAX : pq->xcollect_score + MI_XCOLLECT_SCORE_INC);
+        pq->xcollect_score = mi_min(pq->xcollect_score + MI_XCOLLECT_SCORE_INC, MI_XCOLLECT_SCORE_MAX);
       }
       else if (pq->xcollect_score > 0) {
         pq->xcollect_score--;
