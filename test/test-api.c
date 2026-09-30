@@ -55,6 +55,8 @@ bool test_stl_theap_allocator3(void);
 bool test_stl_theap_allocator4(void);
 
 static bool test_zero_aligned_first(void);
+static bool test_heap_destroy_xthread_free(void);
+static bool test_heap_destroy_stale_theap(void);
 #ifdef __cplusplus
 static bool test_new_first(void);
 #endif
@@ -614,7 +616,14 @@ int main(void) {
     }
     for (size_t i = 0; i < NHEAPS; i++) {
       mi_heap_destroy(heaps[i]);
-    }  
+    }
+  }
+
+  CHECK_BODY("heap-destroy-xthread-free") {   // destroy a heap with live blocks and pending cross-thread frees
+    result = test_heap_destroy_xthread_free();
+  }
+  CHECK_BODY("heap-destroy-stale-theap") {    // a thread's cached theap must not survive the destroy of its heap
+    result = test_heap_destroy_stale_theap();
   }
 
   //CHECK("theap_destroy", test_theap1());
@@ -822,3 +831,149 @@ static bool test_new_first(void) {
 }
 #endif
 
+
+
+// ---------------------------------------------------------------------------
+// Heap destroy with blocks that were freed by another thread (and not yet collected).
+// The destroyed pages still have live blocks; the pending thread-free block must
+// not be reported as "corrupted meta-data in thread-free list".
+// ---------------------------------------------------------------------------
+
+static void* xthread_free_block;
+static long  xthread_efault_count;
+
+static bool xthread_free_fun(void) {
+  mi_free(xthread_free_block);            // pushes onto the thread-free list of a page owned by the main thread
+  return true;
+}
+
+static void xthread_count_efault(int err, void* arg) {
+  (void)arg;
+  if (err == EFAULT) { xthread_efault_count++; }
+}
+
+static bool test_heap_destroy_xthread_free(void) {
+  mi_heap_t* heap = mi_heap_new();
+  if (heap == NULL) return false;
+  void* live = mi_heap_malloc(heap, 32);  // stays live, so the page is destroyed rather than freed
+  xthread_free_block = mi_heap_malloc(heap, 32);
+  if (live == NULL || xthread_free_block == NULL) return false;
+  if (!mi_run_on_thread(&xthread_free_fun)) return false;
+
+  xthread_efault_count = 0;
+  mi_register_error(&xthread_count_efault, NULL);  // the default handler aborts in debug mode
+  mi_heap_destroy(heap);
+  mi_register_error(NULL, NULL);
+  return (xthread_efault_count == 0);
+}
+
+
+// ---------------------------------------------------------------------------
+// A thread that last allocated from a heap keeps that theap in its `_mi_theap_cached`.
+// If another thread destroys the heap and a new heap is allocated at the same address,
+// the stale cached theap must not be used for the new heap (it has `tld==NULL` and its
+// pages were destroyed).
+// ---------------------------------------------------------------------------
+
+typedef struct test_gate_s {
+  int step;
+  #ifdef _WIN32
+  CRITICAL_SECTION   lock;
+  CONDITION_VARIABLE cond;
+  #else
+  pthread_mutex_t    lock;
+  pthread_cond_t     cond;
+  #endif
+} test_gate_t;
+
+#ifdef _WIN32
+static void test_gate_init(test_gate_t* g) { g->step = 0; InitializeCriticalSection(&g->lock); InitializeConditionVariable(&g->cond); }
+static void test_gate_done(test_gate_t* g) { DeleteCriticalSection(&g->lock); }
+static void test_gate_set(test_gate_t* g, int step) {
+  EnterCriticalSection(&g->lock); g->step = step; LeaveCriticalSection(&g->lock);
+  WakeAllConditionVariable(&g->cond);
+}
+static void test_gate_wait(test_gate_t* g, int step) {
+  EnterCriticalSection(&g->lock);
+  while (g->step < step) { SleepConditionVariableCS(&g->cond, &g->lock, INFINITE); }
+  LeaveCriticalSection(&g->lock);
+}
+typedef HANDLE test_thread_t;
+static void stale_theap_worker(void);
+static DWORD WINAPI test_thread_entry(LPVOID arg) { (void)arg; stale_theap_worker(); return 0; }
+static bool test_thread_start(test_thread_t* t) {
+  *t = CreateThread(NULL, 0, &test_thread_entry, NULL, 0, NULL);
+  return (*t != NULL);
+}
+static void test_thread_join(test_thread_t t) { WaitForSingleObject(t, INFINITE); CloseHandle(t); }
+#else
+static void test_gate_init(test_gate_t* g) { g->step = 0; pthread_mutex_init(&g->lock, NULL); pthread_cond_init(&g->cond, NULL); }
+static void test_gate_done(test_gate_t* g) { pthread_cond_destroy(&g->cond); pthread_mutex_destroy(&g->lock); }
+static void test_gate_set(test_gate_t* g, int step) {
+  pthread_mutex_lock(&g->lock); g->step = step; pthread_mutex_unlock(&g->lock);
+  pthread_cond_broadcast(&g->cond);
+}
+static void test_gate_wait(test_gate_t* g, int step) {
+  pthread_mutex_lock(&g->lock);
+  while (g->step < step) { pthread_cond_wait(&g->cond, &g->lock); }
+  pthread_mutex_unlock(&g->lock);
+}
+typedef pthread_t test_thread_t;
+static void stale_theap_worker(void);
+static void* test_thread_entry(void* arg) { (void)arg; stale_theap_worker(); return NULL; }
+static bool test_thread_start(test_thread_t* t) {
+  return (pthread_create(t, NULL, &test_thread_entry, NULL) == 0);
+}
+static void test_thread_join(test_thread_t t) { pthread_join(t, NULL); }
+#endif
+
+static test_gate_t stale_gate;
+static mi_heap_t*  stale_heap;       // published through the gate
+static bool        stale_result;
+
+static void stale_theap_worker(void) {
+  void* p = mi_heap_malloc(stale_heap, 16);  // creates this thread's theap of `stale_heap` (may leave the main theap cached)
+  mi_free(p);
+  p = mi_heap_malloc(stale_heap, 16);        // now `_mi_theap_cached` is this thread's theap of `stale_heap`
+  test_gate_set(&stale_gate, 1);
+  test_gate_wait(&stale_gate, 2);            // meanwhile: heap destroyed, new heap (likely) at the same address
+  void* q = mi_heap_malloc(stale_heap, 16);  // must not use the cached theap of the destroyed heap
+  stale_result = (p != NULL && q != NULL && mi_heap_contains(stale_heap, q));
+  mi_free(q);
+}
+
+#define STALE_MAX_HEAPS (1000)
+
+static bool test_heap_destroy_stale_theap(void) {
+  test_gate_init(&stale_gate);
+  mi_heap_t* const destroyed = mi_heap_new();
+  if (destroyed == NULL) return false;
+  stale_heap = destroyed;
+  stale_result = false;
+
+  test_thread_t thread;
+  if (!test_thread_start(&thread)) return false;
+  test_gate_wait(&stale_gate, 1);
+  mi_heap_destroy(destroyed);
+
+  // allocate heaps until one reuses the address of the destroyed heap
+  mi_heap_t* heaps[STALE_MAX_HEAPS];
+  size_t count = 0;
+  bool reused = false;
+  while (count < STALE_MAX_HEAPS) {
+    mi_heap_t* const heap = mi_heap_new();
+    if (heap == NULL) break;
+    heaps[count++] = heap;
+    if (heap == destroyed) { reused = true; break; }
+  }
+  if (count == 0) return false;
+  stale_heap = heaps[count-1];
+
+  test_gate_set(&stale_gate, 2);
+  test_thread_join(thread);
+  for (size_t i = 0; i < count; i++) { mi_heap_destroy(heaps[i]); }
+  test_gate_done(&stale_gate);
+
+  if (!reused) { fprintf(stderr, "(heap address not reused, inconclusive) "); }
+  return stale_result;
+}
