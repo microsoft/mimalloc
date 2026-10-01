@@ -284,7 +284,7 @@ jobs:
       # MSYS2 mingw64
       - name: mingw-ucrt64 x64, Setup
         if: matrix.tests == 'mingw-ucrt64'
-        uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0     
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
         with: 
           msystem: UCRT64
           install: |
@@ -314,7 +314,7 @@ jobs:
       # VM: FreeBSD (arm64 and x64)
       - name: FreeBSD arm64, Setup
         if: matrix.tests == 'freebsd-arm64'
-        uses: vmactions/freebsd-vm@f0552d3b69211736abd97f02ff3d4674c56b73b1 # v1.5.5
+        uses: vmactions/freebsd-vm@a2f9a41fa97f6848b8c3b791087dfcdaa5b473ff # v1.5.8
         with:
           arch: arm64
           custom-shell-name: freebsd-arm64
@@ -353,7 +353,7 @@ jobs:
 
       - name: FreeBSD x64, Setup
         if: matrix.tests == 'freebsd-x64'
-        uses: vmactions/freebsd-vm@f0552d3b69211736abd97f02ff3d4674c56b73b1 # v1.5.5
+        uses: vmactions/freebsd-vm@a2f9a41fa97f6848b8c3b791087dfcdaa5b473ff # v1.5.8
         with:
           arch: x86_64
           usesh: true
