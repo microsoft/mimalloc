@@ -12,6 +12,8 @@ Concurrent bitmap that can set/reset sequences of bits atomically
 #ifndef MI_BITMAP_H
 #define MI_BITMAP_H
 
+#include "mimalloc/internal.h"  // mi_assert_internal, mi_atomic_*, etc.
+
 /* --------------------------------------------------------------------------------
   Atomic bitmaps with release/acquire guarantees:
 

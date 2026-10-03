@@ -1476,9 +1476,12 @@ void* mi_aligned_offset_recalloc(void* p, size_t newcount, size_t size, size_t a
 /// @param size The size in bytes.
 /// __v3__: this can improve performance for objects with a \a size < MI_SMALL_SIZE_MAX()
 /// as it will use mi_free_small() internally. Always use this if possible.
+/// Note: it is not allowed to use mi_free_size() for aligned allocations,
+/// use mi_free_size_aligned() (mi_free()) instead.
 /// @see mi_free_tp()
 /// @see mi_free_csize()
 /// @see mi_free_size_nonnull()
+/// @see mi_free_size_aligned()
 void mi_free_size(void* p, size_t size);
 
 /// @brief Free a non-NULL pointer that was allocated with a known size.
@@ -1486,17 +1489,24 @@ void mi_free_size(void* p, size_t size);
 /// @param size The size in bytes.
 /// __v3__: this can improve performance for objects with a \a size < MI_SMALL_SIZE_MAX()
 /// as it will use mi_free_small_nonnull() internally. Always use this if possible.
+/// Note: it is not allowed to use mi_free_size() for aligned allocations,
+/// use mi_free_size_aligned() (or mi_free()) instead.
 /// @see mi_free_tp()
 /// @see mi_free_csize()
+/// @see mi_free_size_aligned()
 void mi_free_size_nonnull(void* p, size_t size);
 
 /// @brief Free an object that was allocated aligned.
 /// @param p The pointer to the object (or \a NULL )
 /// @param size The size of the object as allocated.
 /// @param alignment The requested alignment at the allocation.
-/// Currently just defers to mi_free_size()
+/// This can be faster than using mi_free() for aligned allocations.
 void mi_free_size_aligned(void* p, size_t size, size_t alignment);
 
+/// @brief Free an object that was allocated aligned.
+/// @param p The pointer to the object (or \a NULL )
+/// @param alignment The requested alignment at the allocation.
+/// At this time just defers to mi_free() but it can be optimized in the future for aligned allocations.
 void mi_free_aligned(void* p, size_t alignment);
 
 /// \}
