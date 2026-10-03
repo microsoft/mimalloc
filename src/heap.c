@@ -176,6 +176,9 @@ static void mi_heap_free_theaps(mi_heap_t* heap) {
       theap->hnext = NULL;
       theap->hprev = NULL;
       mi_assert_internal(theap->tld==NULL);
+      // clear the heap so a stale `_mi_theap_cached` entry in another thread no longer matches
+      // (a new heap can be allocated at the same address and would otherwise pick up this freed theap)
+      mi_atomic_store_ptr_release(mi_heap_t, &theap->heap, NULL);
       // merge stats into the owning heap stats
       _mi_stats_merge_into(&heap->stats, &theap->stats);
       // and free
