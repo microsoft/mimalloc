@@ -9,6 +9,21 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "this file should be included from 'alloc.c' (so aliases can work)"
 #endif
 
+// ------------------------------------------------------
+// Defined here instead of alloc-posix.c so they can be aliased below,
+// but outside of MI_MALLOC_OVERRIDE as they are part of the API.
+// ------------------------------------------------------
+
+mi_decl_nodiscard size_t mi_malloc_size(const void* p) mi_attr_noexcept {
+  if (!mi_any_heap_contains(p)) return 0;
+  return mi_usable_size(p);
+}
+
+mi_decl_nodiscard size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept {
+  if (!mi_any_heap_contains(p)) return 0;
+  return mi_usable_size(p);
+}
+
 
 #if defined(MI_MALLOC_OVERRIDE) && !defined(_DLL)
 
@@ -324,17 +339,6 @@ typedef void* mi_nothrow_t;
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-// defined here instead alloc-posix so we can alias it
-mi_decl_nodiscard size_t mi_malloc_size(const void* p) mi_attr_noexcept {
-  if (!mi_is_in_heap_region(p)) return 0;
-  return mi_usable_size(p);
-}
-
-mi_decl_nodiscard size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept {
-  if (!mi_is_in_heap_region(p)) return 0;
-  return mi_usable_size(p);
-}
 
 #ifndef MI_OSX_IS_INTERPOSED
   // Forward Posix/Unix calls as well

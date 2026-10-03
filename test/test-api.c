@@ -106,6 +106,11 @@ int main(void) {
     void* p = mi_malloc(67108872);
     mi_free(p);
   };
+  CHECK_BODY("malloc-size") {
+    void* p = mi_malloc(42);
+    result = (mi_malloc_size(p) >= 42 && mi_malloc_usable_size(p) >= 42);
+    mi_free(p);
+  };
   
   CHECK_BODY("calloc0") {
     void* p = mi_calloc(0,1000);
