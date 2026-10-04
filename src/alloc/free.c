@@ -54,6 +54,21 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   page->local_free = block;
   const bool is_empty = (mi_xused_used_count(xused) == 0);
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+
+  #if MI_STATS>=2
+  mi_theap_t* theap = mi_theap_of_page(page);
+  const size_t bsize = mi_page_usable_block_size(page);
+  const size_t bin = _mi_bin(bsize);
+  mi_theap_stat_counter_increase(theap, free_count, 1);
+  mi_theap_stat_counter_increase(theap, freed, bsize);
+  mi_theap_stat_decrease(theap, allocated, bsize);
+  if (bin != MI_BIN_HUGE) {
+    mi_theap_stat_decrease(theap, malloc_normal, bsize);
+  } else {
+    mi_theap_stat_decrease(theap, malloc_huge, bsize);
+  }
+  #endif
+
   if mi_unlikely(is_empty) {      // is used count zero ?
     if (page->retire_expire==0) { // no need to re-retire retired pages (happens when we alloc/free one block repeatedly in an empty page)
       _mi_page_retire(page); 
