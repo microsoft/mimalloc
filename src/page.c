@@ -204,17 +204,19 @@ static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, 
     const size_t bin = _mi_bin(bsize);      
     // allocations
     if (alloc_count > 0) {
-      mi_theapx_stat_counter_increase(heap, theap, malloc_normal_count, alloc_count);
-      mi_theapx_stat_increase(heap, theap, malloc_normal, allocated);
       mi_theapx_stat_increase(heap, theap, malloc_bins[bin], alloc_count);
       #if MI_STATS==1
+      mi_theapx_stat_counter_increase(heap, theap, malloc_normal_count, alloc_count);
+      mi_theapx_stat_increase(heap, theap, malloc_normal, allocated);
       // use coarse total requested bytes
       mi_theapx_stat_counter_increase(heap, theap, malloc_requested, requested);      
       #endif
     }
     // frees
     if (free_count > 0) {
+      #if MI_STATS==1
       mi_theapx_stat_decrease(heap, theap, malloc_normal, freed);
+      #endif
       mi_theapx_stat_decrease(heap, theap, malloc_bins[bin], free_count);      
     }
   }
@@ -223,16 +225,18 @@ static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, 
     mi_assert_internal(alloc_count<=1);
     mi_assert_internal(free_count<=1);    
     if (alloc_count > 0) {      
+      #if MI_STATS==1
       mi_theapx_stat_counter_increase(heap, theap, malloc_huge_count, alloc_count);
       mi_theapx_stat_increase(heap, theap, malloc_huge, allocated);
-      #if MI_STATS==1
       // use coarse total requested bytes      
       mi_theapx_stat_counter_increase(heap, theap, malloc_requested, requested);      
       #endif
     }
     // frees
     if (free_count > 0) {
+      #if MI_STATS==1
       mi_theapx_stat_decrease(heap, theap, malloc_huge, freed);
+      #endif
     }
   }
 }
