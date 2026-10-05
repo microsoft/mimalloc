@@ -157,6 +157,9 @@ static mi_theap_t* mi_theap_of_page(mi_page_t* page) {
 #endif
 
 #if MI_SAMPLE==1 /* for ==2, the countdown is already done at every `alloc.c:mi_page_alloc_zero` */
+
+// Adjust the theap->sample_countdown based on the current page allocation count
+// in the `mi_malloc_generic` function this is countdown is checked
 static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page, size_t alloc_count) 
 {
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));    
@@ -181,7 +184,7 @@ static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page,
 #endif
 
 #if MI_STATS
-// Merge stats from the page into the corresponding theap or heap.
+// Merge stats from the page into the corresponding theap (or heap if theap==NULL).
 static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, size_t alloc_count, size_t free_count ) {
   // get heap (as the theap might be NULL)
   mi_heap_t* const heap = mi_page_heap(page);
@@ -237,7 +240,7 @@ static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, 
   }
 }
 
-// Update stats for a page
+// Update stats for a page (and sample countdown)
 static void mi_theap_page_update_stats(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
   mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
@@ -282,6 +285,7 @@ static void mi_theap_page_update_stats(mi_theap_t* theap, mi_page_t* page) {
   }
 }
 
+// Update stats for a page (and sample countdown)
 void _mi_page_update_stats(mi_page_t* page) {         // called on abandoned pages etc.
   mi_theap_page_update_stats(mi_theap_of_page(page),page);
 }
@@ -292,6 +296,7 @@ void _mi_page_update_stats(mi_page_t* page) {
 }
 #endif
 
+// Update the sampling countdown based on the current allocation count of the page
 static void mi_page_update_sample_countdown(mi_page_t* page) 
 {  
   // adjust count down  
@@ -299,15 +304,15 @@ static void mi_page_update_sample_countdown(mi_page_t* page)
   if (alloc_count==0) {
     return; 
   }
-  else if mi_unlikely(alloc_count>=0x8000) {  // if the count could overflow, update stats so the counter is reset
-    _mi_page_update_stats(page);
+  else if mi_unlikely(alloc_count>=0x8000) {  // if the count could overflow, update stats so the alloc_count is reset
+    _mi_page_update_stats(page);              // calls mi_theap_adjust_sample_countdown if needed
   }
   #if MI_SAMPLE==1  // if ==2 the countdown is already always counted in `alloc.c:mi_page_alloc_zero_ex`
   else {
     mi_theap_t* theap = mi_theap_of_page(page);
     if (theap==NULL) return;
     mi_theap_adjust_sample_countdown(theap,page,alloc_count);
-    // update last_alloc to alloc_count
+    // update last_alloc to the current alloc_count
     mi_assert_internal(alloc_count <= UINT16_MAX);      
     #if MI_SIZE_SIZE >= 8
       page->xused.used_alloc = (alloc_count << 48) | (page->xused.used_alloc & (~MI_ZU(0) >> 16));
@@ -316,7 +321,6 @@ static void mi_page_update_sample_countdown(mi_page_t* page)
     #endif
     mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
     mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
-
   }
   #endif
 }
