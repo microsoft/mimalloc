@@ -22,6 +22,18 @@ static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* bl
 // Free
 // ------------------------------------------------------
 
+#if MI_STATS || MI_SAMPLE
+// Gets the theap belonging to a page.
+// FIXME: duplicated from page.c
+static mi_theap_t* mi_theap_of_page(mi_page_t* page) {
+  mi_theap_t* theap = page->theap;
+  if mi_unlikely(mi_page_thread_id(page) != _mi_prim_thread_id()) {
+    theap = _mi_page_associated_theap_peek(page);
+  }
+  return theap;
+}
+#endif
+
 // regular free of a (thread local) block pointer
 // fast path written carefully to prevent spilling on the stack
 static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool was_guarded, bool check_full)
@@ -48,6 +60,17 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   page->local_free = block;
   const bool is_empty = (mi_xused_used_count(xused) == 0);
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+
+  #if MI_STATS>=2
+  mi_theap_t* theap = mi_theap_of_page(page);
+  const size_t bsize = mi_page_usable_block_size(page);
+  if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
+    mi_theap_stat_decrease(theap, malloc_normal, bsize);
+  } else {
+    mi_theap_stat_decrease(theap, malloc_huge, bsize);
+  }
+  #endif
+
   if mi_unlikely(is_empty) {      // is used count zero ?
     if (page->retire_expire==0) { // no need to re-retire retired pages (happens when we alloc/free one block repeatedly in an empty page)
       _mi_page_retire(page); 
