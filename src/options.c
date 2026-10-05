@@ -113,6 +113,10 @@ int mi_version(void) {
 #define MI_DEFAULT_COLLECT_MERGES_STATS  1
 #endif
 
+#ifndef MI_DEFAULT_STATS_MERGE_THRESHOLD
+#define MI_DEFAULT_STATS_MERGE_THRESHOLD  0
+#endif
+
 // Static options
 static mi_option_desc_t mi_options[_mi_option_last] =
 {
@@ -186,6 +190,8 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { 0,   MI_OPTION_UNINIT, MI_OPTION(profile_inuse_interval) },  // N KiB between automatic dumps of the `MIMALLOC_PROFILE` heap profiler whenever in-use bytes grow by that amount (use `option_get_size`); 0 disables (default)
   { 0,   MI_OPTION_UNINIT, MI_OPTION(profile_time_interval) },  // N seconds between automatic dumps of the `MIMALLOC_PROFILE` heap profiler; 0 disables (default)
   { 512, MI_OPTION_UNINIT, MI_OPTION(profile_sample_rate) },      // sample rate in KiB for the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`) (=512 KiB)
+  { MI_DEFAULT_STATS_MERGE_THRESHOLD,
+         MI_OPTION_UNINIT, MI_OPTION(stats_merge_threshold) },    // on a page stats update, merge theap stats into the heap if N blocks were allocated or freed since the last merge (=0, disabled)
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
