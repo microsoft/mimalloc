@@ -201,6 +201,16 @@ static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, 
   #endif
   mi_assert_internal(allocated <= INT64_MAX);  // safe to cast to int64_t for stats
   mi_assert_internal(freed <= INT64_MAX);
+
+  if (alloc_count > 0) {
+    mi_theapx_stat_counter_increase(heap, theap, malloc_count, alloc_count);
+    mi_theapx_stat_increase(heap, theap, allocated, allocated);
+  }
+  if (free_count > 0) {
+    mi_theapx_stat_counter_increase(heap, theap, free_count, free_count);
+    mi_theapx_stat_counter_increase(heap, theap, freed, freed);
+    mi_theapx_stat_decrease(heap, theap, allocated, freed);
+  }
   
   // adjust stats
   if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
@@ -236,6 +246,15 @@ static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, 
     // frees
     if (free_count > 0) {
       mi_theapx_stat_decrease(heap, theap, malloc_huge, freed);
+    }
+  }
+
+  // merge the theap stats into the heap once N bytes were allocated or freed since the last merge
+  if (theap != NULL) {
+    const size_t threshold = mi_option_get_size(mi_option_stats_merge_threshold);
+    const int64_t churn = theap->stats.allocated.total + theap->stats.freed.total;
+    if (threshold > 0 && churn >= (int64_t)threshold) {
+      _mi_theap_merge_stats(theap);
     }
   }
 }
@@ -275,14 +294,6 @@ static void mi_theap_page_update_stats(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
 
   mi_theap_page_merge_stats(theap, page, alloc_count, free_count);
-
-  // merge the theap stats into the heap once N blocks were allocated or freed since the last merge
-  if (theap != NULL) {
-    const long threshold = mi_option_get(mi_option_stats_merge_threshold);
-    if (threshold > 0 && theap->stats.pages_stat_update_count.total >= (int64_t)threshold) {
-      _mi_theap_merge_stats(theap);
-    }
-  }
 }
 
 // Update stats for a page (and sample countdown)

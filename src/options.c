@@ -109,12 +109,12 @@ int mi_version(void) {
 #endif
 #endif
 
-#ifndef MI_DEFAULT_COLLECT_MERGES_STATS
-#define MI_DEFAULT_COLLECT_MERGES_STATS  1
+#ifndef MI_DEFAULT_STATS_MERGE_ON_COLLECT
+#define MI_DEFAULT_STATS_MERGE_ON_COLLECT  1
 #endif
 
 #ifndef MI_DEFAULT_STATS_MERGE_THRESHOLD
-#define MI_DEFAULT_STATS_MERGE_THRESHOLD  0
+#define MI_DEFAULT_STATS_MERGE_THRESHOLD   (512*1024)  // 512 KiB
 #endif
 
 // Static options
@@ -184,21 +184,30 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { MI_DEFAULT_ARENA_MAX_OBJECT_SIZE,
          MI_OPTION_UNINIT, MI_OPTION(arena_max_object_size) },    // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit).
   { 0,   MI_OPTION_UNINIT, MI_OPTION(arena_is_numa_local) },      // associate local numa node with an initial arena allocation
-  { MI_DEFAULT_COLLECT_MERGES_STATS,
-         MI_OPTION_UNINIT, MI_OPTION(collect_merges_stats) },     // on each theap collect, stats are merged with the parent heap
+  { MI_DEFAULT_STATS_MERGE_ON_COLLECT,
+         MI_OPTION_UNINIT, MI_OPTION(stats_merge_on_collect) },   // on each theap collect, stats are merged with the parent heap
   { MI_MiB, MI_OPTION_UNINIT, MI_OPTION(profile_alloc_interval) },// N KiB (=1 GiB default) between automatic dumps of the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`); 0 disables automatic dumping
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(profile_inuse_interval) },  // N KiB between automatic dumps of the `MIMALLOC_PROFILE` heap profiler whenever in-use bytes grow by that amount (use `option_get_size`); 0 disables (default)
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(profile_time_interval) },  // N seconds between automatic dumps of the `MIMALLOC_PROFILE` heap profiler; 0 disables (default)
+  { 0,   MI_OPTION_UNINIT, MI_OPTION(profile_inuse_interval) },   // N KiB between automatic dumps of the `MIMALLOC_PROFILE` heap profiler whenever in-use bytes grow by that amount (use `option_get_size`); 0 disables (default)
+  { 0,   MI_OPTION_UNINIT, MI_OPTION(profile_time_interval) },    // N seconds between automatic dumps of the `MIMALLOC_PROFILE` heap profiler; 0 disables (default)
   { 512, MI_OPTION_UNINIT, MI_OPTION(profile_sample_rate) },      // sample rate in KiB for the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`) (=512 KiB)
   { MI_DEFAULT_STATS_MERGE_THRESHOLD,
-         MI_OPTION_UNINIT, MI_OPTION(stats_merge_threshold) },    // on a page stats update, merge theap stats into the heap if N blocks were allocated or freed since the last merge (=0, disabled)
+         MI_OPTION_UNINIT, MI_OPTION(stats_merge_threshold) },    // on a page stats update, merge theap stats into the heap if N bytes were freed/allocated (=0, disabled)
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
 
+// option value is stored in KiB so it can fit a `long`
+// todo: use mi_ssize_t for options?
 static bool mi_option_has_size_in_kib(mi_option_t option) {
   return (option == mi_option_reserve_os_memory || option == mi_option_arena_reserve ||
-          option == mi_option_minimal_purge_size || option == mi_option_arena_max_object_size ||
+          option == mi_option_minimal_purge_size || option == mi_option_arena_max_object_size 
+          // || option == mi_option_profile_alloc_interval || option == mi_option_profile_inuse_interval || option == mi_option_profile_sample_rate
+         );
+}
+
+// option value is stored in bytes as a `long` is enough.
+static bool mi_option_has_size_in_bytes(mi_option_t option) {
+  return (option == mi_option_stats_merge_threshold || 
           option == mi_option_profile_alloc_interval || option == mi_option_profile_inuse_interval || option == mi_option_profile_sample_rate);
 }
 
@@ -254,7 +263,7 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
     mi_option_t option = (mi_option_t)i;
     long l = mi_option_get(option); MI_UNUSED(l); // possibly initialize
     mi_option_desc_t* desc = &mi_options[option];
-    _mi_fprintf(out, arg, "option '%s': %ld %s\n", desc->name, desc->value, (mi_option_has_size_in_kib(option) ? "KiB" : ""));
+    _mi_fprintf(out, arg, "option '%s': %ld %s\n", desc->name, desc->value, (mi_option_has_size_in_kib(option) ? "KiB" : (mi_option_has_size_in_bytes(option) ? "B" : "")));
   }
 
   // show build configuration  
@@ -682,19 +691,26 @@ static void mi_option_init(mi_option_desc_t* desc) {
       char* end = buf;
       errno = 0;
       long value = strtol(buf, &end, 10);
-      if (errno==0 && mi_option_has_size_in_kib(desc->option)) {
-        // this option is interpreted in KiB to prevent overflow of `long` for large allocations
-        // (long is 32-bit on 64-bit windows, which allows for 4TiB max.)
+      if (errno==0 && (mi_option_has_size_in_kib(desc->option) || mi_option_has_size_in_bytes(desc->option))) {
+        // this option is interpreted in bytes. 
         size_t size = (value < 0 ? 0 : (size_t)value);
         bool overflow = false;
         if (*end == 'K') { end++; }
-        else if (*end == 'M') { overflow = mi_mul_overflow(size,MI_KiB,&size); end++; }
-        else if (*end == 'G') { overflow = mi_mul_overflow(size,MI_MiB,&size); end++; }
-        else if (*end == 'T') { overflow = mi_mul_overflow(size,MI_GiB,&size); end++; }
-        else { size = (size + MI_KiB - 1) / MI_KiB; }
+        #if MI_SIZE_SIZE >= 4        
+        else if (*end == 'M') { overflow = mi_mul_overflow(size,MI_MiB,&size); end++; }
+        else if (*end == 'G') { overflow = mi_mul_overflow(size,MI_GiB,&size); end++; }
+        #endif
+        #if MI_SIZE_SIZE >= 8
+        else if (*end == 'T') { overflow = mi_mul_overflow(size,MI_GiB * MI_KiB,&size); end++; }
+        #endif        
         if (end[0] == 'I' && end[1] == 'B') { end += 2; } // KiB, MiB, GiB, TiB
         else if (*end == 'B') { end++; }                  // Kb, Mb, Gb, Tb
-        if (overflow || size > (MI_MAX_ALLOC_SIZE / MI_KiB)) { size = (MI_MAX_ALLOC_SIZE / MI_KiB); }
+        if (overflow || size > MI_MAX_ALLOC_SIZE) { size = MI_MAX_ALLOC_SIZE; }        
+        if (mi_option_has_size_in_kib(desc->option)) {
+          // This option is interpreted in KiB to prevent overflow of `long` for large allocations
+          // (long is 32-bit on 64-bit windows, which allows for 4TiB max.)
+          size = (size + MI_KiB - 1) / MI_KiB;  // no overflow due to check before this
+        }
         value = (size > LONG_MAX ? LONG_MAX : (long)size);
       }
       if (errno==0 && *end == 0) {
