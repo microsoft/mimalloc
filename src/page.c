@@ -145,7 +145,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
 }
 #endif
 
-#if MI_STATS || MI_SAMPLE
+#if MI_STATS || (MI_SAMPLE==1)
 // Gets the theap belonging to a page.
 static mi_theap_t* mi_theap_of_page(mi_page_t* page) {
   mi_theap_t* theap = page->theap;

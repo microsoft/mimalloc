@@ -189,28 +189,12 @@ static void mi_print_decimal(int64_t n, mi_output_fun* out, void* arg) {
 //   mi_print_number(n, out, arg, true, false, 1024);
 // }
 
-
-static void mi_print_empty(mi_output_fun* out, void* arg) {
-  _mi_fprintf(out, arg, "%12s", " ");
-}
 static void mi_print_label(const char* label, mi_output_fun* out, void* arg) {
   _mi_fprintf(out, arg, "  %-12s:", label);
 }
+
 static void mi_print_newline(mi_output_fun* out, void* arg) {
   _mi_fprintf(out, arg, "\n");
-}
-static void mi_print_check(const mi_stat_count_t* stat, mi_output_fun* out, void* arg, const char* not_ok) {
-  _mi_fprintf(out, arg, "  %s\n", (stat->current==0 ? "ok" : (not_ok == NULL ? "not all freed" : not_ok)));    
-}
-
-static void mi_print_stat_bin(const mi_stat_count_t* stat, const char* msg, int64_t blocksize, int64_t total, mi_output_fun* out, void* arg) {
-  mi_print_label(msg, out, arg);
-  mi_print_size(stat->peak * blocksize, out, arg);
-  mi_print_size(stat->total * blocksize, out, arg);
-  mi_print_size(stat->current * blocksize, out, arg);
-  mi_print_size(blocksize, out, arg);
-  mi_print_decimal(total, out, arg);
-  mi_print_check(stat, out, arg, NULL);
 }
 
 static void mi_print_stat_decimal(const mi_stat_count_t* stat, const char* msg, mi_output_fun* out, void* arg) {
@@ -228,15 +212,6 @@ static void mi_print_stat_size(const mi_stat_count_t* stat, const char* msg, mi_
   mi_print_size(stat->current, out, arg);
   mi_print_newline(out, arg);
 }
-
-#if MI_STATS
-static void mi_print_stat_total_size(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg) {
-  mi_print_label(msg, out, arg);
-  mi_print_empty(out, arg);  // no peak
-  mi_print_size(stat->total, out, arg);
-  mi_print_newline(out, arg);
-}
-#endif
 
 static void mi_print_stat_counter(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg ) {
   mi_print_label(msg, out, arg);
@@ -258,17 +233,41 @@ static void mi_print_average(int64_t count, int64_t total, const char* msg, mi_o
   _mi_fprintf(out, arg, " %5lld.%lld avg\n", avg_whole, avg_frac1);
 }
 
+static void mi_print_header(const char* name, mi_output_fun* out, void* arg ) {
+  _mi_fprintf(out, arg, " %-13s %11s %11s %11s\n", name, "peak   ", "total   ", "current   ");
+}
+
+#if MI_STATS
+static void mi_print_empty(mi_output_fun* out, void* arg) {
+  _mi_fprintf(out, arg, "%12s", " ");
+}
+
+static void mi_print_stat_total_size(const mi_stat_counter_t* stat, const char* msg, mi_output_fun* out, void* arg) {
+  mi_print_label(msg, out, arg);
+  mi_print_empty(out, arg);  // no peak
+  mi_print_size(stat->total, out, arg);
+  mi_print_newline(out, arg);
+}
+
+static void mi_print_check(const mi_stat_count_t* stat, mi_output_fun* out, void* arg, const char* not_ok) {
+  _mi_fprintf(out, arg, "  %s\n", (stat->current==0 ? "ok" : (not_ok == NULL ? "not all freed" : not_ok)));    
+}
+
+static void mi_print_stat_bin(const mi_stat_count_t* stat, const char* msg, int64_t blocksize, int64_t total, mi_output_fun* out, void* arg) {
+  mi_print_label(msg, out, arg);
+  mi_print_size(stat->peak * blocksize, out, arg);
+  mi_print_size(stat->total * blocksize, out, arg);
+  mi_print_size(stat->current * blocksize, out, arg);
+  mi_print_size(blocksize, out, arg);
+  mi_print_decimal(total, out, arg);
+  mi_print_check(stat, out, arg, NULL);
+}
 
 static void mi_print_header_bins(const char* name, mi_output_fun* out, void* arg ) {
   _mi_fprintf(out, arg, " %-13s %11s %11s %11s %11s %11s\n",
                         name, "peak   ", "total   ", "current   ", "block   ", "total#   ");
 }
 
-static void mi_print_header(const char* name, mi_output_fun* out, void* arg ) {
-  _mi_fprintf(out, arg, " %-13s %11s %11s %11s\n", name, "peak   ", "total   ", "current   ");
-}
-
-#if MI_STATS
 static bool mi_stats_print_bins(const mi_stat_count_t* bins, const mi_stat_count_t* stat_huge, size_t max, mi_output_fun* out, void* arg) {
   bool found = false;
   char buf[64];

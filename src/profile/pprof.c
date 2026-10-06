@@ -533,7 +533,7 @@ static size_t mi_prim_backtrace(void** buffer, size_t max_depth, size_t* hash) {
   return 0; 
 }
 
-void mi_pprof_profiler_snapshot(mi_profiler_t* profiler) {
+void mi_pprof_profiler_snapshot(mi_pprof_profiler_t* profiler) {
   MI_UNUSED(profiler);
 }
 
