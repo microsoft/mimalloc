@@ -394,7 +394,10 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
       return;
     }    
   #endif
-  #if MI_PAGE_META_SMALL_IS_ALIGNED || MI_PAGE_META_IS_ALIGNED
+  
+  // note: only use `mi_free_small` if small allocations are aligned.
+  // this allows building with `-DMI_OPT_FREE_SMALL=OFF` in case wrong sizes are passed to `mi_free_size`, see issue #1423
+  #if MI_PAGE_META_SMALL_IS_ALIGNED  
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {
     mi_free_small(p); 
   }
