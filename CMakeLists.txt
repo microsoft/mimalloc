@@ -78,6 +78,9 @@ set_property(CACHE MI_WIN_INIT PROPERTY STRINGS "CRT_TLS" "RAW_DLLMAIN" "TLS_DLL
 set(MI_TLS_MODEL "DEFAULT" CACHE STRING "Force TLS model: LOCAL (thread local variables), PTHREADS (pthread locals), LOCAL_DYNAMIC (dlopen-compatible thread local storage mechanism (Unix)), WIN32 (direct Windows TLS slots), FIXED (fixed thread local slots), DEFAULT.")
 set_property(CACHE MI_TLS_MODEL PROPERTY STRINGS "LOCAL" "PTHREADS" "LOCAL_DYNAMIC" "WIN32" "FIXED" "DEFAULT")
 
+set(MI_OPT_FREE_SMALL "DEFAULT" CACHE STRING "Use aligned `mi_free_small` without pagemap lookup; set this OFF if `mi_free_size` can be called with wrong sizes.")
+set_property(CACHE MI_OPT_FREE_SMALL PROPERTY STRINGS "OFF" "ON" "DEFAULT")
+
 # deprecated options
 option(MI_USE_LIBATOMIC       "Deprecated: Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
 option(MI_DEBUG_INTERNAL      "Deprecated: Enable assertion and internal invariant checks (use MI_DEBUG=INTERNAL instead)" OFF)
@@ -95,9 +98,6 @@ option(MI_WIN_DIRECT_TLS      "Deprecated: Use only direct TLS slots on Windows 
 option(MI_TRACK_VALGRIND      "Deprecated: Compile with Valgrind support (adds a small overhead) (use MI_TRACK=VALGRIND instead)" OFF)
 option(MI_TRACK_ASAN          "Deprecated: Compile with address sanitizer support (adds a small overhead) (use MI_TRACK=ASAN instead)" OFF)
 option(MI_TRACK_ETW           "Deprecated: Compile with Windows event tracing (ETW) support (adds a small overhead) (use MI_TRACK=ETW instead)" OFF)
-
-set(MI_OPT_FREE_SMALL "DEFAULT" CACHE STRING "Deprecated: Use aligned `mi_free_small` without pagemap lookup (can only be used if SECURE or GUARDED mode are off)")
-set_property(CACHE MI_OPT_FREE_SMALL PROPERTY STRINGS "OFF" "ON" "DEFAULT")
 
 include(CheckLinkerFlag)    # requires cmake 3.18
 include(CheckIncludeFiles)

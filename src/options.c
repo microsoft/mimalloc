@@ -117,6 +117,10 @@ int mi_version(void) {
 #define MI_DEFAULT_STATS_MERGE_THRESHOLD   (512*1024)  // 512 KiB
 #endif
 
+#ifndef MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE
+#define MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE  (MI_LARGE_PAGE_SIZE / MI_KiB)  // in KiB
+#endif
+
 // Static options
 static mi_option_desc_t mi_options[_mi_option_last] =
 {
@@ -180,7 +184,7 @@ static mi_option_desc_t mi_options[_mi_option_last] =
          MI_OPTION_UNINIT, MI_OPTION(page_cross_thread_max_reclaim) }, // don't reclaim (small) pages across threads if we already own N pages in that size class
   { MI_DEFAULT_ALLOW_THP,
          MI_OPTION_UNINIT, MI_OPTION(allow_thp) },                // allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(minimal_purge_size) },       // set minimal purge size (in KiB) (=0). Using 0 resolves to either 64 (or 2048 if THP is enabled).
+  { 0,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(arena_purge_min_size, minimal_purge_size) },       // set minimal purge size (in KiB) (=0). Using 0 resolves to either 64 (or 2048 if THP is enabled).
   { MI_DEFAULT_ARENA_MAX_OBJECT_SIZE,
          MI_OPTION_UNINIT, MI_OPTION(arena_max_object_size) },    // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit).
   { 0,   MI_OPTION_UNINIT, MI_OPTION(arena_is_numa_local) },      // associate local numa node with an initial arena allocation
@@ -192,6 +196,9 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { 512, MI_OPTION_UNINIT, MI_OPTION(profile_sample_rate) },      // sample rate in KiB for the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`) (=512 KiB)
   { MI_DEFAULT_STATS_MERGE_THRESHOLD,
          MI_OPTION_UNINIT, MI_OPTION(stats_merge_threshold) },    // on a page stats update, merge theap stats into the heap if N bytes were freed/allocated (=0, disabled)
+  { MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE,
+         MI_OPTION_UNINIT, MI_OPTION(arena_purge_immediate_size) }, // ranges above this size are purged immediately
+  
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
@@ -200,7 +207,8 @@ static void mi_option_init(mi_option_desc_t* desc);
 // todo: use mi_ssize_t for options?
 static bool mi_option_has_size_in_kib(mi_option_t option) {
   return (option == mi_option_reserve_os_memory || option == mi_option_arena_reserve ||
-          option == mi_option_minimal_purge_size || option == mi_option_arena_max_object_size 
+          option == mi_option_arena_purge_min_size || option == mi_option_arena_purge_immediate_size || 
+          option == mi_option_arena_max_object_size 
           // || option == mi_option_profile_alloc_interval || option == mi_option_profile_inuse_interval || option == mi_option_profile_sample_rate
          );
 }

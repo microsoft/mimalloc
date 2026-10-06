@@ -337,6 +337,7 @@ mi_decl_export bool   mi_manage_os_memory(void* start, size_t size, bool is_comm
 
 mi_decl_export void   mi_debug_show_arenas(void) mi_attr_noexcept;
 mi_decl_export void   mi_arenas_print(void) mi_attr_noexcept;
+mi_decl_export void   mi_arenas_purge(void) mi_attr_noexcept;
 mi_decl_export size_t mi_arena_min_alignment(void);
 mi_decl_export size_t mi_arena_min_size(void);
 mi_decl_export size_t mi_arena_max_object_size(void);
@@ -493,7 +494,7 @@ typedef enum mi_option_e {
   mi_option_page_max_reclaim,           // don't reclaim pages of the same originating theap if we already own N pages (in that size class) (=-1 (unlimited))
   mi_option_page_cross_thread_max_reclaim, // don't reclaim pages across threads if we already own N pages (in that size class) (=32)
   mi_option_allow_thp,                  // allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
-  mi_option_minimal_purge_size,         // set minimal purge size (in KiB) (=0). By default set to either 64 or 2048 if THP is enabled.
+  mi_option_arena_purge_min_size,       // set minimal purge size (in KiB) (=0). By default set to either 64 or 2048 if THP is enabled.
   mi_option_arena_max_object_size,      // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit). 
   mi_option_arena_is_numa_local,        // experimental: associate local numa node with an initial arena allocation
   mi_option_stats_merge_on_collect,     // on each theap collection, the theap stats are merged automatically with the parent heap
@@ -502,13 +503,15 @@ typedef enum mi_option_e {
   mi_option_profile_time_interval,      // number of seconds between automatic dumps of the `MIMALLOC_PROFILE` heap profiler (=0, disabled)
   mi_option_profile_sample_rate,        // sample rate (in bytes) for the `MIMALLOC_PROFILE` heap profiler (internally, this value is in KiB; use `mi_option_get_size`) (=16 KiB)
   mi_option_stats_merge_threshold,      // on a page stats update, merge theap stats into the parent heap if N bytes were freed/allocated (=0, disabled)
+  mi_option_arena_purge_immediate_size, // ranges above this size are purged immediately
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,
   mi_option_eager_region_commit = mi_option_arena_eager_commit,
   mi_option_reset_decommits = mi_option_purge_decommits,
   mi_option_reset_delay = mi_option_purge_delay,
-  mi_option_limit_os_alloc = mi_option_disallow_os_alloc
+  mi_option_limit_os_alloc = mi_option_disallow_os_alloc,
+  mi_option_minimal_purge_size = mi_option_arena_purge_min_size
 } mi_option_t;
 
 

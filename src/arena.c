@@ -2314,7 +2314,7 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_
   if (arena->memid.is_pinned || delay < 0 || _mi_preloading()) return;  // is purging allowed at all?
 
   mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
-  if (delay == 0) {
+  if (delay == 0 || mi_size_of_slices(slice_count) >= mi_option_get_size(mi_option_arena_purge_immediate_size)) {
     // purge directly
     mi_arena_purge(arena, slice_index, slice_count);
   }
@@ -2456,6 +2456,10 @@ static void mi_arenas_try_purge(bool force, bool visit_all, mi_subproc_t* subpro
       mi_atomic_storei64_release(&subproc->purge_expire, (mi_msecs_t)0);
     }
   }
+}
+
+void mi_arenas_purge(void) mi_attr_noexcept {
+  mi_arenas_try_purge(true, true, _mi_subproc_main(), 0);
 }
 
 
