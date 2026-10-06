@@ -202,53 +202,36 @@ static void mi_theap_page_merge_stats(mi_theap_t* theap, const mi_page_t* page, 
   mi_assert_internal(allocated <= INT64_MAX);  // safe to cast to int64_t for stats
   mi_assert_internal(freed <= INT64_MAX);
 
+  // adjust stats
+  const size_t bin = _mi_bin(bsize);
   if (alloc_count > 0) {
     mi_theapx_stat_counter_increase(heap, theap, malloc_count, alloc_count);
     mi_theapx_stat_increase(heap, theap, allocated, allocated);
+    mi_theapx_stat_increase(heap, theap, malloc_bins[bin], alloc_count);
+    if (bin==MI_BIN_HUGE) { mi_theapx_stat_increase(heap,theap,malloc_huge,allocated); } // separate so we have a count and total
+    #if MI_STATS==1
+    // use coarse total requested bytes
+    mi_theapx_stat_counter_increase(heap, theap, malloc_requested, requested);      
+    #endif
+    // deprecated
+    if (bin!=MI_BIN_HUGE) { 
+      mi_theapx_stat_counter_increase(heap, theap, malloc_normal_count, alloc_count); 
+      mi_theapx_stat_increase(heap, theap, malloc_normal, allocated);
+    }
+    else {
+      mi_theapx_stat_counter_increase(heap, theap, malloc_huge_count, alloc_count);
+    }
   }
   if (free_count > 0) {
     mi_theapx_stat_counter_increase(heap, theap, free_count, free_count);
     mi_theapx_stat_counter_increase(heap, theap, freed, freed);
     mi_theapx_stat_decrease(heap, theap, allocated, freed);
+    mi_theapx_stat_decrease(heap, theap, malloc_bins[bin], free_count);      
+    if (bin==MI_BIN_HUGE) { mi_theapx_stat_decrease(heap, theap, malloc_huge, freed); }
+    // deprecated
+    if (bin!=MI_BIN_HUGE) { mi_theapx_stat_decrease(heap, theap, malloc_normal, freed); }      
   }
   
-  // adjust stats
-  if (bsize <= MI_LARGE_MAX_OBJ_SIZE) {
-    const size_t bin = _mi_bin(bsize);      
-    // allocations
-    if (alloc_count > 0) {
-      mi_theapx_stat_counter_increase(heap, theap, malloc_normal_count, alloc_count);
-      mi_theapx_stat_increase(heap, theap, malloc_normal, allocated);
-      mi_theapx_stat_increase(heap, theap, malloc_bins[bin], alloc_count);
-      #if MI_STATS==1
-      // use coarse total requested bytes
-      mi_theapx_stat_counter_increase(heap, theap, malloc_requested, requested);      
-      #endif
-    }
-    // frees
-    if (free_count > 0) {
-      mi_theapx_stat_decrease(heap, theap, malloc_normal, freed);
-      mi_theapx_stat_decrease(heap, theap, malloc_bins[bin], free_count);      
-    }
-  }
-  else {
-    // allocations
-    mi_assert_internal(alloc_count<=1);
-    mi_assert_internal(free_count<=1);    
-    if (alloc_count > 0) {      
-      mi_theapx_stat_counter_increase(heap, theap, malloc_huge_count, alloc_count);
-      mi_theapx_stat_increase(heap, theap, malloc_huge, allocated);
-      #if MI_STATS==1
-      // use coarse total requested bytes      
-      mi_theapx_stat_counter_increase(heap, theap, malloc_requested, requested);      
-      #endif
-    }
-    // frees
-    if (free_count > 0) {
-      mi_theapx_stat_decrease(heap, theap, malloc_huge, freed);
-    }
-  }
-
   // merge the theap stats into the heap once N bytes were allocated or freed since the last merge
   if (theap != NULL) {
     const size_t threshold = mi_option_get_size(mi_option_stats_merge_threshold);
