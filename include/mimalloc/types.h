@@ -198,9 +198,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #if MI_PAGE_META_IS_SEPARATED && MI_PAGE_MAP_FLAT
 #error "cannot have a flat page map with separated page infos"
 #endif
-#if MI_DEBUG && NDEBUG
-#warning "mimalloc assertions enabled in a release build"
-#endif
+
 
 // --------------------------------------------------------------
 // Sizes of internal data-structures

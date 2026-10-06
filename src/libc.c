@@ -16,6 +16,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/internal.h"
 #include "mimalloc/prim.h"      // mi_prim_getenv
 
+#if MI_DEBUG && NDEBUG
+#warning "mimalloc assertions enabled in a release build"
+#endif
+
 char _mi_toupper(char c) {
   if (c >= 'a' && c <= 'z') return (c - 'a' + 'A');
                        else return c;
