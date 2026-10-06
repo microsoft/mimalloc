@@ -383,18 +383,16 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
     if mi_unlikely(size > usable) { 
       const bool is_guarded = mi_block_ptr_is_guarded(block,p);
       if (!is_guarded) {
-        _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size but the size %zu is greater than the usable size %zu\n", p, size, usable);
+        _mi_error_message(EINVAL, "pointer %p is freed with 'mi_free_size' but the size %zu is greater than the usable size %zu\n", p, size, usable);
         mi_free(p);
         return;
       }
     }
-    #if MI_PAGE_META_SMALL_IS_ALIGNED
     else if mi_unlikely(size <= MI_SMALL_SIZE_MAX && !mi_page_is_small(page)) {
-      _mi_error_message(EINVAL, "pointer %p is freed with mi_free_size with size %zu <= MI_SMALL_SIZE_MAX but it is allocated in a non-small page with block size %zu\n  hint: maybe a mismatched delete operator?\n", p, size, mi_page_block_size(page));
+      _mi_error_message(EINVAL, "pointer %p is freed with 'mi_free_size' with size %zu (<= MI_SMALL_SIZE_MAX), but it was allocated in a non-small page with block size %zu -- maybe a mismatched delete operator?\n", p, size, mi_page_block_size(page));
       mi_free(p);
       return;
-    }
-    #endif
+    }    
   #endif
   #if MI_PAGE_META_SMALL_IS_ALIGNED || MI_PAGE_META_IS_ALIGNED
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {

@@ -1020,6 +1020,9 @@ static inline bool mi_page_is_used_at_frac(const mi_page_t* page, uint16_t n) {
   return (page->reserved - mi_page_used(page) <= frac);
 }
 
+static inline bool mi_page_is_small(const mi_page_t* page) {
+  return (page->block_size <= MI_SMALL_MAX_OBJ_SIZE && !mi_page_is_singleton(page));
+}
 
 static inline bool mi_page_is_huge(const mi_page_t* page) {
   return (mi_page_is_singleton(page) &&
