@@ -605,17 +605,11 @@ void mi_process_init(void) mi_attr_noexcept {
   }
 }
 
-
-// Called when the process is done
-static void mi_process_done_once(void) {
-  // only shutdown if we were initialized
-  if (!_mi_process_is_initialized) return;
-  // ensure we are called once
-  static bool process_done = false;
-  if (process_done) return;
-  process_done = true;
-
-  _mi_pprof_profiler_done();  
+// Called once on process exit (when the process/dll is exiting gracefully)
+static void mi_process_unwind_once(void) 
+{
+  // stop the profiler
+  _mi_pprof_profiler_done();
 
   // decref any cached theap
   _mi_theap_cached_set(_mi_theap_empty_get());
@@ -623,14 +617,14 @@ static void mi_process_done_once(void) {
   // release any thread specific resources and ensure _mi_thread_done is called on all but the main thread
   _mi_prim_thread_done_auto_done();
 
-  #ifndef MI_SKIP_COLLECT_ON_EXIT
-    #if (MI_DEBUG || !defined(MI_SHARED_LIB))
-    // free all memory if possible on process exit. This is not needed for a stand-alone process
-    // but should be done if mimalloc is statically linked into another shared library which
-    // is repeatedly loaded/unloaded, see issue #281.
-    mi_theap_collect(_mi_theap_default(), true /* force */);
-    #endif
-  #endif
+#ifndef MI_SKIP_COLLECT_ON_EXIT
+#if (MI_DEBUG || !defined(MI_SHARED_LIB))
+  // free all memory if possible on process exit. This is not needed for a stand-alone process
+  // but should be done if mimalloc is statically linked into another shared library which
+  // is repeatedly loaded/unloaded, see issue #281.
+  mi_theap_collect(_mi_theap_default(), true /* force */);
+#endif
+#endif
 
   // done with tracking tools
   mi_track_done();
@@ -658,16 +652,35 @@ static void mi_process_done_once(void) {
   }
 
   _mi_tls_slots_done();
+}
+
+// Called when the process is done
+static void mi_process_done_once(void) {
+  // only shutdown if we were initialized
+  if (!_mi_process_is_initialized) return;
+  // ensure we are called once
+  static bool process_done = false;
+  if (process_done) return;
+  process_done = true;
+
+  const size_t thread_count = mi_atomic_load_acquire(&_mi_subproc_main()->thread_count);
+  if (thread_count == 1 || !_mi_prim_process_is_killed()) {  // can we safely take locks?
+    mi_process_unwind_once();
+    _mi_verbose_message("process done: 0x%zx\n", mi_process_tld_main.thread_id);
+  }
+
   _mi_subproc_main_done();
   _mi_allocator_done();
-  _mi_verbose_message("process done %zu\n", sizeof(mi_page_t)); // : 0x%zx\n", mi_process_tld_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore
 }
 
 
 // Call when the process is done (cdecl as it is used with `at_exit` on some platforms)
 void mi_cdecl mi_process_done(void) mi_attr_noexcept {
-  mi_atomic_do_once {
+  // we don't use `mi_atomic_do_once` here to avoid deadlocks if threads are killed due to a forced exit (issue #1377)
+  static _Atomic(size_t) mi_process_is_done;
+  size_t expected = 0;
+  if (mi_atomic_cas_strong_acq_rel(&mi_process_is_done, &expected, 1)) {
     mi_process_done_once();
   }
 }

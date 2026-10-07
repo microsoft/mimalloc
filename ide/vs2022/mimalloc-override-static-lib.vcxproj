@@ -486,8 +486,11 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|ARM64EC'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\..\src\page.c" />
+    <ClCompile Include="..\..\src\profile\pprof.c" />
     <ClCompile Include="..\..\src\random.c" />
     <ClCompile Include="..\..\src\os.c" />
+    <ClCompile Include="..\..\src\sample-guarded.c" />
+    <ClCompile Include="..\..\src\sample-profile.c" />
     <ClCompile Include="..\..\src\stats.c" />
     <ClCompile Include="..\..\src\subproc.c" />
     <ClCompile Include="..\..\src\theap.c" />

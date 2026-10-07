@@ -153,7 +153,7 @@ void _mi_pprof_profiler_done(void) {
   mi_profiler_stop(profiler);
   _mi_verbose_message("pprof profiler done\n");
   mi_profiler_snapshot(profiler);    // final snapshot so short-lived processes still get a complete profile
-  mi_profile(NULL);              // detach from the main sub-process
+  mi_profile(NULL);                  // detach from the main sub-process
   mi_pprof_profiler_delete(profiler);
   #endif
 }

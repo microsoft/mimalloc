@@ -17,7 +17,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim.h"      // mi_prim_getenv
 
 #if MI_DEBUG && NDEBUG
+#if defined(_MSC_VER)
+#pragma message("mimalloc assertions enabled in a release build")
+#else
 #warning "mimalloc assertions enabled in a release build"
+#endif
 #endif
 
 char _mi_toupper(char c) {

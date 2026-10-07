@@ -1006,18 +1006,16 @@ static inline bool mi_page_is_full(const mi_page_t* page) {
   return full;
 }
 
-// is more than 7/8th of a page in use?
-static inline bool mi_page_is_mostly_used(const mi_page_t* page) {
+// is more than (1 - 1/n)'th of a page in use?
+static inline bool mi_page_is_used_at_frac(const mi_page_t* page, size_t n) {
   if (page==NULL) return true;
-  uint16_t frac = page->reserved / 8U;
+  const size_t frac = page->reserved / n;
   return (page->reserved - mi_page_used(page) <= frac);
 }
 
-// is more than (n-1)/n'th of a page in use?
-static inline bool mi_page_is_used_at_frac(const mi_page_t* page, uint16_t n) {
-  if (page==NULL) return true;
-  uint16_t frac = page->reserved / n;
-  return (page->reserved - mi_page_used(page) <= frac);
+// is more than 7/8th of a page in use?
+static inline bool mi_page_is_mostly_used(const mi_page_t* page) {
+  return mi_page_is_used_at_frac(page, 8);
 }
 
 static inline bool mi_page_is_small(const mi_page_t* page) {

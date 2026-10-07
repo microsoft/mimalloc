@@ -100,7 +100,7 @@ static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_pag
   mi_assert_expensive(mi_theap_page_is_valid(theap, pq, page, NULL, NULL));
   mi_collect_t collect = *((mi_collect_t*)arg_collect);
   _mi_page_free_collect(page, collect >= MI_FORCE);  // update used count
-  _mi_page_update_stats(page);                       
+  _mi_page_update_stats(page);
   if (mi_page_all_free(page)) {
     // no more used blocks, possibly free the page.
     if (collect >= MI_FORCE || page->retire_expire == 0) {  // either forced/abandon, or not already retired
@@ -116,7 +116,7 @@ static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_pag
 }
 
 void _mi_theap_merge_stats(mi_theap_t* theap) {
-  mi_assert_internal(mi_theap_is_initialized(theap));  
+  mi_assert_internal(mi_theap_is_initialized(theap));
   mi_heap_t* const heap = _mi_theap_heap(theap);
   _mi_stats_merge_into(&heap->stats, &theap->stats);
 }
@@ -127,13 +127,15 @@ static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
   mi_assert_expensive(mi_theap_is_valid(theap));
 
   const bool force = (collect >= MI_FORCE);
-  _mi_deferred_free(theap, force);
+  if (collect != MI_ABANDON) {     // skip on thread shutdown to avoid running user-code after process exit (issue #1377)
+    _mi_deferred_free(theap, force);
+  }
 
   // python/cpython#112532: we may be called from a thread that is not the owner of the theap
   // const bool is_main_thread = (_mi_is_main_thread() && theap->thread_id == _mi_thread_id());
 
   // collect retired pages (and full pages if theap->allow_page_abandon is false)
-  _mi_theap_collect_retired(theap, force); 
+  _mi_theap_collect_retired(theap, force);
 
   // collect all pages owned by this thread
   mi_theap_visit_pages(theap, &mi_theap_page_collect, (collect!=MI_NORMAL), &collect, NULL);  // dont normally visit full pages, see issue #1220
@@ -208,7 +210,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   _mi_memcpy_aligned(theap, &_mi_theap_empty, sizeof(mi_theap_t));
   theap->memid = memid;
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
-  mi_atomic_store_release(&theap->refcount,1);  
+  mi_atomic_store_release(&theap->refcount,1);
   mi_atomic_store_ptr_release(mi_subproc_t,&theap->subproc,heap->subproc);
   mi_assert_internal(theap->stats.size == sizeof(mi_stats_t));
   mi_theap_options_init(theap);
@@ -231,23 +233,26 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
     theap->tprev = NULL;
     theap->tnext = head;
     theap->tld->theaps = theap;
-    if (head!=NULL) { 
-      head->tprev = theap; 
+    if (head!=NULL) {
+      head->tprev = theap;
       head_random = head->random;
-    }    
+    }
   }
 
   // initialize random if heap==NULL
   if (head==NULL) {  // first theap of the first thread?
-    #if defined(_WIN32) && !defined(MI_SHARED_LIB)
-    if (tld->thread_seq==0) {
-      _mi_random_init_weak(&theap->random);    // prevent allocation failure during bcrypt dll initialization with static linking (issue #1185)
-    }
-    else
-    #endif
-    {
-      _mi_random_init(&theap->random);
-    }
+    // will be initialized on the first random_next/split call. (see #1377, W20)
+
+    // #if defined(_WIN32) && !defined(MI_SHARED_LIB)
+    // if (tld->thread_seq==0) {
+    //   _mi_random_init_weak(&theap->random);    // prevent allocation failure during bcrypt dll initialization with static linking (issue #1185)
+    // }
+    // else
+    // #endif
+    // {
+    //   _mi_random_init(&theap->random);
+    // }
+
   }
   else {
     _mi_random_split(&head_random, &theap->random); // &theap->random is used as nonce so it is ok if threads capture the same head->random
@@ -260,7 +265,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
 
   // only now set the heap member as it is used to determine if a theap is initialized
   mi_atomic_store_ptr_release(mi_heap_t,&theap->heap,heap);
-  
+
   // push on the heap's theap list
   mi_lock(&heap->theaps_lock) {
     head = heap->theaps;
@@ -280,7 +285,7 @@ mi_theap_t* _mi_theap_alloc(mi_heap_t* heap, mi_tld_t* tld) {
   // allocate and initialize a theap
   mi_memid_t memid;
   mi_theap_t* theap;
-  
+
   if (heap->exclusive_arena == NULL) {
     theap = (mi_theap_t*)_mi_meta_zalloc(heap->subproc, sizeof(mi_theap_t), &memid);
   }
@@ -288,7 +293,7 @@ mi_theap_t* _mi_theap_alloc(mi_heap_t* heap, mi_tld_t* tld) {
     // theaps associated with a specific arena are allocated in that arena
     // note: takes up at least one slice which is quite wasteful...
     const size_t size = _mi_align_up(sizeof(mi_theap_t),MI_ARENA_MIN_OBJ_SIZE);
-    theap = (mi_theap_t*)_mi_arenas_alloc(heap, size, true, true, heap->exclusive_arena, tld->thread_seq, tld->numa_node, &memid);    
+    theap = (mi_theap_t*)_mi_arenas_alloc(heap, size, true, true, heap->exclusive_arena, tld->thread_seq, tld->numa_node, &memid);
   }
   if (theap==NULL) {
     _mi_error_message(ENOMEM, "unable to allocate theap meta-data\n");
@@ -312,9 +317,9 @@ size_t _mi_theap_random_next(mi_theap_t* theap) {
 
 static void mi_theap_free_mem(mi_theap_t* theap) {
   if (theap!=NULL) {
-    mi_subproc_t* const subproc = mi_atomic_load_ptr_relaxed(mi_subproc_t,&theap->subproc);      
+    mi_subproc_t* const subproc = mi_atomic_load_ptr_relaxed(mi_subproc_t,&theap->subproc);
     if (!theap->is_detached) {
-      mi_subproc_stat_decrease(subproc,theaps,1);  
+      mi_subproc_stat_decrease(subproc,theaps,1);
     }
     _mi_meta_free(subproc, theap, theap->memid);
   }
@@ -335,7 +340,7 @@ void _mi_theap_decref(mi_theap_t* theap) {
   }
 }
 
-// Thread termination and heap delete/destroy might run concurrently 
+// Thread termination and heap delete/destroy might run concurrently
 // and we need to ensure we free the memory correctly. A heap or tld
 // will first "detach" its theaps so it has a list with theaps that are
 // no longer shared, and only then free's the theaps in that list.
@@ -352,14 +357,14 @@ void _mi_heap_detach_theaps( mi_heap_t* heap ) {
       mi_theap_t* theap = heap->theaps;
       while (theap != NULL) {
         mi_theap_t* next = theap->hnext;
-        mi_tld_t* tld = theap->tld; 
+        mi_tld_t* tld = theap->tld;
         if (tld != NULL) {
           if (mi_lock_try_acquire(&tld->theaps_lock)) {
             // remove the theap from the tld theaps list
             if (theap->tnext != NULL) { theap->tnext->tprev = theap->tprev;  }
             if (theap->tprev != NULL) { theap->tprev->tnext = theap->tnext;  }
                                 else { mi_assert_internal(theap->tld->theaps == theap); theap->tld->theaps = theap->tnext; }
-            theap->tnext = theap->tprev = NULL;       
+            theap->tnext = theap->tprev = NULL;
             theap->tld = NULL;
             mi_lock_release(&tld->theaps_lock);
           }

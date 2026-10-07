@@ -133,4 +133,9 @@ bool _mi_prim_thread_is_in_threadpool(void);
 // Is called only in rare situations and does not have to be lightning fast.
 void _mi_prim_thread_yield(void);
 
+// Return `true` if the process is forcefully shutdown (with potentially killed threads that might still hold a lock)
+// If this returns true, mimalloc skips graceful shutdown (as locks might still be held by threads that are killed).
+// See also issue #1377
+bool _mi_prim_process_is_killed(void);
+
 #endif  // MI_PRIM_H

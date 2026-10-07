@@ -188,7 +188,7 @@ size_t _mi_prim_numa_node_count(void) {
 // low resolution timer
 static mi_msecs_t mi_prim_clock_now_lowres(void) {
   const int64_t ticks = (int64_t)clock();
-  #if !defined(CLOCKS_PER_SEC) 
+  #if !defined(CLOCKS_PER_SEC)
     return ticks;
   #else
     if (CLOCKS_PER_SEC <= 0 || CLOCKS_PER_SEC == 1000) {
@@ -210,12 +210,12 @@ mi_msecs_t _mi_prim_clock_now(void) {
     #else
     const clockid_t clockid = CLOCK_REALTIME;
     #endif
-    struct timespec t;  
+    struct timespec t;
     if (clock_gettime(clockid,&t) == 0) {
       return ((mi_msecs_t)t.tv_sec * 1000) + ((mi_msecs_t)t.tv_nsec / 1000000L);
     }
-  #endif  
-  return mi_prim_clock_now_lowres();  
+  #endif
+  return mi_prim_clock_now_lowres();
 }
 
 
@@ -294,4 +294,8 @@ bool _mi_prim_thread_is_in_threadpool(void) {
 
 void _mi_prim_thread_yield(void) {
   sleep(0);
+}
+
+bool _mi_prim_process_is_killed(void) {
+  return false;
 }

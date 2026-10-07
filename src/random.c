@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2019-2021, Microsoft Research, Daan Leijen
+Copyright (c) 2019-2026, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -126,21 +126,19 @@ static void chacha_split(mi_random_ctx_t* ctx, uint64_t nonce, mi_random_ctx_t* 
 Random interface
 -----------------------------------------------------------------------------*/
 
-#if MI_DEBUG>1
 static bool mi_random_is_initialized(mi_random_ctx_t* ctx) {
   return (ctx != NULL && ctx->input[0] != 0);
 }
-#endif
 
 void _mi_random_split(mi_random_ctx_t* ctx, mi_random_ctx_t* ctx_new) {
-  mi_assert_internal(mi_random_is_initialized(ctx));
-  mi_assert_internal(ctx != ctx_new);  
+  mi_assert_internal(ctx != ctx_new);
+  if mi_unlikely(!mi_random_is_initialized(ctx)) { _mi_random_init(ctx); }
   const uintptr_t nonce_rnd = _mi_random_next(ctx);
   chacha_split(ctx, (uintptr_t)ctx_new ^ nonce_rnd /*nonce*/, ctx_new);
 }
 
 size_t _mi_random_next(mi_random_ctx_t* ctx) {
-  mi_assert_internal(mi_random_is_initialized(ctx));
+  if mi_unlikely(!mi_random_is_initialized(ctx)) { _mi_random_init(ctx); }
   size_t r;
   do {
     #if MI_SIZE_SIZE <= 4
@@ -181,12 +179,12 @@ static void mi_random_init_ex(mi_random_ctx_t* ctx, bool use_weak) {
     if (!use_weak) { _mi_warning_message("unable to use secure randomness\n"); }
     #endif
     size_t x = _mi_os_random_weak(0);
-    for (size_t i = 0; i < 32; i+=4, x++) {  
+    for (size_t i = 0; i < 32; i+=4, x++) {
       x = _mi_random_shuffle(x);
       key[i]   = (uint8_t)(x);
       key[i+1] = (uint8_t)(x>>8);
       key[i+2] = (uint8_t)(x>>16);
-      key[i+3] = (uint8_t)(x>>24);      
+      key[i+3] = (uint8_t)(x>>24);
     }
     ctx->weak = true;
   }

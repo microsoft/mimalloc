@@ -155,7 +155,7 @@ size_t _mi_prim_numa_node_count(void) {
 
 mi_msecs_t _mi_prim_clock_now(void) {
   // todo: use a monotonic clock instead
-  return emscripten_date_now();  
+  return emscripten_date_now();
 }
 
 
@@ -260,4 +260,8 @@ bool _mi_prim_thread_is_in_threadpool(void) {
 
 void _mi_prim_thread_yield(void) {
   sched_yield();
+}
+
+bool _mi_prim_process_is_killed(void) {
+  return false;
 }

@@ -71,12 +71,14 @@ typedef BOOL (__stdcall* PGetNumaNodeProcessorMaskEx)(USHORT Node, PGROUP_AFFINI
 typedef BOOL (__stdcall *PGetNumaProcessorNode)(UCHAR Processor, PUCHAR NodeNumber);
 typedef BOOL (__stdcall* PGetNumaNodeProcessorMask)(UCHAR Node, PULONGLONG ProcessorMask);
 typedef BOOL (__stdcall* PGetNumaHighestNodeNumber)(PULONG Node);
+typedef BOOL (__stdcall* PRtlDllShutdownInProgress)(VOID);
 static PGetCurrentProcessorNumberEx pGetCurrentProcessorNumberEx = NULL;
 static PGetNumaProcessorNodeEx      pGetNumaProcessorNodeEx = NULL;
 static PGetNumaNodeProcessorMaskEx  pGetNumaNodeProcessorMaskEx = NULL;
 static PGetNumaProcessorNode        pGetNumaProcessorNode = NULL;
 static PGetNumaNodeProcessorMask    pGetNumaNodeProcessorMask = NULL;
 static PGetNumaHighestNodeNumber    pGetNumaHighestNodeNumber = NULL;
+static PRtlDllShutdownInProgress    pRtlDllShutdownInProgress = NULL;
 
 // Not available on xbox
 typedef SIZE_T(__stdcall* PGetLargePageMinimum)(VOID);
@@ -206,6 +208,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   hDll = mi_win_getlibrary(TEXT("ntdll.dll"), &hDllFree);
   if (hDll != NULL) {
     pNtAllocateVirtualMemoryEx = (PNtAllocateVirtualMemoryEx)(void (*)(void))GetProcAddress(hDll, "NtAllocateVirtualMemoryEx");
+    pRtlDllShutdownInProgress = (PRtlDllShutdownInProgress)(void (*)(void))GetProcAddress(hDll, "RtlDllShutdownInProgress");
     mi_win_freelibrary(hDll, hDllFree);
   }
   // Try to use Win7+ numa API
@@ -753,6 +756,15 @@ void _mi_prim_thread_yield(void) {
   SwitchToThread();
 }
 
+bool _mi_prim_process_is_killed(void) {
+  if (pRtlDllShutdownInProgress != NULL) {
+    return (*pRtlDllShutdownInProgress)();
+  }
+  else {
+    return false;
+  }
+}
+
 //----------------------------------------------------------------
 // Process & Thread Init/Done
 //----------------------------------------------------------------
@@ -809,10 +821,14 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     return ((imageNtHeaders->FileHeader.Characteristics & IMAGE_FILE_DLL) == IMAGE_FILE_DLL);
   }
 
+  extern "C" IMAGE_DOS_HEADER __ImageBase;   // supplied by the linker
+
   static bool mi_current_module_is_dll(void) {
-    HMODULE mod = NULL;
-    const BOOL ok = GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)mi_current_module_is_dll, &mod);
-    return (ok && mi_module_is_dll(mod));
+    // HMODULE mod = NULL;
+    // const BOOL ok = GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)mi_current_module_is_dll, &mod);
+    // return (ok && mi_module_is_dll(mod));
+    const HMODULE mod = (HMODULE)(&__ImageBase);
+    return mi_module_is_dll(mod);
   }
 
   // Hook into CRT initialization and finalization.
@@ -868,7 +884,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 
   typedef int (mi_cdecl* mi_crt_callback_t)(void);
 
-  #if defined(_WIN64) && defined(_MSC_VER) // 64-bit
+  #if (defined(_WIN64) || defined(_M_ARM)) && defined(_MSC_VER) // no underscore
     #pragma comment(linker, "/INCLUDE:_tls_used")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_post")
@@ -885,7 +901,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
       extern const mi_crt_callback_t _mi_crt_callback_init[];
       const mi_crt_callback_t _mi_crt_callback_init[] = { &mi_crt_init };
     #pragma const_seg()
-  #elif defined(_MSC_VER) // 32-bit
+  #elif defined(_MSC_VER) // x86 32-bit, add underscore
     #pragma comment(linker, "/INCLUDE:__tls_used")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_post")
@@ -974,7 +990,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   extern "C" {
   #endif
 
-  #if defined(_WIN64) && defined(_MSC_VER) // 64-bit
+  #if (defined(_WIN64) || defined(_M_ARM)) && defined(_MSC_VER) // no underscore
     #pragma comment(linker, "/INCLUDE:_tls_used")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_post")
@@ -986,7 +1002,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
       extern const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[];
       const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_tls_detach };
     #pragma const_seg()
-  #elif defined(_MSC_VER) // 32-bit
+  #elif defined(_MSC_VER) // x86 32-bit
     #pragma comment(linker, "/INCLUDE:__tls_used")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_post")
@@ -1048,7 +1064,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   extern "C" {
   #endif
 
-  #if defined(_WIN64) && defined(_MSC_VER) // 64-bit
+  #if (defined(_WIN64) || defined(_M_ARM)) && defined(_MSC_VER) // no underscore
     #pragma comment(linker, "/INCLUDE:_tls_used")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:_mi_tls_callback_post")
@@ -1060,7 +1076,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     extern const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[];
     const PIMAGE_TLS_CALLBACK _mi_tls_callback_post[] = { &mi_win_main_detach };
     #pragma const_seg()
-  #elif defined(_MSC_VER) // 32-bit
+  #elif defined(_MSC_VER) // x86 32-bit
     #pragma comment(linker, "/INCLUDE:__tls_used")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_pre")
     #pragma comment(linker, "/INCLUDE:__mi_tls_callback_post")
@@ -1073,8 +1089,8 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   #elif defined(__MINGW32__)
     extern const IMAGE_TLS_DIRECTORY _tls_used;
     __attribute__((used)) static const void* const mi_tls_used_ref = &_tls_used; // pull in the CRT tls
-    __attribute__((used, section(".CRT$XLB"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_pre  = &mi_tls_attach;
-    __attribute__((used, section(".CRT$XLY"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_post = &mi_tls_detach;
+    __attribute__((used, section(".CRT$XLB"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_pre  = &mi_win_main_attach;
+    __attribute__((used, section(".CRT$XLY"))) PIMAGE_TLS_CALLBACK _mi_tls_callback_post = &mi_win_main_detach;
   #endif
 
   #if defined(__cplusplus)

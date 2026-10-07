@@ -22,7 +22,10 @@ public:
 
 static Static s = Static();
 
-void Test(void) {
+#ifdef __cplusplus
+extern "C"
+#endif
+void __cdecl Test(void) {
   char* s = mi_mallocn_tp(char, 128);
   #ifdef _WIN32
   strcpy_s(s, 128, "hello world!");
@@ -33,7 +36,7 @@ void Test(void) {
   mi_free(s);
 }
 
-#ifdef WIN32
+#ifdef _WIN32
 #include <windows.h>
 
 BOOL WINAPI DllMain(HINSTANCE module, DWORD reason, LPVOID reserved) {

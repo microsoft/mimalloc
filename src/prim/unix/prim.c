@@ -1065,3 +1065,7 @@ bool _mi_prim_thread_is_in_threadpool(void) {
 void _mi_prim_thread_yield(void) {
   sleep(0);
 }
+
+bool _mi_prim_process_is_killed(void) {
+  return false;  // todo: can we detect when exit_group has been called and threads have been killed (potentially holding locks?)
+}

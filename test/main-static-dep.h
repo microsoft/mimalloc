@@ -4,7 +4,7 @@
 extern "C" {
 #endif
 
-#ifdef WIN32
+#ifdef _WIN32
 typedef void (__cdecl *TestFun)(void);
 __declspec(dllexport) void __cdecl Test(void);
 #else

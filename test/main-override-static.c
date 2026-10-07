@@ -53,7 +53,7 @@ int main() {
   // invalid_free();  
   // block_overflow1();
   // block_overflow2();
-  test_canary_leak();
+  // test_canary_leak();
   // test_aslr();
   // test_reserved();
   // negative_stat();

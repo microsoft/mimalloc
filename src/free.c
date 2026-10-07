@@ -462,7 +462,7 @@ static bool mi_abandoned_page_try_reabandon_to_mapped(mi_page_t* page)
 {
   // if the page is unmapped, try to reabandon so it can possibly be mapped and found for allocations
   // We only reabandon if a full page starts to have enough blocks available to prevent immediate re-abandon of a full page
-  if (mi_page_is_mostly_used(page)) return false;   // not too full
+  if (mi_page_is_mostly_used(page)) return false;   // not too full (1/8th should be free)
   if (page->memid.memkind != MI_MEM_ARENA || mi_page_is_abandoned_mapped(page)) return false;  // and not already mapped (or unmappable)
 
   mi_assert(!mi_page_is_full(page));
@@ -535,8 +535,8 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
     max_reclaim = _mi_option_get_fast(theap->tld->is_in_threadpool ? mi_option_page_cross_thread_max_reclaim : mi_option_page_max_reclaim);
   }
   else if (reclaim_on_free == 1 &&               // if cross-thread is allowed
-            !theap->tld->is_in_threadpool &&      // and we are not part of a threadpool
-            !mi_page_is_mostly_used(page) &&     // and the page is not too full
+            !theap->tld->is_in_threadpool &&     // and we are not part of a threadpool
+            !mi_page_is_used_at_frac(page,4) &&  // and at least 1/4th of the page is free
             _mi_arena_memid_is_suitable(page->memid, _mi_theap_heap(theap)->exclusive_arena)) {   // and it fits our memory
     // across threads
     max_reclaim = _mi_option_get_fast(mi_option_page_cross_thread_max_reclaim);
