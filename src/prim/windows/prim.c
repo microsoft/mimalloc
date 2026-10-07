@@ -821,7 +821,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     return ((imageNtHeaders->FileHeader.Characteristics & IMAGE_FILE_DLL) == IMAGE_FILE_DLL);
   }
 
-  extern "C" IMAGE_DOS_HEADER __ImageBase;   // supplied by the linker
+  mi_decl_externc IMAGE_DOS_HEADER __ImageBase;   // supplied by the linker
 
   static bool mi_current_module_is_dll(void) {
     // HMODULE mod = NULL;
