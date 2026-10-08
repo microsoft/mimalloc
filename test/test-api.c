@@ -483,6 +483,25 @@ int main(void) {
       mi_free(p);
     }
   }
+
+  CHECK_BODY("free_size_mismatch_large") {  // issue #1423
+    for (int round = 0; round < 100; round++) {
+      void* blocks[64];
+      for (int i = 0; i < 64; i++) {
+        const size_t sz = 2000 + (size_t)(i % 7) * 3000;
+        blocks[i] = mi_malloc(sz);
+        if (blocks[i] == NULL) { result = false; return; }
+      }
+      for (int i = 0; i < 64; i++) {
+        mi_free_size(blocks[i], 4);  // mimatched sized delete (e.g. sizeof(small struct))
+      }
+      for (int i = 0; i < 200; i++) {
+        void* junk = mi_malloc(3000);
+        mi_free(junk);
+      }
+    }
+  }
+
   // ---------------------------------------------------
   // Returned block sizes
   // ---------------------------------------------------

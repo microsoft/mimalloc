@@ -399,7 +399,13 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
   // this allows building with `-DMI_OPT_FREE_SMALL=OFF` in case wrong sizes are passed to `mi_free_size`, see issue #1423
   #if MI_PAGE_META_SMALL_IS_ALIGNED  
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {
-    mi_free_small(p); 
+    mi_page_t* page = NULL;
+    if (mi_ptr_page_is_valid(p, "mi_free_size", &page) && mi_page_is_small(page)) {
+      mi_free_nonnull(p, page, NULL, true /* allow reclaim? */);
+    }
+    else {
+      mi_free(p);
+    }
   }
   else 
   #endif
