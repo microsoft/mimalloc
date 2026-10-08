@@ -525,7 +525,6 @@ size_t _mi_prim_numa_node(void) {
 }
 
 size_t _mi_prim_numa_node_count(void) {
-  #if defined(MS_WINDOWS_DESKTOP)
   ULONG numa_max = 0;
   if (pGetNumaHighestNodeNumber!=NULL) {
     (*pGetNumaHighestNodeNumber)(&numa_max);
@@ -551,10 +550,7 @@ size_t _mi_prim_numa_node_count(void) {
     // max node was invalid or had no processor assigned, try again
     numa_max--;
   }
-  return ((size_t)numa_max + 1);
-  #else
-  return 1; // assume no NUMA on UWP
-  #endif
+  return ((size_t)numa_max + 1);  
 }
 
 
