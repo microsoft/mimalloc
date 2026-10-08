@@ -12,6 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim.h"
 #include <stdio.h>   // fputs, stderr
 #include <stdlib.h>  // atexit
+#include <bcrypt.h>  // NTSTATUS
 
 // xbox has no console IO and cannot use LoadLibrary or GetModuleHandle
 #if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)
@@ -525,6 +526,7 @@ size_t _mi_prim_numa_node(void) {
 }
 
 size_t _mi_prim_numa_node_count(void) {
+  #if defined(MS_WINDOWS_DESKTOP)
   ULONG numa_max = 0;
   if (pGetNumaHighestNodeNumber!=NULL) {
     (*pGetNumaHighestNodeNumber)(&numa_max);
@@ -551,6 +553,9 @@ size_t _mi_prim_numa_node_count(void) {
     numa_max--;
   }
   return ((size_t)numa_max + 1);
+  #else
+  return 1; // assume no NUMA on UWP
+  #endif
 }
 
 
