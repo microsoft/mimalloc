@@ -312,7 +312,7 @@ typedef enum mi_memkind_e {
   MI_MEM_OS,        // allocated from the OS
   MI_MEM_OS_HUGE,   // allocated as huge OS pages (usually 1GiB, pinned to physical memory)
   MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
-  MI_MEM_ARENA,     // allocated from an arena (the usual case) (`arena.c`)
+  MI_MEM_ARENA,     // allocated from an arena (the usual case) (`arena-alloc.c`)
   MI_MEM_MALLOC     // allocated with mi_malloc
 } mi_memkind_t;
 
@@ -671,7 +671,7 @@ struct mi_theap_s {
 struct mi_arena_pages_s;
 typedef struct mi_arena_pages_s mi_arena_pages_t;
 
-#define MI_MAX_ARENAS   (160)   // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `mi_arena_reserve`)
+#define MI_MAX_ARENAS   (160)   // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `_mi_arena_reserve`)
                                 // 160 arenas is enough for ~2 TiB memory
 
 // A dynamic thread-local variable; 0 for an invalid thread-local

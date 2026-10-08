@@ -17,7 +17,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
   // certain blocks are always allocated at a certain natural alignment.
-  // (see also `arena.c:mi_arenas_page_alloc_fresh`).
+  // (see also `arena-page.c:mi_arenas_page_alloc_fresh`).
   mi_assert_internal(mi_alignment_is_valid(alignment));
   if (alignment > size) return false;
   const size_t bsize = mi_good_size(size);

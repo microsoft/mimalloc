@@ -248,7 +248,7 @@ void          _mi_thread_locals_init(void);
 void          _mi_thread_locals_done(void);
 void          _mi_thread_locals_thread_done(void);
 
-// arena.c
+// arena.c, arena-alloc.c, arena-page.c
 mi_arena_id_t _mi_arena_id_none(void);
 mi_arena_t*   _mi_arena_from_id(mi_arena_id_t id);
 bool          _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_t* request_arena);
@@ -311,8 +311,8 @@ void          _mi_theap_merge_stats(mi_theap_t* theap);
 void          _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap, mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id);
 void          _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
 mi_decl_cold  mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap);  // get (and possible create) the theap belonging to a heap
-void          _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to);  // in "arena.c"
-void          _mi_heap_destroy_pages(mi_heap_t* heap_from);                   // in "arena.c"
+void          _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to);  // in "arena-page.c"
+void          _mi_heap_destroy_pages(mi_heap_t* heap_from);                   // in "arena-page.c"
 void          _mi_heap_force_destroy(mi_heap_t* heap, bool acquire_heaps_lock); // allow destroying the main heap
 mi_heap_t*    _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool is_heap_main);
 bool          _mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap);

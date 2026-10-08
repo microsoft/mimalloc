@@ -486,7 +486,7 @@ void _mi_page_map_unregister(mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   mi_page_map_t* const pmap = _mi_page_map();
-  // note: should proceed even if the page was not registered yet (for failure paths in page allocation in `arena.c`)
+  // note: should proceed even if the page was not registered yet (for failure paths in page allocation in `arena-page.c`)
   if mi_unlikely(pmap == NULL) return;
   // get index and count
   size_t slice_count;
