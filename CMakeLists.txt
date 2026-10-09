@@ -894,7 +894,7 @@ endif()
 # set language for source files now
 if(MI_USE_CXX)
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
-  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-stress-pprof.c test/test-profile.c test/test-pprof.c PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-arena.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-stress-pprof.c test/test-profile.c test/test-pprof.c PROPERTIES LANGUAGE CXX )
 endif()
 
 # platform specific headers that are only needed for profiling support
@@ -1185,7 +1185,10 @@ if (MI_BUILD_TESTS)
   enable_testing()
 
   # static link tests
-  foreach(TEST_NAME api api-fill stress-heaps stress-subprocs stress stress-pprof profile pprof)
+  foreach(TEST_NAME api api-fill arena stress-heaps stress-subprocs stress stress-pprof profile pprof)
+    if(TEST_NAME STREQUAL "arena" AND (NOT MI_BUILD_STATIC OR MI_DEBUG_TSAN))
+      continue()
+    endif()
     add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
     target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
     target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})

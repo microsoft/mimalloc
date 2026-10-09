@@ -54,7 +54,6 @@ bool _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_t* request_arena) {
   }
 }
 
-
 size_t mi_arena_min_alignment(void) {
   return MI_ARENA_ALIGNMENT;
 }
@@ -62,7 +61,6 @@ size_t mi_arena_min_alignment(void) {
 size_t mi_arena_min_size(void) {
   return MI_ARENA_MIN_SIZE;
 }
-
 
 // fixed limit for the maximum object size in an arena
 static size_t mi_arena_max_fixed_object_size(void) {
@@ -88,12 +86,6 @@ size_t mi_arena_max_object_size(void) {
   }
 }
 
-
-/* -----------------------------------------------------------
-  Util
------------------------------------------------------------ */
-
-
 // Size of an arena
 static size_t mi_arena_size(mi_arena_t* arena) {
   return mi_size_of_slices(arena->slice_count);
@@ -112,6 +104,110 @@ void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
   return mi_arena_start(arena);
 }
 
+
+
+/* -----------------------------------------------------------
+  Arena iteration
+----------------------------------------------------------- */
+
+static bool mi_arena_is_suitable_ex(mi_arena_t* arena, mi_arena_t* req_arena, bool match_numa, int numa_node, bool allow_pinned) {
+  if (!allow_pinned && arena->memid.is_pinned) return false;
+  if (!mi_arena_is_suitable(arena, req_arena)) return false;
+  if (req_arena == NULL) { // if not specific, check numa affinity
+    const bool numa_suitable = (numa_node < 0 || arena->numa_node < 0 || arena->numa_node == numa_node);
+    if (match_numa) { if (!numa_suitable) return false; }
+               else { if (numa_suitable)  return false; }
+  }
+  return true;
+}
+
+// determine the start of search; important to keep heaps and threads
+// into their own memory regions to reduce contention.
+static size_t mi_arena_start_idx(mi_heap_t* heap, size_t tseq, size_t arena_cycle) 
+{
+  const size_t hseq   = heap->heap_seq;
+  const size_t hcount = mi_atomic_load_relaxed(&heap->subproc->heap_count);
+  if (arena_cycle <= 1)     return 0;
+  if (hseq==0 || hcount<=1 || arena_cycle > 0x8FF) return (tseq % arena_cycle); // common for single heap programs
+
+  // spread heaps evenly among arena's, and then evenly for threads in their fraction
+  size_t start;
+  mi_assert_internal(arena_cycle <= 0x8FF);             // prevent overflow on 32-bit
+  const size_t frac = (arena_cycle * 256) / hcount;     // fraction in the arena_cycle; at most: arena_cycle * 0x100
+  if (frac==0) {
+    // many heaps (> 256 per arena)
+    start = (hseq % arena_cycle);
+  }
+  else {
+    const size_t hspot = (hseq % hcount);
+    start = (frac * hspot) / 256;           // (arena_cycle * (hseq % hcount)) / hcount
+    if (frac >= 512) {                      // at least 2 arena's per heap?
+      start = start + (tseq % (frac/256));
+    }
+  }
+  mi_assert_internal(start < arena_cycle);
+  return start;
+}
+
+bool mi_forall_arenas(mi_heap_t* heap, mi_arena_t* req_arena, size_t tseq, mi_forall_arena_fun_t* visit, const void* arg, void** result) 
+{
+  if (result != NULL) *result = NULL;
+  const size_t arena_count = mi_arenas_get_count(heap->subproc);
+  const size_t arena_cycle = (arena_count == 0 ? 0 : arena_count - 1); /* first search the arenas below the last one */
+  /* always start searching in the arena's below the max */
+  const size_t start = (req_arena==NULL ? mi_arena_start_idx(heap,tseq,arena_cycle) : req_arena->arena_idx);
+  mi_assert_internal(start <= arena_count);
+  for (size_t i = 0; i < arena_count; i++) {
+    size_t idx;
+    if (i < arena_cycle) {
+      idx = i + start;
+      if (idx >= arena_cycle) { idx -= arena_cycle; } /* adjust so we rotate through the cycle */
+    }
+    else {
+      idx = i; /* remaining arena's after the cycle */
+    }
+    mi_arena_t* arena = mi_arena_from_index(heap->subproc,idx);
+    if (req_arena != NULL && arena != req_arena &&
+        (arena == NULL || arena->parent != req_arena)) continue; /* only the requested arena or its children */
+    
+    // call the visitor
+    if (arena != NULL) {
+      if (!visit(arena, arg, result)) return false;
+    }
+  }
+  return true;
+}
+
+typedef struct mi_arena_suitable_visit_info_s {
+  mi_arena_t*            req_arena;
+  bool                   match_numa;
+  int                    numa_node;
+  bool                   allow_large;
+  mi_forall_arena_fun_t* visit;
+  const void*            arg;
+} mi_arena_suitable_visit_info_t;
+
+static bool mi_arena_visit_suitable(mi_arena_t* arena, const void* arg, void** result) 
+{
+  const mi_arena_suitable_visit_info_t* info = (const mi_arena_suitable_visit_info_t*)arg;
+  if (!mi_arena_is_suitable_ex(arena, info->req_arena, info->match_numa, info->numa_node, info->allow_large)) {
+    return true; // skip and continue
+  }
+  else {
+    return info->visit(arena, info->arg, result); // visit
+  }
+}
+
+bool mi_forall_suitable_arenas(mi_heap_t* heap, mi_arena_t* req_arena, size_t tseq, bool match_numa, int numa_node,
+                              bool allow_large, mi_forall_arena_fun_t* visit, const void* arg, void** result) {
+  const mi_arena_suitable_visit_info_t info = { req_arena, match_numa, numa_node, allow_large, visit, arg };
+  return mi_forall_arenas(heap, req_arena, tseq, &mi_arena_visit_suitable, &info, result);
+}
+
+
+/* -----------------------------------------------------------
+  Reserve a fresh arena
+----------------------------------------------------------- */
 
 static int mi_reserve_os_memory_ex2(mi_subproc_t* subproc, size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id);
 
@@ -450,6 +546,11 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
   if (!mi_arenas_add(subproc, arena, arena_id)) { return NULL;  }
   return arena;
 }
+
+
+/* -----------------------------------------------------------
+  Reserve and manage OS memory (as an arena)
+----------------------------------------------------------- */
 
 static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t size, int numa_node, bool exclusive,
   mi_memid_t memid, mi_commit_fun_t* commit_fun, void* commit_fun_arg, mi_arena_id_t* arena_id) mi_attr_noexcept
