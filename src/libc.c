@@ -13,7 +13,9 @@ terms of the MIT license. A copy of the license can be found in the file
 // --------------------------------------------------------
 
 #include "mimalloc.h"
-#include "mimalloc/internal.h"
+#include "mimalloc/internal/libc.h"
+#include "mimalloc/internal/options.h"
+#include "mimalloc/internal/prim-tls.h"
 #include "mimalloc/prim.h"      // mi_prim_getenv
 
 #if MI_DEBUG && NDEBUG

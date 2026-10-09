@@ -6,7 +6,9 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc.h"
-#include "mimalloc/internal.h"
+#include "mimalloc/internal/memid.h"
+#include "mimalloc/internal/page.h"
+#include "mimalloc/internal/subproc.h"
 #include "bitmap.h"
 
 static void mi_page_map_cannot_commit(void) {

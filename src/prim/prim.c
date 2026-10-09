@@ -26,6 +26,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #endif
 
+#include "mimalloc/internal/init.h"
+#include "mimalloc/internal/prim.h"
+
 // Generic process initialization
 #if !defined(MI_PRIM_HAS_PROCESS_ATTACH)
 #if defined(__GNUC__) || defined(__clang__)

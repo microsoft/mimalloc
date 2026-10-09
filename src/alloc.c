@@ -9,7 +9,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #include "mimalloc.h"
-#include "mimalloc/internal.h"
+#include "mimalloc/internal/alloc.h"
+#include "mimalloc/internal/free.h"
+#include "mimalloc/internal/sample-profile.h"
+#include "mimalloc/internal/stats.h"
 #include "mimalloc/atomic.h"
 #include "mimalloc/prim-tls.h"   // _mi_prim_thread_id()
 

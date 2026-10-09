@@ -9,7 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MI_PAGE_QUEUE_H
 #define MI_PAGE_QUEUE_H
 
-#include "mimalloc/internal.h"
+#include "mimalloc/internal/page.h"
 
 #if (MI_DEBUG>1)
 bool mi_page_queue_contains(mi_page_queue_t* queue, const mi_page_t* page);

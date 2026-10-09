@@ -21,8 +21,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #include "mimalloc.h"
-#include "mimalloc/internal.h"
+#include "mimalloc/internal/init.h"
+#include "mimalloc/internal/libc.h"
+#include "mimalloc/internal/options.h"
+#include "mimalloc/internal/os.h"
 #include "mimalloc/prim.h"
+#include "mimalloc/track.h"
 
 #include <sys/mman.h>  // mmap
 #include <unistd.h>    // sysconf, sleep

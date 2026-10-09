@@ -9,7 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MI_ARENA_H
 #define MI_ARENA_H
 
-#include "mimalloc/internal.h"
+#include "mimalloc/internal/arena.h"
 #include "bitmap.h"
 
 bool                    _mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_large, mi_arena_id_t* arena_id);

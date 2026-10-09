@@ -12,7 +12,10 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc.h"
-#include "mimalloc/internal.h"
+#include "mimalloc/internal/memid.h"
+#include "mimalloc/internal/options.h"
+#include "mimalloc/internal/subproc.h"
+#include "mimalloc/internal/threadlocal.h"
 #include "mimalloc/prim.h"
 
 /* -----------------------------------------------------------

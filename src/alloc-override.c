@@ -9,6 +9,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "this file should be included from 'alloc.c' (so aliases can work)"
 #endif
 
+#include "mimalloc/track.h"
+
 // ------------------------------------------------------
 // Defined here instead of alloc-posix.c so they can be aliased below,
 // but outside of MI_MALLOC_OVERRIDE as they are part of the API.

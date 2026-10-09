@@ -5,7 +5,12 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
-#include "mimalloc/internal.h"
+#include "mimalloc/internal/memid.h"
+#include "mimalloc/internal/pprof.h"
+#include "mimalloc/internal/prim.h"
+#include "mimalloc/internal/random.h"
+#include "mimalloc/internal/sample-profile.h"
+#include "mimalloc/internal/stats.h"
 #include "mimalloc/prim.h"
 #include "mimalloc/prim-tls.h"
 

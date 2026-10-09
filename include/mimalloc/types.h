@@ -30,6 +30,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdbool.h>  // bool
 #include <limits.h>   // SIZE_MAX etc.
 #include <errno.h>    // error codes
+
+#include "decl.h"     // compiler dependent definitions
 #include "bits.h"     // size defines (MI_SIZE_SIZE etc), bit operations
 #include "atomic.h"   // _Atomic primitives
 

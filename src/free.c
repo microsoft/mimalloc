@@ -6,11 +6,16 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 #if !defined(MI_IN_ALLOC_C)
 #error "this file should be included from 'alloc.c' (so aliases can work from alloc-override)"
-// add includes help an IDE
-#include "mimalloc.h"
-#include "mimalloc/internal.h"
-#include "mimalloc/prim-tls.h"   // _mi_prim_thread_id()
 #endif
+
+#include "mimalloc.h"
+#include "mimalloc/internal/arena-page.h"
+#include "mimalloc/internal/arena.h"
+#include "mimalloc/internal/free.h"
+#include "mimalloc/internal/page-queue.h"
+#include "mimalloc/internal/sample-guarded.h"
+#include "mimalloc/internal/stats.h"
+#include "mimalloc/prim-tls.h"   // _mi_prim_thread_id()
 
 
 // forward declarations

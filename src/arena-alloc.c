@@ -6,7 +6,10 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc.h"
-#include "mimalloc/internal.h"
+#include "mimalloc/internal/arena-alloc.h"
+#include "mimalloc/internal/free.h"
+#include "mimalloc/internal/memid.h"
+#include "mimalloc/internal/stats.h"
 #include "mimalloc/prim-tls.h"
 #include "arena.h"
 

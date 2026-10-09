@@ -111,6 +111,78 @@
     <ClInclude Include="..\..\include\mimalloc\internal.h">
       <Filter>Headers</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\libc.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\options.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\random.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\prim.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\prim-tls.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\subproc.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\init.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\os.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\threadlocal.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\arena.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\memid.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\arena-alloc.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\arena-page.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\page-map.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\page.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\page-queue.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\theap.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\heap.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\stats.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\alloc.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\free.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\sample-guarded.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\sample-profile.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\internal\pprof.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
     <ClInclude Include="$(ProjectDir)..\..\include\mimalloc.h">
       <Filter>Headers</Filter>
     </ClInclude>

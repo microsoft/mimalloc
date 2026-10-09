@@ -9,7 +9,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MIMALLOC_PRIM_TLS_H
 
 #include "types.h"
-#include "internal.h"             // mi_decl_hidden
+#include "internal/heap.h"
+#include "internal/page.h"
+#include "internal/theap.h"
+#include "internal/threadlocal.h"
 
 // --------------------------------------------------------------------------
 // We need fast access to both a unique thread id (in `free.c:mi_free`) and

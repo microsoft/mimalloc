@@ -5,7 +5,8 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
-#include "mimalloc/internal.h"
+#include "mimalloc/internal/sample-guarded.h"
+#include "mimalloc/internal/stats.h"
 #include "mimalloc/prim-tls.h"
 
 mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed) {

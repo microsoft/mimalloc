@@ -6,7 +6,9 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc.h"
-#include "mimalloc/internal.h"
+#include "mimalloc/internal/alloc.h"
+#include "mimalloc/internal/free.h"
+#include "mimalloc/internal/sample-guarded.h"
 #include "mimalloc/prim-tls.h"  // _mi_theap_default
 
 #include <string.h>     // memset
