@@ -114,10 +114,10 @@ set(mi_sources
     src/util/stats.c
     src/util/threadlocal.c
     src/arena/arena.c
-    # src/arena/arena-alloc.c
-    # src/arena/arena-page.c
+    src/arena/arena-alloc.c
+    src/arena/arena-page.c
     src/arena/bitmap.c
-    # src/arena/bitmap-chunk.c
+    src/arena/bitmap-chunk.c
     src/alloc/alloc.c
     # src/alloc/free.c
     # src/alloc/alloc-override.c    
