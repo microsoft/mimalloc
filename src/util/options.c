@@ -119,7 +119,7 @@ int mi_version(void) {
 #endif
 
 #ifndef MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE
-#define MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE  (MI_LARGE_PAGE_SIZE / MI_KiB)  // in KiB
+#define MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE  ((MI_SIZE_SIZE * MI_LARGE_PAGE_SIZE) / MI_KiB)  // 32 MiB (in KiB)
 #endif
 
 // Static options

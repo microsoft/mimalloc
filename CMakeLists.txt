@@ -105,31 +105,33 @@ include(GNUInstallDirs)
 include("cmake/mimalloc-config-version.cmake")
 
 set(mi_sources
-    src/alloc/alloc.c
-    src/alloc/alloc-aligned.c
-    src/alloc/alloc-posix.c
+    src/prim/os.c
+    src/prim/prim.c
+    src/prim/prim-tls.c 
+    src/util/libc.c
+    src/util/options.c
+    src/util/random.c
+    src/util/stats.c
+    src/util/threadlocal.c
     src/arena/arena.c
     # src/arena/arena-alloc.c
     # src/arena/arena-page.c
     src/arena/bitmap.c
     # src/arena/bitmap-chunk.c
-    src/heap/heap.c
-    src/heap/init.c
-    src/util/libc.c
-    src/util/options.c
-    src/prim/os.c
+    src/alloc/alloc.c
+    # src/alloc/free.c
+    # src/alloc/alloc-override.c    
+    src/alloc/alloc-aligned.c
+    src/alloc/alloc-posix.c
     src/alloc/page.c
     src/alloc/page-queue.c
+    src/heap/heap.c
+    src/heap/init.c
     src/heap/page-map.c
-    src/prim/prim.c
-    src/prim/prim-tls.c 
-    src/util/random.c
-    src/profile/sample-guarded.c
-    src/profile/sample-profile.c
-    src/util/stats.c
     src/heap/subproc.c
     src/heap/theap.c
-    src/util/threadlocal.c
+    src/profile/sample-guarded.c
+    src/profile/sample-profile.c
     src/profile/pprof.c)  
 
 set(mi_cflags "")
