@@ -1035,9 +1035,12 @@ message(STATUS "")
 # Main targets
 # -----------------------------------------------------------------------------
 
+# for better codegen, we prefer the static.c single source for release builds
+set(mi_static_sources "$<IF:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,src/static.c,${mi_sources}>")
+
 # shared library
 if(MI_BUILD_SHARED)
-  add_library(mimalloc SHARED ${mi_sources})
+  add_library(mimalloc SHARED ${mi_static_sources})
   set_target_properties(mimalloc PROPERTIES VERSION ${mi_version} SOVERSION ${mi_version_major} OUTPUT_NAME ${mi_libname} )
   target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
   target_compile_options(mimalloc PRIVATE ${mi_cflags} ${mi_cflags_dynamic})
@@ -1108,7 +1111,7 @@ endif()
 
 # static library
 if (MI_BUILD_STATIC)
-  add_library(mimalloc-static STATIC ${mi_sources})
+  add_library(mimalloc-static STATIC ${mi_static_sources})
   set_property(TARGET mimalloc-static PROPERTY OUTPUT_NAME ${mi_libname})
   set_property(TARGET mimalloc-static PROPERTY POSITION_INDEPENDENT_CODE ON)
   target_compile_definitions(mimalloc-static PRIVATE ${mi_defines} MI_STATIC_LIB)
