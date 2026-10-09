@@ -9,8 +9,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_INTERNAL_H
 
 // --------------------------------------------------------------------------
-// This file contains the internal API's of mimalloc and various utility
-// functions and macros.
+// This file includes all the internal API's of mimalloc for convenience.
+// (but is not used by mimalloc itself)
 // --------------------------------------------------------------------------
 
 #include "types.h"
@@ -20,24 +20,29 @@ terms of the MIT license. A copy of the license can be found in the file
 // Internal functions
 // --------------------------------------------------------------------------
 
+#include "prim/os.h"
+#include "prim/prim-tls.h"
+
 #include "util/libc.h"
 #include "util/options.h"
 #include "util/random.h"
-#include "prim/prim-tls.h"
-#include "heap/subproc.h"
-#include "heap/init.h"
-#include "prim/os.h"
+#include "util/stats.h"
 #include "util/threadlocal.h"
+
 #include "arena/arena.h"
 #include "arena/arena-alloc.h"
 #include "arena/arena-page.h"
+
 #include "heap/page-map.h"
-#include "alloc/page.h"
+#include "heap/subproc.h"
+#include "heap/init.h"
 #include "heap/theap.h"
 #include "heap/heap.h"
-#include "util/stats.h"
+
+#include "alloc/page.h"
 #include "alloc/alloc.h"
 #include "alloc/free.h"
+
 #include "profile/sample-profile.h"
 #include "profile/sample-guarded.h"
 #include "profile/pprof.h"
