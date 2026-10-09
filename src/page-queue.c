@@ -9,13 +9,10 @@ terms of the MIT license. A copy of the license can be found in the file
   Definition of page queues for each block size
 ----------------------------------------------------------- */
 
-#ifndef MI_IN_PAGE_C
-#error "this file should be included from 'page.c'"
-// include to help an IDE
 #include "mimalloc.h"
 #include "mimalloc/internal.h"
 #include "mimalloc/atomic.h"
-#endif
+#include "page-queue.h"
 
 /* -----------------------------------------------------------
   Minimal alignment in machine words (i.e. `sizeof(void*)`)
@@ -31,27 +28,6 @@ terms of the MIT license. A copy of the license can be found in the file
   // ok, default alignment is 1 word
 #endif
 
-
-/* -----------------------------------------------------------
-  Queue query
------------------------------------------------------------ */
-
-
-static inline bool mi_page_queue_is_huge(const mi_page_queue_t* pq) {
-  return (pq->block_size == (MI_LARGE_MAX_OBJ_SIZE+sizeof(uintptr_t)));
-}
-
-static inline bool mi_page_queue_is_full(const mi_page_queue_t* pq) {
-  return (pq->block_size == (MI_LARGE_MAX_OBJ_SIZE+(2*sizeof(uintptr_t))));
-}
-
-static inline bool mi_page_queue_is_special(const mi_page_queue_t* pq) {
-  return (pq->block_size > MI_LARGE_MAX_OBJ_SIZE);
-}
-
-static inline size_t mi_page_queue_count(const mi_page_queue_t* pq) {
-  return pq->count;
-}
 
 /* -----------------------------------------------------------
   Bins
@@ -124,7 +100,7 @@ mi_decl_nodiscard mi_decl_export size_t mi_good_size(size_t size) mi_attr_noexce
 }
 
 #if (MI_DEBUG>1)
-static bool mi_page_queue_contains(mi_page_queue_t* queue, const mi_page_t* page) {
+bool mi_page_queue_contains(mi_page_queue_t* queue, const mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_page_t* list = queue->first;
   while (list != NULL) {
@@ -136,12 +112,6 @@ static bool mi_page_queue_contains(mi_page_queue_t* queue, const mi_page_t* page
   return (list == page);
 }
 
-#endif
-
-#if (MI_DEBUG>1)
-static bool mi_theap_contains_queue(const mi_theap_t* theap, const mi_page_queue_t* pq) {
-  return (pq >= &theap->pages[0] && pq <= &theap->pages[MI_BIN_FULL]);
-}
 #endif
 
 bool _mi_page_queue_is_valid(mi_theap_t* theap, const mi_page_queue_t* pq) {
@@ -184,20 +154,13 @@ size_t _mi_page_stats_bin(const mi_page_t* page) {
   return bin;
 }
 
-static mi_page_queue_t* mi_theap_page_queue_of(mi_theap_t* theap, const mi_page_t* page) {
+mi_page_queue_t* mi_theap_page_queue_of(mi_theap_t* theap, const mi_page_t* page) {
   mi_assert_internal(theap!=NULL);
   const size_t bin = mi_page_bin(page);
   mi_page_queue_t* pq = &theap->pages[bin];
   mi_assert_internal((mi_page_block_size(page) == pq->block_size) ||
                        (mi_page_is_huge(page) && mi_page_queue_is_huge(pq)) ||
                          (mi_page_is_in_full(page) && mi_page_queue_is_full(pq)));
-  return pq;
-}
-
-static mi_page_queue_t* mi_page_queue_of(const mi_page_t* page) {
-  mi_theap_t* theap = mi_page_theap(page);
-  mi_page_queue_t* pq = mi_theap_page_queue_of(theap, page);
-  mi_assert_expensive(mi_page_queue_contains(pq, page));
   return pq;
 }
 
@@ -249,7 +212,7 @@ static bool mi_page_queue_is_empty(mi_page_queue_t* queue) {
 }
 */
 
-static void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
+void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_assert_expensive(mi_page_queue_contains(queue, page));
   mi_assert_internal(queue->count >= 1);
@@ -274,7 +237,7 @@ static void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
 }
 
 
-static void mi_page_queue_push(mi_theap_t* theap, mi_page_queue_t* queue, mi_page_t* page) {
+void mi_page_queue_push(mi_theap_t* theap, mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(mi_page_theap(page) == theap);
   mi_assert_internal(!mi_page_queue_contains(queue, page));
   #if MI_HUGE_PAGE_ABANDON
@@ -303,7 +266,7 @@ static void mi_page_queue_push(mi_theap_t* theap, mi_page_queue_t* queue, mi_pag
   theap->page_count++;
 }
 
-static void mi_page_queue_push_at_end(mi_theap_t* theap, mi_page_queue_t* queue, mi_page_t* page) {
+void mi_page_queue_push_at_end(mi_theap_t* theap, mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(mi_page_theap(page) == theap);
   mi_assert_internal(!mi_page_queue_contains(queue, page));
 
@@ -330,24 +293,6 @@ static void mi_page_queue_push_at_end(mi_theap_t* theap, mi_page_queue_t* queue,
     mi_theap_queue_first_update(theap, queue);
   }
   theap->page_count++;
-}
-
-static void mi_page_queue_move_to_front(mi_theap_t* theap, mi_page_queue_t* queue, mi_page_t* page) {
-  mi_assert_internal(mi_page_theap(page) == theap);
-  mi_assert_internal(mi_page_queue_contains(queue, page));
-  if (queue->first == page) return;
-  mi_page_queue_remove(queue, page);
-  mi_page_queue_push(theap, queue, page);
-  mi_assert_internal(queue->first == page);
-}
-
-static void mi_page_queue_move_to_back(mi_theap_t* theap, mi_page_queue_t* queue, mi_page_t* page) {
-  mi_assert_internal(mi_page_theap(page) == theap);
-  mi_assert_internal(mi_page_queue_contains(queue, page));
-  if (queue->last == page) return;
-  mi_page_queue_remove(queue, page);
-  mi_page_queue_push_at_end(theap, queue, page);
-  mi_assert_internal(queue->last == page);
 }
 
 static void mi_page_queue_enqueue_from_ex(mi_page_queue_t* to, mi_page_queue_t* from, bool enqueue_at_end, mi_page_t* page) {
@@ -422,11 +367,29 @@ static void mi_page_queue_enqueue_from_ex(mi_page_queue_t* to, mi_page_queue_t* 
   mi_page_set_in_full(page, mi_page_queue_is_full(to));
 }
 
-static void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* from, mi_page_t* page) {
+void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* from, mi_page_t* page) {
   mi_page_queue_enqueue_from_ex(to, from, true /* enqueue at the end */, page);
 }
 
-static void mi_page_queue_enqueue_from_full(mi_page_queue_t* to, mi_page_queue_t* from, mi_page_t* page) {
+void mi_page_queue_enqueue_from_full(mi_page_queue_t* to, mi_page_queue_t* from, mi_page_t* page) {
   // note: we could insert at the front to increase reuse, but it slows down certain benchmarks (like `alloc-test`)
   mi_page_queue_enqueue_from_ex(to, from, true /* enqueue at the end of the `to` queue? */, page);
+}
+
+void mi_page_queue_move_to_front(mi_theap_t* theap, mi_page_queue_t* queue, mi_page_t* page) {
+  mi_assert_internal(mi_page_theap(page) == theap);
+  mi_assert_internal(mi_page_queue_contains(queue, page));
+  if (queue->first == page) return;
+  mi_page_queue_remove(queue, page);
+  mi_page_queue_push(theap, queue, page);
+  mi_assert_internal(queue->first == page);
+}
+
+void mi_page_queue_move_to_back(mi_theap_t* theap, mi_page_queue_t* queue, mi_page_t* page) {
+  mi_assert_internal(mi_page_theap(page) == theap);
+  mi_assert_internal(mi_page_queue_contains(queue, page));
+  if (queue->last == page) return;
+  mi_page_queue_remove(queue, page);
+  mi_page_queue_push_at_end(theap, queue, page);
+  mi_assert_internal(queue->last == page);
 }

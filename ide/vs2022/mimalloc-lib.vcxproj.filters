@@ -102,6 +102,9 @@
     <ClInclude Include="..\..\src\arena.h">
       <Filter>Headers</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\page-queue.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\include\mimalloc\internal.h">
       <Filter>Headers</Filter>
     </ClInclude>

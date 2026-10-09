@@ -119,6 +119,7 @@ set(mi_sources
     src/options.c
     src/os.c
     src/page.c
+    src/page-queue.c
     src/page-map.c   
     src/prim/prim.c
     src/prim/prim-tls.c 

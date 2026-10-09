@@ -38,7 +38,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #if MI_OSX_ZONE
 #include "prim/osx/alloc-override-zone.c"
 #endif
-#include "page.c"           // includes page-queue.c
+#include "page.c"
+#include "page-queue.c"
 #include "page-map.c"
 #include "random.c"
 #include "sample-guarded.c"

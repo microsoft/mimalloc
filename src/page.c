@@ -16,14 +16,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/atomic.h"
 #include "mimalloc/prim.h"
 #include "mimalloc/prim-tls.h"
-
-/* -----------------------------------------------------------
-  Definition of page queues for each block size
------------------------------------------------------------ */
-
-#define MI_IN_PAGE_C
-#include "page-queue.c"
-#undef MI_IN_PAGE_C
+#include "page-queue.h"
 
 
 /* -----------------------------------------------------------
