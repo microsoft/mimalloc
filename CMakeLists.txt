@@ -109,10 +109,10 @@ set(mi_sources
     src/alloc/alloc-aligned.c
     src/alloc/alloc-posix.c
     src/arena/arena.c
-    src/arena/arena-alloc.c
-    src/arena/arena-page.c
+    # src/arena/arena-alloc.c
+    # src/arena/arena-page.c
     src/arena/bitmap.c
-    src/arena/bitmap-chunk.c
+    # src/arena/bitmap-chunk.c
     src/heap/heap.c
     src/heap/init.c
     src/util/libc.c

@@ -41,11 +41,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "util/stats.c"
 #include "util/threadlocal.c"
 
-#include "arena/arena.c"
-#include "arena/arena-alloc.c"
-#include "arena/arena-page.c"
-#include "arena/bitmap-chunk.c"
-#include "arena/bitmap.c"
+#include "arena/arena.c"           // includes arena/arena-alloc.c, and arena/arena-page.c
+#include "arena/bitmap.c"          // includes arena/bitmap-chunk.c
 
 #include "alloc/alloc.c"           // includes alloc-override.c and free.c (for aliasing to work)
 #include "alloc/alloc-aligned.c"

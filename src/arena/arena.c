@@ -1178,3 +1178,9 @@ mi_decl_export bool mi_arena_reload(void* start, size_t size, mi_commit_fun_t* c
 }
 
 */
+
+// Include directly for better codegen
+#define MI_IN_ARENA_C
+#include "arena-alloc.c"
+#include "arena-page.c"
+#undef MI_IN_ARENA_C

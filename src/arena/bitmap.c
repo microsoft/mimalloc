@@ -910,3 +910,9 @@ bool mi_bbitmap_try_find_and_clearN_(mi_bbitmap_t* bbitmap, size_t tseq, size_t 
   }
   return false;
 }
+
+// Include the bitmap-chunk implementation directly for better codegen
+#define MI_IN_BITMAP_C
+#include "bitmap-chunk.c"
+#undef MI_IN_BITMAP_C
+
