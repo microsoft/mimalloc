@@ -10,8 +10,8 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 
 #include "mimalloc.h"
-#include "mimalloc/internal/page-queue.h"
-#include "mimalloc/atomic.h"
+#include "mimalloc/types.h"
+#include "mimalloc/internal/page.h"
 #include "page-queue.h"
 
 /* -----------------------------------------------------------

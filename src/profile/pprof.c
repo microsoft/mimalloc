@@ -25,7 +25,7 @@ format generation).
 #include "mimalloc.h"
 #include "mimalloc/internal/pprof.h"
 #include "mimalloc/internal/stats.h"
-#include "mimalloc/prim-tls.h"   // _mi_theap_default
+#include "mimalloc/internal/prim-tls.h"   // _mi_theap_default
 #include "mimalloc-profile.h"
 
 // ---------------------------------------------------------------------------

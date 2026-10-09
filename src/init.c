@@ -12,7 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/internal/sample-profile.h"
 #include "mimalloc/internal/stats.h"
 #include "mimalloc/prim.h"
-#include "mimalloc/prim-tls.h"
+#include "mimalloc/internal/prim-tls.h"
 
 #include <string.h>  // memcpy, memset
 #include <stdlib.h>  // atexit

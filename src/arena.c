@@ -22,7 +22,7 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 #include "mimalloc.h"
 #include "mimalloc/internal/memid.h"
 #include "mimalloc/internal/stats.h"
-#include "mimalloc/prim-tls.h"
+#include "mimalloc/internal/prim-tls.h"
 #include "arena.h"
 
 

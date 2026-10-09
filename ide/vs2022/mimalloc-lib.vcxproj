@@ -518,7 +518,6 @@
     <ClInclude Include="..\..\include\mimalloc\internal\sample-guarded.h" />
     <ClInclude Include="..\..\include\mimalloc\internal\sample-profile.h" />
     <ClInclude Include="..\..\include\mimalloc\internal\pprof.h" />
-    <ClInclude Include="..\..\include\mimalloc\prim-tls.h" />
     <ClInclude Include="..\..\include\mimalloc\prim.h" />
     <ClInclude Include="..\..\include\mimalloc\track.h" />
     <ClInclude Include="..\..\include\mimalloc\types.h" />

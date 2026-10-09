@@ -6,13 +6,13 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc.h"
-#include "mimalloc/internal/arena-alloc.h"
-#include "mimalloc/internal/page-queue.h"
-#include "mimalloc/internal/random.h"
-#include "mimalloc/internal/sample-guarded.h"
-#include "mimalloc/internal/stats.h"
 #include "mimalloc/prim.h"      // _mi_prim_thread_yield
-#include "mimalloc/prim-tls.h"  // _mi_theap_default
+#include "mimalloc/internal/random.h"
+#include "mimalloc/internal/stats.h"
+#include "mimalloc/internal/arena-alloc.h"
+#include "mimalloc/internal/page.h"
+#include "mimalloc/internal/sample-guarded.h"
+#include "mimalloc/internal/prim-tls.h"  // _mi_theap_default
 
 #if defined(_MSC_VER) && (_MSC_VER < 1920)
 #pragma warning(disable:4204)  // non-constant aggregate initializer
@@ -696,4 +696,3 @@ bool mi_theap_visit_blocks(const mi_theap_t* theap, bool visit_blocks, mi_block_
   mi_visit_blocks_args_t args = { visit_blocks, visitor, arg };
   return mi_theap_visit_areas(theap, &mi_theap_area_visitor, &args);
 }
-

@@ -33,6 +33,19 @@ void          _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page);
 bool          _mi_page_is_valid(mi_page_t* page);
 #endif
 
+// in page-queue.c
+bool          _mi_page_queue_is_valid(mi_theap_t* theap, const mi_page_queue_t* pq);
+size_t        _mi_page_stats_bin(const mi_page_t* page); // for stats
+size_t        _mi_bin_size(size_t bin);                  // for stats
+size_t        _mi_bin(size_t size);                      // for stats
+
+
+static inline mi_page_queue_t* mi_page_queue(const mi_theap_t* theap, size_t size) {
+  mi_page_queue_t* const pq = &((mi_theap_t*)theap)->pages[_mi_bin(size)];
+  if (size <= MI_LARGE_MAX_OBJ_SIZE) { mi_assert_internal(pq->block_size <= MI_LARGE_MAX_OBJ_SIZE); }
+  return pq;
+}
+
 // Get the block size of a page
 static inline size_t mi_page_block_size(const mi_page_t* page) {
   mi_assert_internal(page->block_size > 0);

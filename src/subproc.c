@@ -10,7 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/internal/memid.h"
 #include "mimalloc/internal/sample-profile.h"
 #include "mimalloc/internal/stats.h"
-#include "mimalloc/prim-tls.h"
+#include "mimalloc/internal/prim-tls.h"
 
 // pre-allocate the main subprocess structure.
 static mi_decl_cache_align mi_subproc_t mi_process_subproc_main = mi_init_struct_zero;
@@ -328,4 +328,3 @@ mi_subproc_t* _mi_subproc_main_init(void) {
 void _mi_subproc_main_done(void) {
   mi_lock_done(&mi_subprocs_lock);
 }
-

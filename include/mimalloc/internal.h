@@ -34,7 +34,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "internal/arena-page.h"
 #include "internal/page-map.h"
 #include "internal/page.h"
-#include "internal/page-queue.h"
 #include "internal/theap.h"
 #include "internal/heap.h"
 #include "internal/stats.h"

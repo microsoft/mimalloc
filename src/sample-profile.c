@@ -7,7 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc/internal/sample-guarded.h"
 #include "mimalloc/internal/stats.h"
-#include "mimalloc/prim-tls.h"
+#include "mimalloc/internal/prim-tls.h"
 
 //----------------------------------------------------------------------------
 // General sampled allocation (called from `page.c:mi_malloc_generic_fallback`)
@@ -272,4 +272,3 @@ void mi_profiler_snapshot(mi_profiler_t* profiler) {
     (*profiler->on_snapshot)(profiler);
   }
 }
-

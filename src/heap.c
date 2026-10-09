@@ -11,7 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/internal/free.h"
 #include "mimalloc/internal/stats.h"
 #include "mimalloc/prim.h"      // _mi_prim_thread_yield
-#include "mimalloc/prim-tls.h"  // _mi_heap_theap
+#include "mimalloc/internal/prim-tls.h"  // _mi_heap_theap
 
 
 /* -----------------------------------------------------------

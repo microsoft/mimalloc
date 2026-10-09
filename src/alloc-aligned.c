@@ -9,7 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/internal/alloc.h"
 #include "mimalloc/internal/free.h"
 #include "mimalloc/internal/sample-guarded.h"
-#include "mimalloc/prim-tls.h"  // _mi_theap_default
+#include "mimalloc/internal/prim-tls.h"  // _mi_theap_default
 
 #include <string.h>     // memset
 
@@ -445,5 +445,4 @@ mi_decl_nodiscard void* mi_heap_recalloc_aligned_at(mi_heap_t* heap, void* p, si
 mi_decl_nodiscard void* mi_heap_recalloc_aligned(mi_heap_t* heap, void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept {
   return mi_theap_recalloc_aligned(_mi_heap_theap(heap), p, newcount, size, alignment);
 }
-
 

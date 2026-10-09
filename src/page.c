@@ -14,13 +14,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc/internal/alloc.h"
 #include "mimalloc/internal/arena-page.h"
-#include "mimalloc/internal/page-queue.h"
 #include "mimalloc/internal/random.h"
 #include "mimalloc/internal/sample-profile.h"
 #include "mimalloc/internal/stats.h"
 #include "mimalloc/atomic.h"
 #include "mimalloc/prim.h"
-#include "mimalloc/prim-tls.h"
+#include "mimalloc/internal/prim-tls.h"
 #include "page-queue.h"
 
 

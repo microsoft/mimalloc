@@ -6,7 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc.h"
-#include "mimalloc/prim-tls.h"  // _mi_thread_is_initialized
+#include "mimalloc/internal/prim-tls.h"  // _mi_thread_is_initialized
 #if defined(MI_MALLOC_OVERRIDE)
 
 #if !defined(__APPLE__)

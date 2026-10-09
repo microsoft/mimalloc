@@ -9,7 +9,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_INTERNAL_THEAP_H
 
 #include "../types.h"
-#include "prim-tls.h"
 
 size_t        _mi_theap_random_next(mi_theap_t* theap);
 void          _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld);
@@ -60,11 +59,6 @@ static inline mi_page_t* mi_theap_get_free_small_page(mi_theap_t* theap, size_t 
 
 static inline bool mi_theap_is_detached(mi_theap_t* theap) {
   return (theap!=NULL && theap->tld->thread_id == MI_THREADID_DETACHED);
-}
-
-static inline bool mi_theap_matches_thread(mi_theap_t* theap) {
-  const mi_threadid_t tid = _mi_thread_id();
-  return (theap==NULL || theap->tld==NULL || theap->tld->thread_id == tid || mi_theap_is_detached(theap));
 }
 
 #endif
