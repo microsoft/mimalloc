@@ -28,7 +28,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // ---------------------------------------------------------------------------
 
 #define TEST_THRESHOLD (1 * 1024)
-#define PROFILE_BASE_NAME "test-pprof-profile"
+#define PROFILE_BASE_NAME "profile/test-pprof-profile"
 
 // Build the name of the `seq`-th snapshot file for `base`, matching the
 // `<base>.<seq>.heap` naming used by `mi_profiler_snapshot`.
@@ -330,7 +330,7 @@ bool test_pprof_snapshot_proto_format(void) {
   return true;
 }
 
-#define PROFILE_INTERVAL_BASE_NAME "test-pprof-profile-interval"
+#define PROFILE_INTERVAL_BASE_NAME "profile/test-pprof-profile-interval"
 #define TEST_INTERVAL_SIZE   (8 * 1024)   // small enough that `allocate_and_free` below reliably triggers several automatic snapshots, even with a coarser sample rate
 #define TEST_INTERVAL_MAX_SEQ 64          // generous upper bound used only for cleanup
 
@@ -485,7 +485,7 @@ bool test_pprof_profiler_new_delete(void) {
 // ---------------------------------------------------------------------------
 #if !defined(_WIN32)
 
-#define PROFILE_THREADS_BASE_NAME  "test-pprof-profile-threads"
+#define PROFILE_THREADS_BASE_NAME  "profile/test-pprof-profile-threads"
 #define MI_TEST_PPROF_THREAD_COUNT      8
 #define MI_TEST_PPROF_THREAD_ITERS      50000
 #define MI_TEST_PPROF_THREAD_POOL_SIZE  1024

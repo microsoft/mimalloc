@@ -30,7 +30,7 @@ terms of the MIT license.
 
 
 #define TEST_STRESS_PPROF_THRESHOLD  (64 * 1024)
-#define TEST_STRESS_PPROF_BASE_NAME  "test-stress-pprof-profile"
+#define TEST_STRESS_PPROF_BASE_NAME  "profile/test-stress-pprof-profile"
 
 static mi_profiler_t* stress_pprof_profiler = NULL;
 #endif
