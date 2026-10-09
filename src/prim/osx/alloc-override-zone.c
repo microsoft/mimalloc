@@ -382,16 +382,9 @@ static void zone_unregister(malloc_zone_t* zone) {
 
 // use interposing so `DYLD_INSERT_LIBRARIES` works without `DYLD_FORCE_FLAT_NAMESPACE=1`
 // See: <https://books.google.com/books?id=K8vUkpOXhN4C&pg=PA73>
-struct mi_zone_interpose_s {
-  const void* replacement;
-  const void* target;
-};
-#define MI_INTERPOSE_FUN(oldfun,newfun) { (const void*)&newfun, (const void*)&oldfun }
-#define MI_INTERPOSE_MI(fun)            MI_INTERPOSE_FUN(fun,mi_##fun)
 #define MI_INTERPOSE_ZONE(fun)          MI_INTERPOSE_FUN(malloc_##fun,fun)
-__attribute__((used)) static struct mi_zone_interpose_s _mi_zone_interposes[]  __attribute__((section("__DATA, __interpose"))) =
+MI_INTERPOSE_DECLS(_mi_zone_interposes) = 
 {
-
   MI_INTERPOSE_MI(malloc_create_zone),
   MI_INTERPOSE_MI(malloc_default_purgeable_zone),
   MI_INTERPOSE_MI(malloc_default_zone),

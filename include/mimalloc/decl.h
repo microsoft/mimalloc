@@ -155,4 +155,18 @@ mi_decl_noreturn mi_decl_cold void _mi_assert_fail(const char* assertion, const 
 #define MI_INIT5(x)   MI_INIT4(x),x()
 #define MI_INIT6(x)   MI_INIT4(x),x(),x()
 
+// ------------------------------------------------------
+// Interposing for macOS (DYLD)
+// ------------------------------------------------------
+
+#if defined(__APPLE__) && defined(__MACH__)
+struct mi_interpose_s {
+  const void* replacement;
+  const void* target;
+};
+#define MI_INTERPOSE_FUN(oldfun,newfun) { (const void*)&newfun, (const void*)&oldfun }
+#define MI_INTERPOSE_MI(fun)            MI_INTERPOSE_FUN(fun,mi_##fun)
+#define MI_INTERPOSE_DECLS(name)        __attribute__((used)) static const struct mi_interpose_s name[]  __attribute__((section("__DATA, __interpose")))
+#endif
+
 #endif // MI_DECL_H

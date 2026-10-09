@@ -77,15 +77,6 @@ typedef void* mi_nothrow_t;
 
   // use interposing so `DYLD_INSERT_LIBRARIES` works without `DYLD_FORCE_FLAT_NAMESPACE=1`
   // See: <https://books.google.com/books?id=K8vUkpOXhN4C&pg=PA73>
-  struct mi_interpose_s {
-    const void* replacement;
-    const void* target;
-  };
-  #define MI_INTERPOSE_FUN(oldfun,newfun) { (const void*)&newfun, (const void*)&oldfun }
-  #define MI_INTERPOSE_MI(fun)            MI_INTERPOSE_FUN(fun,mi_##fun)
-
-  #define MI_INTERPOSE_DECLS(name)        __attribute__((used)) static struct mi_interpose_s name[]  __attribute__((section("__DATA, __interpose")))
-
   MI_INTERPOSE_DECLS(_mi_interposes) =
   {
     MI_INTERPOSE_MI(malloc),
@@ -129,7 +120,7 @@ typedef void* mi_nothrow_t;
   #ifdef __cplusplus
   }
   #endif
-  __attribute__((used)) static struct mi_interpose_s _mi_cxx_interposes[]  __attribute__((section("__DATA, __interpose"))) =
+  MI_INTERPOSE_DECLS(_mi_cxx_interposes) =
   {
     MI_INTERPOSE_FUN(_ZdlPv,mi_free),
     MI_INTERPOSE_FUN(_ZdaPv,mi_free),
