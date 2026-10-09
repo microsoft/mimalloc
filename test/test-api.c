@@ -11,7 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 /*
 Testing allocators is difficult as bugs may only surface after particular
 allocation patterns. The main approach to testing _mimalloc_ is therefore
-to have extensive internal invariant checking (see `page_is_valid` in `page.c`
+to have extensive internal invariant checking (see `page_is_valid` in `alloc/page.c`
 for example), which is enabled in debug mode with `-DMI_DEBUG_FULL=ON`.
 The main testing is then to run `mimalloc-bench` [1] using full invariant checking
 to catch any potential problems over a wide range of intensive allocation bench

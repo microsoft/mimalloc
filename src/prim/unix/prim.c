@@ -21,12 +21,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #include "mimalloc.h"
-#include "mimalloc/internal/init.h"
-#include "mimalloc/internal/libc.h"
-#include "mimalloc/internal/options.h"
-#include "mimalloc/internal/os.h"
 #include "mimalloc/prim.h"
 #include "mimalloc/track.h"
+#include "mimalloc/prim/os.h"
+#include "mimalloc/util/libc.h"
+#include "mimalloc/util/options.h"
+#include "mimalloc/heap/init.h"
 
 #include <sys/mman.h>  // mmap
 #include <unistd.h>    // sysconf, sleep
@@ -42,8 +42,6 @@ terms of the MIT license. A copy of the license can be found in the file
   #endif
   #if defined(__GLIBC__)
   #include <linux/mman.h>   // linux mmap flags
-  #else
-  #include <sys/mman.h>
   #endif
   #if defined(__riscv) || defined(_M_RISCV)
     #if defined(MI_HAS_SYS_HWPROBEH)
@@ -788,7 +786,6 @@ mi_msecs_t _mi_prim_clock_now(void) {
 
 #if defined(__unix__) || defined(__unix) || defined(unix) || defined(__APPLE__) || defined(__HAIKU__)
 #include <stdio.h>
-#include <unistd.h>
 #include <sys/resource.h>
 
 #if defined(__APPLE__)

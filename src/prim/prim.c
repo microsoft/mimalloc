@@ -5,6 +5,10 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 
+#include "mimalloc/heap/init.h"
+#include "mimalloc/prim.h"
+
+
 // Select the implementation of the primitives
 // depending on the OS.
 
@@ -25,9 +29,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "unix/prim.c"     // mmap() (Linux, macOSX, BSD, Illumnos, Haiku, DragonFly, etc.)
 
 #endif
-
-#include "mimalloc/internal/init.h"
-#include "mimalloc/internal/prim.h"
 
 // Generic process initialization
 #if !defined(MI_PRIM_HAS_PROCESS_ATTACH)

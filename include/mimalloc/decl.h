@@ -106,8 +106,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_UNUSED_RELEASE(x)  MI_UNUSED(x)
 #endif
 
-
-
 // ------------------------------------------------------
 // Assertions and tracing
 // ------------------------------------------------------
@@ -140,5 +138,21 @@ mi_decl_noreturn mi_decl_cold void _mi_assert_fail(const char* assertion, const 
 #define mi_assert_expensive(x)
 #endif
 
+
+// ------------------------------------------------------
+// Initialization macros
+// ------------------------------------------------------
+
+#define MI_INIT4(x)   x(),x(),x(),x()
+#define MI_INIT8(x)   MI_INIT4(x),MI_INIT4(x)
+#define MI_INIT16(x)  MI_INIT8(x),MI_INIT8(x)
+#define MI_INIT32(x)  MI_INIT16(x),MI_INIT16(x)
+#define MI_INIT64(x)  MI_INIT32(x),MI_INIT32(x)
+#define MI_INIT128(x) MI_INIT64(x),MI_INIT64(x)
+#define MI_INIT256(x) MI_INIT128(x),MI_INIT128(x)
+
+#define MI_INIT74(x)  MI_INIT64(x),MI_INIT8(x),x(),x()
+#define MI_INIT5(x)   MI_INIT4(x),x()
+#define MI_INIT6(x)   MI_INIT4(x),x(),x()
 
 #endif // MI_DECL_H

@@ -6,7 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc.h"
-#include "mimalloc/internal/prim-tls.h"  // _mi_thread_is_initialized
+#include "mimalloc/prim/os.h"
 #if defined(MI_MALLOC_OVERRIDE)
 
 #if !defined(__APPLE__)
@@ -24,7 +24,6 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <AvailabilityMacros.h>
 #include <malloc/malloc.h>
-#include <string.h>  // memset
 #include <stdlib.h>
 
 #ifdef __cplusplus
@@ -281,7 +280,7 @@ static bool is_mimalloc_zone( malloc_zone_t* zone ) {
 // our mimalloc zone. Since even the loader uses malloc
 // on macOS, this ensures that all allocations go through
 // mimalloc (as all calls are interposed).
-// The main `malloc`, `free`, etc calls are interposed in `alloc-override.c`,
+// The main `malloc`, `free`, etc calls are interposed in `alloc/alloc-override.c`,
 // Here, we also override macOS specific API's like
 // `malloc_zone_calloc` etc. see <https://github.com/aosm/libmalloc/blob/master/man/malloc_zone_malloc.3>
 // ------------------------------------------------------

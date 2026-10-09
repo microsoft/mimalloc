@@ -10,12 +10,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <string.h>
 #include <stddef.h>
 
 #include "mimalloc.h"
 #include "mimalloc-profile.h"
-#include "mimalloc/internal.h"
+#include "mimalloc/decl.h"
 #include "testhelper.h"
 
 // ---------------------------------------------------------------------------

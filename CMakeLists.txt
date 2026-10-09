@@ -105,31 +105,31 @@ include(GNUInstallDirs)
 include("cmake/mimalloc-config-version.cmake")
 
 set(mi_sources
-    src/alloc.c
-    src/alloc-aligned.c
-    src/alloc-posix.c
-    src/arena.c
-    src/arena-alloc.c
-    src/arena-page.c
-    src/bitmap.c
-    src/bitmap-chunk.c
-    src/heap.c
-    src/init.c
-    src/libc.c
-    src/options.c
-    src/os.c
-    src/page.c
-    src/page-queue.c
-    src/page-map.c   
+    src/alloc/alloc.c
+    src/alloc/alloc-aligned.c
+    src/alloc/alloc-posix.c
+    src/arena/arena.c
+    src/arena/arena-alloc.c
+    src/arena/arena-page.c
+    src/arena/bitmap.c
+    src/arena/bitmap-chunk.c
+    src/heap/heap.c
+    src/heap/init.c
+    src/util/libc.c
+    src/util/options.c
+    src/prim/os.c
+    src/alloc/page.c
+    src/alloc/page-queue.c
+    src/heap/page-map.c
     src/prim/prim.c
     src/prim/prim-tls.c 
-    src/random.c
-    src/sample-guarded.c
-    src/sample-profile.c
-    src/stats.c
-    src/subproc.c
-    src/theap.c
-    src/threadlocal.c
+    src/util/random.c
+    src/profile/sample-guarded.c
+    src/profile/sample-profile.c
+    src/util/stats.c
+    src/heap/subproc.c
+    src/heap/theap.c
+    src/util/threadlocal.c
     src/profile/pprof.c)  
 
 set(mi_cflags "")

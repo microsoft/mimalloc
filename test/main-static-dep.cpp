@@ -1,6 +1,6 @@
 // test allocation in a DLL that is statically linked to mimalloc
-#include <string>
-#include <iostream>
+#include <stdio.h>
+#include <string.h>
 #include "main-static-dep.h"
 #include <mimalloc.h>
 

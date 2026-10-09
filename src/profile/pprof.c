@@ -23,10 +23,11 @@ format generation).
 // ---------------------------------------------------------------------------
 
 #include "mimalloc.h"
-#include "mimalloc/internal/pprof.h"
-#include "mimalloc/internal/stats.h"
-#include "mimalloc/internal/prim-tls.h"   // _mi_theap_default
-#include "mimalloc-profile.h"
+#include "mimalloc/prim/prim-tls.h"   // _mi_theap_default
+#include "mimalloc/util/libc.h"
+#include "mimalloc/util/options.h"
+#include "mimalloc/util/stats.h"
+#include "mimalloc/profile/pprof.h"
 
 // ---------------------------------------------------------------------------
 // Internal API
@@ -126,7 +127,7 @@ static size_t  mi_prim_backtrace(void** buffer, size_t max_depth, size_t* hash);
 static bool mi_is_elevated_process(void);
 static mi_profiler_t* mi_profile_env_profiler;  // NULL if `MIMALLOC_PROFILE` was not set (or initialization failed)
 
-// Called once at process initialization (see `mi_process_init` in `init.c`).
+// Called once at process initialization (see `mi_process_init` in `heap/init.c`).
 void _mi_pprof_profiler_init(void) {
   #if MI_PROFILE
   if (mi_is_elevated_process()) return;  // don't let an untrusted environment influence a privileged process
@@ -145,7 +146,7 @@ void _mi_pprof_profiler_init(void) {
   #endif
 }
 
-// Called once at process termination (see `mi_process_done` in `init.c`).
+// Called once at process termination (see `mi_process_done` in `heap/init.c`).
 void _mi_pprof_profiler_done(void) {
   #if MI_PROFILE
   mi_profiler_t* profiler = mi_profile_env_profiler;
@@ -755,7 +756,7 @@ static void mi_pprof_modules_done(mi_pprof_modules_t* mods) {
 // sites can use its `%l8x`/`%l8d`/`%tx` extensions instead of <inttypes.h>'s
 // `PRIx64`/`PRIu64`/`PRIxPTR` macros) and writes the result directly to a `FILE*`.
 // (Distinct from the existing `_mi_fprintf(mi_output_fun*, void*, ...)`  in
-// `options.c`, which targets mimalloc's redirectable output callback instead
+// `util/options.c`, which targets mimalloc's redirectable output callback instead
 // of an arbitrary `FILE*`.)
 static void mi_fprintf(FILE* f, const char* fmt, ...) {
   char buf[512];

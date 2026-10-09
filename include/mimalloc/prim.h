@@ -138,4 +138,17 @@ void _mi_prim_thread_yield(void);
 // See also issue #1377
 bool _mi_prim_process_is_killed(void);
 
+
+// The following are predefined by default
+
+// Is the mimalloc-redirect running (Windows only)
+bool _mi_is_redirected(void);
+
+// Called to initialize the allocator
+bool _mi_allocator_init(const char** message);
+
+// Called to clean up the allocator
+void _mi_allocator_done(void);
+
+
 #endif  // MI_PRIM_H

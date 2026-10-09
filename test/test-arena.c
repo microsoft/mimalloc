@@ -1,4 +1,4 @@
-#include "../src/arena.h"
+#include "../src/arena/arena.h"
 #include "testhelper.h"
 
 static mi_subproc_t test_subproc;

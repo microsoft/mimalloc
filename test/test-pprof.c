@@ -7,7 +7,6 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Tests for the mimalloc pprof heap profiler (src/profile/pprof.c).
 
-#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>

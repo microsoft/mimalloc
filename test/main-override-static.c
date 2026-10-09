@@ -308,7 +308,6 @@ static void test_dep(void) {
 // Experiment with huge OS pages
 #if 0
 
-#include <mimalloc/types.h>
 #include <mimalloc/internal.h>
 #include <unistd.h>
 #include <sys/mman.h>

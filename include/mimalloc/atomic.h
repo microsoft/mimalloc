@@ -9,7 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ATOMIC_H
 
 // include windows.h or pthreads.h
-#if defined(_WIN32) || defined(__CYGWIN__)  // we use windows locks on cygwin, but otherwise treat it at unix
+#if defined(_WIN32) || defined(__CYGWIN__)  // we use windows locks on cygwin, but otherwise treat it as unix
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -569,8 +569,8 @@ typedef struct mi_atomic_once_s {
 // Returns `true` only on the first invocation, signifying we can execute an action once.
 // If it returns `true`, the caller should call `_mi_atomic_once_release` after performing the action.
 // Other threads (than the initial thread that entered) will block until `_mi_atomic_once_release` has been called.
-bool _mi_atomic_once_enter(mi_atomic_once_t* once);        // defined in `libc.c`
-void _mi_atomic_once_release(mi_atomic_once_t* once);      // defined in `libc.c`
+bool _mi_atomic_once_enter(mi_atomic_once_t* once);        // defined in `util/libc.c`
+void _mi_atomic_once_release(mi_atomic_once_t* once);      // defined in `util/libc.c`
 
 #define mi_atomic_do_once  \
   static mi_atomic_once_t _mi_once = { MI_ATOMIC_VAR_INIT(0), MI_LOCK_INITIALIZER }; \

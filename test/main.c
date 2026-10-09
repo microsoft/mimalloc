@@ -1,5 +1,3 @@
-#include <stdio.h>
-#include <assert.h>
 #include <mimalloc.h>
 
 void test_heap(void* p_out) {

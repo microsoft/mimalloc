@@ -310,11 +310,11 @@ typedef struct mi_subproc_s mi_subproc_t;
 typedef enum mi_memkind_e {
   MI_MEM_NONE,      // not allocated (or static)
   MI_MEM_EXTERNAL,  // not owned by mimalloc but provided externally (via `mi_manage_os_memory` for example)
-  MI_MEM_STATIC,    // allocated in a static area and should not be freed (the initial main theap data for example (`init.c`))
+  MI_MEM_STATIC,    // allocated in a static area and should not be freed (the initial main theap data for example (`heap/init.c`))
   MI_MEM_OS,        // allocated from the OS
   MI_MEM_OS_HUGE,   // allocated as huge OS pages (usually 1GiB, pinned to physical memory)
   MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
-  MI_MEM_ARENA,     // allocated from an arena (the usual case) (`arena-alloc.c`)
+  MI_MEM_ARENA,     // allocated from an arena (the usual case) (`arena/arena-alloc.c`)
   MI_MEM_MALLOC     // allocated with mi_malloc
 } mi_memkind_t;
 
@@ -372,6 +372,14 @@ static inline mi_arena_t* mi_memid_arena(mi_memid_t memid) {
   return (memid.memkind == MI_MEM_ARENA ? memid.mem.arena.arena : NULL);
 }
 
+// defined in arena.c
+mi_memid_t    _mi_memid_create(mi_memkind_t memkind);
+mi_memid_t    _mi_memid_none(void);
+mi_memid_t    _mi_memid_create_os(void* base, size_t size, bool committed, bool is_zero, bool is_large);
+mi_memid_t    _mi_memid_create_static(void* p, size_t size);
+mi_memid_t    _mi_memid_create_malloc(void* p, size_t size, bool iszero);
+size_t        _mi_memid_size(mi_memid_t memid);
+
 
 // ------------------------------------------------------
 // Mimalloc pages contain allocated blocks
@@ -411,7 +419,7 @@ typedef size_t mi_page_flags_t;
 // Points to a list of blocks that are freed by other threads.
 // The least-bit is set if the page is owned by the current thread. (`mi_page_is_owned`).
 // Ownership is required before we can read any non-atomic fields in the page.
-// This way we can push a block on the thread free list and try to claim ownership atomically in `free.c:mi_free_block_mt`.
+// This way we can push a block on the thread free list and try to claim ownership atomically in `alloc/free.c:mi_free_block_mt`.
 typedef uintptr_t mi_thread_free_t;
 
 // We store the currently used block count together with the total malloc call count as 16-bit numbers.
@@ -462,7 +470,7 @@ static inline mi_used_t mi_xused_used_reset(mi_used_t xused) { xused.used_alloc 
 //   that case the `xthreadid` is 0 or 4 (4 is for abandoned pages that
 //   are in the `pages_abandoned` lists of an arena, these are called "mapped" abandoned pages).
 // - page flags are in the bottom 3 bits of `xthread_id` for the fast path in `mi_free`.
-// - The layout below is optimized for `free.c:mi_free` and `alloc.c:mi_page_alloc`
+// - The layout below is optimized for `alloc/free.c:mi_free` and `alloc/alloc.c:mi_page_alloc`
 
 typedef struct mi_page_s {  
   #if (MI_PAGE_META_IS_ALIGNED)
@@ -524,7 +532,7 @@ typedef struct mi_page_s {
 #error "mimalloc internal: define more bins"
 #endif
 
-// static invariant: MI_MAX_SINGLETON_BIN >= _mi_bin(MI_LARGE_MAX_OBJ_SIZE) (See init.c for the size bins)
+// static invariant: MI_MAX_SINGLETON_BIN >= _mi_bin(MI_LARGE_MAX_OBJ_SIZE) (See heap/init.c for the size bins)
 #if (MI_LARGE_MAX_OBJ_WSIZE <= 8192)     // 64 KiB
 #define MI_MAX_SINGLETON_BIN   (48)
 #elif (MI_LARGE_MAX_OBJ_WSIZE <= 32768)  // 256KiB
@@ -785,8 +793,8 @@ struct mi_tld_s {
 #define MI_ARENA_MIN_SIZE       (MI_BCHUNK_BITS * MI_ARENA_SLICE_SIZE)           // 32 MiB (or 8 MiB on 32-bit)
 #define MI_ARENA_MAX_SIZE       (MI_BITMAP_MAX_BIT_COUNT * MI_ARENA_SLICE_SIZE)  // 16 GiB
 
-typedef struct mi_bitmap_s  mi_bitmap_t;    // atomic bitmap  (defined in `src/bitmap.h`)
-typedef struct mi_bbitmap_s mi_bbitmap_t;   // atomic binned bitmap (defined in `src/bitmap.h`)
+typedef struct mi_bitmap_s  mi_bitmap_t;    // atomic bitmap  (defined in `src/arena/bitmap.h`)
+typedef struct mi_bbitmap_s mi_bbitmap_t;   // atomic binned bitmap (defined in `src/arena/bitmap.h`)
 
 struct mi_arena_pages_s {
   mi_bitmap_t* pages;                // all registered pages (abandoned and owned)

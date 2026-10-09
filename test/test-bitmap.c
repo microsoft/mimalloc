@@ -1,5 +1,5 @@
-#include "../src/bitmap-chunk.h"
-#include "mimalloc/internal/subproc.h"
+#include "../src/arena/bitmap-chunk.h"
+#include "mimalloc/heap/subproc.h"
 #include "testhelper.h"
 
 static bool test_fields(void) {

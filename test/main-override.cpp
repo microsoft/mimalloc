@@ -12,7 +12,6 @@
 #include <thread>
 #include <random>
 #include <chrono>
-#include <assert.h>
 
 #ifdef _WIN32
 #include <mimalloc-new-delete.h>
@@ -223,11 +222,7 @@ static void test_stl_allocators() {
 
 #if 0
 #include <algorithm>
-#include <chrono>
 #include <functional>
-#include <iostream>
-#include <thread>
-#include <vector>
 
 static void test_mixed0() {
     std::vector<std::unique_ptr<std::size_t>> numbers(1024 * 1024 * 100);
