@@ -300,6 +300,7 @@ static void mi_page_update_sample_countdown(mi_page_t* page)
   #if MI_SAMPLE==1  // if ==2 the countdown is already always counted in `alloc/alloc.c:mi_page_alloc_zero_ex`
   else {
     mi_theap_t* theap = mi_theap_of_page(page);
+    mi_assert_internal(theap != NULL);
     if (theap==NULL) return;
     mi_theap_adjust_sample_countdown(theap,page,alloc_count);
     // update last_alloc to the current alloc_count
