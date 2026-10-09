@@ -110,18 +110,18 @@ static inline void** mi_prim_thread_pointer(void) {
   #elif defined(__i386__)
   static inline void** mi_prim_thread_pointer(void) {
     void** tcb;
-    __asm__ ("movl %%gs:0, %0" : "=r" (tcb) : : );  // x86 32-bit always uses GS
+    __asm__ ("{movl %%gs:0, %0|mov %0, DWORD PTR gs:0}" : "=r" (tcb) : : );  // x86 32-bit always uses GS
     return tcb;
   }
   #elif defined(__x86_64__)
   static inline void** mi_prim_thread_pointer(void) {
     void** tcb;
     #if defined(__APPLE__)
-    __asm__ ("movq %%gs:0, %0" : "=r" (tcb) : : );  // x86_64 macOSX uses GS
+    __asm__ ("{movq %%gs:0, %0|mov %0, QWORD PTR gs:0}" : "=r" (tcb) : : );  // x86_64 macOSX uses GS
     #elif (MI_SIZE_SIZE==4)
-    __asm__ ("movl %%fs:0, %0" : "=r" (tcb) : : );  // x32 ABI
+    __asm__ ("{movl %%fs:0, %0|mov %0, DWORD PTR fs:0}" : "=r" (tcb) : : );  // x32 ABI
     #else
-    __asm__ ("movq %%fs:0, %0" : "=r" (tcb) : : );  // x86_64 Linux, BSD uses FS
+    __asm__ ("{movq %%fs:0, %0|mov %0, QWORD PTR fs:0}" : "=r" (tcb) : : );  // x86_64 Linux, BSD uses FS
     #endif
     return tcb;
   }
