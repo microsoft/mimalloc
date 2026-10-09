@@ -25,6 +25,9 @@
     <ClCompile Include="..\..\src\bitmap.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\bitmap-chunk.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\free.c">
       <Filter>Sources</Filter>
     </ClCompile>
@@ -94,6 +97,9 @@
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\bitmap.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\bitmap-chunk.h">
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\arena.h">

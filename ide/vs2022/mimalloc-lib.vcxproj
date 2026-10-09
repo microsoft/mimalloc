@@ -441,6 +441,11 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64EC'">false</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="..\..\src\bitmap-chunk.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64EC'">false</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\..\src\free.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">true</ExcludedFromBuild>
@@ -503,6 +508,7 @@
     <ClInclude Include="..\..\include\mimalloc\track.h" />
     <ClInclude Include="..\..\include\mimalloc\types.h" />
     <ClInclude Include="..\..\src\bitmap.h" />
+    <ClInclude Include="..\..\src\bitmap-chunk.h" />
     <ClInclude Include="..\..\src\arena.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
