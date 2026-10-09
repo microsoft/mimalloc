@@ -45,7 +45,7 @@ static bool mi_bitmap_chunkmap_try_clear(mi_bitmap_t* bitmap, size_t chunk_idx) 
 
 size_t mi_bitmap_size(size_t bit_count, size_t* pchunk_count) {
   mi_assert_internal((bit_count % MI_BCHUNK_BITS) == 0);
-  bit_count = _mi_align_up(bit_count, MI_BCHUNK_BITS);
+  bit_count = mi_align_up(bit_count, MI_BCHUNK_BITS);
   mi_assert_internal(bit_count <= MI_BITMAP_MAX_BIT_COUNT);
   mi_assert_internal(bit_count > 0);
   const size_t chunk_count = bit_count / MI_BCHUNK_BITS;
@@ -63,7 +63,7 @@ size_t mi_bitmap_init(mi_bitmap_t* bitmap, size_t bit_count, bool already_zero) 
   size_t chunk_count;
   const size_t size = mi_bitmap_size(bit_count, &chunk_count);
   if (!already_zero) {
-    _mi_memzero_aligned(bitmap, size);
+    mi_memzero_aligned(bitmap, size);
   }
   mi_atomic_store_release(&bitmap->chunk_count, chunk_count);
   mi_assert_internal(mi_atomic_load_relaxed(&bitmap->chunk_count) <= MI_BITMAP_MAX_CHUNK_COUNT);
@@ -219,7 +219,7 @@ typedef bool (mi_bitmap_visit_fun_t)(mi_bitmap_t* bitmap, size_t chunk_idx, size
 // If it returns `true` stop the search.
 static inline bool mi_bitmap_find(mi_bitmap_t* bitmap, size_t tseq, size_t n, size_t* pidx, mi_bitmap_visit_fun_t* on_find, void* arg1, void* arg2)
 {
-  const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
+  const size_t chunkmap_max = mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
   for (size_t i = 0; i < chunkmap_max; i++) {
     // and for each chunkmap entry we iterate over its bits to find the chunks
     const mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]);
@@ -295,7 +295,7 @@ mi_decl_nodiscard bool mi_bitmap_try_find_and_claim(mi_bitmap_t* bitmap, size_t 
 
 
 bool mi_bitmap_bsr(mi_bitmap_t* bitmap, size_t* idx) {
-  const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
+  const size_t chunkmap_max = mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
   for (size_t i = chunkmap_max; i > 0; ) {
     i--;
     mi_bfield_t cmap = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]);
@@ -320,7 +320,7 @@ bool mi_bitmap_bsr(mi_bitmap_t* bitmap, size_t* idx) {
 size_t mi_bitmap_popcount(mi_bitmap_t* bitmap) {
   // for all chunkmap entries
   size_t popcount = 0;
-  const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
+  const size_t chunkmap_max = mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
   for (size_t i = 0; i < chunkmap_max; i++) {
     mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]);
     size_t cmap_idx;
@@ -350,7 +350,7 @@ void mi_bitmap_clear_once_set(mi_subproc_t* subproc, mi_bitmap_t* bitmap, size_t
 // todo: optimize further? maybe use avx512 to directly get all indices using a mask_compressstore?
 bool _mi_bitmap_forall_set(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg) {
   // for all chunkmap entries
-  const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
+  const size_t chunkmap_max = mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
   for(size_t i = 0; i < chunkmap_max; i++) {
     mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]);
     size_t cmap_idx;
@@ -379,7 +379,7 @@ bool _mi_bitmap_forall_set(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_a
 // todo: optimize further? maybe use avx512 to directly get all indices using a mask_compressstore?
 bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* visit, mi_arena_t* arena, void* arg) {
   // for all chunkmap entries
-  const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
+  const size_t chunkmap_max = mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
   for (size_t i = 0; i < chunkmap_max; i++) {
     mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]);
     size_t cmap_idx;
@@ -438,7 +438,7 @@ bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_fo
   if (rngslices > MI_BFIELD_BITS) { rngslices = MI_BFIELD_BITS;  } // cap at MI_BFIELD_BITS at most
 
   // for all chunkmap entries
-  const size_t chunkmap_max = _mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
+  const size_t chunkmap_max = mi_divide_up(mi_bitmap_chunk_count(bitmap), MI_BFIELD_BITS);
   for (size_t i = 0; i < chunkmap_max; i++) {
     mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bitmap->chunkmap.bfields[i]);
     size_t cmap_idx;
@@ -496,7 +496,7 @@ bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_fo
 
 size_t mi_bbitmap_size(size_t bit_count, size_t* pchunk_count) {
   // mi_assert_internal((bit_count % MI_BCHUNK_BITS) == 0);
-  bit_count = _mi_align_up(bit_count, MI_BCHUNK_BITS);
+  bit_count = mi_align_up(bit_count, MI_BCHUNK_BITS);
   mi_assert_internal(bit_count <= MI_BITMAP_MAX_BIT_COUNT);
   mi_assert_internal(bit_count > 0);
   const size_t chunk_count = bit_count / MI_BCHUNK_BITS;
@@ -513,7 +513,7 @@ size_t mi_bbitmap_init(mi_subproc_t* subproc, mi_bbitmap_t* bbitmap, size_t bit_
   size_t chunk_count;
   const size_t size = mi_bbitmap_size(bit_count, &chunk_count);
   if (!already_zero) {
-    _mi_memzero_aligned(bbitmap, size);
+    mi_memzero_aligned(bbitmap, size);
   }
   mi_atomic_store_release(&bbitmap->chunk_count, chunk_count);
   mi_assert_internal(mi_atomic_load_relaxed(&bbitmap->chunk_count) <= MI_BITMAP_MAX_CHUNK_COUNT);
@@ -715,7 +715,7 @@ typedef bool (mi_bchunk_try_find_and_clear_fun_t)(mi_bchunk_t* chunk, size_t n, 
 static bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, size_t tseq, size_t n, size_t* pidx, mi_bchunk_try_find_and_clear_fun_t* on_find)
 {
   // we space out threads to reduce contention
-  const size_t cmap_max_count  = _mi_divide_up(mi_bbitmap_chunk_count(bbitmap),MI_BFIELD_BITS);
+  const size_t cmap_max_count  = mi_divide_up(mi_bbitmap_chunk_count(bbitmap),MI_BFIELD_BITS);
   const size_t chunk_acc       = mi_atomic_load_relaxed(&bbitmap->chunk_max_accessed);
   const size_t cmap_acc        = chunk_acc / MI_BFIELD_BITS;
   const size_t cmap_acc_bits   = 1 + (chunk_acc % MI_BFIELD_BITS);
@@ -866,7 +866,7 @@ bool mi_bbitmap_try_find_and_clearN_(mi_bbitmap_t* bbitmap, size_t tseq, size_t 
   mi_assert(n > 0); if (n==0) { return false; }
 
   const size_t chunk_max = mi_bbitmap_chunk_count(bbitmap);
-  const size_t chunk_req = _mi_divide_up(n, MI_BCHUNK_BITS);  // minimal number of chunks needed
+  const size_t chunk_req = mi_divide_up(n, MI_BCHUNK_BITS);  // minimal number of chunks needed
   if (chunk_max < chunk_req) { return false; }
 
   // iterate through the chunks

@@ -155,7 +155,7 @@ void          _mi_random_split(mi_random_ctx_t* ctx, mi_random_ctx_t* new_ctx);
 size_t        _mi_random_next(mi_random_ctx_t* ctx);
 size_t        _mi_theap_random_next(mi_theap_t* theap);
 size_t        _mi_os_random_weak(size_t extra_seed);
-static inline size_t _mi_random_shuffle(size_t x);
+static inline size_t mi_random_shuffle(size_t x);
 
 // prim-tls.c
 void          _mi_tls_slots_init(void);
@@ -537,22 +537,22 @@ static inline size_t mi_min(size_t x,  size_t y) { return (x <= y ? x : y); }
 static inline size_t mi_max(size_t x,  size_t y) { return (x >= y ? x : y); }
 
 // Is `x` a power of two? (0 is considered a power of two)
-static inline bool _mi_is_power_of_two(uintptr_t x) {
+static inline bool mi_is_power_of_two(uintptr_t x) {
   return ((x & (x - 1)) == 0);
 }
 
 // valid alignment values are as posix memalign: <https://en.cppreference.com/c/memory/aligned_alloc#Notes>
 static inline bool mi_alignment_is_valid(size_t alignment) {
-  return ((alignment!=0) && _mi_is_power_of_two(alignment));
+  return ((alignment!=0) && mi_is_power_of_two(alignment));
 }
 
 // Is a pointer aligned?
-static inline bool _mi_is_aligned(const void* p, size_t alignment) {
+static inline bool mi_is_aligned(const void* p, size_t alignment) {
   return (alignment==0 || ((uintptr_t)p % alignment) == 0);
 }
 
 // Align upwards
-static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
+static inline uintptr_t mi_align_up(uintptr_t sz, size_t alignment) {
   mi_assert_internal(alignment != 0);
   const uintptr_t mask = alignment - 1;
   if ((alignment & mask) == 0) {  // power of two?
@@ -564,12 +564,12 @@ static inline uintptr_t _mi_align_up(uintptr_t sz, size_t alignment) {
 }
 
 // Align a pointer upwards
-static inline void* _mi_align_up_ptr(const void* p, size_t alignment) {
-  return (void*)_mi_align_up((uintptr_t)p, alignment);
+static inline void* mi_align_up_ptr(const void* p, size_t alignment) {
+  return (void*)mi_align_up((uintptr_t)p, alignment);
 }
 
 // Align down
-static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
+static inline uintptr_t mi_align_down(uintptr_t sz, size_t alignment) {
   mi_assert_internal(alignment != 0);
   const uintptr_t mask = alignment - 1;
   if ((alignment & mask) == 0) {  // power of two?
@@ -581,19 +581,19 @@ static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
 }
 
 // Align a pointer downwards
-static inline void* _mi_align_down_ptr(const void* p, size_t alignment) {
-  return (void*)_mi_align_down((uintptr_t)p, alignment);
+static inline void* mi_align_down_ptr(const void* p, size_t alignment) {
+  return (void*)mi_align_down((uintptr_t)p, alignment);
 }
 
-// Divide upwards: `s <= _mi_divide_up(s,d)*d < s+d`.
-static inline uintptr_t _mi_divide_up(uintptr_t size, size_t divider) {
+// Divide upwards: `s <= mi_divide_up(s,d)*d < s+d`.
+static inline uintptr_t mi_divide_up(uintptr_t size, size_t divider) {
   mi_assert_internal(divider != 0);
   return (divider == 0 ? size : ((size + divider - 1) / divider));
 }
 
 
 // clamp an integer
-static inline size_t _mi_clamp(size_t sz, size_t min, size_t max) {
+static inline size_t mi_clamp(size_t sz, size_t min, size_t max) {
   if (sz < min) return min;
   else if (sz > max) return max;
   else return sz;
@@ -661,28 +661,28 @@ extern mi_decl_hidden const mi_theap_t _mi_theap_empty; // read-only empty theap
 extern mi_decl_hidden mi_theap_t _mi_theap_empty_wrong; // read-only empty theap used to signal that a theap for a heap could not be allocated
 
 
-static inline mi_heap_t* _mi_theap_heap_peek(const mi_theap_t* theap) {
+static inline mi_heap_t* mi_theap_heap_peek(const mi_theap_t* theap) {
   mi_assert_internal(theap!=NULL);
   return mi_atomic_load_ptr_relaxed(mi_heap_t,&theap->heap);
 }
 
-static inline mi_heap_t* _mi_theap_heap(const mi_theap_t* theap) {
-  mi_heap_t* const heap = _mi_theap_heap_peek(theap);
+static inline mi_heap_t* mi_theap_heap(const mi_theap_t* theap) {
+  mi_heap_t* const heap = mi_theap_heap_peek(theap);
   mi_assert_internal(heap!=NULL);
   return heap;
 }
 
 static inline bool mi_theap_is_initialized(const mi_theap_t* theap) {
-  return (theap != NULL && _mi_theap_heap_peek(theap) != NULL);
+  return (theap != NULL && mi_theap_heap_peek(theap) != NULL);
 }
 
-static inline mi_subproc_t* _mi_theap_subproc(const mi_theap_t* theap) {
+static inline mi_subproc_t* mi_theap_subproc(const mi_theap_t* theap) {
   mi_subproc_t* const subproc = mi_atomic_load_ptr_relaxed(mi_subproc_t,&theap->subproc);
-  mi_assert_internal(!mi_theap_is_initialized(theap) || _mi_theap_heap(theap)->subproc == subproc);
+  mi_assert_internal(!mi_theap_is_initialized(theap) || mi_theap_heap(theap)->subproc == subproc);
   return subproc;
 }
 
-static inline mi_page_t* _mi_theap_get_free_small_page(mi_theap_t* theap, size_t xsize, bool is_wsize) {
+static inline mi_page_t* mi_theap_get_free_small_page(mi_theap_t* theap, size_t xsize, bool is_wsize) {
   mi_assert_internal(is_wsize ? xsize <= (MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE) : xsize <= (MI_SMALL_SIZE_MAX + MI_PADDING_SIZE));
   const size_t idx = (is_wsize ? xsize : mi_wsize_from_size(xsize));
   mi_assert_internal(idx < MI_PAGES_DIRECT);
@@ -696,7 +696,7 @@ static inline bool mi_theap_is_detached(mi_theap_t* theap) {
 // permanently exclude a theap from profiling (mirrors `mi_heap_profile_disable` but at the theap level);
 // used for detached/meta theaps used to bootstrap thread/theap metadata, since sampling those can call
 // back into the profiler while allocating on a not yet (re-)initialized thread, causing deadlock.
-static inline void _mi_theap_profile_disable(mi_theap_t* theap) {
+static inline void mi_theap_profile_disable(mi_theap_t* theap) {
   theap->profile_disabled = true;
   theap->profile_sample_rate = 0;
   theap->profile_sample_countdown = 0;
@@ -719,34 +719,34 @@ static inline bool mi_theap_matches_thread(mi_theap_t* theap) {
 extern mi_decl_hidden _Atomic(uint8_t*) _mi_page_map;
 extern mi_decl_hidden _Atomic(void*)    _mi_page_map_max_address;
 
-static inline size_t _mi_page_map_index(const void* p) {
+static inline size_t mi_page_map_index(const void* p) {
   return (size_t)((uintptr_t)p >> MI_ARENA_SLICE_SHIFT);
 }
 
-static inline uint8_t _mi_page_map_at(size_t idx) {
+static inline uint8_t mi_page_map_at(size_t idx) {
   return mi_atomic_load_ptr_relaxed(uint8_t,&_mi_page_map)[idx];
 }
 
-static inline mi_page_t* _mi_ptr_page_ex(const void* p, bool* valid) {
-  const size_t idx = _mi_page_map_index(p);
-  const size_t ofs = _mi_page_map_at(idx);
+static inline mi_page_t* mi_ptr_page_ex(const void* p, bool* valid) {
+  const size_t idx = mi_page_map_index(p);
+  const size_t ofs = mi_page_map_at(idx);
   if (valid != NULL) { *valid = (ofs != 0); }
   return (mi_page_t*)((((uintptr_t)p >> MI_ARENA_SLICE_SHIFT) + 1 - ofs) << MI_ARENA_SLICE_SHIFT);
 }
 
-static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
+static inline mi_page_t* mi_checked_ptr_page(const void* p) {
   #if MI_MIN_VABITS < MI_INTPTR_BITS
   if mi_unlikely(((uintptr_t)p >> MI_MIN_VABITS) != 0) {
     if (p > mi_atomic_load_ptr_relaxed(void, &_mi_page_map_max_address)) return NULL;
   }
   #endif
   bool valid;
-  mi_page_t* const page = _mi_ptr_page_ex(p, &valid);
+  mi_page_t* const page = mi_ptr_page_ex(p, &valid);
   return (valid ? page : NULL);
 }
 
-static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
-  return _mi_ptr_page_ex(p, NULL);
+static inline mi_page_t* mi_unchecked_ptr_page(const void* p) {
+  return mi_ptr_page_ex(p, NULL);
 }
 
 #else
@@ -773,31 +773,31 @@ typedef struct mi_page_map_s {
 
 extern mi_decl_hidden _Atomic(mi_page_map_t*) __mi_page_map;
 
-static inline size_t _mi_page_map_index(const void* p, size_t* sub_idx) {
+static inline size_t mi_page_map_index(const void* p, size_t* sub_idx) {
   const size_t u = (size_t)((uintptr_t)p / MI_ARENA_SLICE_SIZE);
   if (sub_idx != NULL) { *sub_idx = u % MI_PAGE_MAP_SUB_COUNT; }
   return (u / MI_PAGE_MAP_SUB_COUNT);
 }
 
-static inline mi_page_map_t* _mi_page_map(void) {
+static inline mi_page_map_t* mi_page_map(void) {
   return mi_atomic_load_ptr_relaxed(mi_page_map_t,&__mi_page_map);
 }
 
-static inline mi_submap_t _mi_page_map_at(const mi_page_map_t* pmap, size_t idx) {
+static inline mi_submap_t mi_page_map_at(const mi_page_map_t* pmap, size_t idx) {
   return mi_atomic_load_ptr_acquire(mi_page_t*, &pmap->submaps[idx]);
 }
 
-static inline mi_page_t* _mi_unchecked_ptr_page(const void* p) {
-  const mi_page_map_t* pmap = _mi_page_map();
+static inline mi_page_t* mi_unchecked_ptr_page(const void* p) {
+  const mi_page_map_t* pmap = mi_page_map();
   size_t sub_idx;
-  const size_t idx = _mi_page_map_index(p, &sub_idx);
-  return _mi_page_map_at(pmap,idx)[sub_idx];  // NULL if p==NULL
+  const size_t idx = mi_page_map_index(p, &sub_idx);
+  return mi_page_map_at(pmap,idx)[sub_idx];  // NULL if p==NULL
 }
 
-static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
-  const mi_page_map_t* pmap = _mi_page_map();
+static inline mi_page_t* mi_checked_ptr_page(const void* p) {
+  const mi_page_map_t* pmap = mi_page_map();
   size_t sub_idx;
-  const size_t idx = _mi_page_map_index(p, &sub_idx);
+  const size_t idx = mi_page_map_index(p, &sub_idx);
   const size_t committed_count = mi_atomic_load_relaxed(&pmap->committed_count);    
   if mi_unlikely(idx >= committed_count) return NULL;
   // #if MI_MIN_VABITS < MI_INTPTR_BITS   // is still invalid if free is called before the pagemap is initialized
@@ -806,7 +806,7 @@ static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
   //   if mi_unlikely(idx >= committed_count) return NULL;
   // }   
   // #endif
-  mi_submap_t const sub = _mi_page_map_at(pmap,idx);
+  mi_submap_t const sub = mi_page_map_at(pmap,idx);
   if mi_unlikely(sub == NULL) return NULL;
   return sub[sub_idx];
 }
@@ -816,8 +816,8 @@ static inline mi_page_t* _mi_checked_ptr_page(const void* p) {
 #if MI_PAGE_META_IS_ALIGNED
 // if the page meta data is aligned in front of pages we can find it efficiently
 // without needing to go through the page map (for valid pointers).
-static inline mi_page_t* _mi_aligned_ptr_page0(const void* p) {
-  mi_page_t* const page_metas = (mi_page_t*)_mi_align_down_ptr(p,MI_PAGE_META_ALIGNMENT);
+static inline mi_page_t* mi_aligned_ptr_page0(const void* p) {
+  mi_page_t* const page_metas = (mi_page_t*)mi_align_down_ptr(p,MI_PAGE_META_ALIGNMENT);
   // const ptrdiff_t page_idx = ((uint8_t*)p - (uint8_t*)page_metas)/MI_ARENA_SLICE_SIZE;
   const uintptr_t page_idx    = ((uintptr_t)p / MI_ARENA_SLICE_SIZE) % (MI_PAGE_META_ALIGNMENT / MI_ARENA_SLICE_SIZE);
   mi_assert_internal(page_idx <= MI_PAGE_META_ALIGNED_COUNT);
@@ -830,13 +830,13 @@ static inline mi_page_t* _mi_aligned_ptr_page0(const void* p) {
   
 }
 
-static inline mi_page_t* _mi_aligned_ptr_page(const void* p) {
-  mi_page_t* const page = _mi_aligned_ptr_page0(p);
+static inline mi_page_t* mi_aligned_ptr_page(const void* p) {
+  mi_page_t* const page = mi_aligned_ptr_page0(p);
   if mi_unlikely(page==NULL) return NULL;
   #if MI_DEBUG
-    mi_page_t* const cpage = _mi_checked_ptr_page(p);
+    mi_page_t* const cpage = mi_checked_ptr_page(p);
     if mi_unlikely(cpage==NULL) { 
-      _mi_error_message(EINVAL, "_mi_aligned_ptr_page: invalid pointer: %p\n", p); 
+      _mi_error_message(EINVAL, "mi_aligned_ptr_page: invalid pointer: %p\n", p);
       return NULL;
     }
   #endif
@@ -844,16 +844,16 @@ static inline mi_page_t* _mi_aligned_ptr_page(const void* p) {
 }
 #endif
 
-static inline mi_page_t* _mi_ptr_page(const void* p) {
+static inline mi_page_t* mi_ptr_page(const void* p) {
   mi_assert_internal(p==NULL || mi_is_in_heap_region(p));
   #if MI_SECURE || MI_FREE_IS_CHECKED
-    return _mi_checked_ptr_page(p);
+    return mi_checked_ptr_page(p);
   #elif MI_PAGE_META_IS_ALIGNED
-    return _mi_aligned_ptr_page(p);
+    return mi_aligned_ptr_page(p);
   #elif MI_DEBUG
-    return _mi_checked_ptr_page(p);
+    return mi_checked_ptr_page(p);
   #else  
-    return _mi_unchecked_ptr_page(p);
+    return mi_unchecked_ptr_page(p);
   #endif
 }
 
@@ -880,7 +880,7 @@ static inline uint8_t* mi_page_area(const mi_page_t* page, size_t* size) {
 }
 
 static inline size_t mi_page_info_size(void) {
-  return _mi_align_up(sizeof(mi_page_t), MI_MAX_ALIGN_SIZE);
+  return mi_align_up(sizeof(mi_page_t), MI_MAX_ALIGN_SIZE);
 }
 
 static inline bool mi_page_contains_address(const mi_page_t* page, const void* p) {
@@ -906,15 +906,15 @@ static inline size_t mi_page_usable_block_size(const mi_page_t* page) {
 static inline bool mi_page_meta_is_separated(const mi_page_t* page) {
   #if MI_PAGE_META_IS_ALIGNED 
     #if MI_PAGE_META_SMALL_IS_ALIGNED
-    return (page != _mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));  
+    return (page != mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));
     #else
     MI_UNUSED_RELEASE(page);
-    mi_assert_internal(page != _mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));  
+    mi_assert_internal(page != mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));
     return true;
     #endif
   #elif MI_PAGE_META_IS_SEPARATED
   // usually separated but can still be in front for direct OS allocations (due to size or alignment) or due to MI_PAGE_META_SMALL_IS_ALIGNED
-  return (page->memid.memkind == MI_MEM_ARENA && page != _mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));
+  return (page->memid.memkind == MI_MEM_ARENA && page != mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));
   #else
   MI_UNUSED(page);
   return false;
@@ -924,7 +924,7 @@ static inline bool mi_page_meta_is_separated(const mi_page_t* page) {
 static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
   if (mi_page_meta_is_separated(page)) {
     // page meta info is at a separate location (at `arena->pages`)
-    return (uint8_t*)_mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN);
+    return (uint8_t*)mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN);
   }
   else {
     // page meta info is at the start of the page slices
@@ -1157,12 +1157,12 @@ static inline mi_heap_t* mi_heap_get_heap_main(const mi_heap_t* heap) {
   return _mi_subproc_heap_main(heap->subproc);
 }
 
-static inline bool _mi_is_heap_main(const mi_heap_t* heap) {
+static inline bool mi_is_heap_main(const mi_heap_t* heap) {
   mi_assert_internal(heap!=NULL);
   return (mi_heap_get_heap_main(heap) == heap);
 }
 
-static inline bool _mi_is_process_heap_main(const mi_heap_t* heap) {
+static inline bool mi_is_process_heap_main(const mi_heap_t* heap) {
   mi_assert_internal(heap!=NULL);
   return (_mi_subproc_main()->heap_main == heap);
 }
@@ -1291,9 +1291,9 @@ We also pass a separate `null` value to be used as `NULL` or otherwise
 ------------------------------------------------------------------- */
 
 static inline bool mi_is_in_same_page(const void* p, const void* q) {
-  mi_page_t* page = _mi_ptr_page(p);
+  mi_page_t* page = mi_ptr_page(p);
   return mi_page_contains_address(page,q);
-  // return (_mi_ptr_page(p) == _mi_ptr_page(q));
+  // return (mi_ptr_page(p) == mi_ptr_page(q));
 }
 
 static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {
@@ -1395,7 +1395,7 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
 
 // Blocks needed for a given byte size
 static inline size_t mi_slice_count_of_size(size_t size) {
-  return _mi_divide_up(size, MI_ARENA_SLICE_SIZE);
+  return mi_divide_up(size, MI_ARENA_SLICE_SIZE);
 }
 
 // Byte size of a number of blocks
@@ -1408,19 +1408,19 @@ static inline size_t mi_size_of_slices(size_t bcount) {
   memory id's
 ----------------------------------------------------------- */
 
-static inline mi_memid_t _mi_memid_create(mi_memkind_t memkind) {
+static inline mi_memid_t mi_memid_create(mi_memkind_t memkind) {
   mi_memid_t memid;
   _mi_memzero_var(memid);
   memid.memkind = memkind;
   return memid;
 }
 
-static inline mi_memid_t _mi_memid_none(void) {
-  return _mi_memid_create(MI_MEM_NONE);
+static inline mi_memid_t mi_memid_none(void) {
+  return mi_memid_create(MI_MEM_NONE);
 }
 
-static inline mi_memid_t _mi_memid_create_os(void* base, size_t size, bool committed, bool is_zero, bool is_large) {
-  mi_memid_t memid = _mi_memid_create(MI_MEM_OS);
+static inline mi_memid_t mi_memid_create_os(void* base, size_t size, bool committed, bool is_zero, bool is_large) {
+  mi_memid_t memid = mi_memid_create(MI_MEM_OS);
   memid.mem.os.base = base;
   memid.mem.os.size = size;
   memid.initially_committed = committed;
@@ -1429,8 +1429,8 @@ static inline mi_memid_t _mi_memid_create_os(void* base, size_t size, bool commi
   return memid;
 }
 
-static inline mi_memid_t _mi_memid_create_static(void* p, size_t size) {
-  mi_memid_t memid = _mi_memid_create(MI_MEM_STATIC);
+static inline mi_memid_t mi_memid_create_static(void* p, size_t size) {
+  mi_memid_t memid = mi_memid_create(MI_MEM_STATIC);
   memid.mem.malloc.base = p;
   memid.mem.malloc.size = size;
   memid.initially_committed = true;
@@ -1438,8 +1438,8 @@ static inline mi_memid_t _mi_memid_create_static(void* p, size_t size) {
   return memid;
 }
 
-static inline mi_memid_t _mi_memid_create_malloc(void* p, size_t size, bool iszero) {
-  mi_memid_t memid = _mi_memid_create(MI_MEM_MALLOC);
+static inline mi_memid_t mi_memid_create_malloc(void* p, size_t size, bool iszero) {
+  mi_memid_t memid = mi_memid_create(MI_MEM_MALLOC);
   memid.mem.malloc.base = p;
   memid.mem.malloc.size = size;
   memid.initially_committed = true;
@@ -1448,7 +1448,7 @@ static inline mi_memid_t _mi_memid_create_malloc(void* p, size_t size, bool isze
   return memid;
 }
 
-static inline size_t _mi_memid_size(mi_memid_t memid) {
+static inline size_t mi_memid_size(mi_memid_t memid) {
   if (mi_memid_is_os(memid)) {
     return memid.mem.os.size;
   }
@@ -1468,7 +1468,7 @@ static inline size_t _mi_memid_size(mi_memid_t memid) {
 // Fast "random" shuffle
 // -------------------------------------------------------------------
 
-static inline size_t _mi_random_shuffle(size_t x) {
+static inline size_t mi_random_shuffle(size_t x) {
   if (x==0) { x = 17; }   // ensure we don't get stuck in generating zeros
 #if (MI_SIZE_SIZE>=8)
   // by Sebastiano Vigna, see: <http://xoshiro.di.unimi.it/splitmix64.c>
@@ -1490,58 +1490,58 @@ static inline size_t _mi_random_shuffle(size_t x) {
 
 
 // ---------------------------------------------------------------------------------
-// Provide our own `_mi_memcpy/set` for potential performance optimizations.
+// Provide our own `mi_memcpy/set` for potential performance optimizations.
 // ---------------------------------------------------------------------------------
 
-static inline int _mi_memcmp(const void* dst, const void* src, size_t n) {
+static inline int mi_memcmp(const void* dst, const void* src, size_t n) {
   return memcmp(dst, src, n);
 }
 
-static inline void* _mi_memcpy(void* dst, const void* src, size_t n) {
+static inline void* mi_memcpy(void* dst, const void* src, size_t n) {
   return memcpy(dst, src, n);
 }
 
-static inline void* _mi_memset(void* dst, int val, size_t n) {  
+static inline void* mi_memset(void* dst, int val, size_t n) {
   return memset(dst, val, n);
 }
 
-static inline void* _mi_memset_backward(void* dst, int val, size_t n) {
+static inline void* mi_memset_backward(void* dst, int val, size_t n) {
   memset((uint8_t*)dst - n, val, n);
   return dst;
 }
 
-static inline void* _mi_memzero(void* dst, size_t n) {
-  return _mi_memset(dst, 0, n);
+static inline void* mi_memzero(void* dst, size_t n) {
+  return mi_memset(dst, 0, n);
 }
 
-static inline void* _mi_memzero_backward(void* dst, size_t n) {
-  return _mi_memset_backward(dst, 0, n);
+static inline void* mi_memzero_backward(void* dst, size_t n) {
+  return mi_memset_backward(dst, 0, n);
 }
 
-static inline void* _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
+static inline void* mi_memcpy_aligned(void* dst, const void* src, size_t n) {
   // on gcc/clang we can provide a hint that the pointers are word aligned.
-  mi_assert_internal(_mi_is_aligned(dst,MI_SIZE_SIZE) && _mi_is_aligned(src,MI_SIZE_SIZE));
+  mi_assert_internal(mi_is_aligned(dst,MI_SIZE_SIZE) && mi_is_aligned(src,MI_SIZE_SIZE));
   void* adst = mi_assume_aligned(dst, MI_SIZE_SIZE);
   const void* asrc = mi_assume_aligned(src, MI_SIZE_SIZE);
-  return _mi_memcpy(adst, asrc, n);
+  return mi_memcpy(adst, asrc, n);
 }
 
-static inline void* _mi_memset_aligned(void* dst, int val, size_t n) {
-  mi_assert_internal(_mi_is_aligned(dst,MI_SIZE_SIZE));
+static inline void* mi_memset_aligned(void* dst, int val, size_t n) {
+  mi_assert_internal(mi_is_aligned(dst,MI_SIZE_SIZE));
   void* adst = mi_assume_aligned(dst, MI_SIZE_SIZE);
-  return _mi_memset(adst, val, n);
+  return mi_memset(adst, val, n);
 }
 
-static inline void* _mi_memzero_aligned(void* dst, size_t n) {
-  return _mi_memset_aligned(dst, 0, n);
+static inline void* mi_memzero_aligned(void* dst, size_t n) {
+  return mi_memset_aligned(dst, 0, n);
 }
 
 // Zero a block: blocks are always aligned with a positive bsize in machine-word bytes.
-static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize) {
+static mi_decl_forceinline void* mi_memzero_block(mi_block_t* dst, size_t bsize) {
   mi_assert_internal(bsize%MI_SIZE_SIZE == 0);
   mi_assert_internal(bsize > 0);
-  mi_assert_internal(_mi_is_aligned(dst,MI_SIZE_SIZE));
-  mi_assert_internal(bsize < MI_MAX_ALIGN_SIZE || _mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
+  mi_assert_internal(mi_is_aligned(dst,MI_SIZE_SIZE));
+  mi_assert_internal(bsize < MI_MAX_ALIGN_SIZE || mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
   
   // fast memzero for small sizes based on overlapping writes (and assuming non-zero size_t-multiple size, and size_t aligned)
   // assumes constant memset(p,0,N) gets optimized to fast simd stores by the compiler
@@ -1552,26 +1552,26 @@ static mi_decl_forceinline void* _mi_memzero_block(mi_block_t* dst, size_t bsize
       *((size_t*)dst) = 0;
       return dst;
     }
-    mi_assert_internal(_mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
+    mi_assert_internal(mi_is_aligned(dst,MI_MAX_ALIGN_SIZE));
     uint8_t* const start = (uint8_t*)mi_assume_aligned(dst, MI_MAX_ALIGN_SIZE);
     uint8_t* const end   = start + bsize;    // note: if bsize is always a multiple of 16 then end is always aligned as well (but due to padding this does not hold)    
     if mi_likely(bsize < 8*MI_SIZE_SIZE) {   // bsize < 64 (32)
       const size_t ofs = (bsize>>1)&(2*MI_SIZE_SIZE); mi_assert_internal(bsize < 4*MI_SIZE_SIZE ? ofs==0 : ofs==2*MI_SIZE_SIZE);  // ofs == 16 (8)
-      _mi_memzero(start,            2*MI_SIZE_SIZE); 
-      _mi_memzero(start+ofs,        2*MI_SIZE_SIZE);
-      _mi_memzero_backward(end-ofs, 2*MI_SIZE_SIZE); 
-      _mi_memzero_backward(end,     2*MI_SIZE_SIZE);
+      mi_memzero(start,            2*MI_SIZE_SIZE);
+      mi_memzero(start+ofs,        2*MI_SIZE_SIZE);
+      mi_memzero_backward(end-ofs, 2*MI_SIZE_SIZE);
+      mi_memzero_backward(end,     2*MI_SIZE_SIZE);
       return dst;
     }
     if mi_likely(bsize <= 16*MI_SIZE_SIZE) {  // bsize < 128 (64)
-      _mi_memzero(start,        8*MI_SIZE_SIZE);
-      _mi_memzero_backward(end, 8*MI_SIZE_SIZE);
+      mi_memzero(start,        8*MI_SIZE_SIZE);
+      mi_memzero_backward(end, 8*MI_SIZE_SIZE);
       return dst;
     }
   #endif
   // fallback to regular memset for larger sizes
   void* const wdst = mi_assume_aligned(dst,MI_SIZE_SIZE);
-  return _mi_memzero_aligned(wdst, bsize);
+  return mi_memzero_aligned(wdst, bsize);
 }
 
 #endif  // MI_INTERNAL_H

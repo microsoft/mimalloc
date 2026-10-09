@@ -121,7 +121,7 @@ static mi_thread_locals_t* mi_thread_locals_expand(size_t least_idx) {
   if (count > MI_TLS_IDX_MAX) { return NULL; }  // too large
   // allocate as meta (for secure mode)
   // we could also allocate on the main heap; this is recursion safe as that uses the fast local key
-  mi_memid_t memid = (tls_old==NULL ? _mi_memid_none() : tls_old->memid);
+  mi_memid_t memid = (tls_old==NULL ? mi_memid_none() : tls_old->memid);
   mi_thread_locals_t* tls = (mi_thread_locals_t*)_mi_meta_rezalloc(_mi_subproc(), tls_old, sizeof(mi_thread_locals_t) + count*sizeof(mi_tls_slot_t), &memid);
   if mi_unlikely(tls==NULL) return NULL;
   tls->memid = memid;
@@ -270,12 +270,12 @@ static bool mi_thread_local_create_expand(void) {
   // mi_bitmap_t* newslots = (mi_bitmap_t*)mi_zalloc_aligned(newsize, MI_BCHUNK_SIZE);
   mi_memid_t memid;
   mi_bitmap_t* newslots = (mi_bitmap_t*)_mi_meta_zalloc_aligned(_mi_subproc_main(), newsize, MI_BCHUNK_SIZE, &memid); // always allocate thread locals in the main subprocess
-  mi_assert_internal(_mi_is_aligned(newslots,MI_BCHUNK_SIZE));
+  mi_assert_internal(mi_is_aligned(newslots,MI_BCHUNK_SIZE));
   if (newslots==NULL) { return false; }
   if (slots!=NULL) {
     // copy over the previous bitmap
     const size_t oldsize = mi_bitmap_size(oldcount,NULL);
-    _mi_memcpy_aligned(newslots, slots, oldsize);
+    mi_memcpy_aligned(newslots, slots, oldsize);
     _mi_meta_free(_mi_subproc_main(), slots, mi_thread_locals_memid);
   }
   mi_bitmap_init(newslots, newcount, true /* pretend already zero'd so we do not zero out the copied old entries */);

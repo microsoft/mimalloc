@@ -625,7 +625,7 @@ struct mi_theap_s {
   bool                  profile_disabled;                    // if `true`, this theap is permanently excluded from profiling
 
   // sampling
-  size_t                sample_countdown;                    // sample countdown in requested bytes (don't change the field order; see `internal.h:_mi_theap_get_free_small_page`)
+  size_t                sample_countdown;                    // sample countdown in requested bytes (don't change the field order; see `internal.h:mi_theap_get_free_small_page`)
   size_t                sample_rate;                         // current sampling rate in requested bytes (or 0 to disable) (for profiling and guarded mode)
   uint64_t              sample_requested;                    // total allocated/requested bytes since the last sample
   size_t                profile_sample_rate;                 // sampling rate in requested bytes for profiling

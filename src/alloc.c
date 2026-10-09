@@ -76,8 +76,8 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
 {
   if (page->block_size != 0) { // not the empty theap
     mi_assert_internal(mi_page_block_size(page) >= size);
-    mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
-    mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
+    mi_assert_internal(mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
+    mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
     mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));    
   }
 
@@ -96,7 +96,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
            else { return _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage); }
     #endif
   }
-  mi_assert_internal(block != NULL && _mi_ptr_page(block) == page);
+  mi_assert_internal(block != NULL && mi_ptr_page(block) == page);
   if (ppage != NULL) { *ppage = page; };
 
   // pop from the free list
@@ -111,8 +111,8 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
   page->free  = next;
   page->xused = xused;
 
-  mi_assert_internal(page->free == NULL || _mi_ptr_page(page->free) == page);
-  mi_assert_internal(page->block_size < MI_MAX_ALIGN_SIZE || _mi_is_aligned(block, MI_MAX_ALIGN_SIZE));
+  mi_assert_internal(page->free == NULL || mi_ptr_page(page->free) == page);
+  mi_assert_internal(page->block_size < MI_MAX_ALIGN_SIZE || mi_is_aligned(block, MI_MAX_ALIGN_SIZE));
 
   #if MI_SAMPLE==2 
   const size_t req_size = size - MI_PADDING_SIZE;
@@ -154,7 +154,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
       #if !MI_PADDING
       return // use tail-call       
       #endif
-      _mi_memzero_block(block,bsize); 
+      mi_memzero_block(block,bsize);
     }
     else {
       block->next = 0; 
@@ -200,7 +200,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_theap_nonnull_xmalloc_small
   #endif
   
   // get page in constant time 
-  mi_page_t* page = _mi_theap_get_free_small_page(theap, xsize + (is_wsize ? MI_PADDING_WSIZE : MI_PADDING_SIZE), is_wsize);
+  mi_page_t* page = mi_theap_get_free_small_page(theap, xsize + (is_wsize ? MI_PADDING_WSIZE : MI_PADDING_SIZE), is_wsize);
 
   // and allocate  
   void* const p = mi_page_malloc_zero(theap, page, size + MI_PADDING_SIZE, theap->sample_countdown, zero, is_new, ppage);
@@ -420,7 +420,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_calloc(mi_heap_t* heap, size_t 
 
 // Return usable size
 static void* mi_ublock_size( void* p, mi_page_t* page, size_t* pblock_size ) {
-  mi_assert_internal(page == _mi_ptr_page(p));
+  mi_assert_internal(page == mi_ptr_page(p));
   if (pblock_size!=NULL) {
     if (p!=NULL) { *pblock_size = mi_page_block_size(page); }
   }
@@ -520,7 +520,7 @@ static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, voi
     if (theap!=NULL)
     #endif
     {
-      if (mi_page_heap(page)==_mi_theap_heap_peek(theap)) {  // and within the same heap
+      if (mi_page_heap(page)==mi_theap_heap_peek(theap)) {  // and within the same heap
         mi_assert_internal(p!=NULL);
         // todo: do not track as the usable size is still the same in the free; adjust potential padding?
         // mi_track_resize(p,size,newsize)
@@ -536,18 +536,18 @@ static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, voi
   if mi_likely(newp != NULL) {
     if (pblock_size_post!=NULL) { *pblock_size_post = mi_page_block_size(newpage); }  
     const size_t copy_size  = (newsize > size ? size : newsize);
-    const size_t zero_start = _mi_align_down( (copy_size >= sizeof(intptr_t) ? copy_size - sizeof(intptr_t) : 0), sizeof(intptr_t)); // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
+    const size_t zero_start = mi_align_down( (copy_size >= sizeof(intptr_t) ? copy_size - sizeof(intptr_t) : 0), sizeof(intptr_t)); // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
     const size_t usable = _mi_page_usable_size(newpage,newp); 
     mi_assert_internal(usable >= newsize);     
     if (zero && usable > zero_start) {      
-      _mi_memzero_aligned((uint8_t*)newp + zero_start, usable - zero_start);
+      mi_memzero_aligned((uint8_t*)newp + zero_start, usable - zero_start);
     }
     else if (newsize == 0) {
       ((uint8_t*)newp)[0] = 0; // work around for applications that expect zero-reallocation to be zero initialized (issue #725)
     }
     if mi_likely(p != NULL) {
       mi_track_mem_defined(p,copy_size);  // _mi_useable_size may be too large for byte precise memory tracking..
-      _mi_memcpy_aligned(newp, p, copy_size);
+      mi_memcpy_aligned(newp, p, copy_size);
       mi_free(p); // only free the original pointer if successful
     }
   }
@@ -651,7 +651,7 @@ mi_decl_nodiscard static mi_decl_restrict char* mi_theap_strdup(mi_theap_t* xthe
   if (len > MI_MAX_ALLOC_SIZE - 1) return NULL;  // prevent overflow on len+1
   char* t = (char*)mi_theap_malloc(xtheap,len+1);
   if (t == NULL) return NULL;
-  _mi_memcpy(t, s, len);
+  mi_memcpy(t, s, len);
   t[len] = 0;
   return t;
 }
@@ -671,7 +671,7 @@ mi_decl_nodiscard static mi_decl_restrict char* mi_theap_strndup(mi_theap_t* xth
   if (len > MI_MAX_ALLOC_SIZE - 1) return NULL;  // prevent overflow on len+1
   char* t = (char*)mi_theap_malloc(xtheap, len+1);
   if (t == NULL) return NULL;
-  _mi_memcpy(t, s, len);
+  mi_memcpy(t, s, len);
   t[len] = 0;
   return t;
 }

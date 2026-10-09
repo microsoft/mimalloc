@@ -35,12 +35,12 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page);
 
 #if (MI_DEBUG>=3)
 static size_t mi_page_list_count(mi_page_t* page, mi_block_t* head) {
-  mi_assert_internal(_mi_ptr_page(mi_page_start(page)) == page);
+  mi_assert_internal(mi_ptr_page(mi_page_start(page)) == page);
   const uint8_t* slice_start = mi_page_slice_start(page);
-  mi_assert_internal(_mi_is_aligned(slice_start,MI_PAGE_ALIGN));
+  mi_assert_internal(mi_is_aligned(slice_start,MI_PAGE_ALIGN));
   size_t count = 0;
   while (head != NULL) {
-    mi_assert_internal((uint8_t*)head - slice_start > (ptrdiff_t)MI_LARGE_PAGE_SIZE || page == _mi_ptr_page(head));
+    mi_assert_internal((uint8_t*)head - slice_start > (ptrdiff_t)MI_LARGE_PAGE_SIZE || page == mi_ptr_page(head));
     count++;
     head = mi_block_next(page, head);
   }
@@ -458,8 +458,8 @@ mi_block_t* _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
 // called from `mi_free` on a reclaim, and fresh_alloc if we get an abandoned page
 void _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page)
 {
-  mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
-  mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
+  mi_assert_internal(mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
+  mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
 
@@ -747,11 +747,11 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
   counts[current]--;
   mi_block_t* const free_start = blocks[current];
   // and iterate through the rest; use `random_shuffle` for performance
-  size_t rnd = _mi_random_shuffle(r|1); // ensure not 0
+  size_t rnd = mi_random_shuffle(r|1); // ensure not 0
   for (size_t i = 1; i < extend; i++) {
     // call random_shuffle only every SIZE_SIZE rounds
     const size_t round = i%MI_SIZE_SIZE;
-    if (round == 0) rnd = _mi_random_shuffle(rnd);
+    if (round == 0) rnd = mi_random_shuffle(rnd);
     // select a random next slice index
     size_t next = ((rnd >> 8*round) & (slice_count-1));
     while (counts[next]==0) {                            // ensure it still has space
@@ -848,22 +848,22 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   if (slice_committed > 0) {
     // reduce extend if it commits more than an arena slice
     if ((extend * bsize) > MI_ARENA_SLICE_SIZE) {
-      extend = _mi_divide_up(MI_ARENA_SLICE_SIZE, bsize);
+      extend = mi_divide_up(MI_ARENA_SLICE_SIZE, bsize);
     }
     // commit required size
     const size_t needed_size = (page->capacity + extend)*bsize;
     mi_assert_internal(needed_size <= page_size);
-    size_t needed_commit = _mi_align_up( mi_page_slice_offset_of(page, needed_size), mi_page_min_commit_size());
+    size_t needed_commit = mi_align_up( mi_page_slice_offset_of(page, needed_size), mi_page_min_commit_size());
     #if MI_SECURE>=5
     // the previous alignup could extend the commit into the guard page; re-adjust if needed
-    const size_t page_size_commit = _mi_align_up( mi_page_slice_offset_of(page, page_size), _mi_os_page_size() );    
+    const size_t page_size_commit = mi_align_up( mi_page_slice_offset_of(page, page_size), _mi_os_page_size() );
     if (needed_commit > page_size_commit) { 
       needed_commit = page_size_commit;
     }
     #endif
     if (needed_commit > slice_committed) {
       mi_assert_internal(((needed_commit - slice_committed) % _mi_os_page_size()) == 0);
-      if (!_mi_os_commit(_mi_theap_subproc(theap), mi_page_slice_start(page) + slice_committed, needed_commit - slice_committed, NULL)) {
+      if (!_mi_os_commit(mi_theap_subproc(theap), mi_page_slice_start(page) + slice_committed, needed_commit - slice_committed, NULL)) {
         return false;
       }
       mi_assert_internal(needed_commit <= UINT16_MAX * _mi_os_page_size());
@@ -889,7 +889,7 @@ static bool mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
 mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   mi_assert(page != NULL);
   mi_assert(theap!=NULL);
-  // page->heap = (_mi_is_heap_main(_mi_theap_heap(theap)) ? NULL : _mi_theap_heap(theap)); // faster for `mi_page_associated_theap`
+  // page->heap = (mi_is_heap_main(mi_theap_heap(theap)) ? NULL : mi_theap_heap(theap)); // faster for `mi_page_associated_theap`
   // mi_page_set_theap(page, theap);
 
   size_t page_size;
@@ -911,7 +911,7 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   #endif
 
   mi_assert_internal(page->heap != NULL);
-  mi_assert_internal(page->heap == _mi_theap_heap(theap));
+  mi_assert_internal(page->heap == mi_theap_heap(theap));
   mi_assert_internal(page->theap!=NULL);
   mi_assert_internal(page->theap == mi_page_theap(page));
   mi_assert_internal(page->capacity == 0);
@@ -1093,8 +1093,8 @@ static inline mi_page_t* mi_page_queue_lookup_free_first(mi_theap_t* theap, mi_p
     #endif
     page->retire_expire = 0;
     mi_assert_internal(mi_page_immediate_available(page));
-    mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
-    mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
+    mi_assert_internal(mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
+    mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
     return page;
   }
   else {
@@ -1114,8 +1114,8 @@ static inline mi_page_t* mi_page_queue_find_free(mi_theap_t* theap, mi_page_queu
     if (page==NULL) return NULL;
   }  
   mi_assert_internal(mi_page_immediate_available(page));
-  mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
-  mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
+  mi_assert_internal(mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
+  mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
   return page;
 }
 
@@ -1171,8 +1171,8 @@ static mi_page_t* mi_find_page(mi_theap_t* theap, size_t size, size_t huge_align
   if (page==NULL) return NULL;
   mi_assert_internal(mi_page_block_size(page) >= size);
   mi_assert_internal(mi_page_immediate_available(page));
-  mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
-  mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
+  mi_assert_internal(mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
+  mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
   return page;
 }
 
@@ -1233,9 +1233,9 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
     theap->generic_collect_count += theap->generic_count;
     theap->generic_count = 0;
 
-    // check if the profiler is enabled (unless this theap is permanently excluded, see `_mi_theap_profile_disable`)
+    // check if the profiler is enabled (unless this theap is permanently excluded, see `mi_theap_profile_disable`)
     if (!theap->profile_disabled) {
-      mi_heap_t* const heap = _mi_theap_heap(theap);
+      mi_heap_t* const heap = mi_theap_heap(theap);
       mi_profiler_t* prof = mi_atomic_load_ptr_relaxed(mi_profiler_t, &heap->profiler);
       const bool prof_enabled = (prof!=NULL && mi_profiler_is_enabled(prof));
       if (prof_enabled && theap->profile_sample_rate==0) {
@@ -1318,8 +1318,8 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
 
   mi_assert_internal(mi_page_immediate_available(page));
   mi_assert_internal(mi_page_block_size(page) >= size);
-  mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
-  mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);
+  mi_assert_internal(mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
+  mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
 
   // and try again, this time succeeding! (i.e. this should never recurse through _mi_page_malloc_zero)
   if (ppage!=NULL) { *ppage = page; }

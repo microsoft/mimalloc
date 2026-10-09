@@ -53,7 +53,7 @@ int _mi_prim_free(void* addr, size_t size ) {
   }
 #elif defined(__wasi__)
   static void* mi_memory_grow( size_t size ) {
-    size_t base = (size > 0 ? __builtin_wasm_memory_grow(0,_mi_divide_up(size, _mi_os_page_size()))
+    size_t base = (size > 0 ? __builtin_wasm_memory_grow(0,mi_divide_up(size, _mi_os_page_size()))
                             : __builtin_wasm_memory_size(0));
     if (base == SIZE_MAX) return NULL;
     return (void*)(base * _mi_os_page_size());
@@ -88,8 +88,8 @@ static void* mi_prim_mem_grow(size_t size, size_t try_alignment) {
     {
       void* current = mi_memory_grow(0);  // get current size
       if (current != NULL) {
-        void* aligned_current = _mi_align_up_ptr(current, try_alignment);  // and align from there to minimize wasted space
-        alloc_size = _mi_align_up( ((uint8_t*)aligned_current - (uint8_t*)current) + size, _mi_os_page_size());
+        void* aligned_current = mi_align_up_ptr(current, try_alignment);  // and align from there to minimize wasted space
+        alloc_size = mi_align_up( ((uint8_t*)aligned_current - (uint8_t*)current) + size, _mi_os_page_size());
         base = mi_memory_grow(alloc_size);
       }
     }
@@ -97,7 +97,7 @@ static void* mi_prim_mem_grow(size_t size, size_t try_alignment) {
     pthread_mutex_unlock(&mi_theap_grow_mutex);
     #endif
     if (base != NULL) {
-      p = _mi_align_up_ptr(base, try_alignment);
+      p = mi_align_up_ptr(base, try_alignment);
       if ((uint8_t*)p + size > (uint8_t*)base + alloc_size) {
         // another thread used wasm_memory_grow/sbrk in-between and we do not have enough
         // space after alignment. Give up (and waste the space as we cannot shrink :-( )

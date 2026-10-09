@@ -468,7 +468,7 @@ static void mi_locations_done(mi_heap_t* heap, mi_locations_t* locations) {
 static bool mi_location_matches(const mi_location_t* loc, size_t hash, mi_threadid_t thread_id, const mi_callstack_t* callstack) {
   return (loc->hash == hash && loc->thread_id == thread_id &&
           loc->callstack.count == callstack->count &&
-          (callstack->count == 0 || _mi_memcmp(loc->callstack.frames, callstack->frames, callstack->count * sizeof(void*)) == 0));
+          (callstack->count == 0 || mi_memcmp(loc->callstack.frames, callstack->frames, callstack->count * sizeof(void*)) == 0));
 }
 
 // Find an existing location matching `thread_id` and `callstack`, or insert
@@ -498,7 +498,7 @@ static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_
   if (callstack->count > 0) {
     loc->callstack.frames = (void**)mi_heap_mallocn(heap, callstack->count, sizeof(void*));
     if (loc->callstack.frames == NULL) return NULL;
-    _mi_memcpy(loc->callstack.frames, callstack->frames, callstack->count * sizeof(void*));
+    mi_memcpy(loc->callstack.frames, callstack->frames, callstack->count * sizeof(void*));
   }
   loc->callstack.count = callstack->count;
   loc->thread_id = thread_id;

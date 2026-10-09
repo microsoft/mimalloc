@@ -65,7 +65,7 @@ static bool mi_theap_page_is_valid(mi_theap_t* theap, mi_page_queue_t* pq, mi_pa
 
 static bool mi_theap_is_valid(mi_theap_t* theap) {
   mi_assert_internal(theap!=NULL);
-  mi_heap_t* const heap = _mi_theap_heap_peek(theap);
+  mi_heap_t* const heap = mi_theap_heap_peek(theap);
   mi_assert_internal(heap != NULL);
   mi_theap_t* const heap_theap = _mi_heap_theap_peek(heap);  // don't use mi_heap_theap as that may re-initialize the thread
   mi_assert_internal(heap_theap==NULL || heap_theap == theap);
@@ -117,7 +117,7 @@ static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_pag
 
 void _mi_theap_merge_stats(mi_theap_t* theap) {
   mi_assert_internal(mi_theap_is_initialized(theap));
-  mi_heap_t* const heap = _mi_theap_heap(theap);
+  mi_heap_t* const heap = mi_theap_heap(theap);
   _mi_stats_merge_into(&heap->stats, &theap->stats);
 }
 
@@ -207,7 +207,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   mi_assert_internal(heap!=NULL);
   mi_assert_internal(tld!=NULL);
   mi_memid_t memid = theap->memid;
-  _mi_memcpy_aligned(theap, &_mi_theap_empty, sizeof(mi_theap_t));
+  mi_memcpy_aligned(theap, &_mi_theap_empty, sizeof(mi_theap_t));
   theap->memid = memid;
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
   mi_atomic_store_release(&theap->refcount,1);
@@ -260,7 +260,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   // theap->cookie = _mi_theap_random_next(theap) | 1;
   _mi_theap_guarded_init(theap); // needs theap->random
   if (!theap->is_detached) {
-    mi_subproc_stat_increase(_mi_theap_subproc(theap),theaps,1);  // on subproc to match theap_free_mem
+    mi_subproc_stat_increase(mi_theap_subproc(theap),theaps,1);  // on subproc to match theap_free_mem
   }
 
   // only now set the heap member as it is used to determine if a theap is initialized
@@ -292,7 +292,7 @@ mi_theap_t* _mi_theap_alloc(mi_heap_t* heap, mi_tld_t* tld) {
   else {
     // theaps associated with a specific arena are allocated in that arena
     // note: takes up at least one slice which is quite wasteful...
-    const size_t size = _mi_align_up(sizeof(mi_theap_t),MI_ARENA_MIN_OBJ_SIZE);
+    const size_t size = mi_align_up(sizeof(mi_theap_t),MI_ARENA_MIN_OBJ_SIZE);
     theap = (mi_theap_t*)_mi_arenas_alloc(heap, size, true, true, heap->exclusive_arena, tld->thread_seq, tld->numa_node, &memid);
   }
   if (theap==NULL) {
@@ -392,7 +392,7 @@ void _mi_tld_detach_theaps( mi_tld_t* tld ) {
       while (theap != NULL) {
         mi_theap_t* next = theap->tnext;
         mi_assert_internal(theap->page_count==0);
-        mi_heap_t* heap = _mi_theap_heap_peek(theap); // now the heap might be NULL from an earlier iteration
+        mi_heap_t* heap = mi_theap_heap_peek(theap); // now the heap might be NULL from an earlier iteration
         if (heap != NULL) {
           if (mi_lock_try_acquire(&heap->theaps_lock)) {
             // merge stats into the owning heap stats
@@ -451,7 +451,7 @@ void mi_theap_unload(mi_theap_t* theap) {
   mi_assert(mi_theap_is_initialized(theap));
   mi_assert_expensive(mi_theap_is_valid(theap));
   if (theap==NULL || !mi_theap_is_initialized(theap)) return;
-  if (_mi_theap_heap(theap)->exclusive_arena == NULL) {
+  if (mi_theap_heap(theap)->exclusive_arena == NULL) {
     _mi_warning_message("cannot unload theaps that are not associated with an exclusive arena\n");
     return;
   }
@@ -471,7 +471,7 @@ void mi_theap_unload(mi_theap_t* theap) {
 bool mi_theap_reload(mi_theap_t* theap, mi_arena_id_t arena_id) {
   mi_assert(mi_theap_is_initialized(theap));
   if (theap==NULL || !mi_theap_is_initialized(theap)) return false;
-  if (_mi_theap_heap(theap)->exclusive_arena == NULL) {
+  if (mi_theap_heap(theap)->exclusive_arena == NULL) {
     _mi_warning_message("cannot reload theaps that were not associated with an exclusive arena\n");
     return false;
   }
@@ -480,8 +480,8 @@ bool mi_theap_reload(mi_theap_t* theap, mi_arena_id_t arena_id) {
     return false;
   }
   mi_arena_t* arena = _mi_arena_from_id(arena_id);
-  if (_mi_theap_heap(theap)->exclusive_arena != arena) {
-    _mi_warning_message("trying to reload a theap at a different arena address: %p vs %p\n", _mi_theap_heap(theap)->exclusive_arena, arena);
+  if (mi_theap_heap(theap)->exclusive_arena != arena) {
+    _mi_warning_message("trying to reload a theap at a different arena address: %p vs %p\n", mi_theap_heap(theap)->exclusive_arena, arena);
     return false;
   }
 
@@ -570,7 +570,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
   // create a bitmap of free blocks.
   #define MI_MAX_BLOCKS   (MI_SMALL_PAGE_SIZE / sizeof(void*))
   uintptr_t free_map[MI_MAX_BLOCKS / MI_INTPTR_BITS];
-  const uintptr_t bmapsize = _mi_divide_up(page->capacity, MI_INTPTR_BITS);
+  const uintptr_t bmapsize = mi_divide_up(page->capacity, MI_INTPTR_BITS);
   memset(free_map, 0, bmapsize * sizeof(intptr_t));
   if (page->capacity % MI_INTPTR_BITS != 0) {
     // mark left-over bits at the end as free
@@ -678,7 +678,7 @@ typedef struct mi_visit_blocks_args_s {
 
 static bool mi_theap_area_visitor(const mi_theap_t* theap, const mi_theap_area_ex_t* xarea, void* arg) {
   mi_visit_blocks_args_t* args = (mi_visit_blocks_args_t*)arg;
-  if (!args->visitor(_mi_theap_heap(theap), &xarea->area, NULL, xarea->area.block_size, args->arg)) return false;
+  if (!args->visitor(mi_theap_heap(theap), &xarea->area, NULL, xarea->area.block_size, args->arg)) return false;
   if (args->visit_blocks) {
     return _mi_theap_area_visit_blocks(&xarea->area, xarea->page, args->visitor, args->arg);
   }

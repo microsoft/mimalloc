@@ -35,7 +35,7 @@ void mi_heap_stats_merge_to_main(mi_heap_t* heap) {
 }
 
 bool _mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap) {
-  mi_assert_internal((uintptr_t)theap == 1 || _mi_theap_heap(theap)==heap);
+  mi_assert_internal((uintptr_t)theap == 1 || mi_theap_heap(theap)==heap);
   mi_assert_internal(!_mi_is_empty_theap(theap));
   mi_assert_internal(heap->theap != 0);
   return _mi_thread_local_set(heap->theap,theap);
@@ -123,7 +123,7 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
   }
   mi_atomic_increment_relaxed(&subproc->heap_count);
   mi_subproc_stat_increase(subproc, heaps, 1);
-  mi_assert_internal(_mi_is_heap_main(heap) ? heap->theap == mi_thread_local_key_fast : heap->theap != 0);
+  mi_assert_internal(mi_is_heap_main(heap) ? heap->theap == mi_thread_local_key_fast : heap->theap != 0);
 }
 
 mi_heap_t* _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool is_main_heap) {
@@ -188,7 +188,7 @@ static void mi_heap_free_theaps(mi_heap_t* heap) {
   }  
 
   // set the theap thread local to NULL (so _mi_page_associated_theap does not read from a freed theap (through delete pages -> page_update_stats))
-  if (!_mi_is_process_heap_main(heap)) { 
+  if (!mi_is_process_heap_main(heap)) {
     _mi_thread_local_free(heap->theap);
     heap->theap = 0;
   }
@@ -196,10 +196,10 @@ static void mi_heap_free_theaps(mi_heap_t* heap) {
 
 // free the heap resources (assuming the pages are already moved/destroyed, and all theaps have been freed)
 static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
-  mi_assert_internal(heap!=NULL); // && !_mi_is_process_heap_main(heap));
+  mi_assert_internal(heap!=NULL); // && !mi_is_process_heap_main(heap));
 
   // free all arena pages infos
-  const bool is_main = _mi_is_heap_main(heap);
+  const bool is_main = mi_is_heap_main(heap);
   if (!is_main) {  // pages for the main heap are pre-allocated in the arenas
     mi_lock(&heap->arena_pages_lock) {
       for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
@@ -230,7 +230,7 @@ static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
   mi_lock_done(&heap->theaps_lock);
   mi_lock_done(&heap->os_abandoned_pages_lock);
   mi_lock_done(&heap->arena_pages_lock);
-  if (!_mi_is_process_heap_main(heap)) { 
+  if (!mi_is_process_heap_main(heap)) {
     // _mi_thread_local_free(heap->theap);
     _mi_free_subproc_safe(heap); 
   }
@@ -263,7 +263,7 @@ void _mi_heap_force_destroy(mi_heap_t* heap, bool acquire_heaps_lock) {
 
 void mi_heap_destroy(mi_heap_t* heap) {
   if (heap==NULL) return;
-  if (_mi_is_heap_main(heap)) {
+  if (mi_is_heap_main(heap)) {
     _mi_warning_message("cannot destroy the main heap\n");
     return;
   }

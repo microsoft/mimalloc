@@ -65,7 +65,7 @@ size_t mi_arena_min_size(void) {
 // fixed limit for the maximum object size in an arena
 static size_t mi_arena_max_fixed_object_size(void) {
   #if MI_PAGE_META_IS_ALIGNED
-  return (MI_PAGE_META_ALIGNMENT - _mi_align_up(MI_PAGE_META_ALIGNED_COUNT * sizeof(mi_page_t), MI_ARENA_SLICE_SIZE));
+  return (MI_PAGE_META_ALIGNMENT - mi_align_up(MI_PAGE_META_ALIGNED_COUNT * sizeof(mi_page_t), MI_ARENA_SLICE_SIZE));
   #else
   return (MI_ARENA_MAX_SIZE - MI_ARENA_CHUNK_SIZE); // minus an initial chunk to accommodate meta info
   #endif
@@ -74,7 +74,7 @@ static size_t mi_arena_max_fixed_object_size(void) {
 // Maximum object size allowed to be allocated in an arena
 size_t mi_arena_max_object_size(void) {
   size_t max_size = mi_option_get_size(mi_option_arena_max_object_size);
-  max_size = _mi_align_up(max_size, MI_ARENA_SLICE_SIZE);
+  max_size = mi_align_up(max_size, MI_ARENA_SLICE_SIZE);
   if (max_size <= MI_ARENA_MIN_OBJ_SIZE) {
     return MI_ARENA_MIN_OBJ_SIZE;
   }
@@ -224,11 +224,11 @@ bool _mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_large,
   if (!_mi_os_has_virtual_reserve()) {
     arena_reserve = arena_reserve/4;  // be conservative if virtual reserve is not supported (for WASM for example)
   }
-  arena_reserve = _mi_align_up(arena_reserve, MI_ARENA_SLICE_SIZE);
+  arena_reserve = mi_align_up(arena_reserve, MI_ARENA_SLICE_SIZE);
 
   if (arena_count >= 1 && arena_count <= 128) {
     // scale up the arena sizes exponentially every 8 entries
-    const size_t multiplier = (size_t)1 << _mi_clamp(arena_count/8, 0, 16);
+    const size_t multiplier = (size_t)1 << mi_clamp(arena_count/8, 0, 16);
     size_t reserve = 0;
     if (!mi_mul_overflow(multiplier, arena_reserve, &reserve)) {
       arena_reserve = reserve;
@@ -236,7 +236,7 @@ bool _mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_large,
   }
 
   // try to accommodate the requested size for huge allocations
-  req_size = _mi_align_up(req_size + MI_ARENA_MAX_CHUNK_OBJ_SIZE, MI_ARENA_MAX_CHUNK_OBJ_SIZE); // over-reserve for meta-info
+  req_size = mi_align_up(req_size + MI_ARENA_MAX_CHUNK_OBJ_SIZE, MI_ARENA_MAX_CHUNK_OBJ_SIZE); // over-reserve for meta-info
   if (arena_reserve < req_size) {
     arena_reserve = req_size;
   }
@@ -404,7 +404,7 @@ static mi_arena_t* mi_arena_info(void* area) {
 static size_t mi_arena_info_slices_needed(size_t slice_count, size_t* bitmap_base) {
   if (slice_count == 0) slice_count = MI_BCHUNK_BITS;
   mi_assert_internal((slice_count % MI_BCHUNK_BITS) == 0);
-  const size_t base_size = mi_size_of_slices(mi_arena_page_meta_aligned_slice_count()) + _mi_align_up(sizeof(mi_arena_t), MI_BCHUNK_SIZE);
+  const size_t base_size = mi_size_of_slices(mi_arena_page_meta_aligned_slice_count()) + mi_align_up(sizeof(mi_arena_t), MI_BCHUNK_SIZE);
   const size_t bitmaps_count = 4 + MI_ARENA_BIN_COUNT; // commit, dirty, purge, pages, and abandoned
   const size_t bitmaps_size = bitmaps_count * mi_bitmap_size(slice_count, NULL) + mi_bbitmap_size(slice_count, NULL); // + free
   #if MI_PAGE_META_IS_SEPARATED && !MI_PAGE_META_IS_ALIGNED
@@ -415,7 +415,7 @@ static size_t mi_arena_info_slices_needed(size_t slice_count, size_t* bitmap_bas
   const size_t size = base_size + bitmaps_size + pages_size;
 
   const size_t os_page_size = _mi_os_page_size();
-  const size_t info_size = _mi_align_up(size, os_page_size) + _mi_os_secure_guard_page_size();
+  const size_t info_size = mi_align_up(size, os_page_size) + _mi_os_secure_guard_page_size();
   const size_t info_slices = mi_slice_count_of_size(info_size);
 
   if (bitmap_base != NULL) *bitmap_base = base_size;
@@ -434,7 +434,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
                                         int numa_node, bool exclusive,
                                         mi_memid_t memid, mi_commit_fun_t* commit_fun, void* commit_fun_arg, mi_arena_id_t* arena_id)
 {
-  mi_assert_internal(_mi_is_aligned(start,MI_ARENA_ALIGNMENT));
+  mi_assert_internal(mi_is_aligned(start,MI_ARENA_ALIGNMENT));
   mi_assert_internal(mi_size_of_slices(slice_count)>=MI_ARENA_MIN_SIZE);
 
   if (slice_count > MI_BITMAP_MAX_BIT_COUNT) {  // 16 GiB for now
@@ -477,7 +477,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
     _mi_os_secure_guard_page_set_before(subproc, (uint8_t*)start + mi_size_of_slices(info_slices), memid);
   }
   if (!memid.initially_zero) {
-    _mi_memzero(start, mi_size_of_slices(info_slices) - _mi_os_secure_guard_page_size());
+    mi_memzero(start, mi_size_of_slices(info_slices) - _mi_os_secure_guard_page_size());
   }
 
   // init
@@ -559,9 +559,9 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
   mi_assert(start!=NULL);
   if (arena_id != NULL) { *arena_id = _mi_arena_id_none(); }
   if (start==NULL) return false;
-  if (!_mi_is_aligned(start, MI_ARENA_ALIGNMENT)) {
+  if (!mi_is_aligned(start, MI_ARENA_ALIGNMENT)) {
     // we can align the start since the memid tracks the real base of the memory.
-    void* const aligned_start = _mi_align_up_ptr(start, MI_ARENA_ALIGNMENT);
+    void* const aligned_start = mi_align_up_ptr(start, MI_ARENA_ALIGNMENT);
     const size_t diff = (uint8_t*)aligned_start - (uint8_t*)start;
     if (diff >= size || (size - diff) < MI_ARENA_ALIGNMENT) {
       _mi_warning_message("after alignment, the size of the arena becomes too small (memory at %p with size %zu)\n", start, size);
@@ -573,7 +573,7 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
 
   // allocate enough arena's to span the full memory area
   // the first arena is the owner, the rest are "sub-arena" (with `parent` pointing to the first one)
-  size_t total_slice_count = _mi_align_down(size / MI_ARENA_SLICE_SIZE, MI_BCHUNK_BITS);
+  size_t total_slice_count = mi_align_down(size / MI_ARENA_SLICE_SIZE, MI_BCHUNK_BITS);
   size_t total_size = mi_size_of_slices(total_slice_count);
   if (total_size < MI_ARENA_MIN_SIZE) {
     _mi_warning_message("cannot use OS memory since it is not large enough (size %zu KiB, minimum required is %zu KiB)", size/MI_KiB, MI_ARENA_MIN_SIZE/MI_KiB);
@@ -622,7 +622,7 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
 }
 
 bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept {
-  mi_memid_t memid = _mi_memid_create(MI_MEM_EXTERNAL);
+  mi_memid_t memid = mi_memid_create(MI_MEM_EXTERNAL);
   memid.mem.os.base = start;
   memid.mem.os.size = size;
   memid.initially_committed = is_committed;
@@ -633,7 +633,7 @@ bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is
 
 bool mi_manage_memory(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive, mi_commit_fun_t* commit_fun, void* commit_fun_arg, mi_arena_id_t* arena_id) mi_attr_noexcept
 {
-  mi_memid_t memid = _mi_memid_create(MI_MEM_EXTERNAL);
+  mi_memid_t memid = mi_memid_create(MI_MEM_EXTERNAL);
   memid.mem.os.base = start;
   memid.mem.os.size = size;
   memid.initially_committed = is_committed;
@@ -647,7 +647,7 @@ bool mi_manage_memory(void* start, size_t size, bool is_committed, bool is_pinne
 static int mi_reserve_os_memory_ex2(mi_subproc_t* subproc, size_t size, bool commit, bool allow_large, bool exclusive, mi_arena_id_t* arena_id) {
   if (arena_id != NULL) *arena_id = _mi_arena_id_none();
   if (size <= MI_MAX_ALLOC_SIZE) {
-    size = _mi_align_up(size, MI_ARENA_SLICE_SIZE); // at least one slice
+    size = mi_align_up(size, MI_ARENA_SLICE_SIZE); // at least one slice
   }
   if (size > MI_MAX_ALLOC_SIZE) {
     _mi_error_message(EOVERFLOW, "memory reservation request is too large (size %zu)\n", size);
@@ -658,10 +658,10 @@ static int mi_reserve_os_memory_ex2(mi_subproc_t* subproc, size_t size, bool com
   if (start == NULL) return ENOMEM;  
   if (!mi_manage_os_memory_ex2(subproc, start, size, -1 /* numa node */, exclusive, memid, NULL, NULL, arena_id)) {
     _mi_os_free_ex(subproc, start, size, commit, memid);
-    _mi_verbose_message("failed to reserve %zu KiB memory\n", _mi_divide_up(size, 1024));
+    _mi_verbose_message("failed to reserve %zu KiB memory\n", mi_divide_up(size, 1024));
     return ENOMEM;
   }
-  _mi_verbose_message("reserved %zu KiB memory%s\n", _mi_divide_up(size, 1024), memid.is_pinned ? " (in large os pages)" : "");
+  _mi_verbose_message("reserved %zu KiB memory%s\n", mi_divide_up(size, 1024), memid.is_pinned ? " (in large os pages)" : "");
   // mi_debug_show_arenas(true, true, false);
 
   return 0;
@@ -806,7 +806,7 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
   long bit_of_page = 0;
   mi_ansi_color_t color_of_page = MI_GRAY;
   for (size_t i = 0; i < chunk_count && bit_count < slice_count; i++) {
-    char buf[5*MI_BCHUNK_BITS + 64]; _mi_memzero(buf, sizeof(buf));
+    char buf[5*MI_BCHUNK_BITS + 64]; mi_memzero(buf, sizeof(buf));
     if (bit_count > used_slice_count && i+2 < chunk_count) {
       const size_t diff = chunk_count - 1 - i;
       bit_count += diff*MI_BCHUNK_BITS;
@@ -837,10 +837,10 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
 
     for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
       if (j > 0 && (j % fields_per_line) == 0) {
-        // buf[k++] = '\n'; _mi_memset(buf+k,' ',7); k += 7;
+        // buf[k++] = '\n'; mi_memset(buf+k,' ',7); k += 7;
         _mi_raw_message("  %s\n\x1B[37m", buf);
-        _mi_memzero(buf, sizeof(buf));
-        _mi_memset(buf, ' ', 5); k = 5;
+        mi_memzero(buf, sizeof(buf));
+        mi_memset(buf, ' ', 5); k = 5;
       }
       if (bit_count < slice_count) {
         mi_bfield_t bfield = 0;
@@ -855,7 +855,7 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
         buf[k++] = ' ';
       }
       else {
-        _mi_memset(buf + k, 'o', MI_BFIELD_BITS);
+        mi_memset(buf + k, 'o', MI_BFIELD_BITS);
         k += MI_BFIELD_BITS;
       }
       bit_count += MI_BFIELD_BITS;
@@ -1003,7 +1003,7 @@ static bool mi_arena_page_register(size_t slice_index, size_t slice_count, mi_ar
   mi_page_t* page = mi_arena_page_at_slice(arena, slice_index);
   mi_assert_internal(mi_bitmap_is_setN(page->memid.mem.arena.arena->pages, page->memid.mem.arena.slice_index, 1));
   if (!_mi_page_map_register(page)) return false; // break
-  mi_assert_internal(_mi_ptr_page(page)==page);
+  mi_assert_internal(mi_ptr_page(page)==page);
   return true;
 }
 

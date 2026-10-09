@@ -46,7 +46,7 @@ void _mi_theap_guarded_init(mi_theap_t* theap) {
 // and the first word to `~0` for guarded allocations to have a correct `mi_usable_size`
 static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size, size_t* usable_size) {
   // todo: we can still make padding work by moving it out of the guard page area
-  mi_page_t* const page = _mi_ptr_page(block);
+  mi_page_t* const page = mi_ptr_page(block);
   mi_page_set_has_interior_pointers(page, true);
   block->next = MI_BLOCK_TAG_GUARDED;
 
@@ -62,9 +62,9 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size, size_t
   uint8_t* guard_page = (uint8_t*)block + block_size - os_page_size;
   // note: the alignment of the guard page relies on blocks being os_page_size aligned which
   // is ensured in `mi_arena_page_alloc_fresh`.  
-  mi_assert_internal(_mi_is_aligned(block, os_page_size));
-  mi_assert_internal(_mi_is_aligned(guard_page, os_page_size));
-  if (!page->memid.is_pinned && _mi_is_aligned(guard_page, os_page_size)) {
+  mi_assert_internal(mi_is_aligned(block, os_page_size));
+  mi_assert_internal(mi_is_aligned(guard_page, os_page_size));
+  if (!page->memid.is_pinned && mi_is_aligned(guard_page, os_page_size)) {
     const bool ok = _mi_os_protect(guard_page, os_page_size);
     if mi_unlikely(!ok) {
       _mi_warning_message("failed to set a guard page behind an object (object %p of size %zu)\n", block, block_size);
@@ -99,9 +99,9 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
     return NULL;
   }
   const size_t os_page_size = _mi_os_page_size();
-  const size_t obj_size = (mi_option_is_enabled(mi_option_guarded_precise) ? size : _mi_align_up(size, MI_MAX_ALIGN_SIZE));
-  const size_t bsize    = _mi_align_up(_mi_align_up(obj_size, MI_MAX_ALIGN_SIZE) + sizeof(mi_block_t), MI_MAX_ALIGN_SIZE);
-  const size_t req_size = _mi_align_up(bsize + os_page_size, os_page_size);  
+  const size_t obj_size = (mi_option_is_enabled(mi_option_guarded_precise) ? size : mi_align_up(size, MI_MAX_ALIGN_SIZE));
+  const size_t bsize    = mi_align_up(mi_align_up(obj_size, MI_MAX_ALIGN_SIZE) + sizeof(mi_block_t), MI_MAX_ALIGN_SIZE);
+  const size_t req_size = mi_align_up(bsize + os_page_size, os_page_size);
   // const size_t threshold = mi_theap_disable_profiler(theap);
   mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(theap, req_size, false /* don't zero */, ppage);
   // mi_theap_enable_profiler(theap,threshold);
@@ -110,7 +110,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   void* const p = mi_block_ptr_set_guarded(block, obj_size, &usable_size);
   if (p == NULL) return NULL;
   if (zero) {
-    _mi_memzero(p,obj_size);  // we have to zero afterwards as padding might have written inside the block (if the `blocksize > reqsize + os_page_size`)
+    mi_memzero(p,obj_size);  // we have to zero afterwards as padding might have written inside the block (if the `blocksize > reqsize + os_page_size`)
   }
 
   // stats
@@ -130,7 +130,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
   #if MI_PAGE_META_SMALL_IS_ALIGNED && MI_DEBUG>=2
   // we should never allocate something allocated as small in a non-small page or otherwise aligned mi_free_small may fail.
   if (size <= MI_SMALL_SIZE_MAX) { 
-    mi_page_t* const page = _mi_ptr_page(p); 
+    mi_page_t* const page = mi_ptr_page(p);
     mi_assert_internal(mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE); 
   }
   #endif
@@ -153,7 +153,7 @@ void _mi_page_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
   mi_assert_internal(bsize > psize);
   mi_assert_internal(!page->memid.is_pinned);
   void* gpage = (uint8_t*)block + bsize - psize;
-  mi_assert_internal(_mi_is_aligned(gpage, psize));
+  mi_assert_internal(mi_is_aligned(gpage, psize));
   _mi_os_unprotect(gpage, psize);
 }
 

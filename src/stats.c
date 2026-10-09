@@ -457,7 +457,7 @@ void _mi_stats_merge_into(mi_stats_t* to, mi_stats_t* from) {
 
 static const mi_stats_t* mi_stats_merge_theap_to_heap(mi_theap_t* theap) mi_attr_noexcept {
   mi_stats_t* stats = &theap->stats;
-  mi_stats_t* heap_stats = &_mi_theap_heap(theap)->stats;
+  mi_stats_t* heap_stats = &mi_theap_heap(theap)->stats;
   _mi_stats_merge_into( heap_stats, stats );
   return heap_stats;
 }
@@ -537,7 +537,7 @@ void mi_stats_print(void* out) mi_attr_noexcept {
 void mi_thread_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept {
   mi_theap_t* theap = _mi_theap_default();
   if (theap==NULL || !mi_theap_is_initialized(theap)) return;
-  _mi_stats_print("heap", _mi_theap_heap(theap)->heap_seq, &theap->stats, out, arg);
+  _mi_stats_print("heap", mi_theap_heap(theap)->heap_seq, &theap->stats, out, arg);
   mi_stats_merge_theap_to_heap(_mi_theap_default());
 }
 
@@ -618,7 +618,7 @@ size_t mi_stats_get_bin_size(size_t bin) mi_attr_noexcept {
 static bool mi_stats_copy(mi_stats_t* stats_to, const mi_stats_t* stats_from) mi_attr_noexcept {
   if (stats_to == NULL || stats_to->size != sizeof(mi_stats_t) || stats_to->version != MI_STAT_VERSION) return false;
   if (stats_from == NULL || stats_from->size != stats_to->size) return false;
-  _mi_memcpy(stats_to, stats_from, stats_to->size);
+  mi_memcpy(stats_to, stats_from, stats_to->size);
   return true;
 }
 
@@ -767,7 +767,7 @@ static char* mi_stats_get_json_from(const mi_stats_t* stats, size_t output_size,
   if (stats==NULL || stats->size!=sizeof(mi_stats_t) || stats->version!=MI_STAT_VERSION) return NULL;
   mi_json_buf_t hbuf = { NULL, 0, 0, true };
   if (output_size > 0 && output_buf != NULL) {
-    _mi_memzero(output_buf, output_size);
+    mi_memzero(output_buf, output_size);
     hbuf.buf = output_buf;
     hbuf.size = output_size;
     hbuf.can_realloc = false;

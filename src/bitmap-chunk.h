@@ -9,8 +9,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MI_BITMAP_CHUNK_H
 #define MI_BITMAP_CHUNK_H
 
+// Type definitions for bitmap chunks
 #include "bitmap.h"
 
+// Exported functions for bitmap chunks
 size_t      mi_bfield_popcount(mi_bfield_t x);
 mi_bfield_t mi_bfield_clear_least_bit(mi_bfield_t x);
 bool        mi_bfield_find_least_bit(mi_bfield_t x, size_t* idx);

@@ -31,7 +31,7 @@ void* _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_memid_t* memid ) {
   void* p = NULL;
   mi_lock(&subproc->theap_meta_lock) {
     p = mi_theap_zalloc(subproc->theap_meta, size);
-    if (memid != NULL) { *memid = (p==NULL ? _mi_memid_none() : _mi_memid_create_malloc(p,size,true) ); }
+    if (memid != NULL) { *memid = (p==NULL ? mi_memid_none() : mi_memid_create_malloc(p,size,true) ); }
   }
   return p;
 }
@@ -41,7 +41,7 @@ void* _mi_meta_zalloc_aligned( mi_subproc_t* subproc, size_t size, size_t aligne
   void* p = NULL;
   mi_lock(&subproc->theap_meta_lock) {
     p = mi_theap_zalloc_aligned(subproc->theap_meta, size, aligned);
-    if (memid != NULL) { *memid = (p==NULL ? _mi_memid_none() : _mi_memid_create_malloc(p,size,true) ); }
+    if (memid != NULL) { *memid = (p==NULL ? mi_memid_none() : mi_memid_create_malloc(p,size,true) ); }
   }
   return p;
 }
@@ -58,14 +58,14 @@ void* _mi_meta_rezalloc( mi_subproc_t* subproc, void* oldp, size_t newsize, mi_m
     if (oldp!=NULL) {
       const size_t oldsize  = mi_usable_size(oldp);
       const size_t copysize = (newsize < oldsize ? newsize : oldsize);
-      _mi_memcpy(p,oldp,copysize);
+      mi_memcpy(p,oldp,copysize);
       if (memid!=NULL) { _mi_meta_free(subproc,oldp,*memid); } 
                   else { mi_free(oldp); }
     }
-    if (memid!=NULL) { *memid = _mi_memid_create_malloc(p,newsize,true); }
+    if (memid!=NULL) { *memid = mi_memid_create_malloc(p,newsize,true); }
   }
   else {
-    if (memid!=NULL) { *memid = _mi_memid_none(); }  
+    if (memid!=NULL) { *memid = mi_memid_none(); }
   }
   return p;
 }
@@ -77,7 +77,7 @@ void _mi_meta_free(mi_subproc_t* subproc, void* p, mi_memid_t memid) {
   }
   else {
     mi_assert_internal(subproc!=NULL);  
-    _mi_arenas_free(subproc, p, _mi_memid_size(memid), memid);
+    _mi_arenas_free(subproc, p, mi_memid_size(memid), memid);
   }
 }
 
@@ -188,7 +188,7 @@ mi_subproc_id_t mi_subproc_new(void) {
   mi_assert_internal(parent->theap_meta->tld!=NULL);
   mi_assert_internal(parent->theap_meta->tld->thread_id == MI_THREADID_DETACHED);
   _mi_theap_init(theap_meta,heap_main,parent->theap_meta->tld /* detached tld */);
-  _mi_theap_profile_disable(theap_meta);  // permanently exclude from profiling, see `_mi_theap_profile_disable`
+  mi_theap_profile_disable(theap_meta);  // permanently exclude from profiling, see `mi_theap_profile_disable`
   subproc->theap_meta = theap_meta;
 
   return _mi_subproc_to_id(subproc);
@@ -316,7 +316,7 @@ bool mi_subproc_visit_heaps(mi_subproc_id_t subproc_id, mi_heap_visit_fun* visit
 
 mi_subproc_t* _mi_subproc_main_init(void) {
   mi_lock_init(&mi_subprocs_lock);
-  mi_memid_t memid = _mi_memid_create_static(&mi_process_subproc_main,sizeof(mi_subproc_t));
+  mi_memid_t memid = mi_memid_create_static(&mi_process_subproc_main,sizeof(mi_subproc_t));
   mi_process_subproc_main.memid = memid;
   mi_subproc_init(&mi_process_subproc_main,NULL);
   return &mi_process_subproc_main;

@@ -1039,7 +1039,7 @@ void mi_bchunks_unsafe_setN(mi_bchunk_t* chunks, mi_bchunkmap_t* cmap, size_t id
   n -= m;
   const size_t mid_chunks = n / MI_BCHUNK_BITS;
   if (mid_chunks > 0) {
-    _mi_memset(&chunks[chunk_idx], ~0, mid_chunks * MI_BCHUNK_SIZE);
+    mi_memset(&chunks[chunk_idx], ~0, mid_chunks * MI_BCHUNK_SIZE);
     chunk_idx += mid_chunks;
     n -= (mid_chunks * MI_BCHUNK_BITS);
   }

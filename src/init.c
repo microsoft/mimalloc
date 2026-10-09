@@ -189,8 +189,8 @@ static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc);
 
 // Initialize main heap
 static void mi_heap_main_init_once(void) {
-  mi_memid_t memid_static = _mi_memid_create(MI_MEM_STATIC);
-  _mi_memcpy(&_mi_theap_empty_wrong,&_mi_theap_empty,sizeof(_mi_theap_empty_wrong));
+  mi_memid_t memid_static = mi_memid_create(MI_MEM_STATIC);
+  mi_memcpy(&_mi_theap_empty_wrong,&_mi_theap_empty,sizeof(_mi_theap_empty_wrong));
 
   // initialize the main subprocess
   mi_subproc_t* subproc_main = _mi_subproc_main_init();
@@ -211,7 +211,7 @@ static void mi_heap_main_init_once(void) {
   mi_process_theap_meta.page_full_retain = 2;
   mi_process_theap_meta.sample_rate = 0; // no sampling for meta data
   mi_process_theap_meta.sample_countdown = 0;
-  _mi_theap_profile_disable(&mi_process_theap_meta);  // permanently exclude from profiling, see `_mi_theap_profile_disable`
+  mi_theap_profile_disable(&mi_process_theap_meta);  // permanently exclude from profiling, see `mi_theap_profile_disable`
   subproc_main->theap_meta = &mi_process_theap_meta;
 
   // mi_heap_theap_set(&mi_process_heap_main,&mi_process_theap_main); // set in `mi_thread_init(_theap_default)`
@@ -269,7 +269,7 @@ static mi_tld_t* mi_tld_create(mi_subproc_t* subproc) {
   mi_tld_t* tld;
   if (_mi_subproc_is_main(subproc) && tseq==0 /* first tld */) {
     tld = &mi_process_tld_main;
-    memid = _mi_memid_create_static(tld,sizeof(*tld));
+    memid = mi_memid_create_static(tld,sizeof(*tld));
   }
   else {
     tld  = (mi_tld_t*)_mi_meta_zalloc(subproc, sizeof(mi_tld_t), &memid);
@@ -347,7 +347,7 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
     // allocate and initialize the theap for the main heap
     if (tld==&mi_process_tld_main) {
       theap = &mi_process_theap_main;          // initial theap is pre-allocated
-      theap->memid = _mi_memid_create_static(theap,sizeof(*theap));
+      theap->memid = mi_memid_create_static(theap,sizeof(*theap));
     }
     else {
       theap = _mi_theap_alloc(heap_main,tld);  // otherwise meta allocate
@@ -365,7 +365,7 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
   mi_theap_t* const heap_theap = (heap_main==NULL ? NULL : (mi_theap_t*)_mi_thread_local_get(heap_main->theap));
   mi_assert_internal(heap_main==NULL || heap_theap == theap); MI_UNUSED_RELEASE(heap_theap);
 
-  mi_subproc_stat_increase(_mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?
+  mi_subproc_stat_increase(mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?
   // _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
   return theap;
 }
@@ -417,7 +417,7 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
     while (theap != NULL) {
       mi_theap_t* next = theap->tnext;
       mi_assert_internal(theap->page_count==0);
-      mi_assert_internal(_mi_theap_heap_peek(theap)==NULL);
+      mi_assert_internal(mi_theap_heap_peek(theap)==NULL);
       theap->tld = NULL;
       theap->tnext = NULL;
       theap->tprev = NULL;
@@ -537,7 +537,7 @@ void _mi_auto_process_init(void) {
   mi_theap_t* theap = _mi_theap_default();
   if (theap != NULL) {
     _mi_random_reinit_if_weak(&theap->random);
-    mi_subproc_t* subproc = _mi_theap_subproc(theap);
+    mi_subproc_t* subproc = mi_theap_subproc(theap);
     if (subproc->theap_meta != NULL) {
       mi_lock(&subproc->theap_meta_lock) {
         _mi_random_reinit_if_weak(&subproc->theap_meta->random);

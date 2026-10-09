@@ -325,7 +325,7 @@ static void* unix_mmap_prim_aligned(void* addr, size_t size, size_t try_alignmen
     mi_bsr(try_alignment, &n);
     if (((size_t)1 << n) == try_alignment && n >= 12 && n <= 30) {  // alignment is a power of 2 and 4096 <= alignment <= 1GiB
       p = unix_mmap_prim(addr, size, protect_flags, flags | MAP_ALIGNED(n), fd);
-      if (p==MAP_FAILED || !_mi_is_aligned(p,try_alignment)) {
+      if (p==MAP_FAILED || !mi_is_aligned(p,try_alignment)) {
         int err = errno;
         _mi_trace_message("unable to directly request aligned OS memory (error: %d (0x%x), size: 0x%zx bytes, alignment: 0x%zx, hint address: %p)\n", err, err, size, try_alignment, addr);
       }
@@ -346,7 +346,7 @@ static void* unix_mmap_prim_aligned(void* addr, size_t size, size_t try_alignmen
     void* hint = _mi_os_get_aligned_hint(try_alignment, size);
     if (hint != NULL) {
       p = unix_mmap_prim(hint, size, protect_flags, flags, fd);
-      if (p==MAP_FAILED || !_mi_is_aligned(p,try_alignment)) {
+      if (p==MAP_FAILED || !mi_is_aligned(p,try_alignment)) {
         #if MI_TRACK_ENABLED  // asan sometimes does not instrument errno correctly?
         int err = 0;
         #else

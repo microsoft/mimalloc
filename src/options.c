@@ -421,7 +421,7 @@ static void mi_cdecl mi_out_buf(const char* msg, void* arg) {
       if (start+n >= MI_MAX_DELAY_OUTPUT) {
         n = MI_MAX_DELAY_OUTPUT-start-1;
       }
-      _mi_memcpy(&out_buf[start], msg, n);
+      mi_memcpy(&out_buf[start], msg, n);
     }
   }
 }

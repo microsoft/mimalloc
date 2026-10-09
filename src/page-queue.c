@@ -92,7 +92,7 @@ mi_decl_nodiscard mi_decl_export size_t mi_good_size(size_t size) mi_attr_noexce
     return _mi_bin_size(mi_bin(size + MI_PADDING_SIZE));
   }
   else if (size <= MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE) {
-    return _mi_align_up(size + MI_PADDING_SIZE,_mi_os_page_size());
+    return mi_align_up(size + MI_PADDING_SIZE,_mi_os_page_size());
   }
   else {
     return size;

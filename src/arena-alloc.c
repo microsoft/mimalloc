@@ -30,7 +30,7 @@ static mi_memid_t mi_memid_create_arena(mi_arena_t* arena, size_t slice_index, s
   mi_assert_internal(slice_count < UINT32_MAX);
   mi_assert_internal(slice_count > 0);
   mi_assert_internal(slice_index < arena->slice_count);
-  mi_memid_t memid = _mi_memid_create(MI_MEM_ARENA);
+  mi_memid_t memid = mi_memid_create(MI_MEM_ARENA);
   memid.mem.arena.arena = arena;
   memid.mem.arena.slice_index = (uint32_t)slice_index;
   memid.mem.arena.slice_count = (uint32_t)slice_count;

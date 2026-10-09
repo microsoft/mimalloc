@@ -105,7 +105,7 @@ static mi_profiler_t* mi_heap_profiler(const mi_heap_t* heap) {
 } 
 
 static mi_profiler_t* mi_theap_get_enabled_profiler(const mi_theap_t* theap) {
-  mi_heap_t* const heap = _mi_theap_heap(theap);
+  mi_heap_t* const heap = mi_theap_heap(theap);
   mi_profiler_t* prof = mi_atomic_load_ptr_relaxed(mi_profiler_t, &heap->profiler);
   if (prof!=NULL && mi_profiler_is_enabled(prof) && prof->on_alloc != NULL) {
     return prof;
@@ -137,16 +137,16 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
     if (p==NULL) { return p; }
     if (prof->on_alloc!=NULL) {
       // we are just allocation profiling (not heap profiling as on_free == NULL)    
-      new_sample_rate = (*prof->on_alloc)(prof, NULL /* no data */, p, req_size, theap->profile_sample_rate, requested_since_last_sample, _mi_theap_heap(theap) );    
+      new_sample_rate = (*prof->on_alloc)(prof, NULL /* no data */, p, req_size, theap->profile_sample_rate, requested_since_last_sample, mi_theap_heap(theap) );
     }
   }
   else {
     // overallocate a larger block to store the profiler data
     // [MI_BLOCK_TAG_PROFILE] [usable size] [ ... profile data ... ] [... user data ...]
     const size_t sample_data_offset    = sizeof(mi_block_t);
-    const size_t sample_user_data_size = _mi_align_up(prof->sample_data_size > MI_PROFILE_SAMPLE_DATA_MAX_SIZE ? MI_PROFILE_SAMPLE_DATA_MAX_SIZE : prof->sample_data_size, sizeof(void*)); 
+    const size_t sample_user_data_size = mi_align_up(prof->sample_data_size > MI_PROFILE_SAMPLE_DATA_MAX_SIZE ? MI_PROFILE_SAMPLE_DATA_MAX_SIZE : prof->sample_data_size, sizeof(void*));
     const size_t sample_data_size      = sizeof(mi_profiler_sample_data_t) + sample_user_data_size;  // one void* too many just in case
-    const size_t user_offset           = _mi_align_up(sample_data_offset + sample_data_size, MI_MAX_ALIGN_SIZE);
+    const size_t user_offset           = mi_align_up(sample_data_offset + sample_data_size, MI_MAX_ALIGN_SIZE);
     const size_t oversize              = user_offset + size;
     mi_page_t* page = NULL;
     mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(theap,oversize,zero,&page); 
@@ -169,7 +169,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
 
     // and call the profiler on_alloc
     if (prof->on_alloc!=NULL) { 
-      new_sample_rate = (*prof->on_alloc)(prof, sample_data, p, req_size, theap->profile_sample_rate, requested_since_last_sample, _mi_theap_heap(theap) );      
+      new_sample_rate = (*prof->on_alloc)(prof, sample_data, p, req_size, theap->profile_sample_rate, requested_since_last_sample, mi_theap_heap(theap) );
     }
   }
   if (new_sample_rate!=0 && new_sample_rate != (size_t)theap->profile_sample_rate) { 

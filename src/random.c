@@ -95,7 +95,7 @@ static void chacha_init(mi_random_ctx_t* ctx, const uint8_t key[32], uint64_t no
   // do not _need_ to read 32-bit values as little endian but we do anyways
   // just for being compatible :-)
   ctx->output_available = 0;
-  _mi_memzero(ctx->output,sizeof(ctx->output));
+  mi_memzero(ctx->output,sizeof(ctx->output));
   for (size_t i = 0; i < 4; i++) {
     const uint8_t* sigma = (uint8_t*)"expand 32-byte k";
     ctx->input[i] = read32(sigma,i);
@@ -110,9 +110,9 @@ static void chacha_init(mi_random_ctx_t* ctx, const uint8_t key[32], uint64_t no
 }
 
 static void chacha_split(mi_random_ctx_t* ctx, uint64_t nonce, mi_random_ctx_t* ctx_new) {
-  _mi_memzero(ctx_new, sizeof(*ctx_new));
+  mi_memzero(ctx_new, sizeof(*ctx_new));
   ctx_new->weak = ctx->weak;
-  _mi_memcpy(ctx_new->input, ctx->input, sizeof(ctx_new->input));
+  mi_memcpy(ctx_new->input, ctx->input, sizeof(ctx_new->input));
   ctx_new->input[12] = 0;
   ctx_new->input[13] = 0;
   ctx_new->input[14] = (uint32_t)nonce;
@@ -164,7 +164,7 @@ size_t _mi_os_random_weak(size_t extra_seed) {
   // and do a few randomization steps
   size_t max = ((x ^ (x >> 17)) & 0x0F) + 1;
   for (size_t i = 0; i < max || x==0; i++, x++) {
-    x = _mi_random_shuffle(x);
+    x = mi_random_shuffle(x);
   }
   mi_assert_internal(x != 0);
   return x;
@@ -180,7 +180,7 @@ static void mi_random_init_ex(mi_random_ctx_t* ctx, bool use_weak) {
     #endif
     size_t x = _mi_os_random_weak(0);
     for (size_t i = 0; i < 32; i+=4, x++) {
-      x = _mi_random_shuffle(x);
+      x = mi_random_shuffle(x);
       key[i]   = (uint8_t)(x);
       key[i+1] = (uint8_t)(x>>8);
       key[i+2] = (uint8_t)(x>>16);
@@ -192,7 +192,7 @@ static void mi_random_init_ex(mi_random_ctx_t* ctx, bool use_weak) {
     ctx->weak = false;
   }
   chacha_init(ctx, key, (uintptr_t)ctx /*nonce*/ );
-  _mi_memzero(key, sizeof(key));
+  mi_memzero(key, sizeof(key));
 }
 
 void _mi_random_init(mi_random_ctx_t* ctx) {

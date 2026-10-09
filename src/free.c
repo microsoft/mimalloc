@@ -36,7 +36,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
 
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
   const size_t dbgsize = (usable_size > MI_MiB ? MI_MiB : usable_size);
-  _mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);  
+  mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);
   #endif
   
   // actual free: push on the local free list fast-path
@@ -77,7 +77,7 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
   if (!was_guarded) {
     const size_t dbgsize = (usable_size > MI_MiB ? MI_MiB : usable_size);
-    _mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);
+    mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);
   }
   #endif
 
@@ -110,7 +110,7 @@ static inline mi_block_t* mi_page_ptr_unalign_ex(const mi_page_t* page, const vo
   const size_t diff = (uint8_t*)p - mi_page_start(page);
   const size_t block_size = mi_page_block_size(page);
   size_t adjust = diff & (block_size - 1); 
-  if mi_unlikely(!_mi_is_power_of_two(block_size)) {
+  if mi_unlikely(!mi_is_power_of_two(block_size)) {
     adjust = diff % block_size;     
   }
   if (poffset!=NULL) { *poffset = adjust; }
@@ -197,7 +197,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
 {
   MI_UNUSED_RELEASE(msg); MI_UNUSED(free_small);
   #if MI_DEBUG
-  if mi_unlikely(!_mi_is_aligned(p,MI_SIZE_SIZE) && !mi_option_is_enabled(mi_option_guarded_precise)) {
+  if mi_unlikely(!mi_is_aligned(p,MI_SIZE_SIZE) && !mi_option_is_enabled(mi_option_guarded_precise)) {
     _mi_error_message(EINVAL, "%s: invalid (unaligned) pointer: %p\n", msg, p);
     return false;
   }
@@ -206,7 +206,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
   mi_page_t* page;
   #if MI_PAGE_META_SMALL_IS_ALIGNED 
     if (free_small) { 
-      const uintptr_t up = _mi_align_down((uintptr_t)p,MI_SMALL_PAGE_SIZE);  // like this for codegen on gcc
+      const uintptr_t up = mi_align_down((uintptr_t)p,MI_SMALL_PAGE_SIZE);  // like this for codegen on gcc
       if mi_unlikely(up==0 && check_p_for_null) { return false; }
       page = (mi_page_t*)up;
     }
@@ -214,9 +214,9 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
   #endif
     {
       #if MI_PAGE_META_IS_ALIGNED
-        { page = _mi_aligned_ptr_page0(p); }
+        { page = mi_aligned_ptr_page0(p); }
       #else
-        { page = _mi_ptr_page(p); }
+        { page = mi_ptr_page(p); }
       #endif      
       if mi_unlikely(page==NULL && check_p_for_null) {
         #if MI_DEBUG
@@ -226,7 +226,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
       }
     }
   #if MI_DEBUG
-  mi_page_t* const cpage = _mi_checked_ptr_page(p);
+  mi_page_t* const cpage = mi_checked_ptr_page(p);
   if mi_unlikely(cpage==NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
   #endif
     
@@ -429,7 +429,7 @@ void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
 
 // checked free
 bool mi_cfree(void* p) mi_attr_noexcept {
-  mi_page_t* const page = _mi_checked_ptr_page(p);
+  mi_page_t* const page = mi_checked_ptr_page(p);
   if mi_likely(page!=NULL) {
     mi_free_nonnull(p, page, NULL, true /* allow reclaim? */);
     return true;
@@ -537,7 +537,7 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
   else if (reclaim_on_free == 1 &&               // if cross-thread is allowed
             !theap->tld->is_in_threadpool &&     // and we are not part of a threadpool
             !mi_page_is_used_at_frac(page,4) &&  // and at least 1/4th of the page is free
-            _mi_arena_memid_is_suitable(page->memid, _mi_theap_heap(theap)->exclusive_arena)) {   // and it fits our memory
+            _mi_arena_memid_is_suitable(page->memid, mi_theap_heap(theap)->exclusive_arena)) {   // and it fits our memory
     // across threads
     max_reclaim = _mi_option_get_fast(mi_option_page_cross_thread_max_reclaim);
   }
@@ -669,7 +669,7 @@ static mi_decl_noinline bool mi_check_double_freex(const mi_page_t* page, const 
 // Used for double free checking to avoid checking free lists too frequently
 static inline bool mi_block_could_be_double_free(const mi_page_t* page, const mi_block_t* block) {
   mi_block_t* n = mi_block_nextx(page,block,page->keys);
-  return (_mi_is_aligned(block,MI_SIZE_SIZE) &&           // quick check: aligned pointer?
+  return (mi_is_aligned(block,MI_SIZE_SIZE) &&           // quick check: aligned pointer?
           (n==NULL || mi_page_contains_address(page,n))); // quick check: in the same page or NULL?  
 }
 

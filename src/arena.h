@@ -43,7 +43,7 @@ static inline size_t mi_arena_info_slices(mi_arena_t* arena) {
 // slices reserved for page meta info at the start of aligned chunks
 static inline size_t mi_arena_page_meta_aligned_slice_count(void) {
   #if MI_PAGE_META_IS_ALIGNED
-  return _mi_divide_up(MI_PAGE_META_ALIGNED_COUNT * sizeof(mi_page_t), MI_ARENA_SLICE_SIZE);
+  return mi_divide_up(MI_PAGE_META_ALIGNED_COUNT * sizeof(mi_page_t), MI_ARENA_SLICE_SIZE);
   #else
   return 0;
   #endif
