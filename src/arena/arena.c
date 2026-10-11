@@ -280,7 +280,8 @@ bool mi_decl_forceinline mi_forall_suitable_arenas(mi_heap_t* heap, mi_arena_t* 
   return mi_forall_arenas(heap, req_arena, tseq, &mi_arena_visit_suitable, &info, result);
 }
 
-#ifdef __cplusplus
+#if defined(__cplusplus) || defined(_MSC_VER)
+// since these are mi_decl_forceinline, ensure they are linked in the final binary by adding a reference.
 void* _mi_arena_externs[] = {
   (void*)&mi_forall_arenas,
   (void*)&mi_forall_suitable_arenas  
