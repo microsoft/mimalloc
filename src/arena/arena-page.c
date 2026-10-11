@@ -65,7 +65,8 @@ static size_t mi_page_full_size(mi_page_t* page) {
 }
 
 /* -----------------------------------------------------------
-  Arena pages
+  Arena pages: these bitmaps track abandoned pages per size
+  bin, and the overall pages belonging to a particular heap.
 ----------------------------------------------------------- */
 
 static mi_arena_pages_t* mi_heap_arena_pages(mi_heap_t* heap, mi_arena_t* arena) {
@@ -380,6 +381,10 @@ mi_decl_maybe_unused static size_t mi_page_block_start(size_t block_size, bool o
 // Free a page without modifying page_bin stats
 static void mi_arenas_page_free_prim(mi_page_t* page);
 
+// Return the actual page metadata given a memory slice and the page start address.
+// The page metadate can be in the arena page metadata (for separated and unaligned pages),
+// or at the start of an aligned area (for aligned pages), or at the start of the
+// page memory (for small aligned pages, or OS allocated pages).
 static mi_page_t* mi_arena_page_meta(mi_memid_t memid_slice, const void* slice_start) {
   #if MI_PAGE_META_IS_ALIGNED
   if (memid_slice.memkind == MI_MEM_ARENA || mi_memid_is_os(memid_slice)) {
