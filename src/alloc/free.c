@@ -9,11 +9,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #include "mimalloc.h"
-#include "mimalloc/prim/prim-tls.h"   // _mi_prim_thread_id()
+#include "mimalloc/prim/prim-tls.h"             // _mi_prim_thread_id()
 #include "mimalloc/util/stats.h"
 #include "mimalloc/arena/arena-page.h"
-#include "mimalloc/arena/arena.h"
-#include "mimalloc/profile/sample-guarded.h"
+#include "mimalloc/arena/arena.h"               // _mi_arena_memid_is_suitable
+#include "mimalloc/profile/sample-guarded.h"    // unguard
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/alloc/free.h"
 

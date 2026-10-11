@@ -80,7 +80,7 @@ mi_decl_export bool mi_profiler_stop(mi_profiler_t* profiler);
 mi_decl_export void mi_profiler_snapshot(mi_profiler_t* profiler);
 
 // builtin pprof compatible profiler
-// the builtin profiler can also be activated using environment variables (see `src/profile/pprof.c`)
+// the builtin profiler can also be activated using environment variables (see [`pprof.c`](/src/profile/pprof.c))
 // `base_file_name` selects the text snapshot format if it ends in `.heap` or `.text` (the extension is
 // stripped); any other extension, or none, uses the default (protobuf) snapshot format.
 // `alloc_interval_size`, if >0, automatically snapshots every that many allocated bytes.

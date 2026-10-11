@@ -9,12 +9,12 @@ terms of the MIT license. A copy of the license can be found in the file
 // This is a "single file include" of the entire mimalloc library.
 // Just include this file in your build to link statically with mimalloc.
 // This will also override the standard library allocation functions 
-// (if -DMIMALLOC_OVERRIDE=ON / defined).
+// (if cmake -DMI_OVERRIDE=ON (or the macro MI_MALLOC_OVERRIDE=1 is defined)).
 //
 // This is also used for a static override where we create a single object 
 // file containing the whole library. 
-// If it is linked first it will override all the standard library allocation 
-// functions (on Unix's).
+// If such object file is linked first it will override all the standard library 
+// allocation functions (on Unix's).
 // --------------------------------------------------------------------------
 
 #ifndef _DEFAULT_SOURCE
