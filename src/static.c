@@ -48,6 +48,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "arena/bitmap.c"          
 
 #include "alloc/alloc.c"           // includes alloc-override.c and free.c (for aliasing to work)
+#include "alloc/alloc-generic.c"
 #include "alloc/alloc-aligned.c"
 #include "alloc/alloc-posix.c"
 #include "alloc/page.c"

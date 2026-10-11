@@ -5,6 +5,12 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 
+// ------------------------------------------------------
+// Overrides for standard allocation functions
+// ------------------------------------------------------
+#include "mimalloc.h"
+#include "mimalloc/types.h"
+
 #if !defined(MI_IN_ALLOC_C)
 #error "this file should be included from 'alloc.c' (so aliases can work)"
 #endif
@@ -13,7 +19,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // ------------------------------------------------------
 // Defined here instead of alloc-posix.c so they can be aliased below,
-// but outside of MI_MALLOC_OVERRIDE as they are part of the API.
+// (but still outside of MI_MALLOC_OVERRIDE as they are part of the API.)
 // ------------------------------------------------------
 
 mi_decl_nodiscard size_t mi_malloc_size(const void* p) mi_attr_noexcept {

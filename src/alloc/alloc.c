@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdlib.h>                  // malloc, abort, realpath
 
 #include "mimalloc.h"
+#include "mimalloc/types.h"
 #include "mimalloc/prim/prim-tls.h"   // _mi_prim_thread_id()
 #include "mimalloc/util/stats.h"
 #include "mimalloc/alloc/alloc.h"
@@ -171,7 +172,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
   return block;  
 }
 
-// extra entries for improved efficiency in `alloc/alloc-aligned.c` (and in `alloc/page.c:mi_malloc_generic`.
+// extra entries for improved efficiency in `alloc/alloc-aligned.c` (and in `alloc/alloc-generic.c:mi_malloc_generic`.
 extern mi_decl_restrict void* _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept {
   return mi_page_malloc_zero(theap, page, size, theap->sample_countdown, zero, false, NULL);
 }
@@ -216,7 +217,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_theap_nonnull_xmalloc_small
 }
 
 // Internal generic allocation.
-// Goes to `alloc/page.c:_mi_malloc_generic` which handles large and aligned allocations.
+// Goes to `alloc/alloc-generic.c:_mi_malloc_generic` which handles large and aligned allocations.
 // Every small allocation eventually goes through this generic allocation path if it cannot be satisfied from the small page cache.
 static mi_decl_forceinline void* mi_theap_malloc_generic(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage) mi_attr_noexcept
 {

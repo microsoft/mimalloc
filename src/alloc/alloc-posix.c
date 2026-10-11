@@ -10,6 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // for convenience and used when overriding these functions.
 // ------------------------------------------------------------------------
 #include "mimalloc.h"
+#include "mimalloc/types.h"
 #include "mimalloc/prim/os.h"
 #include "mimalloc/alloc/alloc.h"
 

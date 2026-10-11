@@ -49,6 +49,9 @@
     <ClCompile Include="..\..\src\alloc\page.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\alloc\alloc-generic.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\alloc\page-queue.c">
       <Filter>Sources</Filter>
     </ClCompile>
@@ -106,6 +109,9 @@
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\alloc\page-queue.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\alloc\page.h">
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\mimalloc\internal.h">

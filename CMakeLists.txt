@@ -119,6 +119,7 @@ set(mi_sources
     src/arena/bitmap.c
     src/arena/bitmap-chunk.c
     src/alloc/alloc.c
+    src/alloc/alloc-generic.c
     # src/alloc/free.c
     # src/alloc/alloc-override.c    
     src/alloc/alloc-aligned.c

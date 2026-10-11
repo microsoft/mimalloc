@@ -93,7 +93,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
   mi_assert_internal(adjust < alignment);
   void* aligned_p = (void*)((uintptr_t)p + adjust);
 
-  // note: after the above allocation, the page may be abandoned now (as it became full, see `alloc/page.c:_mi_malloc_generic`)
+  // note: after the above allocation, the page may be abandoned now (as it became full, see `alloc/alloc-generic.c:_mi_malloc_generic`)
   // and we no longer own it. We should be careful to only read constant fields in the page,
   // or use safe atomic access as in `mi_page_set_has_interior_pointers`.
   // (we can access the page though since the just allocated pointer keeps it alive)

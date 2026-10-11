@@ -12,7 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/profile/sample-profile.h"
 
 //----------------------------------------------------------------------------
-// General sampled allocation (called from `alloc/page.c:mi_malloc_generic_fallback`)
+// General sampled allocation (called from `alloc/alloc-generic.c:mi_malloc_generic_fallback`)
 // This is for both guarded and profiled sampling
 //----------------------------------------------------------------------------
 

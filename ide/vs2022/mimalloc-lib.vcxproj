@@ -480,6 +480,7 @@
     <ClCompile Include="..\..\src\util\options.c" />
     <ClCompile Include="..\..\src\alloc\page-queue.c" />
     <ClCompile Include="..\..\src\alloc\page.c" />
+    <ClCompile Include="..\..\src\alloc\alloc-generic.c" />
     <ClCompile Include="..\..\src\util\random.c" />
     <ClCompile Include="..\..\src\prim\os.c" />
     <ClCompile Include="..\..\src\util\stats.c" />
@@ -522,6 +523,7 @@
     <ClInclude Include="..\..\src\arena\bitmap-chunk.h" />
     <ClInclude Include="..\..\src\arena\arena.h" />
     <ClInclude Include="..\..\src\alloc\page-queue.h" />
+    <ClInclude Include="..\..\src\alloc\page.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
