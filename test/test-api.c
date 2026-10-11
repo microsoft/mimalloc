@@ -29,6 +29,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 #include <errno.h>
 
 #ifdef __cplusplus
+#include <new>
 #include <vector>
 #endif
 
@@ -432,6 +433,51 @@ int main(void) {
     void* p = mi_reallocarray(NULL,0,16);  // issue #574
     result = (p != NULL && errno == 0);
     mi_free(p);
+  };
+
+  CHECK_BODY("reallocarray-overflow") {
+    uint8_t* p = (uint8_t*)mi_malloc(32);
+    if (p == NULL) { result = false; }
+    else {
+      memset(p, 0x5A, 32);
+      errno = 0;
+      void* q = mi_reallocarray(p, SIZE_MAX / 2 + 1, 2);
+      result = (q == NULL && errno == EOVERFLOW && mem_has_vals(p, 32, 0x5A));
+      mi_free(q == NULL ? p : q);
+    }
+  };
+
+  CHECK_BODY("reallocarr-grow") {
+    void* p = mi_malloc(32);
+    if (p == NULL) { result = false; }
+    else {
+      memset(p, 0x5A, 32);
+      int err = mi_reallocarr(&p, 64, 2);
+      result = (err == 0 && mi_usable_size(p) >= 128 && mem_has_vals((uint8_t*)p, 32, 0x5A));
+      mi_free(p);
+    }
+  };
+
+  CHECK_BODY("reallocarr-zero-count") {
+    void* p = mi_malloc(32);
+    if (p == NULL) { result = false; }
+    else {
+      int err = mi_reallocarr(&p, 0, 2);
+      result = (err == 0 && p == NULL);
+      mi_free(p);
+    }
+  };
+
+  CHECK_BODY("reallocarr-overflow") {
+    void* p = mi_malloc(32);
+    if (p == NULL) { result = false; }
+    else {
+      memset(p, 0x5A, 32);
+      void* original = p;
+      int err = mi_reallocarr(&p, SIZE_MAX / 2 + 1, 2);
+      result = (err == EOVERFLOW && p == original && mem_has_vals((uint8_t*)p, 32, 0x5A));
+      mi_free(original);
+    }
   };
 
   CHECK_BODY("realloc-guarded") {      // issue #1304
