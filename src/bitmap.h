@@ -20,6 +20,8 @@ between the fields. (This is used in arena allocation)
 #ifndef MI_BITMAP_H
 #define MI_BITMAP_H
 
+#include "mimalloc/internal.h"  // mi_assert_internal, mi_atomic_*, etc.
+
 /* -----------------------------------------------------------
   Bitmap definition
 ----------------------------------------------------------- */
