@@ -316,7 +316,7 @@ jobs:
       # VM: FreeBSD (arm64 and x64)
       - name: FreeBSD arm64, Setup
         if: matrix.tests == 'freebsd-arm64'
-        uses: vmactions/freebsd-vm@f0552d3b69211736abd97f02ff3d4674c56b73b1 # v1.5.5
+        uses: vmactions/freebsd-vm@a2f9a41fa97f6848b8c3b791087dfcdaa5b473ff # v1.5.8
         with:
           arch: arm64
           custom-shell-name: freebsd-arm64
