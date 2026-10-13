@@ -30,6 +30,8 @@ jobs:
       # Checkout: https://github.com/actions/checkout
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       # Basic
       - name: Debug
@@ -168,7 +170,7 @@ jobs:
       # MSYS2 mingw64 UCRT64
       - name: mingw-ucrt64 x64, Setup
         if: matrix.tests == 'mingw-ucrt64'
-        uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2.32.0     
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
         with: 
           msystem: UCRT64
           install: |
