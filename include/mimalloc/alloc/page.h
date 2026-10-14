@@ -71,6 +71,17 @@ static inline size_t mi_page_info_size(void) {
   return mi_align_up(sizeof(mi_page_t), MI_MAX_ALIGN_SIZE);
 }
 
+// The alignment that every block of size `bsize` is guaranteed to have in any page (or 0 if `bsize==0`).
+// This is guaranteed by the block start (see `arena/arena-page.c:mi_page_meta_in_front_block_start` and `mi_page_meta_select`),
+// and used by `mi_malloc_aligned` to avoid over-allocation for naturally aligned blocks.
+static inline size_t mi_natural_alignment_of_size(size_t bsize) {
+  const size_t lowbit = bsize & (~bsize + 1);  // largest power of 2 that divides `bsize`
+  if (mi_is_power_of_two(bsize) && bsize <= MI_PAGE_MAX_START_BLOCK_ALIGN2) return bsize;   // power-of-two blocks up to 4KiB
+  if (bsize <= MI_SMALL_SIZE_MAX) return lowbit;                                            // small blocks start at a multiple of their size
+  if ((bsize % MI_PAGE_OSPAGE_BLOCK_ALIGN2) == 0) return MI_PAGE_OSPAGE_BLOCK_ALIGN2;      // multiples of 4KiB are 4KiB aligned
+  return (lowbit < MI_MAX_ALIGN_SIZE ? lowbit : MI_MAX_ALIGN_SIZE);                         // otherwise blocks start at least `MI_MAX_ALIGN_SIZE` aligned
+}
+
 static inline bool mi_page_contains_address(const mi_page_t* page, const void* p) {
   size_t psize;
   uint8_t* start = mi_page_area(page, &psize);

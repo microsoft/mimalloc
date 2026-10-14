@@ -629,9 +629,9 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   uint8_t* const slice_start    = mi_arenas_page_alloc_fresh_area(theap,slice_count,max_page_meta_count,block_size,block_alignment,os_align,commit,&memid,&arena_pages,&page,&block_start);
   if (!slice_start) return NULL;
   mi_assert_internal(block_size < MI_MAX_ALIGN_SIZE || block_start % MI_MAX_ALIGN_SIZE == 0);
-  if (mi_is_power_of_two(block_size) && block_size <= MI_PAGE_MAX_START_BLOCK_ALIGN2) {
-    mi_assert_internal(block_start % block_size == 0); // natural alignment (see also alloc_aligned.c)
-  }
+  // all blocks must be naturally aligned (as relied upon by `mi_malloc_aligned`)
+  mi_assert_internal(block_size % mi_natural_alignment_of_size(block_size) == 0);
+  mi_assert_internal(mi_is_aligned(slice_start + block_start, mi_natural_alignment_of_size(block_size)));
 
   // commit the first block (if needed)
   const size_t alloc_size        = _mi_size_of_slices(slice_count);
