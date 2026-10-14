@@ -56,6 +56,7 @@ bool test_stl_theap_allocator3(void);
 bool test_stl_theap_allocator4(void);
 
 static bool test_zero_aligned_first(void);
+static bool test_aligned_all(void);
 static bool test_heap_destroy_xthread_free(void);
 static bool test_heap_destroy_stale_theap(void);
 #ifdef __cplusplus
@@ -329,6 +330,9 @@ int main(void) {
       }
     }
     result = ok;
+  }
+  CHECK_BODY("mimalloc-aligned15") {
+    result = test_aligned_all();
   }
   CHECK_BODY("malloc-aligned-at1") {
     void* p = mi_malloc_aligned_at(48,32,0); result = (p != NULL && ((uintptr_t)(p) + 0) % 32 == 0); mi_free(p);
@@ -870,6 +874,43 @@ static bool test_zero_aligned_first(void) {
   res = res && (p != NULL && (uintptr_t)(p) % 32 == 0);
   mi_free(p);
   return res;
+}
+
+
+// ---------------------------------------------------------------------------
+// Aligned allocation for all size classes and alignments up to 4KiB (including huge blocks).
+// Keeps several blocks live so alignment is checked beyond the first block in a page.
+// ---------------------------------------------------------------------------
+
+static bool test_aligned_check(size_t size, size_t align, bool zero) {
+  void* p[8];
+  bool ok = true;
+  for (int i = 0; i < 8; i++) {
+    p[i] = (zero ? mi_zalloc_aligned(size, align) : mi_malloc_aligned(size, align));
+    if (p[i] == NULL || ((uintptr_t)p[i] % align) != 0 || mi_usable_size(p[i]) < size || (zero && !mem_is_zero(p[i], size))) {
+      ok = false;
+    }
+    if (p[i] != NULL) { memset(p[i], 0xAB, size); }
+  }
+  for (int i = 0; i < 8; i++) {
+    mi_free(p[i]);
+  }
+  return ok;
+}
+
+static bool test_aligned_all(void) {
+  bool ok = true;
+  for (size_t size = 0; size <= 300*1024 && ok; size += (size < 16*1024 ? 8 : 512)) {
+    for (size_t align = 8; align <= 4096 && ok; align *= 2) {
+      ok = test_aligned_check(size, align, ((size/8) & 1) != 0);
+    }
+  }
+  for (size_t size = 4*1024*1024 - 4096; size <= 4*1024*1024 + 3*4096 && ok; size += 1024) {
+    for (size_t align = 8; align <= 4096 && ok; align *= 2) {
+      ok = test_aligned_check(size, align, false);
+    }
+  }
+  return ok;
 }
 
 
