@@ -283,10 +283,47 @@ static size_t mi_page_meta_in_front_block_start(size_t block_size, bool os_align
   return mi_align_up(offset,MI_MAX_ALIGN_SIZE);
 }
 
+// The usable size of a page area (excluding the guard page at the end in secure mode).
+static size_t mi_arenas_page_noguard_size(size_t alloc_size) {
+  #if MI_SECURE>=5
+  mi_assert(alloc_size > _mi_os_secure_guard_page_size());
+  return alloc_size - _mi_os_secure_guard_page_size();
+  #else
+  return alloc_size;
+  #endif
+}
+
+// Can we offset the first block to spread cache sets? (see `MI_PAGE_CACHE_OFFSET`)
+static bool mi_page_block_can_cache_offset(size_t block_size, bool os_align) {
+  if (os_align || !mi_block_size_has_cache_offset(block_size)) return false;
+  #if MI_GUARDED
+  if (block_size % _mi_os_page_size() == 0) return false;  // guarded blocks must stay OS page aligned
+  #endif
+  return true;
+}
+
+// Cache offset for the first block to spread the blocks of different pages over the cache sets (issue #1121).
+// The offset fits in the unused space at the end of the page so the number of blocks is unchanged.
+static size_t mi_page_block_cache_offset(uint8_t* slice_start, size_t slice_count, size_t block_size, size_t block_start, bool os_align) {
+  if (!mi_page_block_can_cache_offset(block_size, os_align)) return 0;
+  const size_t page_noguard_size = mi_arenas_page_noguard_size(_mi_size_of_slices(slice_count));
+  mi_assert_internal(block_start + block_size <= page_noguard_size);
+  const size_t slack   = (page_noguard_size - block_start) % block_size;
+  const size_t noffsets = 1 + (slack < MI_PAGE_CACHE_OFFSET_MAX ? slack : MI_PAGE_CACHE_OFFSET_MAX) / MI_PAGE_CACHE_OFFSET_UNIT;
+  #if MI_SIZE_BITS >= 64
+  const size_t hash = ((size_t)((uintptr_t)slice_start / MI_ARENA_SLICE_SIZE)) * MI_ZU(0x9E3779B97F4A7C15);
+  #else
+  const size_t hash = ((size_t)((uintptr_t)slice_start / MI_ARENA_SLICE_SIZE)) * MI_ZU(0x9E3779B9);
+  #endif
+  return ((hash >> (MI_SIZE_BITS - 16)) % noffsets) * MI_PAGE_CACHE_OFFSET_UNIT;
+}
+
 // Use the separate (zero initialized) `page_meta` if available and not preferring in front of the slices,
 // and otherwise put the page meta data in front of the slices. Also determines the offset of the first block.
-static mi_page_t* mi_page_meta_select(uint8_t* slice_start, mi_page_t* page_meta, size_t block_size, bool os_align, size_t* block_start) {
+static mi_page_t* mi_page_meta_select(uint8_t* slice_start, size_t slice_count, mi_page_t* page_meta, size_t block_size, bool os_align, size_t* block_start) {
   mi_assert_internal(page_meta == NULL || page_meta->block_size == 0);
+  mi_page_t* page;
+  size_t offset;
   if (page_meta == NULL 
       #if MI_PAGE_META_SMALL_IS_ALIGNED
       // small pages keep the page meta data in front of the slices for a fast `mi_free_small`
@@ -296,8 +333,8 @@ static mi_page_t* mi_page_meta_select(uint8_t* slice_start, mi_page_t* page_meta
   ) {
     // put the actual page meta info in front of the slices
     // (note: it is not initialized yet since the slices may not be committed yet)
-    *block_start = mi_page_meta_in_front_block_start(block_size, os_align);
-    return (mi_page_t*)slice_start;
+    offset = mi_page_meta_in_front_block_start(block_size, os_align);
+    page = (mi_page_t*)slice_start;
   }
   else {
     // use the separate page meta data
@@ -305,15 +342,18 @@ static mi_page_t* mi_page_meta_select(uint8_t* slice_start, mi_page_t* page_meta
     #if !defined(MI_PAGE_BLOCK_START_MAX_OFFSET)
     #define MI_PAGE_BLOCK_START_MAX_OFFSET  (8*MI_INTPTR_BITS) /* 512 */
     #endif
-    size_t offset = 0;
+    offset = 0;
     if (block_size >= MI_SIZE_SIZE && block_size <= MI_PAGE_BLOCK_START_MAX_OFFSET && mi_is_power_of_two(block_size)) {
       // use the same offset as if the page meta data was in front
       offset = mi_align_up(mi_page_info_size(), block_size); // to maintain natural alignment
       if (block_size < 64) { offset += 3*block_size; }
     }
-    *block_start = offset;
-    return page_meta;
+    page = page_meta;
   }
+  offset += mi_page_block_cache_offset(slice_start, slice_count, block_size, offset, os_align);
+  mi_assert_internal(os_align || offset < MI_ARENA_SLICE_SIZE);  // so `mi_page_slice_start` can align down the page start
+  *block_start = offset;
+  return page;
 }
 
 #if MI_PAGE_META_IS_ALIGNED
@@ -371,7 +411,7 @@ static uint8_t* mi_arenas_page_alloc_from_slices(mi_theap_t* theap, size_t slice
   mi_assert_internal(MI_PAGE_META_IS_SEPARATED!=0 || arena->pages_meta == NULL);
   mi_page_t* const page_meta = (arena->pages_meta == NULL ? NULL : &arena->pages_meta[memid->mem.arena.slice_index]);
   #endif
-  *ppage = mi_page_meta_select(start, page_meta, block_size, false, pblock_start);
+  *ppage = mi_page_meta_select(start, slice_count, page_meta, block_size, false, pblock_start);
   return start;
 }
 
@@ -417,7 +457,7 @@ static uint8_t* mi_arenas_page_alloc_from_os(mi_heap_t* heap, size_t slice_count
   mi_assert_internal(mi_align_down_ptr(start-1,MI_PAGE_META_ALIGNMENT) == os_start);
   mi_assert_internal((uint8_t*)mi_aligned_ptr_page0(start) < os_start + min_page_meta);
   memid->initially_committed = true; // so we don't commit again
-  *ppage = mi_page_meta_select(start, mi_aligned_ptr_page0(start), block_size, os_align, pblock_start);
+  *ppage = mi_page_meta_select(start, slice_count, mi_aligned_ptr_page0(start), block_size, os_align, pblock_start);
   return start;
 }
 #else
@@ -439,8 +479,7 @@ static uint8_t* mi_arenas_page_alloc_from_os(mi_heap_t* heap, size_t slice_count
   }
   if (start == NULL) return NULL;
   // page meta data is always placed in front of the slices
-  *pblock_start = mi_page_meta_in_front_block_start(block_size, os_align);
-  *ppage = (mi_page_t*)start;
+  *ppage = mi_page_meta_select(start, slice_count, NULL, block_size, os_align, pblock_start);
   return start;
 }
 #endif
@@ -480,16 +519,6 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
 
 // Free a page without modifying page_bin stats
 static void mi_arenas_page_free_prim(mi_page_t* page);
-
-// The usable size of a page area (excluding the guard page at the end in secure mode).
-static size_t mi_arenas_page_noguard_size(size_t alloc_size) {
-  #if MI_SECURE>=5
-  mi_assert(alloc_size > _mi_os_secure_guard_page_size());
-  return alloc_size - _mi_os_secure_guard_page_size();
-  #else
-  return alloc_size;
-  #endif
-}
 
 // Commit the start of the page up to and including the first block if the slices are not yet committed.
 // Sets `*commit_size` to the committed size (or 0 if the slices were already committed).
@@ -707,16 +736,18 @@ static mi_page_t* mi_arenas_page_regular_alloc(mi_theap_t* theap, size_t slice_c
 // Allocate a page containing one block (very large, or with large alignment)
 static mi_page_t* mi_arenas_page_singleton_alloc(mi_theap_t* theap, size_t block_size, size_t block_alignment)
 {
+  const bool os_align = (block_alignment > MI_PAGE_MAX_OVERALLOC_ALIGN);
   #if MI_PAGE_META_IS_ALIGNED
   const size_t info_size = 0;
   #else
-  const bool os_align = (block_alignment > MI_PAGE_MAX_OVERALLOC_ALIGN);
   const size_t info_size = (os_align ? MI_PAGE_ALIGN : mi_page_info_size());
   #endif
+  // room for the cache offset of the block (committed but not touched)
+  const size_t cache_offset_size = (mi_page_block_can_cache_offset(block_size, os_align) ? MI_PAGE_CACHE_OFFSET_MAX : 0);
   #if MI_SECURE < 2
-  const size_t slice_count = _mi_slice_count_of_size(info_size + block_size);
+  const size_t slice_count = _mi_slice_count_of_size(info_size + cache_offset_size + block_size);
   #else
-  const size_t slice_count = _mi_slice_count_of_size(mi_align_up(info_size + block_size, _mi_os_secure_guard_page_size()) + _mi_os_secure_guard_page_size());
+  const size_t slice_count = _mi_slice_count_of_size(mi_align_up(info_size + cache_offset_size + block_size, _mi_os_secure_guard_page_size()) + _mi_os_secure_guard_page_size());
   #endif
 
   mi_page_t* page = mi_arenas_page_alloc_fresh(theap, slice_count, block_size, block_alignment, true /* commit singletons always */);

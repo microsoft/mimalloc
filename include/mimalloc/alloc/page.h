@@ -71,6 +71,11 @@ static inline size_t mi_page_info_size(void) {
   return mi_align_up(sizeof(mi_page_t), MI_MAX_ALIGN_SIZE);
 }
 
+// Can the first block in a page with blocks of size `bsize` have a cache offset? (see `MI_PAGE_CACHE_OFFSET`)
+static inline bool mi_block_size_has_cache_offset(size_t bsize) {
+  return (MI_PAGE_CACHE_OFFSET != 0 && bsize > MI_SMALL_MAX_OBJ_SIZE);
+}
+
 // The alignment that every block of size `bsize` is guaranteed to have in any page (or 0 if `bsize==0`).
 // This is guaranteed by the block start (see `arena/arena-page.c:mi_page_meta_in_front_block_start` and `mi_page_meta_select`),
 // and used by `mi_malloc_aligned` to avoid over-allocation for naturally aligned blocks.
@@ -78,7 +83,9 @@ static inline size_t mi_natural_alignment_of_size(size_t bsize) {
   const size_t lowbit = bsize & (~bsize + 1);  // largest power of 2 that divides `bsize`
   if (mi_is_power_of_two(bsize) && bsize <= MI_PAGE_MAX_START_BLOCK_ALIGN2) return bsize;   // power-of-two blocks up to 4KiB
   if (bsize <= MI_SMALL_SIZE_MAX) return lowbit;                                            // small blocks start at a multiple of their size
-  if ((bsize % MI_PAGE_OSPAGE_BLOCK_ALIGN2) == 0) return MI_PAGE_OSPAGE_BLOCK_ALIGN2;      // multiples of 4KiB are 4KiB aligned
+  if ((bsize % MI_PAGE_OSPAGE_BLOCK_ALIGN2) == 0) {                                         // multiples of 4KiB are 4KiB aligned (or cache offset unit aligned)
+    return (mi_block_size_has_cache_offset(bsize) ? MI_PAGE_CACHE_OFFSET_UNIT : MI_PAGE_OSPAGE_BLOCK_ALIGN2);
+  }
   return (lowbit < MI_MAX_ALIGN_SIZE ? lowbit : MI_MAX_ALIGN_SIZE);                         // otherwise blocks start at least `MI_MAX_ALIGN_SIZE` aligned
 }
 
