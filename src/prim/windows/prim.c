@@ -672,10 +672,7 @@ void _mi_prim_out_stderr( const char* msg )
       #if MI_WIN_DESKTOP
       else if (hcon == NULL) {
         // no stderr handle: this is usually a GUI or detached process. Send the
-        // output to the debugger instead of AttachConsole(ATTACH_PARENT_PROCESS):
-        // attaching to the parent console would also link our lifetime to it --
-        // closing the console (or Ctrl+C in it) would terminate us unexpectedly.
-        // (see issue #1354)
+        // output to the debugger instead (see issue #1354 and #1429)
         OutputDebugStringA(msg);
       }
       #endif
