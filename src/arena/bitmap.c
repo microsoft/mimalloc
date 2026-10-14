@@ -768,7 +768,12 @@ static bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, size_t 
 
         size_t cidx;
         bool did_temp_clear_bits = false;
-        if ((*on_find)(chunk, n, &cidx, &did_temp_clear_bits)) {
+        const bool found = (*on_find)(chunk, n, &cidx, &did_temp_clear_bits);
+        if (did_temp_clear_bits) {
+          // a concurrent find_and_claim may have cleared the chunkmap bit, restore it now
+          mi_bbitmap_chunkmap_set(bbitmap, chunk_idx, false);
+        }        
+        if (found) {
           if (cidx==0 && ibin == MI_CBIN_NONE) { // only the first block determines the size bin
             // this chunk is now reserved for the `bbin` size class
             mi_bbitmap_set_chunk_bin(bbitmap, chunk_idx, bbin);
@@ -782,11 +787,7 @@ static bool mi_bbitmap_try_find_and_clear_generic(mi_bbitmap_t* bbitmap, size_t 
           //       but that is ok as the chunkmap is a conservative approximation.
           // todo: should _on_find_ return a boolean if there is a chance all are clear to avoid calling `try_clear?`
           //       probably not as we already only call `try_clear` once we fail to clear any bits.
-          if (did_temp_clear_bits) {
-            // a concurrent find_and_claim may have cleared the chunkmap bit, restore it now
-            mi_bbitmap_chunkmap_set(bbitmap, chunk_idx, false);
-          }
-          else {
+          if (!did_temp_clear_bits) {
             mi_bbitmap_chunkmap_try_clear(bbitmap, chunk_idx);
           }
         }
