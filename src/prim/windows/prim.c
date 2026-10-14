@@ -619,10 +619,6 @@ void _mi_prim_out_stderr( const char* msg )
     if (hcon == INVALID_HANDLE_VALUE) {
       hcon = GetStdHandle(STD_ERROR_HANDLE);   // returns NULL if no stderr is available
       #if MI_WIN_DESKTOP
-      if (hcon==NULL) {
-        AttachConsole(ATTACH_PARENT_PROCESS);  // if started from a parent console, try to attach to that
-        hcon = GetStdHandle(STD_ERROR_HANDLE);
-      }
       CONSOLE_SCREEN_BUFFER_INFO sbi;
       hconIsConsole = ((hcon != NULL && hcon != INVALID_HANDLE_VALUE) && GetConsoleScreenBufferInfo(hcon, &sbi));
       #endif
@@ -642,6 +638,16 @@ void _mi_prim_out_stderr( const char* msg )
           WriteFile(hcon, msg, (DWORD)len, &written, NULL);
         }
       }
+      #if MI_WIN_DESKTOP
+      else if (hcon == NULL) {
+        // no stderr handle: this is usually a GUI or detached process. Send the
+        // output to the debugger instead of AttachConsole(ATTACH_PARENT_PROCESS):
+        // attaching to the parent console would also link our lifetime to it --
+        // closing the console (or Ctrl+C in it) would terminate us unexpectedly.
+        // (see issue #1354)
+        OutputDebugStringA(msg);
+      }
+      #endif
       // don't fall back to fputs or _cputs as the crt can have it locked
     }
   }
