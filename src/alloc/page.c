@@ -138,17 +138,6 @@ bool _mi_page_is_valid(mi_page_t* page) {
 ----------------------------------------------------------- */
 
 
-#if MI_STATS || (MI_SAMPLE==1)
-// Gets the theap belonging to a page.
-static mi_theap_t* mi_theap_of_page(mi_page_t* page) {
-  mi_theap_t* theap = page->theap;
-  if mi_unlikely(mi_page_thread_id(page) != _mi_prim_thread_id()) { 
-    theap = _mi_page_associated_theap_peek(page);
-  }
-  return theap;
-}
-#endif
-
 #if MI_SAMPLE==1 /* for ==2, the countdown is already done at every `alloc/alloc.c:mi_page_alloc_zero` */
 
 // Adjust the theap->sample_countdown based on the current page allocation count
