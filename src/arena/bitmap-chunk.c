@@ -616,7 +616,7 @@ static inline bool mi_bchunk_try_find_and_clear_at(mi_bchunk_t* chunk, size_t ch
 // This is used to find free slices and abandoned pages and should be efficient.
 // todo: try neon version
 bool mi_bchunk_try_find_and_clear(mi_bchunk_t* chunk, size_t* pidx) {
-  #if MI_OPT_SIMD && defined(__AVX2__) && (MI_BCHUNK_BITS==256)
+  #if MI_OPT_SIMD && defined(__AVX2__) && (MI_BCHUNK_BITS==256) && (MI_BFIELD_SIZE==8)
   for(int tries=0; tries<4; tries++) {   // paranoia: at most 4 tries
     const __m256i vec = _mm256_load_si256((const __m256i*)chunk->bfields);
     const __m256i vcmp = _mm256_cmpeq_epi64(vec, mi_mm256_zero()); // (elem64 == 0 ? 0xFF  : 0)
@@ -633,7 +633,7 @@ bool mi_bchunk_try_find_and_clear(mi_bchunk_t* chunk, size_t* pidx) {
     __asm __volatile ("" : : "g"(chunk) : "memory");
     #endif
   }
-  #elif MI_OPT_SIMD && defined(__AVX2__) && (MI_BCHUNK_BITS==512)
+  #elif MI_OPT_SIMD && defined(__AVX2__) && (MI_BCHUNK_BITS==512) && (MI_BFIELD_SIZE==8)
   for(int tries=0; tries<4; tries++) {   // paranoia: at most 4 tries
     size_t chunk_idx = 0;
     #if 0
