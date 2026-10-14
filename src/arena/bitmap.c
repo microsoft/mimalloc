@@ -838,7 +838,12 @@ static bool mi_bbitmap_try_clearN_(mi_bbitmap_t* bbitmap, size_t chunk_idx, size
   size_t count = 0;  // chunk count
   while (m > 0) {
     mi_bchunk_t* chunk = &bbitmap->chunks[chunk_idx + count];
-    if (!mi_bchunk_try_clearN(chunk, 0, (m > MI_BCHUNK_BITS ? MI_BCHUNK_BITS : m), NULL, NULL)) {
+    bool did_temp_clear_bits = false;
+    if (!mi_bchunk_try_clearN(chunk, 0, (m > MI_BCHUNK_BITS ? MI_BCHUNK_BITS : m), NULL, &did_temp_clear_bits)) {
+      if (did_temp_clear_bits) {
+        // may have raced with a clearer (in on_find) so set the chunkmap bit conservatively
+        mi_bbitmap_chunkmap_set(bbitmap, chunk_idx + count, false);
+      }
       goto rollback;
     }
     m = (m <= MI_BCHUNK_BITS ? 0 : m - MI_BCHUNK_BITS);
