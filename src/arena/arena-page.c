@@ -1116,6 +1116,7 @@ static bool mi_heap_visit_arena(mi_arena_t* arena, const void* arg, void** resul
 static bool mi_heap_visit_owned_os_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
   const mi_heap_visit_info_t visit_info = { heap, visitor, arg, visit_blocks, false };
   for (mi_theap_t* theap = heap->theaps; theap != NULL; theap = theap->hnext) {
+    if (theap->page_count_os == 0) continue;
     for (size_t bin = 0; bin <= MI_BIN_FULL; bin++) {
       mi_page_t* page = theap->pages[bin].first;
       while (page != NULL) {

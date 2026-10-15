@@ -146,7 +146,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   0, 0,                   // profiler_reserved1, profiler_reserved2
   0,                      // heartbeat
   { {0}, {0}, 0, true },  // random
-  0,                      // page count
+  0, 0,                   // page count, OS page count
   MI_BIN_FULL, 0,         // page retired min/max
   0,                      // pages_full_size
   0, 0,                   // generic count

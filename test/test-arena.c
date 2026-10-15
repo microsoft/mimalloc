@@ -1,5 +1,6 @@
 #include "../src/arena/arena.h"
 #include "mimalloc/alloc/page.h"
+#include "mimalloc/heap/theap.h"
 #include "mimalloc/prim.h"
 #include "testhelper.h"
 
@@ -304,7 +305,8 @@ static bool test_heap_visit_owned_os(bool mixed) {
     owned_visit_t visit = { 0, 0, 0, 0, { false } };
     result = (mi_heap_visit_blocks(visit_heap, mode != 0, &owned_record, &visit) &&
               visit.used == expected && visit.blocks == (mode != 0 ? expected : 0) &&
-              visit.os_areas > 0 && visit.arena_areas == (mixed ? 1 : 0));
+              visit.os_areas > 0 && visit.os_areas == mi_heap_theap(visit_heap)->page_count_os &&
+              visit.arena_areas == (mixed ? 1 : 0));
   }
   if (result) {
     block_visit_t visit = { 0, 0, false, false };
@@ -328,6 +330,44 @@ static bool test_heap_visit_owned_os(bool mixed) {
   visit_heap = NULL;
   mi_option_set(mi_option_page_full_retain, retain);
   mi_option_set(mi_option_guarded_sample_rate, guarded);
+  return result;
+}
+
+static bool test_heap_page_count_os(void) {
+  const long disallow = mi_option_get(mi_option_disallow_arena_alloc);
+  const long guarded = mi_option_get(mi_option_guarded_sample_rate);
+  const long reclaim = mi_option_get(mi_option_page_reclaim_on_free);
+  mi_option_enable(mi_option_disallow_arena_alloc);
+  mi_option_set(mi_option_guarded_sample_rate, 0);
+  mi_option_set(mi_option_page_reclaim_on_free, 0);
+  mi_heap_t* heap = mi_heap_new();
+  mi_theap_t* theap = (heap == NULL ? NULL : mi_heap_theap(heap));
+  bool result = (theap != NULL && theap->page_count_os == 0);
+  if (result) {
+    void* p = mi_heap_malloc(heap, 64);
+    void* q = mi_heap_malloc(heap, 64);
+    void* r = mi_heap_malloc(heap, 256);
+    result = (p != NULL && q != NULL && r != NULL);
+    if (result) {
+      result = (theap->page_count_os == 2);
+      mi_free(r);
+      mi_heap_collect(heap, true);
+      result = (theap->page_count_os == 1 && result);
+      _mi_theap_collect_abandon(theap);
+      result = (theap->page_count_os == 0 && result);
+      mi_free(p); // reclaim the page containing q into the originating theap
+      result = (theap->page_count_os == 1 && result);
+      block_visit_t visit = { 0, 0, false, false };
+      result = (mi_heap_visit_blocks(heap, true, &block_record, &visit) && visit.blocks == 1 && result);
+      mi_free(q);
+      mi_heap_collect(heap, true);
+      result = (theap->page_count_os == 0 && result);
+    }
+  }
+  mi_heap_destroy(heap);
+  mi_option_set(mi_option_disallow_arena_alloc, disallow);
+  mi_option_set(mi_option_guarded_sample_rate, guarded);
+  mi_option_set(mi_option_page_reclaim_on_free, reclaim);
   return result;
 }
 
@@ -409,6 +449,7 @@ int main(void) {
   CHECK("heap-visit-stop", test_heap_visit_stop());
   CHECK("heap-visit-owned-os", test_heap_visit_owned_os(false));
   CHECK("heap-visit-owned-os-mixed", test_heap_visit_owned_os(true));
+  CHECK("heap-page-count-os", test_heap_page_count_os());
   CHECK("heap-visit-thread-exit", test_heap_visit_thread_exit());
   return print_test_summary();
 }

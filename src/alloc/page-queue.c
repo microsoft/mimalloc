@@ -229,6 +229,10 @@ void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
     mi_theap_queue_first_update(theap,queue);
   }
   theap->page_count--;
+  if (page->memid.memkind != MI_MEM_ARENA) {
+    mi_assert_internal(theap->page_count_os > 0);
+    theap->page_count_os--;
+  }
   queue->count--;
   page->next = NULL;
   page->prev = NULL;
@@ -263,6 +267,7 @@ void mi_page_queue_push(mi_theap_t* theap, mi_page_queue_t* queue, mi_page_t* pa
   // update direct
   mi_theap_queue_first_update(theap, queue);
   theap->page_count++;
+  if (page->memid.memkind != MI_MEM_ARENA) { theap->page_count_os++; }
 }
 
 void mi_page_queue_push_at_end(mi_theap_t* theap, mi_page_queue_t* queue, mi_page_t* page) {
@@ -292,6 +297,7 @@ void mi_page_queue_push_at_end(mi_theap_t* theap, mi_page_queue_t* queue, mi_pag
     mi_theap_queue_first_update(theap, queue);
   }
   theap->page_count++;
+  if (page->memid.memkind != MI_MEM_ARENA) { theap->page_count_os++; }
 }
 
 static void mi_page_queue_enqueue_from_ex(mi_page_queue_t* to, mi_page_queue_t* from, bool enqueue_at_end, mi_page_t* page) {
