@@ -199,7 +199,7 @@ static bool mi_arena_is_suitable_ex(mi_arena_t* arena, mi_arena_t* req_arena, bo
 
 // determine the start of search; important to keep heaps and threads
 // into their own memory regions to reduce contention.
-static size_t mi_arena_start_idx(mi_heap_t* heap, size_t tseq, size_t arena_cycle) 
+static inline size_t mi_arena_start_idx(mi_heap_t* heap, size_t tseq, size_t arena_cycle)
 {
   const size_t hseq   = heap->heap_seq;
   const size_t hcount = mi_atomic_load_relaxed(&heap->subproc->heap_count);
@@ -263,7 +263,7 @@ typedef struct mi_arena_suitable_visit_info_s {
   const void*            arg;
 } mi_arena_suitable_visit_info_t;
 
-static bool mi_arena_visit_suitable(mi_arena_t* arena, const void* arg, void** result) 
+static inline bool mi_arena_visit_suitable(mi_arena_t* arena, const void* arg, void** result)
 {
   const mi_arena_suitable_visit_info_t* info = (const mi_arena_suitable_visit_info_t*)arg;
   if (!mi_arena_is_suitable_ex(arena, info->req_arena, info->match_numa, info->numa_node, info->allow_large)) {
