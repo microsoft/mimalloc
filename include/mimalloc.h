@@ -392,13 +392,6 @@ mi_decl_export mi_theap_t* mi_theap_set_default(mi_theap_t* theap);
 mi_decl_export mi_theap_t* mi_theap_get_default(void);
 mi_decl_export void        mi_theap_collect(mi_theap_t* theap, bool force) mi_attr_noexcept;
 
-// Abandon all pages, preserving live blocks and the theap for reuse. The owner must be
-// the current thread or quiescent outside mimalloc; exclude concurrent heap/theap deletion.
-mi_decl_export void mi_theap_abandon(mi_theap_t* theap) mi_attr_noexcept;
-// Owner-thread only: abandon pages and delete the theap, not its heap or live blocks.
-// A deleted default is replaced by the main theap; the main theap itself is only abandoned.
-mi_decl_export void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept;
-
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_theap_malloc(mi_theap_t* theap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_theap_zalloc(mi_theap_t* theap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_theap_calloc(mi_theap_t* theap, size_t count, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2, 3);
@@ -433,6 +426,13 @@ mi_decl_export bool  mi_manage_memory(void* start, size_t size, bool is_committe
 
 // unsafe: assumes the page belonging to `p` is only accessed by the calling thread.
 mi_decl_export bool mi_unsafe_heap_page_is_under_utilized(mi_heap_t* heap, void* p, size_t perc_threshold) mi_attr_noexcept;
+
+// Owner-thread only: abandon pages and delete the theap (not its heap or live blocks).
+mi_decl_export void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept;
+
+// Abandon all pages, preserving live blocks and the theap for reuse. The owner must be the current thread or quiescent outside mimalloc (excluding concurrent heap/theap deletion).
+mi_decl_export void mi_theap_quiescent_abandon(mi_theap_t* theap) mi_attr_noexcept;
+
 
 // ------------------------------------------------------
 // Deprecated

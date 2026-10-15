@@ -516,7 +516,214 @@ static bool test_thread_id_of(bool os_pages) {
   return result;
 }
 
+static bool test_theap_delete_owner(void) {
+  mi_theap_t* const main = mi_theap_get_default();
+  mi_tld_t* const tld = main->tld;
+  bool result = true;
+  for (size_t cached = 0; result && cached < 2; cached++) {
+    mi_heap_t* heap = mi_heap_new();
+    if (heap == NULL) return false;
+    mi_theap_t* theap = mi_heap_theap(heap);
+    int* p = (int*)mi_theap_malloc(theap, sizeof(int));
+    int* q = (int*)mi_theap_malloc(main, sizeof(int));
+    result = (p != NULL && q != NULL);
+    if (result) {
+      *p = 42;
+      *q = 43;
+      mi_free(mi_theap_malloc(theap, 4096)); // include an empty retired page
+      mi_theap_set_default(theap);
+      if (cached == 0) {
+        mi_theap_quiescent_abandon(theap);
+        result = (theap->page_count == 0 && theap->tld == tld &&
+                  mi_theap_get_default() == theap && mi_heap_theap(heap) == theap &&
+                  *p == 42 && mi_thread_id_of(p) == 0 && result);
+        mi_free(mi_malloc(4096));
+      }
+      mi_theap_delete(main);
+      result = (mi_theap_get_default() == theap && main->tld == tld &&
+                *q == 43 && mi_thread_id_of(q) == 0 && result);
+      (void)mi_heap_theap(cached ? heap : mi_heap_main());
+      mi_theap_delete(theap);
+      result = (mi_theap_get_default() == main && main->tld == tld &&
+                heap->theaps == NULL && *p == 42 && mi_heap_of(p) == heap &&
+                mi_thread_id_of(p) == 0 && result);
+      block_visit_t visit = { 0, 0, false, false };
+      result = (mi_heap_visit_abandoned_blocks(heap, true, &block_record, &visit) &&
+                visit.blocks == 1 && result);
+      theap = mi_heap_theap(heap);
+      int* r = (int*)mi_heap_malloc(heap, sizeof(int));
+      result = (r != NULL && theap->tld == tld && mi_heap_of(r) == heap && result);
+      mi_free(r);
+      mi_theap_delete(theap);
+    }
+    mi_free(p);
+    mi_free(q);
+    mi_heap_destroy(heap);
+  }
+  mi_theap_delete(main);
+  void* p = mi_malloc(64);
+  result = (p != NULL && mi_theap_get_default() == main && main->tld == tld && result);
+  mi_free(p);
+  return result;
+}
+
+#define CLEANUP_BLOCKS 64
+static mi_heap_t* cleanup_heap;
+static mi_theap_t* cleanup_theap;
+static void* cleanup_blocks[CLEANUP_BLOCKS];
+static _Atomic(size_t) cleanup_state;
+
+static bool abandon_owner(void) {
+  cleanup_theap = mi_heap_theap(cleanup_heap);
+  mi_theap_set_default(cleanup_theap);
+  bool result = true;
+  for (size_t i = 0; i < CLEANUP_BLOCKS; i++) {
+    cleanup_blocks[i] = mi_malloc(4096);
+    if (cleanup_blocks[i] == NULL) { result = false; }
+    else { memset(cleanup_blocks[i], (int)i, 4096); }
+  }
+  mi_free(mi_malloc(128));
+  (void)mi_heap_theap(cleanup_heap);
+  mi_atomic_store_release(&cleanup_state, 1);
+  while (mi_atomic_load_acquire(&cleanup_state) < 2) { _mi_prim_thread_yield(); }
+  result = (cleanup_theap->page_count == 0 && cleanup_theap->page_count_os == 0 &&
+            mi_theap_get_default() == cleanup_theap && mi_heap_theap(cleanup_heap) == cleanup_theap && result);
+  void* p = mi_malloc(64);
+  void* q = mi_theap_malloc(cleanup_theap, 128);
+  void* r = mi_heap_malloc(cleanup_heap, 256);
+  result = (p != NULL && q != NULL && r != NULL && mi_heap_of(p) == cleanup_heap &&
+            mi_heap_of(q) == cleanup_heap && mi_heap_of(r) == cleanup_heap && result);
+  mi_free(p);
+  mi_free(q);
+  mi_free(r);
+  return result; // leave the default set to exercise automatic thread cleanup
+}
+
+static bool test_theap_abandon_foreign(void) {
+  cleanup_heap = mi_heap_new();
+  if (cleanup_heap == NULL) return false;
+  mi_theap_t* const local = mi_heap_theap(cleanup_heap);
+  int* p = (int*)mi_theap_malloc(local, sizeof(int));
+  if (p != NULL) { *p = 42; }
+  mi_atomic_store_release(&cleanup_state, 0);
+  mi_thread_fun_args_t args = { &abandon_owner, false };
+  #ifdef _WIN32
+  HANDLE thread = CreateThread(NULL, 0, &mi_win_thread_entry, &args, 0, NULL);
+  const bool started = (thread != NULL);
+  #else
+  pthread_t thread;
+  const bool started = (pthread_create(&thread, NULL, &mi_pthread_entry, &args) == 0);
+  #endif
+  bool result = (p != NULL && started);
+  if (started) {
+    while (mi_atomic_load_acquire(&cleanup_state) < 1) { _mi_prim_thread_yield(); }
+    result = (cleanup_theap->pages[MI_BIN_FULL].first != NULL && result);
+    mi_free(cleanup_blocks[0]); // collect a pending cross-thread free during abandonment
+    cleanup_blocks[0] = NULL;
+    mi_theap_quiescent_abandon(cleanup_theap);
+    mi_theap_quiescent_abandon(cleanup_theap);
+    block_visit_t visit = { 0, 0, false, false };
+    result = (mi_heap_visit_blocks(cleanup_heap, true, &block_record, &visit) &&
+              visit.blocks == CLEANUP_BLOCKS && mi_heap_theap(cleanup_heap) == local &&
+              p != NULL && *p == 42 && mi_thread_id_of(p) == local->tld->thread_id && result);
+    for (size_t i = 1; i < CLEANUP_BLOCKS; i++) {
+      const uint8_t* block = (const uint8_t*)cleanup_blocks[i];
+      result = (block != NULL && block[0] == i && block[4095] == i &&
+                mi_thread_id_of(block) == 0 && result);
+    }
+    mi_atomic_store_release(&cleanup_state, 2);
+    #ifdef _WIN32
+    WaitForSingleObject(thread, INFINITE);
+    CloseHandle(thread);
+    #else
+    pthread_join(thread, NULL);
+    #endif
+    result = (args.result && cleanup_heap->theaps == local && local->hnext == NULL && result);
+    for (size_t i = 0; i < CLEANUP_BLOCKS; i++) { mi_free(cleanup_blocks[i]); }
+  }
+  mi_free(p);
+  mi_heap_destroy(cleanup_heap);
+  cleanup_heap = NULL;
+  cleanup_theap = NULL;
+  return result;
+}
+
+static bool delete_owner(void) {
+  mi_theap_t* const main = mi_theap_get_default();
+  mi_theap_t* const theap = mi_heap_theap(cleanup_heap);
+  cleanup_blocks[0] = mi_theap_malloc(theap, 64);
+  const bool allocated = (cleanup_blocks[0] != NULL);
+  mi_theap_set_default(theap);
+  (void)mi_heap_theap(mi_heap_main()); // the default is deliberately not protected by the cache
+  mi_atomic_store_release(&cleanup_state, 1);
+  while (mi_atomic_load_acquire(&cleanup_state) < 2) { _mi_prim_thread_yield(); }
+  mi_theap_delete(theap);
+  mi_atomic_store_release(&cleanup_state, 3);
+  void* p = mi_malloc(32);
+  const bool result = (allocated && p != NULL && mi_theap_get_default() == main && mi_heap_of(p) == mi_heap_main());
+  mi_free(p);
+  return result;
+}
+
+static bool test_theap_delete_heap_race(void) {
+  bool result = true;
+  for (size_t i = 0; result && i < 48; i++) {
+    cleanup_heap = mi_heap_new();
+    if (cleanup_heap == NULL) return false;
+    mi_atomic_store_release(&cleanup_state, 0);
+    mi_thread_fun_args_t args = { &delete_owner, false };
+    #ifdef _WIN32
+    HANDLE thread = CreateThread(NULL, 0, &mi_win_thread_entry, &args, 0, NULL);
+    const bool started = (thread != NULL);
+    #else
+    pthread_t thread;
+    const bool started = (pthread_create(&thread, NULL, &mi_pthread_entry, &args) == 0);
+    #endif
+    if (started) {
+      while (mi_atomic_load_acquire(&cleanup_state) < 1) { _mi_prim_thread_yield(); }
+      if (i % 3 != 0) { mi_atomic_store_release(&cleanup_state, 2); }
+      if (i % 3 == 2) {
+        while (mi_atomic_load_acquire(&cleanup_state) < 3) { _mi_prim_thread_yield(); }
+      }
+      if (i % 2 == 0) { mi_heap_destroy(cleanup_heap); }
+                 else { mi_heap_delete(cleanup_heap); }
+      if (i % 3 == 0) { mi_atomic_store_release(&cleanup_state, 2); }
+      #ifdef _WIN32
+      WaitForSingleObject(thread, INFINITE);
+      CloseHandle(thread);
+      #else
+      pthread_join(thread, NULL);
+      #endif
+      result = args.result;
+      if (i % 2 != 0) { mi_free(cleanup_blocks[0]); }
+    }
+    else {
+      mi_heap_destroy(cleanup_heap);
+      result = false;
+    }
+    cleanup_heap = NULL;
+  }
+  return result;
+}
+
+static bool test_theap_cleanup(bool os_pages) {
+  const long disallow = mi_option_get(mi_option_disallow_arena_alloc);
+  const long guarded = mi_option_get(mi_option_guarded_sample_rate);
+  const long retain = mi_option_get(mi_option_page_full_retain);
+  mi_option_set(mi_option_disallow_arena_alloc, (os_pages ? 1 : 0));
+  mi_option_set(mi_option_guarded_sample_rate, 0);
+  mi_option_set(mi_option_page_full_retain, -1);
+  const bool result = (mi_run_on_thread(&test_theap_delete_owner) &&
+                       test_theap_abandon_foreign() && test_theap_delete_heap_race());
+  mi_option_set(mi_option_disallow_arena_alloc, disallow);
+  mi_option_set(mi_option_guarded_sample_rate, guarded);
+  mi_option_set(mi_option_page_full_retain, retain);
+  return result;
+}
+
 int main(void) {
+  CHECK("theap-cleanup-arena", test_theap_cleanup(false));
+  CHECK("theap-cleanup-os", test_theap_cleanup(true));
   CHECK("theap-collect-detached", test_theap_collect_detached());
   CHECK("theap-collect-detached-thread", mi_run_on_thread(&test_theap_collect_detached));
   CHECK("thread-id-of-arena", test_thread_id_of(false));

@@ -32,6 +32,7 @@ int main(void) {
 
 static volatile int stop = 0;
 static void* live[LIVE];  // allocated by a thread that is blocked during the forks
+static mi_theap_t* live_theap;
 static pthread_mutex_t live_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  live_cond = PTHREAD_COND_INITIALIZER;
 static int live_ready = 0;
@@ -94,6 +95,7 @@ static void* churn(void* arg) {
 
 static void* holder(void* arg) {
   (void)arg;
+  live_theap = mi_theap_get_default();
   for (size_t i = 0; i < LIVE; i++) {
     live[i] = mi_malloc(live_size(i));
     memset(live[i], (int)(i & 0xFF), live_size(i));
@@ -108,10 +110,14 @@ static void* holder(void* arg) {
 }
 
 static bool child_check(void) {
+  mi_theap_quiescent_abandon(live_theap); // the fork handler may already have abandoned this dead thread
   // free blocks of a thread that does not exist in the child
   for (size_t i = 0; i < LIVE; i++) {
     const unsigned char* p = (const unsigned char*)live[i];
-    if (p[0] != (unsigned char)(i & 0xFF) || p[live_size(i)-1] != (unsigned char)(i & 0xFF)) return false;
+    if (p[0] != (unsigned char)(i & 0xFF) || p[live_size(i)-1] != (unsigned char)(i & 0xFF) ||
+        mi_thread_id_of(p) != 0) return false;
+  }
+  for (size_t i = 0; i < LIVE; i++) {
     mi_free(live[i]);
   }
   // threads and heaps still work

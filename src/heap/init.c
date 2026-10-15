@@ -249,6 +249,12 @@ mi_heap_t* _mi_subproc_heap_main(mi_subproc_t* subproc) {
   Thread local data
 ----------------------------------------------------------- */
 
+mi_theap_t* _mi_theap_main(void) {
+  // All subprocess main heaps share this slot; do not follow a possibly deleted default theap.
+  const mi_thread_local_t key = mi_process_heap_main.theap;
+  return (key==0 ? NULL : (mi_theap_t*)_mi_thread_local_get(key));
+}
+
 static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc) {
   tld->subproc = subproc;
   tld->theaps = NULL;

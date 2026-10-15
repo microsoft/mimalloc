@@ -188,21 +188,6 @@ void mi_theap_collect(mi_theap_t* theap, bool force) mi_attr_noexcept {
   mi_theap_collect_ex(theap, (force ? MI_FORCE : MI_NORMAL));
 }
 
-void mi_theap_abandon(mi_theap_t* theap) mi_attr_noexcept {
-  if (theap==NULL || !mi_theap_is_initialized(theap)) return;
-  mi_tld_t* const tld = theap->tld;
-  mi_heap_t* const heap = mi_theap_heap(theap);
-  mi_lock_maybe(&tld->theaps_lock, tld!=NULL) {
-    mi_lock(&heap->theaps_lock) {
-      // Temporarily detach for foreign-thread page cleanup, without changing any TLS references.
-      theap->tld = NULL;
-      _mi_theap_abandon_owned_pages(theap);
-      theap->tld = tld;
-      _mi_theap_merge_stats(theap);
-    }
-  }
-}
-
 void mi_collect(bool force) mi_attr_noexcept {
   // cannot really collect process wide, just a theap..
   mi_theap_collect(_mi_theap_default(), force);
@@ -480,7 +465,7 @@ void _mi_tld_detach_theaps( mi_tld_t* tld ) {
 void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept {
   if (theap==NULL) return;
   // The main theap stays alive even if a concurrent heap delete invalidates our default.
-  mi_theap_t* const main = (mi_theap_t*)_mi_thread_local_get(mi_thread_local_key_fast);
+  mi_theap_t* const main = _mi_theap_main();
   if (main==NULL) {
     _mi_warning_message("cannot delete a theap on an uninitialized thread\n");
     return;
@@ -490,13 +475,16 @@ void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept {
     _mi_theap_default_set(main);
   }
 
+  bool found = false;
   bool release = false;
   mi_lock(&tld->theaps_lock) {
     // Do not dereference the argument until list membership protects it from heap deletion.
     mi_theap_t* owned = tld->theaps;
     while (owned!=NULL && owned!=theap) { owned = owned->tnext; }
     if (owned!=NULL) {
+      found = true;
       mi_heap_t* const heap = mi_theap_heap(owned);
+      mi_assert_internal(heap!=NULL);
       mi_lock(&heap->theaps_lock) {
         if (owned == main) {
           _mi_theap_collect_abandon(owned);  // retain the backing theap and tld for the living thread
@@ -513,17 +501,29 @@ void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept {
         }
       }
     }
-    else {
-      _mi_verbose_message("theap %p is no longer owned by this thread\n", theap);
-    }
   }
   if (_mi_theap_cached() == theap) {
     _mi_theap_cached_set(_mi_theap_empty_get());
   }
   if (release) { _mi_theap_decref(theap); }
+  if (!found) { _mi_verbose_message("theap %p is no longer owned by this thread\n", theap); }
 }
 
 
+void mi_theap_quiescent_abandon(mi_theap_t* theap) mi_attr_noexcept {
+  if (theap==NULL || !mi_theap_is_initialized(theap)) return;
+  mi_tld_t* const tld = theap->tld;
+  mi_heap_t* const heap = mi_theap_heap(theap);
+  mi_lock_maybe(&tld->theaps_lock, tld!=NULL) {
+    mi_lock(&heap->theaps_lock) {
+      // Temporarily detach for foreign-thread page cleanup, without changing any TLS references.
+      theap->tld = NULL;
+      _mi_theap_abandon_owned_pages(theap);
+      theap->tld = tld;
+      _mi_theap_merge_stats(theap);
+    }
+  }
+}
 
 /* -----------------------------------------------------------
   Load/unload theaps
