@@ -1100,7 +1100,7 @@ static bool mi_heap_visit_arena(mi_arena_t* arena, const void* arg, void** resul
   if (arena_pages == NULL) return true; // continue
   if (vinfo->abandoned_only) {
     for (size_t bin = 0; bin < MI_ARENA_BIN_COUNT; bin++) {
-      // todo: if we had a single abandoned page map as well, this can be faster.
+      // TODO: if we had a single abandoned page map as well, this can be faster. Maybe for CPython?
       if (mi_atomic_load_relaxed(&heap->abandoned_count[bin]) > 0) {
         if (!_mi_bitmap_forall_set(arena_pages->pages_abandoned[bin], &mi_heap_visit_page_at, arena, &visit_info)) return false; // break
       }
@@ -1112,19 +1112,30 @@ static bool mi_heap_visit_arena(mi_arena_t* arena, const void* arg, void** resul
   }
 }
 
-bool _mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
-  mi_assert(visitor!=NULL);
-  if (visitor==NULL) return false;
-  if (heap==NULL) { heap = mi_heap_main(); }
+// The caller holds heap->theaps_lock to prevent thread-exit abandonment and theap removal.
+static bool mi_heap_visit_owned_os_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
+  const mi_heap_visit_info_t visit_info = { heap, visitor, arg, visit_blocks, false };
+  for (mi_theap_t* theap = heap->theaps; theap != NULL; theap = theap->hnext) {
+    for (size_t bin = 0; bin <= MI_BIN_FULL; bin++) {
+      mi_page_t* page = theap->pages[bin].first;
+      while (page != NULL) {
+        mi_page_t* const next = page->next;
+        if (page->memid.memkind != MI_MEM_ARENA && !mi_heap_visit_page(page, &visit_info)) return false;
+        page = next;
+      }
+    }
+  }
+  return true;
+}
+
+static bool mi_heap_visit_blocks_locked(mi_heap_t* heap, bool abandoned_only, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
   // visit all pages in a heap
-  // we don't have to claim because we assume we are the only thread running (with this heap).
-  // (but we could atomically claim as well by first doing abandoned_reclaim and afterwards reabandoning).
+  // Other threads must not access this heap; thread-exit abandonment is blocked by the heap lock.
   const mi_heap_visit_info_t visit_info = { heap, visitor, arg, visit_blocks, abandoned_only };
   bool ok = mi_forall_arenas(heap, NULL, 0, &mi_heap_visit_arena, &visit_info, NULL);
   if (!ok) return false;
 
   // visit abandoned pages in OS allocated memory
-  // (technically we don't need the initial lock as we assume we are the only thread running in this subproc)
   mi_page_t* page = NULL;
   mi_lock(&heap->os_abandoned_pages_lock) {
     page = heap->os_abandoned_pages;
@@ -1133,6 +1144,22 @@ bool _mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_bloc
     mi_page_t* next = page->next;  // read upfront in case the visitor frees the page
     ok = mi_heap_visit_page(page, &visit_info);
     page = next;
+  }
+
+  // visit owned OS allocated blocks in the theaps
+  if (ok && !abandoned_only) {
+    ok = mi_heap_visit_owned_os_blocks(heap, visit_blocks, visitor, arg);
+  }
+  return ok;
+}
+
+bool _mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
+  mi_assert(visitor!=NULL);
+  if (visitor==NULL) return false;
+  if (heap==NULL) { heap = mi_heap_main(); }
+  bool ok;
+  mi_lock(&heap->theaps_lock) {
+    ok = mi_heap_visit_blocks_locked(heap, abandoned_only, visit_blocks, visitor, arg);
   }
   return ok;
 }

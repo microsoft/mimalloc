@@ -727,8 +727,10 @@ typedef bool (mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* a
 /// @param arg Extra argument passed to \a visitor.
 /// @returns \a true if all areas and blocks were visited.
 ///
-/// Note: requires the option mi_option_visit_abandoned() to be set
-/// at the start of the program to visit all abandoned blocks as well.
+/// Visits all areas and blocks in the heap.
+/// Other threads must not access this heap during the visit
+/// (but thread termination is synchronized internally). The visitor runs under the heap's
+/// lock and must not re-enter the heap (through allocating or free-ing).
 bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
 /// @brief __v1__,__v2__: Visit all areas and blocks in abandoned heaps.

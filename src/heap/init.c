@@ -400,7 +400,10 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
       mi_theap_t* next = theap->tnext;
       // never destroy theaps; if a dll is linked statically with mimalloc,
       // there may still be delete/free calls after the mi_fls_done is called. Issue #207
-      _mi_theap_collect_abandon(theap);
+      mi_heap_t* const heap = mi_theap_heap(theap);
+      mi_lock(&heap->theaps_lock) { // keep page queues stable during a heap walk
+        _mi_theap_collect_abandon(theap);
+      }
       mi_assert_internal(theap->page_count==0);
       theap = next;
     }

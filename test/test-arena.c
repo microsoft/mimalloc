@@ -1,4 +1,6 @@
 #include "../src/arena/arena.h"
+#include "mimalloc/alloc/page.h"
+#include "mimalloc/prim.h"
 #include "testhelper.h"
 
 static mi_subproc_t test_subproc;
@@ -236,6 +238,168 @@ static bool test_heap_visit_stop(void) {
   return result;
 }
 
+#define VISIT_OWNED_BLOCKS 256
+static void* owned_blocks[VISIT_OWNED_BLOCKS + 1];
+
+typedef struct owned_visit_s {
+  size_t used;
+  size_t blocks;
+  size_t os_areas;
+  size_t arena_areas;
+  bool seen[VISIT_OWNED_BLOCKS + 1];
+} owned_visit_t;
+
+static bool owned_record(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {
+  MI_UNUSED(block_size);
+  owned_visit_t* visit = (owned_visit_t*)arg;
+  if (heap != visit_heap) return false;
+  if (block == NULL) {
+    visit->used += area->used;
+    const mi_page_t* page = (const mi_page_t*)area->reserved1;
+    if (page->memid.memkind == MI_MEM_ARENA) { visit->arena_areas++; }
+    else { visit->os_areas++; }
+    return true;
+  }
+  for (size_t i = 0; i <= VISIT_OWNED_BLOCKS; i++) {
+    if (block == owned_blocks[i]) {
+      if (visit->seen[i]) return false;
+      visit->seen[i] = true;
+      visit->blocks++;
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool free_owned_blocks(void) {
+  for (size_t i = 0; i < VISIT_OWNED_BLOCKS / 4; i++) {
+    mi_free(owned_blocks[i]);
+    owned_blocks[i] = NULL;
+  }
+  return true;
+}
+
+static bool test_heap_visit_owned_os(bool mixed) {
+  const long disallow = mi_option_get(mi_option_disallow_arena_alloc);
+  const long retain = mi_option_get(mi_option_page_full_retain);
+  const long guarded = mi_option_get(mi_option_guarded_sample_rate);
+  mi_option_set(mi_option_page_full_retain, -1);
+  mi_option_set(mi_option_guarded_sample_rate, 0);
+  mi_option_disable(mi_option_disallow_arena_alloc);
+  visit_heap = mi_heap_new();
+  bool result = (visit_heap != NULL);
+  owned_blocks[VISIT_OWNED_BLOCKS] = (mixed && result ? mi_heap_malloc(visit_heap, 64) : NULL);
+  if (mixed && owned_blocks[VISIT_OWNED_BLOCKS] == NULL) result = false;
+  mi_option_enable(mi_option_disallow_arena_alloc);
+  for (size_t i = 0; result && i < VISIT_OWNED_BLOCKS; i++) {
+    owned_blocks[i] = mi_heap_malloc(visit_heap, 4096);
+    result = (owned_blocks[i] != NULL);
+  }
+  if (result) {
+    result = (mi_heap_theap(visit_heap)->pages[MI_BIN_FULL].first != NULL);
+  }
+  if (result) result = mi_run_on_thread(&free_owned_blocks);
+  const size_t expected = VISIT_OWNED_BLOCKS * 3 / 4 + (mixed ? 1 : 0);
+  for (size_t mode = 0; result && mode < 2; mode++) {
+    owned_visit_t visit = { 0, 0, 0, 0, { false } };
+    result = (mi_heap_visit_blocks(visit_heap, mode != 0, &owned_record, &visit) &&
+              visit.used == expected && visit.blocks == (mode != 0 ? expected : 0) &&
+              visit.os_areas > 0 && visit.arena_areas == (mixed ? 1 : 0));
+  }
+  if (result) {
+    block_visit_t visit = { 0, 0, false, false };
+    result = (mi_heap_visit_abandoned_blocks(visit_heap, true, &block_record, &visit) &&
+              visit.areas == 0 && visit.blocks == 0);
+  }
+  for (size_t mode = 1; result && mode <= 2; mode++) {
+    block_visit_t visit = { 0, 0, true, mode == 2 };
+    result = (!mi_heap_visit_blocks(visit_heap, true, &block_record, &visit) &&
+              visit.areas == 1 && visit.blocks == (mode == 2 ? 1 : 0));
+  }
+  mi_option_set(mi_option_disallow_arena_alloc, disallow);
+  if (result) result = mi_run_on_thread(&allocate_pages);
+  if (result) {
+    block_visit_t all = { 0, 0, false, false };
+    block_visit_t abandoned = { 0, 0, false, false };
+    result = (mi_heap_visit_blocks(visit_heap, true, &block_record, &all) && all.blocks == expected + 4 &&
+              mi_heap_visit_abandoned_blocks(visit_heap, true, &block_record, &abandoned) && abandoned.blocks == 4);
+  }
+  mi_heap_destroy(visit_heap);
+  visit_heap = NULL;
+  mi_option_set(mi_option_page_full_retain, retain);
+  mi_option_set(mi_option_guarded_sample_rate, guarded);
+  return result;
+}
+
+static _Atomic(size_t) visit_exit_state;
+
+static bool visit_exit_owner(void) {
+  const bool result = allocate_pages();
+  mi_atomic_store_release(&visit_exit_state, 1);
+  while (mi_atomic_load_acquire(&visit_exit_state) < 2) { _mi_prim_thread_yield(); }
+  mi_atomic_store_release(&visit_exit_state, 3);
+  return result;
+}
+
+static bool exit_record(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {
+  if (mi_atomic_load_acquire(&visit_exit_state) == 1) {
+    mi_atomic_store_release(&visit_exit_state, 2);
+    while (mi_atomic_load_acquire(&visit_exit_state) < 3) { _mi_prim_thread_yield(); }
+    for (size_t i = 0; i < 64; i++) { _mi_prim_thread_yield(); }
+  }
+  return block_record(heap, area, block, block_size, arg);
+}
+
+static bool test_heap_visit_thread_exit(void) {
+  const long disallow = mi_option_get(mi_option_disallow_arena_alloc);
+  const long guarded = mi_option_get(mi_option_guarded_sample_rate);
+  mi_option_set(mi_option_guarded_sample_rate, 0);
+  bool result = true;
+  for (size_t i = 0; result && i < 32; i++) {
+    mi_option_set(mi_option_disallow_arena_alloc, (long)(i % 2));
+    visit_heap = mi_heap_new();
+    if (visit_heap == NULL) { result = false; break; }
+    if (mi_heap_malloc(visit_heap, 128) == NULL) {
+      mi_heap_destroy(visit_heap);
+      visit_heap = NULL;
+      result = false;
+      break;
+    }
+    mi_atomic_store_release(&visit_exit_state, 0);
+    mi_thread_fun_args_t args = { &visit_exit_owner, false };
+    #ifdef _WIN32
+    HANDLE thread = CreateThread(NULL, 0, &mi_win_thread_entry, &args, 0, NULL);
+    const bool started = (thread != NULL);
+    #else
+    pthread_t thread;
+    const bool started = (pthread_create(&thread, NULL, &mi_pthread_entry, &args) == 0);
+    #endif
+    if (started) {
+      while (mi_atomic_load_acquire(&visit_exit_state) == 0) { _mi_prim_thread_yield(); }
+      block_visit_t visit = { 0, 0, false, false };
+      result = (mi_heap_visit_blocks(visit_heap, true, &exit_record, &visit) && visit.blocks == 5);
+      if (mi_atomic_load_acquire(&visit_exit_state) == 1) mi_atomic_store_release(&visit_exit_state, 2);
+      #ifdef _WIN32
+      WaitForSingleObject(thread, INFINITE);
+      CloseHandle(thread);
+      #else
+      pthread_join(thread, NULL);
+      #endif
+      visit.blocks = visit.areas = 0;
+      result = (result && args.result &&
+                mi_heap_visit_abandoned_blocks(visit_heap, true, &block_record, &visit) && visit.blocks == 4);
+    }
+    else {
+      result = false;
+    }
+    mi_heap_destroy(visit_heap);
+    visit_heap = NULL;
+  }
+  mi_option_set(mi_option_disallow_arena_alloc, disallow);
+  mi_option_set(mi_option_guarded_sample_rate, guarded);
+  return result;
+}
+
 int main(void) {
   CHECK("arena-order", test_arena_order());
   CHECK("arena-filter", test_arena_filter());
@@ -243,5 +407,8 @@ int main(void) {
   CHECK("arena-snapshot", test_arena_snapshot());
   CHECK("arena-result", test_arena_result());
   CHECK("heap-visit-stop", test_heap_visit_stop());
+  CHECK("heap-visit-owned-os", test_heap_visit_owned_os(false));
+  CHECK("heap-visit-owned-os-mixed", test_heap_visit_owned_os(true));
+  CHECK("heap-visit-thread-exit", test_heap_visit_thread_exit());
   return print_test_summary();
 }

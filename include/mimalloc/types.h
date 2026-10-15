@@ -708,7 +708,7 @@ typedef struct mi_heap_s {
   _Atomic(size_t)       debug_fill_preserve;            // in debug mode, the first N bytes of a block are not filled with MI_DEBUG_UNINIT/FREED
 
   mi_theap_t*           theaps;                         // list of all thread-local theaps belonging to this heap (using the `hnext`/`hprev` fields)
-  mi_lock_t             theaps_lock;                    // lock for the theaps list operations
+  mi_lock_t             theaps_lock;                    // protects the theaps list and serializes heap walks with thread-exit abandonment
 
   _Atomic(mi_profiler_t*) profiler;
 
