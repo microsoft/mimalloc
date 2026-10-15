@@ -63,7 +63,7 @@ static bool mi_theap_page_is_valid(mi_theap_t* theap, mi_page_queue_t* pq, mi_pa
   MI_UNUSED(pq);
   mi_assert_internal(mi_page_theap(page) == theap);
   mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
-  mi_assert_internal(page_theap == NULL || theap == page_theap);
+  mi_assert_internal(page_theap == NULL || theap == page_theap || mi_theap_is_detached(theap));
   mi_assert_expensive(_mi_page_is_valid(page));
   return true;
 }
@@ -73,7 +73,8 @@ static bool mi_theap_is_valid(mi_theap_t* theap) {
   mi_heap_t* const heap = mi_theap_heap_peek(theap);
   mi_assert_internal(heap != NULL);
   mi_theap_t* const heap_theap = _mi_heap_theap_peek(heap);  // don't use mi_heap_theap as that may re-initialize the thread
-  mi_assert_internal(heap_theap==NULL || heap_theap == theap);
+  // Detached metadata theaps are shared and need not match the calling thread's TLS.
+  mi_assert_internal(heap_theap==NULL || heap_theap == theap || mi_theap_is_detached(theap));
   mi_theap_visit_pages(theap, &mi_theap_page_is_valid, true, NULL, NULL);
   for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
     mi_assert_internal(_mi_page_queue_is_valid(theap, &theap->pages[bin]));

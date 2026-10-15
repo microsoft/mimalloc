@@ -440,7 +440,27 @@ static bool test_heap_visit_thread_exit(void) {
   return result;
 }
 
+static bool test_theap_collect_detached(void) {
+  mi_theap_t* const theap = mi_theap_get_default();
+  mi_subproc_t* const subproc = theap->tld->subproc;
+  int* p = NULL;
+  bool result = false;
+  mi_lock(&subproc->theap_meta_lock) {
+    p = (int*)mi_theap_malloc(subproc->theap_meta, sizeof(int));
+    if (p != NULL) {
+      *p = 42;
+      mi_theap_collect(subproc->theap_meta, false);
+      mi_theap_collect(subproc->theap_meta, true);
+      result = (*p == 42);
+    }
+  }
+  mi_free(p);
+  return result;
+}
+
 int main(void) {
+  CHECK("theap-collect-detached", test_theap_collect_detached());
+  CHECK("theap-collect-detached-thread", mi_run_on_thread(&test_theap_collect_detached));
   CHECK("arena-order", test_arena_order());
   CHECK("arena-filter", test_arena_filter());
   CHECK("arena-stop", test_arena_stop());
