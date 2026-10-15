@@ -188,6 +188,21 @@ void mi_theap_collect(mi_theap_t* theap, bool force) mi_attr_noexcept {
   mi_theap_collect_ex(theap, (force ? MI_FORCE : MI_NORMAL));
 }
 
+void mi_theap_abandon(mi_theap_t* theap) mi_attr_noexcept {
+  if (theap==NULL || !mi_theap_is_initialized(theap)) return;
+  mi_tld_t* const tld = theap->tld;
+  mi_heap_t* const heap = mi_theap_heap(theap);
+  mi_lock_maybe(&tld->theaps_lock, tld!=NULL) {
+    mi_lock(&heap->theaps_lock) {
+      // Temporarily detach for foreign-thread page cleanup, without changing any TLS references.
+      theap->tld = NULL;
+      _mi_theap_abandon_owned_pages(theap);
+      theap->tld = tld;
+      _mi_theap_merge_stats(theap);
+    }
+  }
+}
+
 void mi_collect(bool force) mi_attr_noexcept {
   // cannot really collect process wide, just a theap..
   mi_theap_collect(_mi_theap_default(), force);
@@ -376,6 +391,25 @@ void _mi_theap_decref(mi_theap_t* theap) {
 // Due to lock-inversion we need to use `mi_lock_try_acquire` and if that fails
 // we back-off, release the outer lock, and try again until we succeed.
 
+// Both the heap and tld list locks must be held.
+static void mi_theap_detach_from_tld(mi_theap_t* theap) {
+  mi_tld_t* const tld = theap->tld;
+  if (theap->tnext != NULL) { theap->tnext->tprev = theap->tprev; }
+  if (theap->tprev != NULL) { theap->tprev->tnext = theap->tnext; }
+                      else { mi_assert_internal(tld->theaps == theap); tld->theaps = theap->tnext; }
+  theap->tnext = theap->tprev = NULL;
+  theap->tld = NULL;
+}
+
+static void mi_theap_detach_from_heap(mi_theap_t* theap) {
+  mi_heap_t* const heap = mi_theap_heap(theap);
+  if (theap->hnext != NULL) { theap->hnext->hprev = theap->hprev; }
+  if (theap->hprev != NULL) { theap->hprev->hnext = theap->hnext; }
+                      else { mi_assert_internal(heap->theaps == theap); heap->theaps = theap->hnext; }
+  theap->hnext = theap->hprev = NULL;
+  mi_atomic_store_ptr_release(mi_heap_t, &theap->heap, NULL);
+}
+
 // Remove the theaps in this heap from any thread local tld lists.
 void _mi_heap_detach_theaps( mi_heap_t* heap ) {
   bool all_detached;
@@ -388,12 +422,7 @@ void _mi_heap_detach_theaps( mi_heap_t* heap ) {
         mi_tld_t* tld = theap->tld;
         if (tld != NULL) {
           if (mi_lock_try_acquire(&tld->theaps_lock)) {
-            // remove the theap from the tld theaps list
-            if (theap->tnext != NULL) { theap->tnext->tprev = theap->tprev;  }
-            if (theap->tprev != NULL) { theap->tprev->tnext = theap->tnext;  }
-                                else { mi_assert_internal(theap->tld->theaps == theap); theap->tld->theaps = theap->tnext; }
-            theap->tnext = theap->tprev = NULL;
-            theap->tld = NULL;
+            mi_theap_detach_from_tld(theap);
             mi_lock_release(&tld->theaps_lock);
           }
           else {
@@ -425,13 +454,7 @@ void _mi_tld_detach_theaps( mi_tld_t* tld ) {
           if (mi_lock_try_acquire(&heap->theaps_lock)) {
             // merge stats into the owning heap stats
             _mi_stats_merge_into(&heap->stats, &theap->stats);
-            // remove the theap from the heap list
-            if (theap->hnext != NULL) { theap->hnext->hprev = theap->hprev; }
-            if (theap->hprev != NULL) { theap->hprev->hnext = theap->hnext; }
-                                else { mi_assert_internal(heap->theaps == theap); heap->theaps = theap->hnext; }
-            theap->hnext = theap->hprev = NULL;
-            // and set `heap` to NULL
-            mi_atomic_store_ptr_release(mi_heap_t, &theap->heap, NULL);
+            mi_theap_detach_from_heap(theap);
             mi_lock_release(&heap->theaps_lock);
           }
           else {
@@ -454,20 +477,51 @@ void _mi_tld_detach_theaps( mi_tld_t* tld ) {
   Safe theap delete
 ----------------------------------------------------------- */
 
-// Safe delete a theap without freeing any still allocated blocks in that theap.
-// void _mi_theap_delete(mi_theap_t* theap, bool acquire_tld_theaps_lock)
-// {
-//   mi_assert(theap != NULL);
-//   mi_assert(mi_theap_is_initialized(theap));
-//   mi_assert_expensive(mi_theap_is_valid(theap));
-//   if (theap==NULL || !mi_theap_is_initialized(theap)) return;
+void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept {
+  if (theap==NULL) return;
+  // The main theap stays alive even if a concurrent heap delete invalidates our default.
+  mi_theap_t* const main = (mi_theap_t*)_mi_thread_local_get(mi_thread_local_key_fast);
+  if (main==NULL) {
+    _mi_warning_message("cannot delete a theap on an uninitialized thread\n");
+    return;
+  }
+  mi_tld_t* const tld = main->tld;
+  if (_mi_theap_default() == theap) {
+    _mi_theap_default_set(main);
+  }
 
-//   // abandon all pages
-//   _mi_theap_collect_abandon(theap);
-
-//   mi_assert_internal(theap->page_count==0);
-//   _mi_theap_free(theap, true /* acquire heap->theaps_lock */, acquire_tld_theaps_lock);
-// }
+  bool release = false;
+  mi_lock(&tld->theaps_lock) {
+    // Do not dereference the argument until list membership protects it from heap deletion.
+    mi_theap_t* owned = tld->theaps;
+    while (owned!=NULL && owned!=theap) { owned = owned->tnext; }
+    if (owned!=NULL) {
+      mi_heap_t* const heap = mi_theap_heap(owned);
+      mi_lock(&heap->theaps_lock) {
+        if (owned == main) {
+          _mi_theap_collect_abandon(owned);  // retain the backing theap and tld for the living thread
+          _mi_theap_merge_stats(owned);
+        }
+        else {
+          const bool cleared = _mi_thread_local_set(heap->theap, NULL);
+          mi_assert_internal(cleared); MI_UNUSED_RELEASE(cleared);
+          mi_theap_detach_from_tld(owned);
+          _mi_theap_abandon_owned_pages(owned);
+          _mi_theap_merge_stats(owned);
+          mi_theap_detach_from_heap(owned);
+          release = true;
+        }
+      }
+    }
+    else {
+      _mi_verbose_message("theap %p is no longer owned by this thread\n", theap);
+    }
+  }
+  if (_mi_theap_cached() == theap) {
+    _mi_theap_cached_set(_mi_theap_empty_get());
+  }
+  if (release) { _mi_theap_decref(theap); }
+}
 
 
 
