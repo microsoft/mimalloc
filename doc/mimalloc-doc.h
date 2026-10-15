@@ -280,6 +280,15 @@ char* mi_realpath(const char* fname, char* resolved_name);
 /// @see mi_good_size()
 size_t mi_usable_size(void* p);
 
+/// Return the current owner thread-id of the page containing a live allocation.
+/// @param p A mimalloc allocation, or \a NULL.
+/// @returns The mimalloc thread id, or 0 for \a NULL, abandoned pages, or
+///          pages belonging to a detached thread-local heap.
+///
+/// This is a snapshot of current page ownership, not the original allocating
+/// thread. This is mimalloc's internal thread identity scheme, not necessarily the native OS thread-id.
+size_t mi_thread_id_of(const void* p);
+
 /// Return the probable allocation block size for a given required size.
 /// @param size The minimal required size in bytes.
 /// @returns the size `n` that will be allocated, where `n >= size`.

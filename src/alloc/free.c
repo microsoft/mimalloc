@@ -646,6 +646,13 @@ mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
   return _mi_page_usable_size(page,p);
 }
 
+mi_decl_nodiscard size_t mi_thread_id_of(const void* p) mi_attr_noexcept {
+  if (p == NULL) return 0;
+  const mi_page_t* const page = mi_ptr_page(p);
+  const mi_threadid_t tid = mi_page_thread_id(page);
+  return (tid <= MI_THREADID_DETACHED ? 0 : tid);
+}
+
 
 // ------------------------------------------------------
 // Deprecated: double free is usually checked with padding now

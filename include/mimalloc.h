@@ -144,6 +144,8 @@ mi_decl_export void mi_free_small(void* p) mi_attr_noexcept;
 // As `mi_free_small` but `p` should not be a NULL pointer.
 mi_decl_export void mi_free_small_nonnull(void* p) mi_attr_noexcept;
 
+// For runtime's: return the current owner thread-id of the page containing an allocation.
+mi_decl_nodiscard mi_decl_export size_t mi_thread_id_of(const void* p) mi_attr_noexcept;
 
 
 // -------------------------------------------------------------------------------------
