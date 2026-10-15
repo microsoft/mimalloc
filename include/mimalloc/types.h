@@ -528,13 +528,14 @@ typedef struct mi_page_s {
 // The max object sizes are intended to not waste more than ~ 12.5% internally over the page sizes.
 #define MI_SMALL_MAX_OBJ_SIZE             ((MI_SMALL_PAGE_SIZE-MI_PAGE_OSPAGE_BLOCK_ALIGN2)/6)   // = 10 KiB
 #if MI_ENABLE_LARGE_PAGES
-#define MI_MEDIUM_MAX_OBJ_SIZE            ((MI_MEDIUM_PAGE_SIZE-MI_PAGE_OSPAGE_BLOCK_ALIGN2)/6)  // ~ 84 KiB
+#define MI_MEDIUM_MAX_OBJ_SIZE            ((MI_MEDIUM_PAGE_SIZE-MI_PAGE_OSPAGE_BLOCK_ALIGN2)/6)  // ~ 84 KiB (but see `alloc/page.h:mi_block_size_is_medium`)
 #define MI_LARGE_MAX_OBJ_SIZE             (MI_LARGE_PAGE_SIZE/8)    // <= 512 KiB. note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`
 #else
 #define MI_MEDIUM_MAX_OBJ_SIZE            (MI_MEDIUM_PAGE_SIZE/8)   // <= 64 KiB
 #define MI_LARGE_MAX_OBJ_SIZE             MI_MEDIUM_MAX_OBJ_SIZE    // note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`
 #endif
 #define MI_LARGE_MAX_OBJ_WSIZE            (MI_LARGE_MAX_OBJ_SIZE/MI_SIZE_SIZE)
+#define MI_MAX_RECLAIM_OBJ_SIZE           (MI_LARGE_MAX_OBJ_SIZE/4) // only reclaim abandoned pages on free up to this block size
 
 #if (MI_LARGE_MAX_OBJ_WSIZE >= 655360)
 #error "mimalloc internal: define more bins"

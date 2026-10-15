@@ -273,7 +273,7 @@ static bool mi_stats_print_bins(const mi_stat_count_t* bins, const mi_stat_count
       found = true;
       const size_t blocksize = _mi_bin_size((uint8_t)i);
       const char* pagekind = (blocksize <= MI_SMALL_MAX_OBJ_SIZE ? "S" :
-                               (blocksize <= MI_MEDIUM_MAX_OBJ_SIZE ? "M" :
+                               (mi_block_size_is_medium(blocksize) ? "M" :
                                  (blocksize <= MI_LARGE_MAX_OBJ_SIZE ? "L" : "H")));
       _mi_snprintf(buf, 64, "bin%2s  %3lu", pagekind, (long)i);
       if (i!=MI_BIN_HUGE) {
@@ -703,7 +703,7 @@ static void mi_json_buf_print(mi_json_buf_t* hbuf, const char* msg) {
 static void mi_json_buf_print_count_bin(mi_json_buf_t* hbuf, const char* prefix, const mi_stat_count_t* stat, size_t bin, bool add_comma) {
   const size_t binsize = mi_stats_get_bin_size(bin);
   const size_t pagesize = (binsize <= MI_SMALL_MAX_OBJ_SIZE ? MI_SMALL_PAGE_SIZE :
-                            (binsize <= MI_MEDIUM_MAX_OBJ_SIZE ? MI_MEDIUM_PAGE_SIZE :
+                            (mi_block_size_is_medium(binsize) ? MI_MEDIUM_PAGE_SIZE :
                               (binsize <= MI_LARGE_MAX_OBJ_SIZE ? MI_LARGE_PAGE_SIZE : 0)));
   char buf[128];
   _mi_snprintf(buf, 128, "%s{ \"total\": %lld, \"peak\": %lld, \"current\": %lld, \"block_size\": %zu, \"page_size\": %zu }%s\n", prefix, stat->total, stat->peak, stat->current, binsize, pagesize, (add_comma ? "," : ""));

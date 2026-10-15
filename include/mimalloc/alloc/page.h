@@ -76,6 +76,15 @@ static inline bool mi_block_size_has_cache_offset(size_t bsize) {
   return (MI_PAGE_CACHE_OFFSET != 0 && bsize > MI_SMALL_MAX_OBJ_SIZE);
 }
 
+// Is a (non-small) block of size `bsize` allocated in a medium page?
+// Blocks of 1/8th of a medium page (64 KiB) leave no space for a cache offset and use a large page instead.
+static inline bool mi_block_size_is_medium(size_t bsize) {
+  #if MI_ENABLE_LARGE_PAGES
+  if (mi_block_size_has_cache_offset(bsize) && bsize == MI_MEDIUM_PAGE_SIZE/8) return false;
+  #endif
+  return (bsize <= MI_MEDIUM_MAX_OBJ_SIZE);
+}
+
 // The alignment that every block of size `bsize` is guaranteed to have in any page (or 0 if `bsize==0`).
 // This is guaranteed by the block start (see `arena/arena-page.c:mi_page_meta_in_front_block_start` and `mi_page_meta_select`),
 // and used by `mi_malloc_aligned` to avoid over-allocation for naturally aligned blocks.

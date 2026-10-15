@@ -303,19 +303,23 @@ static bool mi_page_block_can_cache_offset(size_t block_size, bool os_align) {
 }
 
 // Cache offset for the first block to spread the blocks of different pages over the cache sets (issue #1121).
-// The offset fits in the unused space at the end of the page so the number of blocks is unchanged.
+// The offset fits in the unused space at the end of the page; if there is none, we skip the last block
+// if that wastes less than 12.5% of the page (e.g. 64 KiB blocks in a 4 MiB page, but not 512 KiB blocks).
 static size_t mi_page_block_cache_offset(uint8_t* slice_start, size_t slice_count, size_t block_size, size_t block_start, bool os_align) {
   if (!mi_page_block_can_cache_offset(block_size, os_align)) return 0;
   const size_t page_noguard_size = mi_arenas_page_noguard_size(_mi_size_of_slices(slice_count));
   mi_assert_internal(block_start + block_size <= page_noguard_size);
-  const size_t slack   = (page_noguard_size - block_start) % block_size;
+  size_t slack = (page_noguard_size - block_start) % block_size;
+  if (slack < MI_PAGE_CACHE_OFFSET_UNIT && block_size < page_noguard_size/8) { slack += block_size; }
   const size_t noffsets = 1 + (slack < MI_PAGE_CACHE_OFFSET_MAX ? slack : MI_PAGE_CACHE_OFFSET_MAX) / MI_PAGE_CACHE_OFFSET_UNIT;
+  // Fibonacci hash of the page index: the top bits spread consecutive pages evenly over the offsets
+  const size_t page_index = (size_t)((uintptr_t)slice_start / MI_ARENA_SLICE_SIZE) / slice_count;
   #if MI_SIZE_BITS >= 64
-  const size_t hash = ((size_t)((uintptr_t)slice_start / MI_ARENA_SLICE_SIZE)) * MI_ZU(0x9E3779B97F4A7C15);
+  const size_t hash = page_index * MI_ZU(0x9E3779B97F4A7C15);
   #else
-  const size_t hash = ((size_t)((uintptr_t)slice_start / MI_ARENA_SLICE_SIZE)) * MI_ZU(0x9E3779B9);
+  const size_t hash = page_index * MI_ZU(0x9E3779B9);
   #endif
-  return ((hash >> (MI_SIZE_BITS - 16)) % noffsets) * MI_PAGE_CACHE_OFFSET_UNIT;
+  return (((hash >> (MI_SIZE_BITS - 16)) * noffsets) >> 16) * MI_PAGE_CACHE_OFFSET_UNIT;
 }
 
 // Use the separate (zero initialized) `page_meta` if available and not preferring in front of the slices,
@@ -774,7 +778,7 @@ mi_page_t* _mi_arenas_page_alloc(mi_theap_t* theap, size_t block_size, size_t bl
   else if (block_size <= MI_SMALL_MAX_OBJ_SIZE) {
     page = mi_arenas_page_regular_alloc(theap, _mi_slice_count_of_size(MI_SMALL_PAGE_SIZE), block_size);
   }
-  else if (block_size <= MI_MEDIUM_MAX_OBJ_SIZE) {
+  else if (mi_block_size_is_medium(block_size)) {
     page = mi_arenas_page_regular_alloc(theap, _mi_slice_count_of_size(MI_MEDIUM_PAGE_SIZE), block_size);
   }
   #if MI_ENABLE_LARGE_PAGES
