@@ -1223,6 +1223,8 @@ if (MI_BUILD_TESTS)
     # don't add as a test
     elseif(NOT APPLE AND (TEST_NAME STREQUAL "pprof" OR TEST_NAME STREQUAL "stress-pprof"))
     # don't add as a test
+    elseif(MI_DEBUG_TSAN AND TEST_NAME STREQUAL "fork")
+    # don't add as a test
     else()
     add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
     endif()
