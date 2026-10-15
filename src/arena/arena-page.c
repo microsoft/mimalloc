@@ -1070,6 +1070,7 @@ typedef struct mi_heap_visit_info_s {
 
 static bool mi_heap_visit_page(mi_page_t* page, const mi_heap_visit_info_t* vinfo) {
   mi_heap_area_t area;
+  _mi_page_free_collect(page, true);  // collect cross-thread free'd blocks so `area.used` is precise.
   _mi_heap_area_init(&area, page);
   mi_assert_internal(vinfo->heap == mi_page_heap(page));
   if (!vinfo->visitor(vinfo->heap, &area, NULL, area.block_size, vinfo->arg)) {
