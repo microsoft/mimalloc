@@ -9,6 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_INTERNAL_PRIM_TLS_H
 
 #include "../types.h"
+#include "../alloc/page.h"
 #include "../heap/heap.h"
 #include "../heap/theap.h"
 #include "../util/threadlocal.h"
@@ -439,6 +440,15 @@ static inline mi_theap_t* _mi_page_associated_theap_peek(const mi_page_t* page) 
   if (theap->heap != heap) return NULL; // should never happen, but can happen for a free across subprocesses, which can happen during pthread tls storage deallocation
   mi_assert_internal(!_mi_is_empty_theap(theap) && mi_theap_matches_thread(theap));
   // note: for pages allocated by a detached theap, the returned theap may not be detached
+  return theap;
+}
+
+// Gets the theap belonging to a page.
+static inline mi_theap_t* mi_theap_of_page(mi_page_t* page) {
+  mi_theap_t* theap = page->theap;
+  if mi_unlikely(mi_page_thread_id(page) != _mi_prim_thread_id()) {
+    theap = _mi_page_associated_theap_peek(page);
+  }
   return theap;
 }
 

@@ -143,6 +143,20 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
 
   // track per-block statistics
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+
+  #if MI_STATS>=2
+  const size_t bin = _mi_bin(bsize);
+  mi_theap_stat_counter_increase(theap, malloc_count, 1);
+  mi_theap_stat_increase(theap, allocated, bsize);
+  // deprecated
+  if (bin!=MI_BIN_HUGE) {
+    mi_theap_stat_counter_increase(theap, malloc_normal_count, 1);
+    mi_theap_stat_increase(theap, malloc_normal, bsize);
+  } else {
+    mi_theap_stat_counter_increase(theap, malloc_huge_count, 1);
+    mi_theap_stat_increase(theap,malloc_huge,bsize);
+  }
+  #endif
   
   // in debug mode initialize with 0xD0
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN

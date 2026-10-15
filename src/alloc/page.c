@@ -138,17 +138,6 @@ bool _mi_page_is_valid(mi_page_t* page) {
 ----------------------------------------------------------- */
 
 
-#if MI_STATS || (MI_SAMPLE==1)
-// Gets the theap belonging to a page.
-static mi_theap_t* mi_theap_of_page(mi_page_t* page) {
-  mi_theap_t* theap = page->theap;
-  if mi_unlikely(mi_page_thread_id(page) != _mi_prim_thread_id()) { 
-    theap = _mi_page_associated_theap_peek(page);
-  }
-  return theap;
-}
-#endif
-
 #if MI_SAMPLE==1 /* for ==2, the countdown is already done at every `alloc/alloc.c:mi_page_alloc_zero` */
 
 // Adjust the theap->sample_countdown based on the current page allocation count
@@ -198,14 +187,13 @@ static void mi_theap_page_merge_stats(mi_theap_t* theapx, const mi_page_t* page,
   // adjust stats
   const size_t bin = _mi_bin(bsize);
   if (alloc_count > 0) {
+    mi_theapx_stat_increase(heap, theapx, malloc_bins[bin], alloc_count);
+    #if MI_STATS==1
     mi_theapx_stat_counter_increase(heap, theapx, malloc_count, alloc_count);
     mi_theapx_stat_increase(heap, theapx, allocated, allocated);
-    mi_theapx_stat_increase(heap, theapx, malloc_bins[bin], alloc_count);
     if (bin==MI_BIN_HUGE) { mi_theapx_stat_increase(heap,theapx,malloc_huge,allocated); } // separate so we have a count and total
-    #if MI_STATS==1
     // use coarse total requested bytes
     mi_theapx_stat_counter_increase(heap, theapx, malloc_requested, requested);      
-    #endif
     // deprecated
     if (bin!=MI_BIN_HUGE) { 
       mi_theapx_stat_counter_increase(heap, theapx, malloc_normal_count, alloc_count); 
@@ -214,15 +202,18 @@ static void mi_theap_page_merge_stats(mi_theap_t* theapx, const mi_page_t* page,
     else {
       mi_theapx_stat_counter_increase(heap, theapx, malloc_huge_count, alloc_count);
     }
+    #endif
   }
   if (free_count > 0) {
+    mi_theapx_stat_decrease(heap, theapx, malloc_bins[bin], free_count);
+    #if MI_STATS==1
     mi_theapx_stat_counter_increase(heap, theapx, free_count, free_count);
     mi_theapx_stat_counter_increase(heap, theapx, freed, freed);
     mi_theapx_stat_decrease(heap, theapx, allocated, freed);
-    mi_theapx_stat_decrease(heap, theapx, malloc_bins[bin], free_count);      
     if (bin==MI_BIN_HUGE) { mi_theapx_stat_decrease(heap, theapx, malloc_huge, freed); }
     // deprecated
     if (bin!=MI_BIN_HUGE) { mi_theapx_stat_decrease(heap, theapx, malloc_normal, freed); }      
+    #endif
   }
   
   // merge the theap stats into the heap once N bytes were allocated or freed since the last merge
