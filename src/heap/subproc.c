@@ -338,7 +338,7 @@ void _mi_subproc_main_done(void) {
 
   `fork()` is only safe if no other thread is executing inside mimalloc
   at the time of the fork; all other threads must be quiesced at a safe
-  point outside mimalloc (as guaranteed e.g. by CPython's stop-the-world).
+  point outside mimalloc (as is done for example by CPython's stop-the-world).
   The child then inherits consistent data structures with no locks held
   (as no thread was inside mimalloc) so we only need to abandon the pages
   of the threads that do not exist in the child.
@@ -346,6 +346,7 @@ void _mi_subproc_main_done(void) {
 
 // Abandon the pages of theaps whose threads do not exist in the child.
 // The theap and tld memory itself is not freed as the (dead) thread lists may be inconsistent.
+// We need to take no locks as at this point only the child process runs in a single thread.
 static void mi_fork_child_abandon_theaps(void) {
   mi_theap_t* const theap_default = _mi_theap_default();
   mi_tld_t* const tld_current = (mi_theap_is_initialized(theap_default) ? theap_default->tld : NULL);
@@ -389,7 +390,7 @@ static void mi_fork_child(void) {
 void _mi_fork_init(void) {
   #if defined(MI_USE_PTHREADS) && !defined(__wasi__) && !defined(__EMSCRIPTEN__)
   if (pthread_atfork(NULL, NULL, &mi_fork_child) != 0) {
-    _mi_warning_message("unable to register fork handler\n");
+    _mi_warning_message("unable to register the pthread fork handler\n");
   }
   #else
   MI_UNUSED(&mi_fork_child);
