@@ -701,16 +701,20 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
 // Random
 //----------------------------------------------------------------
 
+#if defined(MI_USE_RTLGENRANDOM) || MI_WIN_DESKTOP
+#if defined(_MSC_VER)
+#pragma comment (lib,"advapi32.lib")
+#endif
+#define RtlGenRandom  SystemFunction036
+mi_decl_externc BOOLEAN NTAPI RtlGenRandom(PVOID RandomBuffer, ULONG RandomBufferLength);
+#endif
+
 #if defined(MI_USE_RTLGENRANDOM) // || defined(__cplusplus)
 // We prefer to use BCryptGenRandom instead of (the unofficial) RtlGenRandom but when using
 // dynamic overriding, we observed it can raise an exception when compiled with C++, and
 // sometimes deadlocks when also running under the VS debugger.
 // In contrast, issue #623 implies that on Windows Server 2019 we need to use BCryptGenRandom.
 // To be continued..
-#pragma comment (lib,"advapi32.lib")
-#define RtlGenRandom  SystemFunction036
-mi_decl_externc BOOLEAN NTAPI RtlGenRandom(PVOID RandomBuffer, ULONG RandomBufferLength);
-
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   return (RtlGenRandom(buf, (ULONG)buf_len) != 0);
 }
@@ -727,6 +731,13 @@ static  PBCryptGenRandom pBCryptGenRandom = NULL;
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   mi_assert(buf_len <= ULONG_MAX);
   if (buf_len > ULONG_MAX) return false;
+  #if MI_WIN_DESKTOP
+  // On Windows 7 / Server 2008 R2 and older, BCryptGenRandom can deadlock when called while the
+  // loader lock is held (as during process attach), so we use RtlGenRandom instead (issues #1395 and #1426).
+  if (win_major_version < 6 || (win_major_version == 6 && win_minor_version <= 1)) {
+    return (RtlGenRandom(buf, (ULONG)buf_len) != 0);
+  }
+  #endif
   mi_atomic_do_once {
     HINSTANCE hDll = mi_win_loadlibrary(TEXT("bcrypt.dll"));
     if (hDll != NULL) {
