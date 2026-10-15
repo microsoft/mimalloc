@@ -161,6 +161,28 @@ void _mi_theap_collect_abandon(mi_theap_t* theap) {
   mi_theap_collect_ex(theap, MI_ABANDON);
 }
 
+// Abandon all owned pages of a valid but detached theap (`tld==NULL`) into the heap-wide registries.
+void _mi_theap_abandon_owned_pages(mi_theap_t* theap) {
+  mi_assert_internal(theap!=NULL);
+  mi_assert_internal(theap->tld == NULL);  // should be detached as we may access from another thread
+  if (theap==NULL) return;
+  for (size_t bin = 0; bin <= MI_BIN_FULL; bin++) {
+    mi_page_queue_t* const pq = &theap->pages[bin];
+    mi_page_t* page = pq->first;
+    while (page != NULL) {
+      mi_page_t* const next = page->next;  // save as the page is removed from the queue
+      _mi_page_free_collect(page, true);   // collect cross-thread frees so `used` is precise
+      if (mi_page_all_free(page)) { 
+        _mi_page_free(page, pq); 
+      }
+      else { 
+        _mi_page_abandon(page, pq); 
+      }
+      page = next;
+    }
+  }
+}
+
 void mi_theap_collect(mi_theap_t* theap, bool force) mi_attr_noexcept {
   mi_theap_collect_ex(theap, (force ? MI_FORCE : MI_NORMAL));
 }

@@ -186,6 +186,8 @@ static void mi_heap_free_theaps(mi_heap_t* heap) {
       theap->hnext = NULL;
       theap->hprev = NULL;
       mi_assert_internal(theap->tld==NULL);
+      // abandon any owned pages into the heap-wide registries so heap delete/destroy can visit them
+      _mi_theap_abandon_owned_pages(theap);
       // clear the heap so a stale `_mi_theap_cached` entry in another thread no longer matches
       // (a new heap can be allocated at the same address and would otherwise pick up this freed theap)
       mi_atomic_store_ptr_release(mi_heap_t, &theap->heap, NULL);

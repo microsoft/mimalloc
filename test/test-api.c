@@ -661,6 +661,21 @@ int main(void) {
     }
   }
 
+  CHECK_BODY("heap-destroy-os-pages") {   // regular OS-backed owned pages must not be orphaned on heap destroy
+    mi_collect(true);
+    mi_stats_t_decl(stats0);
+    mi_stats_get(&stats0);
+    mi_option_set(mi_option_disallow_arena_alloc, 1);   // force all pages to be OS allocated
+    mi_heap_t* h = mi_heap_new();
+    for (int i = 0; i < 1000; i++) { (void)mi_heap_malloc(h, 48); }  // owned OS-backed pages with live blocks
+    mi_heap_destroy(h);
+    mi_option_set(mi_option_disallow_arena_alloc, 0);
+    mi_collect(true);
+    mi_stats_t_decl(stats1);
+    mi_stats_get(&stats1);
+    result = (stats0.pages.current == stats1.pages.current);  // orphaned if destroy missed the owned OS pages
+  }
+
   #define NHEAPS (1000)
   CHECK_BODY("heap-many") {    // check creating many heaps and threadlocals, see issue #1358
     mi_heap_t* heaps[NHEAPS];
