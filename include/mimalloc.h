@@ -244,6 +244,7 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new(void);
 mi_decl_export void mi_heap_delete(mi_heap_t* heap);            // move live blocks to the main heap
 mi_decl_export void mi_heap_destroy(mi_heap_t* heap);           // free all live blocks
 mi_decl_export void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node);
+mi_decl_export void mi_heap_set_debug_fill_preserve(mi_heap_t* heap, size_t preserve); // in debug mode, do not fill the first `preserve` bytes of blocks on allocation or free
 mi_decl_export void mi_heap_collect(mi_heap_t* heap, bool force);
 
 mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_main(void);

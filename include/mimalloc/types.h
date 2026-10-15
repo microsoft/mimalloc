@@ -705,6 +705,7 @@ typedef struct mi_heap_s {
 
   mi_arena_t*           exclusive_arena;                // if the heap should only allocate from a specific arena (or NULL)
   int                   numa_node;                      // if >=0, prefer this numa node for allocations
+  _Atomic(size_t)       debug_fill_preserve;            // in debug mode, the first N bytes of a block are not filled with MI_DEBUG_UNINIT/FREED
 
   mi_theap_t*           theaps;                         // list of all thread-local theaps belonging to this heap (using the `hnext`/`hprev` fields)
   mi_lock_t             theaps_lock;                    // lock for the theaps list operations

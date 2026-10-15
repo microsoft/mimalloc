@@ -28,6 +28,12 @@ void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node) {
   heap->numa_node = (numa_node < 0 ? -1 : numa_node % _mi_os_numa_node_count());
 }
 
+void mi_heap_set_debug_fill_preserve(mi_heap_t* heap, size_t preserve) {
+  if (heap==NULL) { heap = mi_heap_main(); }
+  if (preserve > MI_MiB) { preserve = MI_MiB; }  // fills are limited to 1 MiB anyway
+  mi_atomic_store_relaxed(&heap->debug_fill_preserve, preserve);
+}
+
 void mi_heap_stats_merge_to_subproc(mi_heap_t* heap) {
   if (heap==NULL) { heap = mi_heap_main(); }
   _mi_stats_merge_into(&heap->subproc->stats, &heap->stats);

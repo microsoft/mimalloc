@@ -24,6 +24,17 @@ mi_decl_nodiscard static bool mi_check_padding_on_free(const mi_page_t* page, co
 mi_decl_nodiscard static bool mi_check_double_free(const mi_page_t* page, const mi_block_t* block);
 static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block, bool was_guarded);
 
+#if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
+// Fill a block with a debug pattern, preserving the first `heap->debug_fill_preserve` bytes
+// (used by CPython to keep object headers intact that may be read by concurrent lock-free readers)
+static inline void mi_debug_fill(const mi_page_t* page, void* block, int c, size_t size) {
+  const size_t preserve = mi_atomic_load_relaxed(&mi_page_heap(page)->debug_fill_preserve);
+  if (preserve < size) {
+    mi_memset((uint8_t*)block + preserve, c, size - preserve);
+  }
+}
+#endif
+
 // ------------------------------------------------------
 // Free
 // ------------------------------------------------------
@@ -42,7 +53,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
 
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
   const size_t dbgsize = (usable_size > MI_MiB ? MI_MiB : usable_size);
-  mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);
+  mi_debug_fill(page, block, MI_DEBUG_FREED, dbgsize);
   #endif
   
   // actual free: push on the local free list fast-path
@@ -83,7 +94,7 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
   if (!was_guarded) {
     const size_t dbgsize = (usable_size > MI_MiB ? MI_MiB : usable_size);
-    mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);
+    mi_debug_fill(page, block, MI_DEBUG_FREED, dbgsize);
   }
   #endif
 

@@ -146,7 +146,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
   
   // in debug mode initialize with 0xD0
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
-  if mi_likely(!zero && !mi_page_is_huge(page)) { memset(block, MI_DEBUG_UNINIT, bsize); }
+  if mi_likely(!zero && !mi_page_is_huge(page)) { mi_debug_fill(page, block, MI_DEBUG_UNINIT, bsize); }
   #endif
 
   // zero the block? note: we need to zero the full block size (issue #63)
