@@ -98,6 +98,7 @@ static void* holder(void* arg) {
     live[i] = mi_malloc(live_size(i));
     memset(live[i], (int)(i & 0xFF), live_size(i));
   }
+  mi_free(mi_malloc(4096)); // leave an empty retired page for child cleanup
   pthread_mutex_lock(&live_lock);
   live_ready = 1;
   pthread_cond_broadcast(&live_cond);
@@ -140,6 +141,7 @@ static int run_child(int depth) {
 }
 
 int main(void) {
+  mi_thread_init(); // retain a different theap for the same heap in the surviving thread
   pthread_t hold;
   pthread_create(&hold, NULL, &holder, NULL);
   pthread_mutex_lock(&live_lock);

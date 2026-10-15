@@ -374,8 +374,8 @@ static void mi_fork_child_abandon_theaps(void) {
     mi_theap_t* const next = dead->hnext;
     mi_heap_t* const heap = mi_theap_heap(dead);
     dead->hnext = NULL;
-    dead->tld->thread_id = _mi_thread_id();  // adopt the theap so we abandon its pages as the owner
-    _mi_theap_collect_abandon(dead);
+    dead->tld = NULL;
+    _mi_theap_abandon_owned_pages(dead);
     _mi_stats_merge_into(&heap->stats, &dead->stats);
     mi_atomic_store_ptr_release(mi_heap_t, &dead->heap, NULL);
     dead = next;
