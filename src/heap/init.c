@@ -577,6 +577,7 @@ static void mi_process_init_once(void) {
   _mi_thread_locals_init();  // pthread key create
   _mi_process_is_initialized = true;    // before `mi_process_setup_auto_thread_done` so `_mi_theap_default` returns the current theap with `MI_TLS_RECURSE_GUARD`
   mi_process_setup_auto_thread_done();  // after the above mi_thread_init so it can add the current theap
+  _mi_fork_init();                      // register fork handlers (can allocate)
 
   #if defined(_WIN32) && defined(MI_WIN_INIT_USE_FLS)
   // On windows, when building as a static lib the FLS cleanup happens to early for the main thread.
