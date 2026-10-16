@@ -1195,14 +1195,6 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/mimalloc.pc"
 if (MI_BUILD_TESTS)
   enable_testing()
 
-  # The QSBR adapter embeds its own allocator with an extended internal layout.
-  add_executable(mimalloc-test-qsbr test/test-qsbr.c)
-  target_compile_definitions(mimalloc-test-qsbr PRIVATE ${mi_defines})
-  target_compile_options(mimalloc-test-qsbr PRIVATE ${mi_cflags})
-  target_include_directories(mimalloc-test-qsbr PRIVATE include)
-  target_link_libraries(mimalloc-test-qsbr PRIVATE ${mi_libraries})
-  add_test(NAME test-qsbr COMMAND mimalloc-test-qsbr)
-
   # static link tests
   foreach(TEST_NAME api api-fill arena bitmap stress-heaps stress-subprocs stress stress-pprof profile pprof fork)
     if((TEST_NAME STREQUAL "arena" OR TEST_NAME STREQUAL "bitmap") AND (NOT MI_BUILD_STATIC OR MI_DEBUG_TSAN))
@@ -1273,6 +1265,14 @@ if (MI_BUILD_TESTS)
       add_test(NAME test-stress-dynamic COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_VERBOSE=1 ${LD_PRELOAD}=$<TARGET_FILE:mimalloc> $<TARGET_FILE:mimalloc-test-stress-dynamic>)
     endif()
   endif()
+
+  # The QSBR adapter embeds its own allocator with an extended internal layout.
+  add_executable(mimalloc-test-qsbr test/test-qsbr.c)
+  target_compile_definitions(mimalloc-test-qsbr PRIVATE ${mi_defines})
+  target_compile_options(mimalloc-test-qsbr PRIVATE ${mi_cflags})
+  target_include_directories(mimalloc-test-qsbr PRIVATE include)
+  target_link_libraries(mimalloc-test-qsbr PRIVATE ${mi_libraries})
+  add_test(NAME test-qsbr COMMAND mimalloc-test-qsbr)
 endif()
 
 # -----------------------------------------------------------------------------
