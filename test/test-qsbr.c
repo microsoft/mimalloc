@@ -227,20 +227,22 @@ static bool remote_free_full_page(void) {
   return true;
 }
 
-static bool test_page_free(void) {
+static bool test_page_free(size_t size) {
   mi_heap_t* heap = mi_heap_new_qsbr();
   require(heap != NULL);
-  full_page_blocks[0] = mi_heap_malloc(heap, 8192);
+  full_page_blocks[0] = mi_heap_malloc(heap, size);
   require(full_page_blocks[0] != NULL);
   mi_page_t* page = mi_ptr_page(full_page_blocks[0]);
   full_page_count = page->reserved;
   require(full_page_count <= sizeof(full_page_blocks)/sizeof(full_page_blocks[0]));
   for (size_t i = 1; i < full_page_count; i++) {
-    full_page_blocks[i] = mi_heap_malloc(heap, 8192);
+    full_page_blocks[i] = mi_heap_malloc(heap, size);
     require(full_page_blocks[i] != NULL && mi_ptr_page(full_page_blocks[i]) == page);
   }
   require(mi_page_is_full(page));
-  _mi_page_to_full(page, mi_page_queue_of(page));
+  if (!mi_page_is_in_full(page)) {
+    _mi_page_to_full(page, mi_page_queue_of(page));
+  }
   require(mi_page_is_in_full(page));
   require(mi_run_on_thread(&remote_free_full_page));
   _mi_page_free_collect(page, true);
@@ -461,7 +463,8 @@ int main(void) {
   CHECK("delayed prefix beyond retirement cache", test_delayed_prefix());
   CHECK("abandon unlinks a middle queue entry before losing its owner", test_abandon_queued_page());
   CHECK("delayed lists are per theap with independent heap contexts", test_separate_delayed_lists());
-  CHECK("page free retains, unfills, and releases through the normal operation", test_page_free());
+  CHECK("page free retains, unfills, and releases a small page", test_page_free(MI_SMALL_MAX_OBJ_SIZE/2));
+  CHECK("page free retains, unfills, and releases an automatically full page", test_page_free(MI_SMALL_MAX_OBJ_SIZE+1));
   CHECK("local reuse starts a new grace period", test_reuse(false));
   CHECK("remote reuse starts a new grace period", test_reuse(true));
   CHECK("reclaim preserves goal, appends at tail, and stops behind an unfinished head", test_reclaim());
