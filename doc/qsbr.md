@@ -19,7 +19,8 @@ is not included here.
 Define `MI_QSBR=1` before including mimalloc headers and `src/static.c`.
 Defining `MI_CPYTHON` also enables it by default; other runtimes need not define
 `MI_CPYTHON`. Supply function definitions for the runtime primitives declared in
-`include/mimalloc/qsbr.h` in the same translation unit.
+`include/mimalloc/qsbr.h`, either in the same translation unit or linked from
+another host source file.
 Missing hooks deliberately fail to build rather than silently release pages.
 
 `include/mimalloc/qsbr.h` selects the default value of `MI_QSBR` and, when
@@ -83,8 +84,8 @@ disable early full-page abandonment. The host needs no copy of that flag.
 
 ## Primitive contract
 
-Runtime primitives have `qsbr` in their function names. They are static
-functions, without a leading underscore. Allocator operations remain
+Runtime primitives have `qsbr` in their function names. They have external C
+linkage, without a leading underscore. Allocator operations remain
 in mimalloc; internal public functions have a leading underscore.
 The `page` and `heap` parameters below are pointers to `mi_page_qsbr_t` and
 `mi_heap_qsbr_t`, respectively, not allocator structs. Queue operations are
@@ -267,3 +268,10 @@ thread under external exclusion.
 Quiescent heap inspection also collects pending frees. In hook-enabled builds
 it temporarily claims abandoned pages for that collection, including empty
 orphans awaiting terminal destruction.
+
+## Fork handling
+
+Forking requires other threads to be outside mimalloc. A host that also performs
+uncoordinated fork-and-exec operations can define `MI_NO_PTHREAD_ATFORK=1` and
+call `_mi_fork_child()` explicitly after a coordinated fork, before resuming
+allocator use. Exec-only children must not use the allocator before exec.

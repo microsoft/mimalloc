@@ -30,21 +30,21 @@ static _Atomic(size_t) last_page_bytes;
 static mi_decl_thread qsbr_domain_t* current_domain = &domain;
 static mi_decl_thread size_t heap_init_count;
 
-static void mi_heap_qsbr_init(mi_heap_qsbr_t* heap) {
+void mi_heap_qsbr_init(mi_heap_qsbr_t* heap) {
   mi_assert_internal(current_domain != NULL);
   heap->domain = current_domain;
   heap_init_count++;
 }
 
-static void mi_page_qsbr_clear(mi_page_qsbr_t* page) {
+void mi_page_qsbr_clear(mi_page_qsbr_t* page) {
   page->goal = 0;
 }
 
-static inline bool mi_page_qsbr_is_clear(const mi_page_qsbr_t* page) {
+bool mi_page_qsbr_is_clear(const mi_page_qsbr_t* page) {
   return page->goal == 0;
 }
 
-static bool mi_page_qsbr_should_delay(mi_page_qsbr_t* page, mi_heap_qsbr_t* heap, size_t page_bytes) {
+bool mi_page_qsbr_should_delay(mi_page_qsbr_t* page, mi_heap_qsbr_t* heap, size_t page_bytes) {
   qsbr_domain_t* d = heap->domain;
   mi_assert_internal(d != NULL);
   if (page->goal == 0) {

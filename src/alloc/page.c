@@ -147,7 +147,7 @@ static mi_theap_t* mi_theap_of_page(mi_page_t* page) {
   if mi_unlikely(mi_page_thread_id(page) != _mi_prim_thread_id()) { 
     theap = _mi_page_associated_theap_peek(page);
   }
-  return theap;
+  return (theap != NULL && theap->tld != NULL ? theap : NULL);
 }
 #endif
 

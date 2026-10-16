@@ -12,7 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
   more concurrent readers; the interface below provides the necessary primitives 
   for managing QSBR state so mimalloc can delay freeing pages until it is
   safe to do so (and efficiently reuse them as well).
-  
+
   See `/test/test-qsbr.c` for a minimal example implementation.
 -----------------------------------------------------------------------------*/
 
@@ -31,17 +31,26 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
+// Create a qsbr enabled heap
+mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_qsbr(void); 
+
 #if MI_QSBR
-// Define these for the host runtime to implement QSBR bookkeeping.
+// Define these for the host runtime to implement qsbr bookkeeping.
 typedef struct mi_page_qsbr_s mi_page_qsbr_t;
 typedef struct mi_heap_qsbr_s mi_heap_qsbr_t;
 
-// Host-defined runtime bookkeeping primitives; see doc/qsbr.md.
-static void mi_heap_qsbr_init(mi_heap_qsbr_t* heap);
-static void mi_page_qsbr_clear(mi_page_qsbr_t* page);
-static inline bool mi_page_qsbr_is_clear(const mi_page_qsbr_t* page);
+// Host-defined runtime bookkeeping primitives; see doc/qsbr.md. (called by mimalloc for pages in qsbr heaps)
+#ifdef __cplusplus
+extern "C" {
+#endif
+void mi_heap_qsbr_init(mi_heap_qsbr_t* heap);
+void mi_page_qsbr_clear(mi_page_qsbr_t* page);
+bool mi_page_qsbr_is_clear(const mi_page_qsbr_t* page);
 // Establish a goal if needed, then check whether release of the empty page must be delayed.
-static bool mi_page_qsbr_should_delay(mi_page_qsbr_t* page, mi_heap_qsbr_t* heap, size_t page_bytes);
+bool mi_page_qsbr_should_delay(mi_page_qsbr_t* page, mi_heap_qsbr_t* heap, size_t page_bytes);
+#ifdef __cplusplus
+}
+#endif
 #endif
 
 #endif

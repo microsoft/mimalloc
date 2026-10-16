@@ -243,8 +243,8 @@ struct mi_heap_s;
 typedef struct mi_heap_s mi_heap_t;
 
 mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new(void);
-mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_qsbr(void); // requires QSBR support; enabled for the heap's lifetime
-mi_decl_export void mi_heap_delete(mi_heap_t* heap);            // move live blocks to the main heap (not for QSBR heaps)
+
+mi_decl_export void mi_heap_delete(mi_heap_t* heap);            // move live blocks to the main heap 
 mi_decl_export void mi_heap_destroy(mi_heap_t* heap);           // free all live blocks
 mi_decl_export void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node);
 mi_decl_export void mi_heap_set_debug_fill_preserve(mi_heap_t* heap, size_t preserve); // in debug mode, do not fill the first `preserve` bytes of blocks on allocation or free
@@ -431,7 +431,7 @@ mi_decl_export bool mi_unsafe_heap_page_is_under_utilized(mi_heap_t* heap, void*
 // Owner-thread only: abandon pages and delete the theap (not its heap or live blocks).
 mi_decl_export void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept;
 
-// Abandon all pages, preserving live blocks and the theap for reuse. The owner must be the current thread or quiescent outside mimalloc (excluding concurrent heap/theap deletion).
+// Abandon all theap pages, preserving live blocks and the theap for reuse. The owner must be the current thread or quiescent outside mimalloc (excluding concurrent heap/theap deletion).
 mi_decl_export void mi_theap_quiescent_abandon(mi_theap_t* theap) mi_attr_noexcept;
 
 

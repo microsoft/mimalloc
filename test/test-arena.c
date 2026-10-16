@@ -540,6 +540,10 @@ static bool test_theap_delete_owner(void) {
       mi_free(mi_theap_malloc(theap, 4096)); // include an empty retired page
       mi_theap_set_default(theap);
       if (cached == 0) {
+        // Reach the statistics update threshold during quiescent abandonment.
+        for (size_t i = 0; i < 0x8000; i++) {
+          mi_free(mi_theap_malloc(theap, sizeof(int)));
+        }
         mi_theap_quiescent_abandon(theap);
         result = (theap->page_count == 0 && theap->tld == tld &&
                   mi_theap_get_default() == theap && mi_heap_theap(heap) == theap &&

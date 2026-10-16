@@ -18,6 +18,7 @@ mi_subproc_t* _mi_subproc(void);          // current subproc of this thread
 mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
 void          _mi_subprocs_unsafe_destroy_all(void);
 void          _mi_fork_init(void);
+void          _mi_fork_child(void);
 
 void*         _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_memid_t* memid );
 void*         _mi_meta_rezalloc( mi_subproc_t* subproc, void* p, size_t newsize, mi_memid_t* memid );
