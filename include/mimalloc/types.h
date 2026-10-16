@@ -34,6 +34,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "decl.h"     // compiler dependent definitions
 #include "bits.h"     // size defines (MI_SIZE_SIZE etc), bit operations
 #include "atomic.h"   // _Atomic primitives
+#include "qsbr.h"     // quiescent state-based reclamation (qsbr) primitives (for runtime systems like CPython)
 
 // Minimal alignment necessary. On most platforms 16 bytes are needed
 // due to SSE registers for example. This must be at least `sizeof(void*)`
@@ -506,6 +507,12 @@ typedef struct mi_page_s {
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   uintptr_t                 keys[MI_PAGE_KEY_COUNT]; // const: one or two random keys to encode the free lists (see `_mi_block_next`) or padding canary
   #endif
+  #if MI_QSBR
+  struct mi_page_s*         qsbr_next;
+  struct mi_page_s*         qsbr_prev;
+  bool                     qsbr_in_queue;
+  mi_page_qsbr_t            qsbr;
+  #endif
 } mi_page_t;
 
 // ------------------------------------------------------
@@ -677,6 +684,10 @@ struct mi_theap_s {
   mi_page_queue_t       pages[MI_BIN_COUNT];                 // queue of pages for each size class (or "bin")
   mi_memid_t            memid;                               // provenance of the theap struct itself (meta or os)
   mi_stats_t            stats;                               // thread-local statistics
+  #if MI_QSBR
+  mi_page_t*           qsbr_first;
+  mi_page_t*           qsbr_last;
+  #endif
 };
 
 
@@ -705,7 +716,11 @@ typedef struct mi_heap_s {
   mi_thread_local_t     theap;                          // dynamic thread local for the thread-local theaps of this heap
 
   mi_arena_t*           exclusive_arena;                // if the heap should only allocate from a specific arena (or NULL)
+  long                  reclaim_on_free;                // reclaim policy captured at heap initialization
   int                   numa_node;                      // if >=0, prefer this numa node for allocations
+  #if MI_QSBR
+  bool                  qsbr_enabled;                   // immutable after heap initialization
+  #endif
   _Atomic(size_t)       debug_fill_preserve;            // in debug mode, the first N bytes of a block are not filled with MI_DEBUG_UNINIT/FREED
 
   mi_theap_t*           theaps;                         // list of all thread-local theaps belonging to this heap (using the `hnext`/`hprev` fields)
@@ -721,6 +736,9 @@ typedef struct mi_heap_s {
   mi_lock_t             arena_pages_lock;                // lock to update the arena_pages array
   mi_memid_t            memid;                           // provenance of the heap memory
   mi_stats_t            stats;                           // statistics for this heap; periodically updated by merging from each theap
+  #if MI_QSBR
+  mi_heap_qsbr_t        qsbr;
+  #endif
 } mi_heap_t;
 
 

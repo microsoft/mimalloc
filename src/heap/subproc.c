@@ -181,7 +181,7 @@ mi_subproc_id_t mi_subproc_new(void) {
   mi_subproc_init(subproc,parent);
   
   // init main heap
-  mi_heap_t* heap_main = _mi_heap_new_for_subproc(subproc,0,true);
+  mi_heap_t* heap_main = _mi_heap_new_for_subproc(subproc,0,true,false);
   if (heap_main==NULL) {
     _mi_meta_free(parent, theap_meta, theap_meta->memid);
     mi_subproc_destroy(_mi_subproc_to_id(subproc));

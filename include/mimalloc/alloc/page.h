@@ -10,7 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "../types.h"
 #include "../prim/os.h"
-#include "../heap/init.h"
+#include "../heap/heap.h"
 #include "../heap/page-map.h"
 #include "../track.h"
 
@@ -19,7 +19,7 @@ mi_decl_restrict void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t si
 
 void          _mi_page_retire(mi_page_t* page) mi_attr_noexcept;       // free the page if there are no other pages with many free blocks
 void          _mi_page_unfull(mi_page_t* page);
-void          _mi_page_free(mi_page_t* page, mi_page_queue_t* pq);     // free the page
+bool          _mi_page_free(mi_page_t* page, mi_page_queue_t* pq);     // false if page release is delayed
 void          _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);  // abandon the page, to be picked up by another thread...
 void          _mi_deferred_free(mi_theap_t* theap, bool force);
 bool          _mi_page_free_collect(mi_page_t* page, bool force);  // returns `true` if cross-thread free'd blocks were collected
@@ -400,6 +400,86 @@ static inline bool mi_page_is_owned(const mi_page_t* page) {
 static inline bool mi_page_claim_ownership(mi_page_t* page) {
   const uintptr_t old = mi_atomic_or_acq_rel(&page->xthread_free, (uintptr_t)1);
   return ((old&1)==0);
+}
+
+/* -----------------------------------------------------------
+  Delayed page release
+----------------------------------------------------------- */
+
+static inline void mi_page_qsbr_unlink(mi_page_t* page) {
+#if MI_QSBR
+  if (!page->qsbr_in_queue) {
+    mi_assert_internal(page->qsbr_next == NULL && page->qsbr_prev == NULL);
+    return;
+  }
+  mi_theap_t* theap = mi_page_theap(page);
+  if (page->qsbr_prev != NULL) { page->qsbr_prev->qsbr_next = page->qsbr_next; }
+  else {
+    mi_assert_internal(theap->qsbr_first == page);
+    theap->qsbr_first = page->qsbr_next;
+  }
+  if (page->qsbr_next != NULL) { page->qsbr_next->qsbr_prev = page->qsbr_prev; }
+  else {
+    mi_assert_internal(theap->qsbr_last == page);
+    theap->qsbr_last = page->qsbr_prev;
+  }
+  page->qsbr_next = page->qsbr_prev = NULL;
+  page->qsbr_in_queue = false;
+#else
+  MI_UNUSED(page);
+#endif
+}
+
+static inline void mi_page_qsbr_enqueue(mi_page_t* page, mi_theap_t* theap) {
+#if MI_QSBR
+  mi_assert_internal(mi_page_theap(page) == theap);
+  mi_assert_internal(mi_page_all_free(page));
+  mi_assert_internal(mi_heap_qsbr_is_enabled(mi_page_heap(page)));
+  mi_assert_internal(!mi_page_qsbr_is_clear(&page->qsbr));
+  if (page->qsbr_in_queue) return;
+  mi_assert_internal(page->qsbr_next == NULL && page->qsbr_prev == NULL);
+  page->qsbr_prev = theap->qsbr_last;
+  if (theap->qsbr_last != NULL) { theap->qsbr_last->qsbr_next = page; }
+  else { theap->qsbr_first = page; }
+  theap->qsbr_last = page;
+  page->qsbr_in_queue = true;
+#else
+  MI_UNUSED(page);
+  MI_UNUSED(theap);
+#endif
+}
+
+static inline void _mi_page_qsbr_clear(mi_page_t* page) {
+#if MI_QSBR
+  mi_page_qsbr_unlink(page);
+  mi_page_qsbr_clear(&page->qsbr);
+#else
+  MI_UNUSED(page);
+#endif
+}
+
+static inline bool _mi_page_qsbr_is_clear(const mi_page_t* page) {
+#if MI_QSBR
+  return (!page->qsbr_in_queue && page->qsbr_next == NULL && page->qsbr_prev == NULL &&
+          mi_page_qsbr_is_clear(&page->qsbr));
+#else
+  MI_UNUSED(page);
+  return true;
+#endif
+}
+
+static inline bool _mi_page_qsbr_should_delay(mi_page_t* page) {
+#if MI_QSBR
+  mi_assert_internal(mi_page_is_owned(page) && mi_page_all_free(page));
+  mi_heap_t* heap = mi_page_heap(page);
+  if (!mi_heap_qsbr_is_enabled(heap)) return false;
+  const bool delayed = mi_page_qsbr_should_delay(&page->qsbr, &heap->qsbr, page->capacity * mi_page_block_size(page));
+  mi_assert_internal(!delayed || !mi_page_qsbr_is_clear(&page->qsbr));
+  return delayed;
+#else
+  MI_UNUSED(page);
+  return false;
+#endif
 }
 
 /* -------------------------------------------------------------------

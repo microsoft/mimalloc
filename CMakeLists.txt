@@ -902,7 +902,7 @@ endif()
 # set language for source files now
 if(MI_USE_CXX)
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
-  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-arena.c test/test-bitmap.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-stress-pprof.c test/test-profile.c test/test-pprof.c test/test-fork.c PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-arena.c test/test-bitmap.c test/test-qsbr.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-stress-pprof.c test/test-profile.c test/test-pprof.c test/test-fork.c PROPERTIES LANGUAGE CXX )
 endif()
 
 # platform specific headers that are only needed for profiling support
@@ -1194,6 +1194,14 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/mimalloc.pc"
 
 if (MI_BUILD_TESTS)
   enable_testing()
+
+  # The QSBR adapter embeds its own allocator with an extended internal layout.
+  add_executable(mimalloc-test-qsbr test/test-qsbr.c)
+  target_compile_definitions(mimalloc-test-qsbr PRIVATE ${mi_defines})
+  target_compile_options(mimalloc-test-qsbr PRIVATE ${mi_cflags})
+  target_include_directories(mimalloc-test-qsbr PRIVATE include)
+  target_link_libraries(mimalloc-test-qsbr PRIVATE ${mi_libraries})
+  add_test(NAME test-qsbr COMMAND mimalloc-test-qsbr)
 
   # static link tests
   foreach(TEST_NAME api api-fill arena bitmap stress-heaps stress-subprocs stress stress-pprof profile pprof fork)

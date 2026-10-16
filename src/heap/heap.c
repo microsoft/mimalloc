@@ -109,14 +109,25 @@ mi_decl_cold mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
   return theap;
 }
 
-void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id)
+void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool use_qsbr)
 {
   // init fields
   heap->theap = theap_slot;
   heap->subproc = subproc;
   heap->heap_seq = mi_atomic_increment_relaxed(&subproc->heap_total_count);
   heap->exclusive_arena = _mi_arena_from_id(exclusive_arena_id);
+  heap->reclaim_on_free = mi_option_get(mi_option_page_reclaim_on_free);
   heap->numa_node = -1; // no initial affinity
+  #if MI_QSBR
+  heap->qsbr_enabled = use_qsbr;
+  if (use_qsbr) {
+    if (heap->reclaim_on_free > 0) { heap->reclaim_on_free = 0; }
+    mi_heap_qsbr_init(&heap->qsbr);
+  }
+  #else
+  mi_assert_internal(!use_qsbr);
+  MI_UNUSED(use_qsbr);
+  #endif
   heap->profiler = mi_atomic_load_ptr_acquire(mi_profiler_t,&subproc->profiler);
   mi_stats_header_init(&heap->stats);
   mi_lock_init(&heap->theaps_lock);
@@ -136,7 +147,7 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
   mi_assert_internal(mi_is_heap_main(heap) ? heap->theap == mi_thread_local_key_fast : heap->theap != 0);
 }
 
-mi_heap_t* _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool is_main_heap) {
+mi_heap_t* _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool is_main_heap, bool use_qsbr) {
   mi_assert_internal(is_main_heap ? (subproc->heap_main == NULL && subproc->parent != NULL) : subproc->heap_main != NULL);
   // heap data is allocated in the current subproc
   mi_heap_t* const heap_main = (is_main_heap ? subproc->parent->heap_main : subproc->heap_main);
@@ -154,7 +165,7 @@ mi_heap_t* _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusi
     mi_assert_internal(subproc->heap_main == NULL);
     subproc->heap_main = heap;
   }
-  _mi_heap_init(heap, theap_slot, subproc, exclusive_arena_id);
+  _mi_heap_init(heap, theap_slot, subproc, exclusive_arena_id, use_qsbr);
   return heap;
 }
 
@@ -162,11 +173,21 @@ mi_heap_t* mi_heap_new_in_arena(mi_arena_id_t exclusive_arena_id) {
   // `mi_heap_new` may be the very first mimalloc call in a process, in which case the
   // main heap does not exist yet and `_mi_heap_new_for_subproc` would allocate from a NULL `subproc->heap_main`.
   mi_thread_init();
-  return _mi_heap_new_for_subproc(_mi_subproc(), exclusive_arena_id, false);
+  return _mi_heap_new_for_subproc(_mi_subproc(), exclusive_arena_id, false, false);
 }
 
 mi_heap_t* mi_heap_new(void) {
   return mi_heap_new_in_arena(0);
+}
+
+mi_heap_t* mi_heap_new_qsbr(void) {
+  #if MI_QSBR
+  mi_thread_init();
+  return _mi_heap_new_for_subproc(_mi_subproc(), 0, false, true);
+  #else
+  _mi_error_message(ENOSYS, "mi_heap_new_qsbr requires a build with QSBR support\n");
+  return NULL;
+  #endif
 }
 
 // free all theaps belonging to this heap (without deleting their pages as we do this arena wise for efficiency)
@@ -253,6 +274,10 @@ void mi_heap_delete(mi_heap_t* heap) {
   mi_heap_t* heap_main = mi_heap_get_heap_main(heap);
   if (heap == heap_main) {
     _mi_warning_message("cannot delete the main heap\n");
+    return;
+  }
+  if (mi_heap_qsbr_is_enabled(heap)) {
+    _mi_warning_message("cannot delete a QSBR heap; use destroy after readers and mutators have stopped\n");
     return;
   }
   mi_heap_free_theaps(heap);

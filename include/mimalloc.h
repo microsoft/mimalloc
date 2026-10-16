@@ -243,7 +243,8 @@ struct mi_heap_s;
 typedef struct mi_heap_s mi_heap_t;
 
 mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new(void);
-mi_decl_export void mi_heap_delete(mi_heap_t* heap);            // move live blocks to the main heap
+mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_qsbr(void); // requires QSBR support; enabled for the heap's lifetime
+mi_decl_export void mi_heap_delete(mi_heap_t* heap);            // move live blocks to the main heap (not for QSBR heaps)
 mi_decl_export void mi_heap_destroy(mi_heap_t* heap);           // free all live blocks
 mi_decl_export void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node);
 mi_decl_export void mi_heap_set_debug_fill_preserve(mi_heap_t* heap, size_t preserve); // in debug mode, do not fill the first `preserve` bytes of blocks on allocation or free
@@ -496,7 +497,7 @@ typedef enum mi_option_e {
   mi_option_guarded_sample_rate,        // 1 out of N allocations in the min/max range will be guarded (=1000)
   mi_option_guarded_sample_seed,        // can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0)
   mi_option_generic_collect,            // collect theaps every N (=10000) generic allocation calls
-  mi_option_page_reclaim_on_free,       // reclaim abandoned pages on a free (=0). -1 disallow always, 0 allows if the page originated from the current theap, 1 allow always
+  mi_option_page_reclaim_on_free,       // heap-creation default for reclaim on free: -1 disallow, 0 originating theap only, 1 allow across theaps
   mi_option_page_full_retain,           // retain N full (small) pages per size class (=2)
   mi_option_page_max_candidates,        // max candidate pages to consider for allocation (=4)
   mi_option_max_vabits,                 // max user space virtual address bits to consider (=48)
