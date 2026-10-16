@@ -809,6 +809,7 @@ mi_page_t* _mi_arenas_page_alloc(mi_theap_t* theap, size_t block_size, size_t bl
 ----------------------------------------------------------- */
 
 static void mi_arenas_page_free_prim(mi_page_t* page) {
+  mi_assert_internal(_mi_page_qsbr_is_clear(page));
   mi_assert_internal(mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
   mi_assert_internal(mi_page_is_owned(page));
@@ -881,6 +882,7 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
 }
 
 void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
+  mi_assert_internal(_mi_page_qsbr_is_clear(page));
   mi_assert_internal(mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
   mi_assert_internal(mi_page_is_owned(page));
@@ -915,7 +917,8 @@ static bool mi_abandoned_page_unown(mi_page_t* page, mi_theap_t* current_theapx)
     mi_assert_internal(mi_tf_is_owned(tf_old));
     while mi_unlikely(mi_tf_block(tf_old) != NULL) {
       _mi_page_free_collect(page, false);  // update used
-      if (mi_page_all_free(page)) {        // it may become free just before unowning it
+      if (mi_page_all_free(page) && !_mi_page_qsbr_should_delay(page)) {
+        _mi_page_qsbr_clear(page);
         _mi_arenas_page_unabandon(page, current_theapx);
         _mi_arenas_page_free(page, current_theapx);
         return true;
@@ -934,10 +937,13 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
-  mi_assert_internal(!mi_page_all_free(page));
+  mi_assert_internal(MI_QSBR || !mi_page_all_free(page));
   mi_assert_internal(page->next==NULL && page->prev == NULL);
   mi_assert_internal(mi_theap_matches_thread(current_theapx));
   // mi_assert_internal(current_theap == _mi_page_associated_theap(page));
+  #if MI_QSBR
+  mi_assert_internal(!page->qsbr_in_queue && page->qsbr_next == NULL && page->qsbr_prev == NULL);
+  #endif
 
   // note: somewhat expensive to update here, but might be good as then we attribute
   // the current allocations/frees to the current thread/theap. Otherwise it might be
@@ -946,7 +952,11 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theapx) {
 
   // add to abandoned?
   mi_heap_t* heap = mi_page_heap(page);
-  if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)) {
+  if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)
+      #if MI_QSBR
+      && !mi_page_is_singleton(page)
+      #endif
+     ) {
     // make available for allocations
     size_t bin = _mi_bin(mi_page_block_size(page));
     mi_assert_internal(bin < MI_ARENA_BIN_COUNT);
@@ -1073,7 +1083,13 @@ typedef struct mi_heap_visit_info_s {
 
 static bool mi_heap_visit_page(mi_page_t* page, const mi_heap_visit_info_t* vinfo) {
   mi_heap_area_t area;
+  #if MI_QSBR
+  const bool claimed = (mi_page_is_abandoned(page) && mi_page_claim_ownership(page));
+  #endif
   _mi_page_free_collect(page, true);  // collect cross-thread free'd blocks so `area.used` is precise.
+  #if MI_QSBR
+  if (claimed && mi_abandoned_page_unown(page, NULL)) return true;
+  #endif
   _mi_heap_area_init(&area, page);
   mi_assert_internal(vinfo->heap == mi_page_heap(page));
   if (!vinfo->visitor(vinfo->heap, &area, NULL, area.block_size, vinfo->arg)) {
@@ -1176,6 +1192,50 @@ bool mi_heap_visit_abandoned_blocks(mi_heap_t* heap, bool visit_blocks, mi_block
   return _mi_heap_visit_blocks(heap, true, visit_blocks, visitor, arg);
 }
 
+#if MI_QSBR
+static bool mi_heap_collect_abandoned_page(mi_page_t* page) {
+  if (!mi_page_is_abandoned(page) || !mi_page_claim_ownership(page)) return true;
+  _mi_page_free_collect(page, true);
+  if (mi_page_all_free(page) && !_mi_page_qsbr_should_delay(page)) {
+    _mi_page_qsbr_clear(page);
+    _mi_arenas_page_unabandon(page, NULL);
+    _mi_arenas_page_free(page, NULL);
+  }
+  else {
+    mi_abandoned_page_unown(page, NULL);
+  }
+  return true;
+}
+
+static bool mi_heap_collect_abandoned_page_at(size_t slice_index, size_t slice_count, mi_arena_t* arena, void* arg) {
+  MI_UNUSED(slice_count); MI_UNUSED(arg);
+  return mi_heap_collect_abandoned_page(mi_arena_page_at_slice(arena, slice_index));
+}
+
+static bool mi_heap_collect_abandoned_arena(mi_arena_t* arena, const void* arg, void** result) {
+  MI_UNUSED(result);
+  mi_heap_t* heap = (mi_heap_t*)arg;
+  mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena);
+  if (arena_pages == NULL) return true;
+  return _mi_bitmap_forall_set(arena_pages->pages, &mi_heap_collect_abandoned_page_at, arena, NULL);
+}
+
+void _mi_heap_collect_abandoned(mi_heap_t* heap) {
+  mi_assert_internal(heap != NULL);
+  mi_lock(&heap->theaps_lock) {
+    // Use the all-pages map: abandoned size-class maps exclude singletons and full pages.
+    mi_forall_arenas(heap, NULL, 0, &mi_heap_collect_abandoned_arena, heap, NULL);
+    mi_page_t* page = NULL;
+    mi_lock(&heap->os_abandoned_pages_lock) { page = heap->os_abandoned_pages; }
+    while (page != NULL) {
+      mi_page_t* next = page->next;
+      mi_heap_collect_abandoned_page(page);
+      page = next;
+    }
+  }
+}
+#endif
+
 
 typedef struct mi_heap_delete_visit_info_s {
   mi_heap_t*  heap_target;
@@ -1191,6 +1251,7 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
   mi_page_t*  const page            = (mi_page_t*)area->reserved1;
 
   mi_page_claim_ownership(page);       // claim ownership
+  _mi_page_qsbr_clear(page); // deletion requires an unprotected heap; destruction requires no readers
   if (mi_page_is_abandoned(page)) {
     _mi_arenas_page_unabandon(page,theap);
   }

@@ -484,16 +484,18 @@ static bool allocate_thread_id_blocks(void) {
   return (read_thread_ids() && mi_run_on_thread(&read_thread_ids));
 }
 
-static bool test_thread_id_of(bool os_pages) {
+static bool test_thread_id_of(bool os_pages, long reclaim_mode) {
   const long disallow = mi_option_get(mi_option_disallow_arena_alloc);
   const long guarded = mi_option_get(mi_option_guarded_sample_rate);
   const long reclaim = mi_option_get(mi_option_page_reclaim_on_free);
   mi_option_set(mi_option_disallow_arena_alloc, (os_pages ? 1 : 0));
   mi_option_set(mi_option_guarded_sample_rate, 0);
-  mi_option_set(mi_option_page_reclaim_on_free, 1);
+  mi_option_set(mi_option_page_reclaim_on_free, reclaim_mode);
   thread_id_heap = mi_heap_new();
+  mi_option_set(mi_option_page_reclaim_on_free, (reclaim_mode == 1 ? -1 : 1));
   mi_theap_t* theap = (thread_id_heap == NULL ? NULL : mi_heap_theap(thread_id_heap));
-  bool result = (theap != NULL && mi_thread_id_of(NULL) == 0);
+  bool result = (theap != NULL && mi_thread_id_of(NULL) == 0 &&
+                 theap->allow_page_reclaim == (reclaim_mode >= 0));
   for (size_t i = 0; i < 3; i++) { thread_id_blocks[i] = NULL; }
   if (result) result = mi_run_on_thread(&allocate_thread_id_blocks);
   if (result) {
@@ -503,10 +505,15 @@ static bool test_thread_id_of(bool os_pages) {
       result = (mi_thread_id_of(thread_id_blocks[i]) == 0 &&
                 mi_thread_id_of((const uint8_t*)thread_id_blocks[i] + 2 * sizeof(size_t)) == 0 && result);
     }
-    mi_free(thread_id_blocks[0]); // reclaim the page containing the second block into this thread
+    mi_free(thread_id_blocks[0]); // only the heap's creation-time mode can permit cross-thread reclaim
     thread_id_blocks[0] = NULL;
-    result = (mi_thread_id_of(thread_id_blocks[1]) == theap->tld->thread_id &&
+    const size_t expected_owner = (reclaim_mode == 1 ? theap->tld->thread_id : 0);
+    result = (mi_thread_id_of(thread_id_blocks[1]) == expected_owner &&
               mi_thread_id_of(thread_id_blocks[2]) == 0 && result);
+  }
+  for (size_t i = 0; i < 3; i++) {
+    mi_free(thread_id_blocks[i]);
+    thread_id_blocks[i] = NULL;
   }
   mi_heap_destroy(thread_id_heap);
   thread_id_heap = NULL;
@@ -533,6 +540,10 @@ static bool test_theap_delete_owner(void) {
       mi_free(mi_theap_malloc(theap, 4096)); // include an empty retired page
       mi_theap_set_default(theap);
       if (cached == 0) {
+        // Reach the statistics update threshold during quiescent abandonment.
+        for (size_t i = 0; i < 0x8000; i++) {
+          mi_free(mi_theap_malloc(theap, sizeof(int)));
+        }
         mi_theap_quiescent_abandon(theap);
         result = (theap->page_count == 0 && theap->tld == tld &&
                   mi_theap_get_default() == theap && mi_heap_theap(heap) == theap &&
@@ -726,8 +737,10 @@ int main(void) {
   CHECK("theap-cleanup-os", test_theap_cleanup(true));
   CHECK("theap-collect-detached", test_theap_collect_detached());
   CHECK("theap-collect-detached-thread", mi_run_on_thread(&test_theap_collect_detached));
-  CHECK("thread-id-of-arena", test_thread_id_of(false));
-  CHECK("thread-id-of-os", test_thread_id_of(true));
+  CHECK("thread-id-of-arena", test_thread_id_of(false, 1));
+  CHECK("thread-id-of-os", test_thread_id_of(true, 1));
+  CHECK("reclaim-on-free-snapshot-disabled", test_thread_id_of(false, -1));
+  CHECK("reclaim-on-free-snapshot-origin-only", test_thread_id_of(false, 0));
   CHECK("arena-order", test_arena_order());
   CHECK("arena-filter", test_arena_filter());
   CHECK("arena-stop", test_arena_stop());

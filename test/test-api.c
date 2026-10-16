@@ -63,6 +63,12 @@ static bool test_heap_destroy_stale_theap(void);
 static bool test_new_first(void);
 #endif
 
+#if !MI_QSBR
+static void mi_cdecl qsbr_record_error(int err, void* arg) {
+  *(int*)arg = err;
+}
+#endif
+
 static bool mem_has_vals(const uint8_t* p, size_t size, uint8_t val) {
   if (p==NULL) return false;
   for (size_t i = 0; i < size; ++i) {
@@ -396,6 +402,17 @@ int main(void) {
     result = mem_is_zero((uint8_t*)ptr + n/2, n/2);    
     mi_free(ptr);
   }
+
+  #if !MI_QSBR
+  CHECK_BODY("heap-qsbr-unavailable") {
+    int err = 0;
+    mi_register_error(&qsbr_record_error, &err);
+    mi_heap_t* heap = mi_heap_new_qsbr();
+    mi_register_error(NULL, NULL);
+    result = (heap == NULL && err == ENOSYS);
+    if (heap != NULL) { mi_heap_destroy(heap); }
+  }
+  #endif
 
   CHECK_BODY("heap_aligned1") {
     mi_heap_t* heap = mi_heap_new();

@@ -97,6 +97,10 @@ int mi_version(void) {
 #define MI_DEFAULT_PAGE_MAX_RECLAIM  (-1)               // unlimited
 #endif
 
+#ifndef MI_DEFAULT_PAGE_FULL_RETAIN
+#define MI_DEFAULT_PAGE_FULL_RETAIN  2
+#endif
+
 #ifndef MI_DEFAULT_PAGE_CROSS_THREAD_MAX_RECLAIM
 #define MI_DEFAULT_PAGE_CROSS_THREAD_MAX_RECLAIM  32
 #endif
@@ -173,7 +177,8 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { 0,   MI_OPTION_UNINIT, MI_OPTION(guarded_sample_seed)},
   { 10000, MI_OPTION_UNINIT, MI_OPTION(generic_collect) },        // collect theaps every N (=10000) generic allocation calls
   { 1,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(page_reclaim_on_free, abandoned_reclaim_on_free) },// reclaim abandoned (small) pages on a free: -1 = disable completely, 0 = only reclaim into the originating theap, 1 = reclaim on free across theaps
-  { 2,   MI_OPTION_UNINIT, MI_OPTION(page_full_retain) },         // number of (small) pages to retain in the free page queues
+  { MI_DEFAULT_PAGE_FULL_RETAIN,
+        MI_OPTION_UNINIT, MI_OPTION(page_full_retain) },         // number of (small) pages to retain in the free page queues
   { 4,   MI_OPTION_UNINIT, MI_OPTION(page_max_candidates) },      // max search to find a best page candidate
   { 0,   MI_OPTION_UNINIT, MI_OPTION(max_vabits) },               // max virtual address space bits
   { MI_DEFAULT_PAGEMAP_COMMIT,

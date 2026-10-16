@@ -50,6 +50,11 @@ static const mi_page_t mi_page_empty = {
   { 0 },                  // key
   #endif
   #endif
+  #if MI_QSBR
+  NULL, NULL,            // qsbr_next, qsbr_prev
+  false,                 // qsbr_in_queue
+  mi_init_struct_zero,    // qsbr
+  #endif
 };
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&mi_page_empty)
@@ -155,6 +160,9 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   MI_PAGE_QUEUES_EMPTY,
   MI_MEMID_STATIC,
   MI_STATS_NULL,          // stats
+  #if MI_QSBR
+  NULL, NULL,            // qsbr_first, qsbr_last
+  #endif
 };
 
 #undef MI_STAT_COUNT
@@ -208,7 +216,7 @@ static void mi_heap_main_init_once(void) {
   // main process heap
   mi_process_heap_main.memid = memid_static;
   mi_atomic_store_ptr_release(mi_heap_t,&subproc_main->heap_main,&mi_process_heap_main);
-  _mi_heap_init(&mi_process_heap_main,mi_thread_local_key_fast,subproc_main,0);
+  _mi_heap_init(&mi_process_heap_main,mi_thread_local_key_fast,subproc_main,0,false);
 
   // detached theap for allocating meta-data (we can allocate on this without having an initialized thread)
   mi_process_theap_meta.memid = memid_static;

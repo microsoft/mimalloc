@@ -181,7 +181,7 @@ mi_subproc_id_t mi_subproc_new(void) {
   mi_subproc_init(subproc,parent);
   
   // init main heap
-  mi_heap_t* heap_main = _mi_heap_new_for_subproc(subproc,0,true);
+  mi_heap_t* heap_main = _mi_heap_new_for_subproc(subproc,0,true,false);
   if (heap_main==NULL) {
     _mi_meta_free(parent, theap_meta, theap_meta->memid);
     mi_subproc_destroy(_mi_subproc_to_id(subproc));
@@ -382,17 +382,15 @@ static void mi_fork_child_abandon_theaps(void) {
   }
 }
 
-static void mi_fork_child(void) {
+void _mi_fork_child(void) {
   mi_fork_child_abandon_theaps();
 }
 
 // Called at process initialization.
 void _mi_fork_init(void) {
-  #if defined(MI_USE_PTHREADS) && !defined(__wasi__) && !defined(__EMSCRIPTEN__)
-  if (pthread_atfork(NULL, NULL, &mi_fork_child) != 0) {
+  #if defined(MI_USE_PTHREADS) && !defined(__wasi__) && !defined(__EMSCRIPTEN__) && !MI_NO_PTHREAD_ATFORK
+  if (pthread_atfork(NULL, NULL, &_mi_fork_child) != 0) {
     _mi_warning_message("unable to register the pthread fork handler\n");
   }
-  #else
-  MI_UNUSED(&mi_fork_child);
   #endif
 }

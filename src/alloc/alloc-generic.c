@@ -163,6 +163,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
     // move the page to the front of the queue
     mi_page_queue_move_to_front(theap, pq, page);
     page->retire_expire = 0;
+    _mi_page_qsbr_clear(page);
     // _mi_theap_collect_retired(theap, false); // update retire counts; note: increases rss on MemoryLoad bench so don't do this
   }
   mi_assert_internal(page == NULL || mi_page_immediate_available(page));
@@ -186,6 +187,7 @@ static inline mi_page_t* mi_page_queue_lookup_free_first(mi_theap_t* theap, mi_p
     MI_UNUSED(theap);
     #endif
     page->retire_expire = 0;
+    _mi_page_qsbr_clear(page);
     mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
     mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
@@ -217,6 +219,7 @@ static inline mi_page_t* mi_page_queue_find_free(mi_theap_t* theap, mi_page_queu
 // Huge pages are also use if the requested alignment is very large (> MI_BLOCK_ALIGNMENT_MAX)
 // so their size is not always `> MI_LARGE_OBJ_SIZE_MAX`.
 static mi_page_t* mi_huge_page_alloc(mi_theap_t* theap, size_t size, size_t page_alignment, mi_page_queue_t* pq) {
+  _mi_theap_qsbr_collect_delayed(theap);
   const size_t block_size = _mi_os_good_alloc_size(size);
   // mi_assert_internal(mi_bin(block_size) == MI_BIN_HUGE || page_alignment > 0);
   #if MI_HUGE_PAGE_ABANDON

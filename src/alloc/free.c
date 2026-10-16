@@ -17,6 +17,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/profile/sample-guarded.h"    // unguard
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/alloc/free.h"
+#include "mimalloc/heap/heap.h"
 
 
 // forward declarations
@@ -66,6 +67,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   const bool is_empty = (mi_xused_used_count(xused) == 0);
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
   if mi_unlikely(is_empty) {      // is used count zero ?
+    _mi_page_qsbr_clear(page);    // a new empty interval must not reuse an earlier grace period
     if (page->retire_expire==0) { // no need to re-retire retired pages (happens when we alloc/free one block repeatedly in an empty page)
       _mi_page_retire(page); 
     }
@@ -464,13 +466,20 @@ bool mi_cfree(void* p) mi_attr_noexcept {
 // 3. if it went to < 7/8th used, re-abandon to be mapped (so it can be found by theaps looking for free pages)
 // --------------------------------------------------------------------------------------------
 
-// Helper for mi_free_try_collect_mt: free if the page has no more used blocks (this is updated by `_mi_page_free_collect(_partly)`)
-static bool mi_abandoned_page_try_free(mi_page_t* page)
+// Consume an empty page, either freeing it or leaving it abandoned until its grace period ends.
+static bool mi_abandoned_page_collect_empty(mi_page_t* page)
 {
   if (!mi_page_all_free(page)) return false;
+  const bool should_delay = _mi_page_qsbr_should_delay(page);
   // first remove it from the abandoned pages in the arena (if mapped, this might wait for any readers to finish)
   _mi_arenas_page_unabandon(page,NULL);
-  _mi_arenas_page_free(page,NULL); // we can now free the page directly
+  if (!should_delay) {
+    _mi_page_qsbr_clear(page);
+    _mi_arenas_page_free(page,NULL);
+  }
+  else {
+    _mi_arenas_page_abandon(page,NULL);
+  }
   return true;
 }
 
@@ -502,7 +511,7 @@ static void mi_abandoned_page_unown_from_free(mi_page_t* page, mi_block_t* page_
     while (mi_tf_block(tf_expect) != NULL) {
       // if there were concurrent updates to the thread-free list, we retry to free or reabandon to mapped (if it became !mosty_used).
       _mi_page_free_collect(page,false);  // update used count
-      if (mi_abandoned_page_try_free(page)) return;
+      if (mi_abandoned_page_collect_empty(page)) return;
       if (mi_abandoned_page_try_reabandon_to_mapped(page)) return;
       // otherwise continue un-owning
       tf_expect = mi_atomic_load_acquire(&page->xthread_free);
@@ -558,6 +567,9 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
     // across threads
     max_reclaim = _mi_option_get_fast(mi_option_page_cross_thread_max_reclaim);
   }
+  else {
+    return false;
+  }
 
   // are we within the reclaim limit?
   if (max_reclaim >= 0 && !mi_page_queue_len_is_atmost(theap, page->block_size, max_reclaim)) {
@@ -594,15 +606,15 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
     _mi_page_free_collect(page,false /* no force */);
     mt_free = NULL; // expected page->xthread_free value after collection
   }
-  const long reclaim_on_free = (allow_reclaim ? _mi_option_get_fast(mi_option_page_reclaim_on_free) : -1);
+  const long reclaim_on_free = mi_heap_reclaim_on_free(mi_page_heap(page));
   #if MI_DEBUG > 1
   if (mi_page_is_singleton(page)) { mi_assert_internal(mi_page_all_free(page)); }
   if (mi_page_is_full(page))      { mi_assert(mi_page_is_mostly_used(page)); }
   #endif
 
   // try to: 1. free it, 2. reclaim it, or 3. reabandon it to be mapped
-  if (mi_abandoned_page_try_free(page)) return;
-  if (page->block_size <= MI_MAX_RECLAIM_OBJ_SIZE && reclaim_on_free >= 0) {  // early test for better codegen
+  if (mi_abandoned_page_collect_empty(page)) return;
+  if (allow_reclaim && page->block_size <= MI_MAX_RECLAIM_OBJ_SIZE && reclaim_on_free >= 0) {  // early test for better codegen
     if (mi_abandoned_page_try_reclaim(page, reclaim_on_free)) return;
   }
   if (mi_abandoned_page_try_reabandon_to_mapped(page)) return;

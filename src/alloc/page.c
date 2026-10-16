@@ -147,7 +147,7 @@ static mi_theap_t* mi_theap_of_page(mi_page_t* page) {
   if mi_unlikely(mi_page_thread_id(page) != _mi_prim_thread_id()) { 
     theap = _mi_page_associated_theap_peek(page);
   }
-  return theap;
+  return (theap != NULL && theap->tld != NULL ? theap : NULL);
 }
 #endif
 
@@ -355,6 +355,7 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
   mi_assert_internal(count <= UINT16_MAX);
   mi_assert_internal(mi_page_used(page) >= count);
   page->xused.used_alloc -= count; // page->used = page->used - (uint16_t)count;
+  if (mi_page_all_free(page)) { _mi_page_qsbr_clear(page); }
 }
 
 // Collect the local `thread_free` list using an atomic exchange.
@@ -461,22 +462,22 @@ void _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page)
   
   mi_page_queue_t* pq = mi_theap_page_queue_of(theap, page);
   mi_page_queue_push_at_end(theap, pq, page);
+  if (!mi_page_all_free(page)) { _mi_page_qsbr_clear(page); }
+  else if (!_mi_page_qsbr_is_clear(page)) { mi_page_qsbr_enqueue(page, theap); }
   mi_assert_expensive(_mi_page_is_valid(page));
 }
 
 void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   _mi_page_free_collect(page, false); // ensure used count is up to date
-  if (mi_page_all_free(page)) {
-    _mi_page_free(page, pq);
-  }
-  else {
-    mi_page_queue_remove(pq, page);
-    mi_theap_t* theap = page->theap;
-    mi_page_set_theap(page, NULL);
-    page->theap = theap; // don't actually set theap to NULL so we can reclaim_on_free within the same theap
-    _mi_arenas_page_abandon(page, theap);
-    // _mi_arenas_collect(false, false, theap->tld); // allow purging
-  }
+  pq = mi_page_queue_of(page); // a preceding release attempt may have unfulled the page
+  if (mi_page_all_free(page) && _mi_page_free(page, pq)) return;
+  pq = mi_page_queue_of(page); // _mi_page_free may have moved an empty page out of the full queue
+  mi_page_queue_remove(pq, page);
+  mi_theap_t* theap = page->theap;
+  mi_page_qsbr_unlink(page);
+  mi_page_set_theap(page, NULL);
+  page->theap = theap; // don't actually set theap to NULL so we can reclaim_on_free within the same theap
+  _mi_arenas_page_abandon(page, theap);
 }
 
 
@@ -566,16 +567,14 @@ void _mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
 }
 
 
-// Free a page with no more free blocks
-void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
+// Physically release an empty page after its grace period has finished.
+static void mi_page_free_prim(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_internal(page != NULL);
+  mi_assert_internal(_mi_page_qsbr_is_clear(page));
   mi_assert_expensive(_mi_page_is_valid(page));
   mi_assert_internal(pq == mi_page_queue_of(page));
   mi_assert_internal(mi_page_all_free(page));
   // mi_assert_internal(mi_page_thread_free_flag(page)!=MI_DELAYED_FREEING);
-
-  // no more aligned blocks in here
-  mi_page_set_has_interior_pointers(page, false);
 
   // remove from the page list
   // (no need to do _mi_theap_delayed_free first as all blocks are already free)
@@ -586,6 +585,30 @@ void _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   mi_page_set_theap(page,NULL);
   _mi_arenas_page_free(page, theap);
   // _mi_arenas_collect(false, false, theap->tld);  // allow purging
+}
+
+// Release an empty page (or retain it until its grace period has finished).
+bool _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
+  mi_assert_internal(mi_page_all_free(page));
+  mi_assert_internal(pq == mi_page_queue_of(page));
+  
+  // no more aligned blocks in here
+  mi_page_set_has_interior_pointers(page, false);
+
+  // try to free
+  if (_mi_page_qsbr_should_delay(page)) {
+    // for pages that are delayed due to qsbr (e.g. in CPython)
+    page->retire_expire = 0;
+    if (mi_page_is_in_full(page)) { _mi_page_unfull(page); }
+    mi_page_qsbr_enqueue(page, mi_page_theap(page));
+    return false;
+  }
+  else {
+    // free the page
+    _mi_page_qsbr_clear(page);
+    mi_page_free_prim(page, pq);
+    return true;
+  }
 }
 
 #define MI_RETIRE_CYCLES      (16)      /* keep a retired page around for about 16 "admin cycles" before free'ing it */
@@ -692,6 +715,7 @@ void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {
   if (!theap->allow_page_abandon) {
     mi_theap_collect_full_pages(theap);
   }
+  _mi_theap_qsbr_collect_delayed(theap);
 }
 
 

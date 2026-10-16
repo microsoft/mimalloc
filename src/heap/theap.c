@@ -13,6 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/arena/arena-alloc.h"
 #include "mimalloc/profile/sample-guarded.h"
+#include "mimalloc/heap/heap.h"
 #include "mimalloc/heap/theap.h"
 
 #if defined(_MSC_VER) && (_MSC_VER < 1920)
@@ -111,11 +112,10 @@ static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_pag
     // no more used blocks, possibly free the page.
     if (collect >= MI_FORCE || page->retire_expire == 0) {  // either forced/abandon, or not already retired
       // note: this will potentially free retired pages as well.
-      _mi_page_free(page, pq);
+      if (_mi_page_free(page, pq)) return true;
     }
   }
-  else if (collect == MI_ABANDON) {
-    // still used blocks but the thread is done; abandon the page
+  if (collect == MI_ABANDON) {
     _mi_page_abandon(page, pq);
   }
   return true; // don't break
@@ -173,11 +173,8 @@ void _mi_theap_abandon_owned_pages(mi_theap_t* theap) {
     while (page != NULL) {
       mi_page_t* const next = page->next;  // save as the page is removed from the queue
       _mi_page_free_collect(page, true);   // collect cross-thread frees so `used` is precise
-      if (mi_page_all_free(page)) { 
-        _mi_page_free(page, pq); 
-      }
-      else { 
-        _mi_page_abandon(page, pq); 
+      if (!mi_page_all_free(page) || !_mi_page_free(page, pq)) {
+        _mi_page_abandon(page, pq);
       }
       page = next;
     }
@@ -221,9 +218,9 @@ mi_theap_t* mi_theap_set_default(mi_theap_t* theap) {
 }
 
 
-static void mi_theap_options_init(mi_theap_t* theap) {
-  theap->allow_page_reclaim = (mi_option_get(mi_option_page_reclaim_on_free) >= 0);
-  theap->allow_page_abandon = (mi_option_get(mi_option_page_full_retain) >= 0);
+static void mi_theap_options_init(mi_theap_t* theap, mi_heap_t* heap) {
+  theap->allow_page_reclaim = (mi_heap_reclaim_on_free(heap) >= 0);
+  theap->allow_page_abandon = (mi_option_get(mi_option_page_full_retain) >= 0 && !mi_heap_qsbr_is_enabled(heap));
   theap->page_full_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
   theap->is_detached = (theap->tld->thread_id == MI_THREADID_DETACHED);
 }
@@ -241,7 +238,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   mi_atomic_store_release(&theap->refcount,1);
   mi_atomic_store_ptr_release(mi_subproc_t,&theap->subproc,heap->subproc);
   mi_assert_internal(theap->stats.size == sizeof(mi_stats_t));
-  mi_theap_options_init(theap);
+  mi_theap_options_init(theap, heap);
 
   if (theap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our theap.
@@ -345,6 +342,9 @@ size_t _mi_theap_random_next(mi_theap_t* theap) {
 
 static void mi_theap_free_mem(mi_theap_t* theap) {
   if (theap!=NULL) {
+    #if MI_QSBR
+    mi_assert_internal(theap->qsbr_first == NULL && theap->qsbr_last == NULL);
+    #endif
     mi_subproc_t* const subproc = mi_atomic_load_ptr_relaxed(mi_subproc_t,&theap->subproc);
     if (!theap->is_detached) {
       mi_subproc_stat_decrease(subproc,theaps,1);
