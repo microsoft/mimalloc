@@ -245,9 +245,6 @@ on Windows to build with the `clang-cl` compiler directly:
 You can also directly build the single `src/static.c` file as part of your project without
 needing `cmake` at all. Make sure to also add the mimalloc `include` directory to the include path.
 
-Runtimes that need to delay empty-page release can use the internal
-[QSBR integration hooks](doc/qsbr.md) in single-source builds.
-
 
 # Using the Library
 
