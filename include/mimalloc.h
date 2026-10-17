@@ -493,7 +493,7 @@ typedef enum mi_option_e {
   mi_option_deprecated_visit_abandoned, // allow visiting theap blocks from abandoned threads (=0)
   mi_option_guarded_min,                // only used when building with MI_GUARDED: minimal rounded object size for guarded objects (=0)
   mi_option_guarded_max,                // only used when building with MI_GUARDED: maximal rounded object size for guarded objects (=0)
-  mi_option_guarded_precise,            // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
+  mi_option_unsafe_guarded_precise,     // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
   mi_option_guarded_sample_rate,        // guard an object in the min/max range about every N requested bytes (=0)
   mi_option_guarded_sample_seed,        // can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0)
   mi_option_generic_collect,            // collect theaps every N (=10000) generic allocation calls

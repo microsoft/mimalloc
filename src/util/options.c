@@ -171,7 +171,7 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { 1,   MI_OPTION_UNINIT, MI_OPTION(deprecated_visit_abandoned) },
   { 0,   MI_OPTION_UNINIT, MI_OPTION(guarded_min) },              // only used when building with MI_GUARDED: minimal rounded object size for guarded objects
   { MI_GiB, MI_OPTION_UNINIT, MI_OPTION(guarded_max) },           // only used when building with MI_GUARDED: maximal rounded object size for guarded objects
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(guarded_precise) },          // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
+  { 0,   MI_OPTION_UNINIT, MI_OPTION(unsafe_guarded_precise) },          // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
   { MI_DEFAULT_GUARDED_SAMPLE_RATE,
          MI_OPTION_UNINIT, MI_OPTION(guarded_sample_rate)},       // guard an object in the min/max range about every N requested bytes (=0)
   { 0,   MI_OPTION_UNINIT, MI_OPTION(guarded_sample_seed)},

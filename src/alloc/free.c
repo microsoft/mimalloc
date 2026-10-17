@@ -216,7 +216,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
 {
   MI_UNUSED_RELEASE(msg); MI_UNUSED(free_small);
   #if MI_DEBUG
-  if mi_unlikely(!mi_is_aligned(p,MI_SIZE_SIZE) && !mi_option_is_enabled(mi_option_guarded_precise)) {
+  if mi_unlikely(!mi_is_aligned(p,MI_SIZE_SIZE) && !mi_option_is_enabled(mi_option_unsafe_guarded_precise)) {
     _mi_error_message(EINVAL, "%s: invalid (unaligned) pointer: %p\n", msg, p);
     return false;
   }

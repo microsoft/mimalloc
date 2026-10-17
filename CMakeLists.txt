@@ -1273,6 +1273,21 @@ if (MI_BUILD_TESTS)
   target_include_directories(mimalloc-test-qsbr PRIVATE include)
   target_link_libraries(mimalloc-test-qsbr PRIVATE ${mi_libraries})
   add_test(NAME test-qsbr COMMAND mimalloc-test-qsbr)
+
+  # Rust crate tests (only if `cargo` is available)
+  find_program(MI_CARGO cargo HINTS "$ENV{CARGO_HOME}/bin" "$ENV{HOME}/.cargo/bin")
+  if(MI_CARGO AND NOT (MI_DEBUG_TSAN OR MI_DEBUG_UBSAN OR (MI_TRACK STREQUAL "ASAN")))
+    message(STATUS "Add Rust crate tests (using ${MI_CARGO})")
+    set(mi_cargo_args test --manifest-path "${CMAKE_CURRENT_SOURCE_DIR}/contrib/rust/Cargo.toml"
+                           --target-dir "${CMAKE_CURRENT_BINARY_DIR}/rust" "$<IF:$<CONFIG:Debug>,--features=debug,--release>")
+    if(MI_SECURE)
+      list(APPEND mi_cargo_args --features=secure)
+    endif()
+    if(MI_OPT_ARCH)
+      list(APPEND mi_cargo_args --features=opt_arch)
+    endif()
+    add_test(NAME test-rust COMMAND ${MI_CARGO} ${mi_cargo_args})
+  endif()
 endif()
 
 # -----------------------------------------------------------------------------
