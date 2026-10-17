@@ -439,7 +439,7 @@ a guard page for every allocation may be too expensive both in terms of memory, 
 many system calls. Therefore, there are various environment variables (and options) to tune this:
 
 - `MIMALLOC_GUARDED_SAMPLE_RATE=N`: Set the sample rate to `N` (by default 0). This mode places a guard page
-  behind every `N` suitable object allocations (per thread). Since the performance in guarded mode without placing
+  behind a suitable object about every `N` requested bytes (per thread). Since the performance in guarded mode without placing
   guard pages is close to release mode, this can be used to enable guard pages even in production to catch latent 
   buffer overflow bugs. Set the sample rate to `1` to guard every object, and to `0` to place no guard pages at all.
 
@@ -613,6 +613,28 @@ For run-time systems and compilers (like Koka, Lean, Rust (?) etc.), we can do s
   skips a theap `NULL` check. Whether this is 
   faster depends a bit on the OS implementation of thread local variables. 
 
+
+# Profiling
+
+Profiling support is only recently added and may still change. 
+The profiling support is "always on", even in release builds and only adds overhead once profiling
+is actually activated. There is a profiling API that allows the use of custom profiling tools
+to hook into mimalloc at runtime, see [`mimalloc-profile.h`](include/mimalloc-profile.h).
+
+However, mimalloc also has a default built-in profiler that can be used with Google's 
+[`pprof`](https://github.com/google/pprof) tools. It can be activated using environment variables:
+
+- `MIMALLOC_PROFILE=<basename>`: set a profile basename, this activates the profiler for the process.
+  This will write _pprof_ compatible `<basename>.<seq>.pb` files.
+  (If you add the extension `.text` it writes old-style heap profiles as readable text).
+  You can later analyze the information information using _pprof_ tools, for example,
+  with a basename of `profile`, we can invoke _pprof_ in the browers as `pprof -http=:8080 ./myprogram  profile.*`  
+- `MIMALLOC_PROFILE_ALLOC_INTERVAL=N`: set the (approximate) number of allocated bytes between saving profile snapshots 
+   of the heap profiler. By default `N` is specified as `1GiB`.
+- `MIMALLOC_PROFILE_INUSE_INTERVAL=N`: when the in-use bytes grow by this amount, take a snapshot. By default disabled (`0`).
+- `MIMALLOC_PROFILE_TIME_INTERVAL=N`: number of seconds between automatic profile snapshots. By default disabled (`0`).
+- `MIMALLOC_PROFILE_SAMPLE_RATE=N`: the sample rate (in bytes) for the heap profiler. Every `N` bytes (approximately,
+  the profiler uses a Poisson distribution to spread samples) a sample is taken at an allocation call site. By default `512KiB`.
 
 # Tools
 

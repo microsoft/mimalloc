@@ -1332,7 +1332,7 @@ typedef enum mi_option_e {
   mi_option_guarded_min,              ///< only used when building with MI_GUARDED: minimal rounded object size for guarded objects (=0)
   mi_option_guarded_max,              ///< only used when building with MI_GUARDED: maximal rounded object size for guarded objects (=0)
   mi_option_guarded_precise,          ///< disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
-  mi_option_guarded_sample_rate,      ///< 1 out of N allocations in the min/max range will be guarded (=1000)
+  mi_option_guarded_sample_rate,      ///< guard an object in the min/max range about every N requested bytes (=0)
   mi_option_guarded_sample_seed,      ///< can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0)
 
   // experimental options
@@ -2036,8 +2036,8 @@ allocated with a guard page takes at least 8 KiB memory for the guard page and i
 a guard page for every allocation may be too expensive both in terms of memory, and in terms of performance with
 many system calls. Therefore, there are various environment variables (and options) to tune this:
 
-- `MIMALLOC_GUARDED_SAMPLE_RATE=N`: Set the sample rate to `N` (by default 4000). This mode places a guard page
-  behind every `N` suitable object allocations (per thread). Since the performance in guarded mode without placing
+- `MIMALLOC_GUARDED_SAMPLE_RATE=N`: Set the sample rate to `N` (by default 0). This mode places a guard page
+  behind a suitable object about every `N` requested bytes (per thread). Since the performance in guarded mode without placing
   guard pages is close to release mode, this can be used to enable guard pages even in production to catch latent 
   buffer overflow bugs. Set the sample rate to `1` to guard every object, and to `0` to place no guard pages at all.
 
