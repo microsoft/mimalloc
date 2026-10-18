@@ -668,8 +668,6 @@ mi_decl_noinline mi_block_t* _mi_block_next_is_corrupted(const mi_page_t* page, 
 // Initialize options by checking the environment
 // --------------------------------------------------------
 
-// TODO: implement ourselves to reduce dependencies on the C runtime
-
 static void mi_option_init(mi_option_desc_t* desc) {
   // Read option value from the environment
   char s[64 + 1];
@@ -701,11 +699,11 @@ static void mi_option_init(mi_option_desc_t* desc) {
       desc->init = MI_OPTION_INITIALIZED;
     }
     else {
-      char* end = buf;
-      errno = 0;
-      long value = strtol(buf, &end, 10);
-      if (errno==0 && (mi_option_has_size_in_kib(desc->option) || mi_option_has_size_in_bytes(desc->option))) {
-        // this option is interpreted in bytes. 
+      const char* end = buf;
+      long value = 0;
+      const bool ok = _mi_strtol(buf, &end, &value);
+      if (ok && (mi_option_has_size_in_kib(desc->option) || mi_option_has_size_in_bytes(desc->option))) {
+        // the size is interpreted in bytes. 
         size_t size = (value < 0 ? 0 : (size_t)value);
         bool overflow = false;
         if (*end == 'K') { end++; }
@@ -726,7 +724,7 @@ static void mi_option_init(mi_option_desc_t* desc) {
         }
         value = (size > LONG_MAX ? LONG_MAX : (long)size);
       }
-      if (errno==0 && *end == 0) {
+      if (ok && *end == 0) {
         mi_option_set(desc->option, value);
       }
       else {
