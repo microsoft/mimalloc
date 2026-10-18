@@ -29,9 +29,11 @@ int main(void) {
 #define THREADS  4
 #define FORKS    100
 #define LIVE     1000
+#define REMOTE   64
 
 static volatile int stop = 0;
 static void* live[LIVE];  // allocated by a thread that is blocked during the forks
+static void* remote[REMOTE];
 static mi_theap_t* live_theap;
 static pthread_mutex_t live_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  live_cond = PTHREAD_COND_INITIALIZER;
@@ -101,6 +103,7 @@ static void* holder(void* arg) {
     memset(live[i], (int)(i & 0xFF), live_size(i));
   }
   mi_free(mi_malloc(4096)); // leave an empty retired page for child cleanup
+  for (size_t i = 0; i < REMOTE; i++) mi_free(remote[i]);
   pthread_mutex_lock(&live_lock);
   live_ready = 1;
   pthread_cond_broadcast(&live_cond);
@@ -109,7 +112,19 @@ static void* holder(void* arg) {
   return NULL;
 }
 
+static bool check_remote_freed(const mi_heap_t* heap, const mi_heap_area_t* area,
+                              void* block, size_t size, void* arg) {
+  (void)heap; (void)area; (void)size;
+  for (size_t i = 0; block != NULL && i < REMOTE; i++) {
+    if (block == remote[i]) *(bool*)arg = false;
+  }
+  return true;
+}
+
 static bool child_check(void) {
+  bool remote_freed = true;
+  mi_collect(true);
+  if (!mi_heap_visit_blocks(mi_heap_main(), true, check_remote_freed, &remote_freed) || !remote_freed) return false;
   mi_theap_quiescent_abandon(live_theap); // the fork handler may already have abandoned this dead thread
   // free blocks of a thread that does not exist in the child
   for (size_t i = 0; i < LIVE; i++) {
@@ -148,6 +163,7 @@ static int run_child(int depth) {
 
 int main(void) {
   mi_thread_init(); // retain a different theap for the same heap in the surviving thread
+  for (size_t i = 0; i < REMOTE; i++) remote[i] = mi_malloc(64);
   pthread_t hold;
   pthread_create(&hold, NULL, &holder, NULL);
   pthread_mutex_lock(&live_lock);

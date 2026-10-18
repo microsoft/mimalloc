@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/util/random.h"
 #include "mimalloc/util/stats.h"
 #include "mimalloc/alloc/page.h"
+#include "mimalloc/alloc/free.h"
 #include "mimalloc/arena/arena-alloc.h"
 #include "mimalloc/profile/sample-guarded.h"
 #include "mimalloc/heap/heap.h"
@@ -135,6 +136,9 @@ static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
   const bool force = (collect >= MI_FORCE);
   if (collect != MI_ABANDON) {     // skip on thread shutdown to avoid running user-code after process exit (issue #1377)
     _mi_deferred_free(theap, force);
+  }
+  if (theap->tld->thread_id == _mi_prim_thread_id()) {
+    _mi_free_collect(theap->tld);
   }
 
   // python/cpython#112532: we may be called from a thread that is not the owner of the theap

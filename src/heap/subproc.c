@@ -14,6 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/profile/sample-profile.h"
 #include "mimalloc/heap/subproc.h"
 #include "mimalloc/util/threadlocal.h"
+#include "mimalloc/alloc/free.h"
 
 // pre-allocate the main subprocess structure.
 static mi_decl_cache_align mi_subproc_t mi_process_subproc_main = mi_init_struct_zero;
@@ -358,6 +359,10 @@ static void mi_fork_child_abandon_theaps(void) {
         mi_theap_t* const next = theap->hnext;
         mi_tld_t* const tld = theap->tld;
         if (tld != NULL && tld != tld_current && tld->thread_id != MI_THREADID_DETACHED) {
+          if (tld->free_batch_heap != NULL) {
+            tld->free_batch_heap = NULL;
+            _mi_free_collect(tld);
+          }
           // remove from the heap list and push on the dead list
           if (theap->hnext != NULL) { theap->hnext->hprev = theap->hprev; }
           if (theap->hprev != NULL) { theap->hprev->hnext = theap->hnext; }
