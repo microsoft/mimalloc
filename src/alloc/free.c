@@ -652,8 +652,8 @@ static void mi_free_batch_publish(mi_tld_t* tld, mi_free_batch_t* batch) {
   batch->page = NULL;
   batch->head = batch->tail = NULL;
   batch->count = 0;
-  // Cache draining also runs for vanished threads after fork; do not reclaim.
-  mi_free_block_mt_publish(page, head, tail, false);
+  const bool allow_reclaim = (tld->thread_id == _mi_prim_thread_id());
+  mi_free_block_mt_publish(page, head, tail, allow_reclaim);
 }
 
 void _mi_free_collect(mi_tld_t* tld) {
