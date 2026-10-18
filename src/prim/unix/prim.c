@@ -174,6 +174,28 @@ static bool unix_detect_thp(void) {
   return thp_enabled;
 }
 
+static size_t unix_detect_large_page_size(void) {
+  size_t large_page_size = MI_UNIX_LARGE_PAGE_SIZE;
+  #if defined(__linux__)
+  int fd = mi_prim_open("/proc/meminfo", O_RDONLY);
+  if (fd >= 0) {
+    char buf[512];
+    ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+    mi_prim_close(fd);
+    if ((nread >= 1) && (nread < (ssize_t)sizeof(buf))) {
+      char* label = _mi_strnstr(buf,nread,"Hugepagesize:");
+      if (label != NULL) {
+        long size_in_kib = 0;
+        if (_mi_strtol(label + 13, NULL, &size_in_kib) && size_in_kib > 0) {
+          mi_mul_overflow((size_t)size_in_kib, MI_KiB, &large_page_size);
+        }
+      }
+    }
+  }
+  #endif
+  return large_page_size;
+}
+
 // try to detect the physical memory dynamically (if possible)
 static void unix_detect_physical_memory( size_t page_size, size_t* physical_memory_in_kib ) {
   #if defined(CTL_HW) && (defined(HW_PHYSMEM64) || defined(HW_MEMSIZE))  // freeBSD, macOS
@@ -258,12 +280,19 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     config->alloc_granularity = (size_t)psize;
     unix_detect_physical_memory(config->page_size, &config->physical_memory_in_kib);
   }
-  config->large_page_size = MI_UNIX_LARGE_PAGE_SIZE;
+  config->large_page_size = unix_detect_large_page_size();
   config->has_overcommit = unix_detect_overcommit();
   config->has_partial_free = true;    // mmap can free in parts
   config->has_virtual_reserve = true; // todo: check if this true for NetBSD?  (for anonymous mmap with PROT_NONE)
-  config->has_transparent_huge_pages = unix_detect_thp();
   config->virtual_address_bits = unix_detect_virtual_address_bits();
+
+  // if large pages are too large, disable madvise for transparent huge pages; see issue #1431
+  if (config->large_page_size > 4*MI_UNIX_LARGE_PAGE_SIZE) {
+    config->has_transparent_huge_pages = false;
+  }
+  else {
+    config->has_transparent_huge_pages = unix_detect_thp();  
+  }
 
   // disable transparent huge pages for this process?
   #if (defined(__linux__) || defined(__ANDROID__)) && defined(PR_GET_THP_DISABLE)
