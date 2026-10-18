@@ -103,12 +103,14 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
   // push atomically on the page thread free list
   // mi_theap_t* theap = _mi_page_associated_theap_peek(page);
   mi_thread_free_t tf_new;
-  mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
+  mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);  
   do {
     mi_block_set_next(page, block, mi_tf_block(tf_old));
     tf_new = mi_tf_create(block, true);
-  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new)); 
-
+  } while (!mi_atomic_cas_weak(&page->xthread_free, &tf_old, tf_new,
+                                mi_tf_is_owned(tf_old) ? mi_memory_order(release) : mi_memory_order(acq_rel), // release is enough if we dont change ownership
+                                mi_memory_order(relaxed))); // on fail
+  
   // and atomically try to collect the page if it was abandoned
   const bool is_newly_owned = mi_tf_is_owned(tf_new) && !mi_tf_is_owned(tf_old);
   if (is_newly_owned) {
