@@ -701,7 +701,7 @@ static void mi_option_init(mi_option_desc_t* desc) {
     else {
       const char* end = buf;
       long value = 0;
-      const bool ok = _mi_strtol(buf, &end, &value);
+      const bool ok = _mi_strntol(buf, sizeof(buf), &end, &value);
       if (ok && (mi_option_has_size_in_kib(desc->option) || mi_option_has_size_in_bytes(desc->option))) {
         // the size is interpreted in bytes. 
         size_t size = (value < 0 ? 0 : (size_t)value);

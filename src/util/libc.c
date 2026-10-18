@@ -131,30 +131,32 @@ static int mi_digit_value(char c, int base) {
   return -1;
 }
 
-// Parse decimal or 0x hexadecimal without errno, skipping at most 128 leading whitespace characters.
+// Parse up to max_len bytes without errno or requiring a terminator; skip at most 128 whitespace characters.
 // Allow at most 64 digits; leading zeros are allowed only in hexadecimal.
 // On failure, result is zero (clamped on overflow); end is s if no digits, otherwise the stopping point.
-bool _mi_strtol(const char* s, const char** end, long* result) {
+bool _mi_strntol(const char* s, size_t max_len, const char** end, long* result) {
   if (end != NULL) { *end = s; }
   if (result != NULL) { *result = 0; }
   if (s == NULL) return false;
   size_t i = 0;
-  while (i < 128 && mi_isspace(s[i])) { i++; }
+  while (i < max_len && i < 128 && mi_isspace(s[i])) { i++; }
+  if (i == max_len) return false;
   const bool neg = (s[i] == '-');
   if (neg || s[i] == '+') { i++; }
+  if (i == max_len) return false;
   int base = 10;
-  if (s[i] == '0' && (s[i+1] == 'x' || s[i+1] == 'X')) {
+  if (i + 1 < max_len && s[i] == '0' && (s[i+1] == 'x' || s[i+1] == 'X')) {
     base = 16;
     i += 2;
   }
-  if (base == 10 && s[i] == '0' && mi_digit_value(s[i+1], base) >= 0) return false;
+  if (base == 10 && i + 1 < max_len && s[i] == '0' && mi_digit_value(s[i+1], base) >= 0) return false;
   const size_t start = i;
   // Accumulate negatively so LONG_MIN is representable without unsigned arithmetic.
   const long limit = (neg ? LONG_MIN : -LONG_MAX);
   const long cutoff = limit / base;
   const long cutlim = -(limit % base);
   long acc = 0;
-  while (i - start < 64) {
+  while (i < max_len && i - start < 64) {
     const int digit = mi_digit_value(s[i], base);
     if (digit < 0) break;
     if (acc < cutoff || (acc == cutoff && digit > cutlim)) {
@@ -167,7 +169,7 @@ bool _mi_strtol(const char* s, const char** end, long* result) {
   }
   if (i == start) return false;
   if (end != NULL) { *end = s + i; }
-  if (i - start == 64 && mi_digit_value(s[i], base) >= 0) return false;
+  if (i < max_len && i - start == 64 && mi_digit_value(s[i], base) >= 0) return false;
   if (result != NULL) { *result = (neg ? acc : -acc); }
   return true;
 }

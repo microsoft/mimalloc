@@ -134,12 +134,13 @@ static bool unix_detect_overcommit(void) {
   #if defined(__linux__)
     int fd = mi_prim_open("/proc/sys/vm/overcommit_memory", O_RDONLY);
     if (fd >= 0) {
-      char buf[32];
-      ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+      char buf[64];
+      ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf)-1);
       mi_prim_close(fd);
       // <https://www.kernel.org/doc/Documentation/vm/overcommit-accounting>
       // 0: heuristic overcommit, 1: always overcommit, 2: never overcommit (ignore NORESERVE)
-      if (nread >= 1) {
+      if (nread >= 1 && nread < (ssize_t)sizeof(buf)) {
+        buf[nread] = 0;
         os_overcommit = (buf[0] == '0' || buf[0] == '1');
       }
     }
@@ -161,12 +162,12 @@ static bool unix_detect_thp(void) {
   int fd = mi_prim_open("/sys/kernel/mm/transparent_hugepage/enabled", O_RDONLY);
   if (fd >= 0) {
     char buf[64];
-    ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+    ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf)-1);
     mi_prim_close(fd);
     // <https://www.kernel.org/doc/html/latest/admin-guide/mm/transhuge.html>
     // between brackets is the current value, for example: always [madvise] never
-    if (nread >= 1) {
-      if (nread > 64) { nread = 64; }
+    if (nread >= 1 && nread < (ssize_t)sizeof(buf)) {
+      buf[nread] = 0;
       thp_enabled = (_mi_strnstr(buf,nread,"[never]") == NULL);
     }
   }
@@ -181,11 +182,12 @@ static size_t unix_detect_large_page_size(void) {
   const int fd = mi_prim_open("/sys/kernel/mm/transparent_hugepage/hpage_pmd_size", O_RDONLY);
   if (fd >= 0) {
     char buf[64];
-    const ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+    const ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf)-1);
     mi_prim_close(fd);
-    if (nread >= 1) {
+    if (nread >= 1 && nread < (ssize_t)sizeof(buf)) {
+      buf[nread] = 0;
       long size = 0;
-      if (_mi_strtol(buf, NULL, &size) && size > 0 && size <= SIZE_MAX) {
+      if (_mi_strntol(buf, nread, NULL, &size) && size > 0 && size <= SIZE_MAX) {
         large_page_size = (size_t)size;
       }
     }
@@ -257,9 +259,10 @@ static size_t unix_detect_virtual_address_bits(void) {
     const int fd = mi_prim_open("/proc/cpuinfo", O_RDONLY);
     if (fd >= 0) {
       char buf[2048];
-      const ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+      const ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf)-1);
       mi_prim_close(fd);
-      if ((nread >= 1) && (nread <= (ssize_t)sizeof(buf))) {
+      if ((nread >= 1) && (nread < (ssize_t)sizeof(buf))) {
+        buf[nread] = 0;
         if (_mi_strnstr(buf, nread, "sv39")) { return 39; }
         else if (_mi_strnstr(buf, nread, "sv48")) { return 48; }
         else if (_mi_strnstr(buf, nread, "sv57")) { return 57; }
