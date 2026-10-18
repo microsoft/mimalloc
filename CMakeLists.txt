@@ -902,7 +902,7 @@ endif()
 # set language for source files now
 if(MI_USE_CXX)
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
-  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-arena.c test/test-bitmap.c test/test-qsbr.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-stress-pprof.c test/test-profile.c test/test-pprof.c test/test-fork.c PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-arena.c test/test-bitmap.c test/test-free-batch.c test/test-qsbr.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-stress-pprof.c test/test-profile.c test/test-pprof.c test/test-fork.c PROPERTIES LANGUAGE CXX )
 endif()
 
 # platform specific headers that are only needed for profiling support
@@ -1266,13 +1266,15 @@ if (MI_BUILD_TESTS)
     endif()
   endif()
 
-  # The QSBR adapter embeds its own allocator with an extended internal layout.
-  add_executable(mimalloc-test-qsbr test/test-qsbr.c)
-  target_compile_definitions(mimalloc-test-qsbr PRIVATE ${mi_defines})
-  target_compile_options(mimalloc-test-qsbr PRIVATE ${mi_cflags})
-  target_include_directories(mimalloc-test-qsbr PRIVATE include)
-  target_link_libraries(mimalloc-test-qsbr PRIVATE ${mi_libraries})
-  add_test(NAME test-qsbr COMMAND mimalloc-test-qsbr)
+  # These tests embed the allocator to inspect internal state or extend its layout.
+  foreach(TEST_NAME qsbr free-batch)
+    add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
+    target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
+    target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})
+    target_include_directories(mimalloc-test-${TEST_NAME} PRIVATE include)
+    target_link_libraries(mimalloc-test-${TEST_NAME} PRIVATE ${mi_libraries})
+    add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
+  endforeach()
 
   # Rust crate tests (only if `cargo` is available)
   find_program(MI_CARGO cargo HINTS "$ENV{CARGO_HOME}/bin" "$ENV{HOME}/.cargo/bin")

@@ -14,5 +14,7 @@ mi_block_t*   _mi_page_ptr_unalign(const mi_page_t* page, const void* p);
 void          _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block, const size_t min_size);
 void          _mi_free_subproc_safe(void* p) mi_attr_noexcept;
 size_t        _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr_noexcept;
+// Requires the owning thread, or a vanished thread's quiesced state after fork.
+void          _mi_free_collect(mi_tld_t* tld);
 
 #endif
