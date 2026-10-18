@@ -177,18 +177,16 @@ static bool unix_detect_thp(void) {
 static size_t unix_detect_large_page_size(void) {
   size_t large_page_size = MI_UNIX_LARGE_PAGE_SIZE;
   #if defined(__linux__)
-  int fd = mi_prim_open("/proc/meminfo", O_RDONLY);
+  // get the transparent huge page size from the pmd size
+  const int fd = mi_prim_open("/sys/kernel/mm/transparent_hugepage/hpage_pmd_size", O_RDONLY);
   if (fd >= 0) {
-    char buf[512];
-    ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+    char buf[64];
+    const ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
     mi_prim_close(fd);
-    if ((nread >= 1) && (nread < (ssize_t)sizeof(buf))) {
-      char* label = _mi_strnstr(buf,nread,"Hugepagesize:");
-      if (label != NULL) {
-        long size_in_kib = 0;
-        if (_mi_strtol(label + 13, NULL, &size_in_kib) && size_in_kib > 0) {
-          mi_mul_overflow((size_t)size_in_kib, MI_KiB, &large_page_size);
-        }
+    if (nread >= 1) {
+      long size = 0;
+      if (_mi_strtol(buf, NULL, &size) && size > 0 && size <= SIZE_MAX) {
+        large_page_size = (size_t)size;
       }
     }
   }
