@@ -44,7 +44,7 @@ bool _mi_os_has_virtual_reserve(void) {
   return mi_os_mem_config.has_virtual_reserve;
 }
 
-bool _mi_os_canuse_thp(void) {
+bool _mi_os_has_thp(void) {
   return mi_os_mem_config.has_transparent_huge_pages;
 }
 
