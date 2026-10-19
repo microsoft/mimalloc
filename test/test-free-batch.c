@@ -48,11 +48,11 @@ static bool free_blocks(void) {
     const unsigned char* p = (const unsigned char*)blocks[i];
     if (p[0] != i % 251 || p[sizes[i]-1] != i % 251) return false;
     mi_free(blocks[i]);
-    if (tld->free_batch_bytes >= MI_FREE_BATCH_BYTES) return false;
-    if (tld->free_batch_bytes != 0) pending = true;
+    if (tld->free_batch.batched_total >= MI_FREE_BATCH_BYTES) return false;
+    if (tld->free_batch.batched_total != 0) pending = true;
   }
   if (disposable != NULL) {
-    if (tld->free_batch_bytes != 0) return false;
+    if (tld->free_batch.batched_total != 0) return false;
     mi_heap_destroy(disposable);
     disposable = NULL;
     mi_collect(true);
@@ -61,13 +61,13 @@ static bool free_blocks(void) {
   if (!pending) return false;
   if (mode == 0) {
     mi_collect(true);
-    return tld->free_batch_bytes == 0;
+    return tld->free_batch.batched_total == 0;
   }
   if (mode == 1) {
     mi_thread_done();
     if (_mi_thread_is_initialized()) return false;
     mi_thread_init();
-    return _mi_theap_default()->tld->free_batch_bytes == 0;
+    return _mi_theap_default()->tld->free_batch.batched_total == 0;
   }
   return true;  // automatic thread cleanup must publish the remaining blocks
 }

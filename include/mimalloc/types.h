@@ -798,11 +798,18 @@ typedef int64_t  mi_msecs_t;
 #define MI_FREE_BATCH_COUNT 64
 #define MI_FREE_BATCH_BYTES (256*MI_KiB)
 
-typedef struct mi_free_batch_s {
+typedef struct mi_free_batch_entry_s {
   mi_page_t*  page;
   mi_block_t* head;
   mi_block_t* tail;
   size_t      count;
+} mi_free_batch_entry_t;
+
+typedef struct mi_free_batch_s {
+  mi_heap_t*            heap;                 // eligible heap; NULL during initialization, collection, and teardown
+  size_t                batched_total;
+  bool                  collecting;
+  mi_free_batch_entry_t entries[MI_FREE_BATCH_COUNT];
 } mi_free_batch_t;
 
 // Thread local data
@@ -816,10 +823,7 @@ struct mi_tld_s {
   bool                  recurse;              // true if deferred was called; used to prevent infinite recursion.
   bool                  is_in_threadpool;     // true if this thread is part of a threadpool (and can run arbitrary tasks)
   mi_memid_t            memid;                // provenance of the tld memory itself (meta or OS)
-  mi_heap_t*            free_batch_heap;      // eligible heap; NULL during initialization, collection, and teardown
-  size_t                free_batch_bytes;
-  bool                  free_batch_collecting;
-  mi_free_batch_t       free_batches[MI_FREE_BATCH_COUNT];
+  mi_free_batch_t       free_batch;
 };
 
 
