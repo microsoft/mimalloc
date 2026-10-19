@@ -641,11 +641,10 @@ typedef struct mi_free_batch_entry_s {
   mi_page_t*  page;
   mi_block_t* head;
   mi_block_t* tail;
-  size_t      count;
 } mi_free_batch_entry_t;
 
 typedef struct mi_free_batch_s {
-  size_t                batched_total;
+  size_t                batched_total;       // bytes queued since the last full collection
   bool                  enabled;
   bool                  collecting;
   mi_free_batch_entry_t entries[MI_FREE_BATCH_COUNT];

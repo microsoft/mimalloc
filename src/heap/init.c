@@ -161,7 +161,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   NULL, NULL,             // hnext, hprev
   MI_PAGE_QUEUES_EMPTY,
   MI_MEMID_STATIC,
-  { 0, false, false, { { NULL, NULL, NULL, 0 } } },
+  { 0, false, false, { { NULL, NULL, NULL } } },
   MI_STATS_NULL,          // stats
   #if MI_QSBR
   NULL, NULL,            // qsbr_first, qsbr_last
