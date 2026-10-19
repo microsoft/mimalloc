@@ -74,8 +74,14 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
 
   // initialize thread first in case this is the main heap
   // (which may allocate the default theap already for the main heap)
-  if (!_mi_thread_is_initialized()) {
+  mi_theap_t* main = _mi_theap_main();
+  if (main == NULL || !mi_theap_is_initialized(main)) {
     mi_thread_init();
+    main = _mi_theap_main();
+  }
+  if (main == NULL || main->tld == NULL) {
+    _mi_error_message(EFAULT, "unable to initialize thread local heap state\n");
+    return NULL;
   }
 
   // get the thread local theap
@@ -84,12 +90,15 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
   // create a fresh theap?
   if (theap==NULL) {
     // allocate a fresh theap
-    theap = _mi_theap_create(heap, mi_theap_get_default()->tld); // sets the theap thread local
+    theap = _mi_theap_create(heap, main->tld);
     if (theap==NULL) {
       _mi_error_message(EFAULT, "unable to allocate memory for a thread local heap\n");
       return NULL;
     }
-    _mi_heap_theap_set(heap, theap);
+    if (!_mi_heap_theap_set(heap, theap)) {
+      mi_theap_delete(theap);
+      return NULL;
+    }
     mi_assert_internal(theap == (mi_theap_t*)_mi_thread_local_get(heap->theap));
   }
   return theap;
@@ -202,13 +211,16 @@ static void mi_heap_free_theaps(mi_heap_t* heap) {
   mi_lock(&heap->theaps_lock) { // paranoia
     mi_theap_t* theap = heap->theaps;
     heap->theaps = NULL;
+    // Keep all theaps alive until their batches and owned pages have been processed.
+    for (mi_theap_t* current = theap; current != NULL; current = current->hnext) {
+      mi_assert_internal(current->tld == NULL);
+      _mi_theap_abandon_owned_pages(current);
+    }
     while(theap != NULL) {
       mi_theap_t* next = theap->hnext;
       theap->hnext = NULL;
       theap->hprev = NULL;
       mi_assert_internal(theap->tld==NULL);
-      // abandon any owned pages into the heap-wide registries so heap delete/destroy can visit them
-      _mi_theap_abandon_owned_pages(theap);
       // clear the heap so a stale `_mi_theap_cached` entry in another thread no longer matches
       // (a new heap can be allocated at the same address and would otherwise pick up this freed theap)
       mi_atomic_store_ptr_release(mi_heap_t, &theap->heap, NULL);

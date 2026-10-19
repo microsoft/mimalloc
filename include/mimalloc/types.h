@@ -639,6 +639,23 @@ typedef struct mi_padding_s {
 
 #define MI_PAGES_DIRECT   (MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE + 1)
 
+#define MI_FREE_BATCH_COUNT 64
+#define MI_FREE_BATCH_BYTES (256*MI_KiB)
+
+typedef struct mi_free_batch_entry_s {
+  mi_page_t*  page;
+  mi_block_t* head;
+  mi_block_t* tail;
+  size_t      count;
+} mi_free_batch_entry_t;
+
+typedef struct mi_free_batch_s {
+  size_t                batched_total;
+  bool                  enabled;
+  bool                  collecting;
+  mi_free_batch_entry_t entries[MI_FREE_BATCH_COUNT];
+} mi_free_batch_t;
+
 
 // A thread-local heap ("theap") owns a set of thread-local pages.
 struct mi_theap_s {
@@ -691,6 +708,7 @@ struct mi_theap_s {
   // page queues
   mi_page_queue_t       pages[MI_BIN_COUNT];                 // queue of pages for each size class (or "bin")
   mi_memid_t            memid;                               // provenance of the theap struct itself (meta or os)
+  mi_free_batch_t       free_batch;
   mi_stats_t            stats;                               // thread-local statistics
   #if MI_QSBR
   mi_page_t*           qsbr_first;
@@ -800,23 +818,6 @@ struct mi_subproc_s {
 // Milliseconds as in `int64_t` to avoid overflows
 typedef int64_t  mi_msecs_t;
 
-#define MI_FREE_BATCH_COUNT 64
-#define MI_FREE_BATCH_BYTES (256*MI_KiB)
-
-typedef struct mi_free_batch_entry_s {
-  mi_page_t*  page;
-  mi_block_t* head;
-  mi_block_t* tail;
-  size_t      count;
-} mi_free_batch_entry_t;
-
-typedef struct mi_free_batch_s {
-  mi_heap_t*            heap;                 // eligible heap; NULL during initialization, collection, and teardown
-  size_t                batched_total;
-  bool                  collecting;
-  mi_free_batch_entry_t entries[MI_FREE_BATCH_COUNT];
-} mi_free_batch_t;
-
 // Thread local data
 struct mi_tld_s {
   mi_threadid_t         thread_id;            // thread id of this thread
@@ -828,8 +829,8 @@ struct mi_tld_s {
   bool                  recurse;              // true if deferred was called; used to prevent infinite recursion.
   bool                  in_profiler;          // true while in a profiler `on_alloc` callback; nested allocations are not sampled
   bool                  is_in_threadpool;     // true if this thread is part of a threadpool (and can run arbitrary tasks)
+  bool                  free_batch_disabled; // suppress lazy theap creation during initialization and shutdown
   mi_memid_t            memid;                // provenance of the tld memory itself (meta or OS)
-  mi_free_batch_t       free_batch;
 };
 
 

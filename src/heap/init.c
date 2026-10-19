@@ -129,8 +129,8 @@ static mi_decl_cache_align mi_tld_t mi_tld_detached = {
   false,                  // recurse
   false,                  // in_profiler
   false,                  // is_in_threadpool
+  true,                   // free_batch_disabled
   MI_MEMID_STATIC,        // memid
-  { NULL, 0, false, { { NULL, NULL, NULL, 0 } } }
 };
 
 #ifdef __cplusplus
@@ -162,6 +162,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   NULL, NULL,             // hnext, hprev
   MI_PAGE_QUEUES_EMPTY,
   MI_MEMID_STATIC,
+  { 0, false, false, { { NULL, NULL, NULL, 0 } } },
   MI_STATS_NULL,          // stats
   #if MI_QSBR
   NULL, NULL,            // qsbr_first, qsbr_last
@@ -269,10 +270,7 @@ mi_theap_t* _mi_theap_main(void) {
 static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc) {
   tld->subproc = subproc;
   tld->theaps = NULL;
-  tld->free_batch.heap = NULL;
-  tld->free_batch.batched_total = 0;
-  tld->free_batch.collecting = false;
-  mi_memzero(tld->free_batch.entries, sizeof(tld->free_batch.entries));
+  tld->free_batch_disabled = (tld->thread_id == MI_THREADID_DETACHED);
   mi_lock_init(&tld->theaps_lock);
   if (tld->thread_id == MI_THREADID_DETACHED) {
     tld->numa_node = -1;
@@ -311,7 +309,6 @@ static mi_tld_t* mi_tld_create(mi_subproc_t* subproc) {
 
 mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
   if (tld==NULL) return;
-  mi_assert_internal(tld->free_batch.batched_total == 0);
   mi_atomic_decrement_relaxed(&tld->subproc->thread_count);
   tld->thread_id = (mi_threadid_t)(~0);          // it is best to set an invalid tid for tld_main as sometimes the same thread-id
                                                  // is reused by the OS after a thread has terminated. (see issue #1287)
@@ -394,9 +391,6 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
   mi_assert_internal(heap_main==NULL || heap_theap == theap); MI_UNUSED_RELEASE(heap_theap);
 
   mi_subproc_stat_increase(mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?
-  if (_mi_subproc_is_main(theap->tld->subproc)) {
-    theap->tld->free_batch.heap = &mi_process_heap_main;
-  }
   // _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
   return theap;
 }
@@ -502,7 +496,7 @@ void _mi_thread_done(mi_theap_t* _theap_main)
 {
   // NULL can be passed on some platforms
   if (_theap_main==NULL) {
-    _theap_main = _mi_theap_default();
+    _theap_main = _mi_theap_main();
   }
 
   // prevent re-entrancy through theap_done/theap_set_default_direct (issue #699)
@@ -514,8 +508,7 @@ void _mi_thread_done(mi_theap_t* _theap_main)
   mi_tld_t* const tld = _theap_main->tld;
 
   if (tld->thread_id == _mi_prim_thread_id()) {
-    tld->free_batch.heap = NULL;
-    _mi_free_collect(tld);
+    _mi_free_collect_all(tld, true);
   }
 
   // release dynamic thread_local's
@@ -648,10 +641,9 @@ void mi_process_init(void) mi_attr_noexcept {
 // Called once on process exit (when the process/dll is exiting gracefully)
 static void mi_process_unwind_once(void)
 {
-  mi_theap_t* const theap = _mi_theap_default();
+  mi_theap_t* const theap = _mi_theap_main();
   if (theap != NULL && theap->tld != NULL) {
-    theap->tld->free_batch.heap = NULL;
-    _mi_free_collect(theap->tld);
+    _mi_free_collect_all(theap->tld, true);
   }
 
   // stop the profiler

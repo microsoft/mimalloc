@@ -359,6 +359,7 @@ static bool test_heap_page_count_os(void) {
       _mi_theap_collect_abandon(theap);
       result = (theap->page_count_os == 0 && result);
       mi_free(p); // reclaim the page containing q into the originating theap
+      mi_heap_collect(heap, false);
       result = (theap->page_count_os == 1 && result);
       block_visit_t visit = { 0, 0, false, false };
       result = (mi_heap_visit_blocks(heap, true, &block_record, &visit) && visit.blocks == 1 && result);
@@ -506,6 +507,7 @@ static bool test_thread_id_of(bool os_pages, long reclaim_mode) {
                 mi_thread_id_of((const uint8_t*)thread_id_blocks[i] + 2 * sizeof(size_t)) == 0 && result);
     }
     mi_free(thread_id_blocks[0]); // only the heap's creation-time mode can permit cross-thread reclaim
+    mi_heap_collect(thread_id_heap, false);
     thread_id_blocks[0] = NULL;
     const size_t expected_owner = (reclaim_mode == 1 ? theap->tld->thread_id : 0);
     result = (mi_thread_id_of(thread_id_blocks[1]) == expected_owner &&
@@ -630,6 +632,7 @@ static bool test_theap_abandon_foreign(void) {
     while (mi_atomic_load_acquire(&cleanup_state) < 1) { _mi_prim_thread_yield(); }
     result = (cleanup_theap->pages[MI_BIN_FULL].first != NULL && result);
     mi_free(cleanup_blocks[0]); // collect a pending cross-thread free during abandonment
+    mi_heap_collect(cleanup_heap, false);
     cleanup_blocks[0] = NULL;
     mi_theap_quiescent_abandon(cleanup_theap);
     mi_theap_quiescent_abandon(cleanup_theap);
