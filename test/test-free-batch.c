@@ -10,6 +10,14 @@ static mi_heap_t* disposable;
 static int mode;
 static _Atomic(size_t) owner_ready;
 static _Atomic(size_t) owner_exit;
+static bool trace_first_test = true;
+
+static void trace_phase(const char* phase) {
+  if (trace_first_test) {
+    fprintf(stderr, "\n  free-batch: %s\n", phase);
+    fflush(stderr);
+  }
+}
 
 static bool find_live(const mi_heap_t* heap, const mi_heap_area_t* area,
                       void* block, size_t size, void* arg) {
@@ -24,32 +32,44 @@ static bool find_live(const mi_heap_t* heap, const mi_heap_area_t* area,
 
 static bool all_freed(void) {
   bool live = false;
+  trace_phase("owner collect");
   mi_collect(true);
-  return (mi_heap_visit_blocks(mi_heap_main(), true, find_live, &live) &&
-          mi_heap_visit_abandoned_blocks(mi_heap_main(), true, find_live, &live) && !live);
+  trace_phase("visit heap blocks");
+  if (!mi_heap_visit_blocks(mi_heap_main(), true, find_live, &live)) return false;
+  trace_phase("visit abandoned blocks");
+  if (!mi_heap_visit_abandoned_blocks(mi_heap_main(), true, find_live, &live)) return false;
+  trace_phase("heap visits complete");
+  return !live;
 }
 
 static bool allocate_blocks(void) {
+  trace_phase("allocate blocks");
   for (size_t i = 0; i < block_count; i++) {
     sizes[i] = (mode == 3 ? 8 + (i * 197) % 16000 : 64);
     blocks[i] = (disposable == NULL ? mi_malloc(sizes[i]) : mi_heap_malloc(disposable, sizes[i]));
     if (blocks[i] == NULL) return false;
     memset(blocks[i], (int)(i % 251), sizes[i]);
   }
+  trace_phase("allocations complete");
   return true;
 }
 
 static bool free_blocks(void) {
+  trace_phase("worker thread init");
   mi_thread_init();
+  trace_phase("worker initial collect");
   mi_collect(true);
+  trace_phase("worker heap lookup");
   mi_heap_t* const heap = (disposable == NULL ? mi_heap_main() : disposable);
   mi_theap_t* theap = _mi_heap_theap_peek(heap);
   if (disposable != NULL && theap != NULL) return false;
   bool pending = false;
+  trace_phase("worker free loop");
   for (size_t i = 0; i < block_count; i++) {
     const unsigned char* p = (const unsigned char*)blocks[i];
     if (p[0] != i % 251 || p[sizes[i]-1] != i % 251) return false;
     mi_free(blocks[i]);
+    if (i == 0) trace_phase("first free complete");
     theap = _mi_heap_theap_peek(heap);
     if (theap == NULL || theap->free_batch.batched_total >= MI_FREE_BATCH_BYTES) return false;
     if (theap->free_batch.batched_total != 0) pending = true;
@@ -63,7 +83,9 @@ static bool free_blocks(void) {
   }
   if (!pending) return false;
   if (mode == 0) {
+    trace_phase("worker batch collect");
     mi_collect(true);
+    trace_phase("worker returning");
     return theap->free_batch.batched_total == 0;
   }
   if (mode == 1) {
@@ -78,7 +100,43 @@ static bool free_blocks(void) {
 static bool test_remote_free(int test_mode) {
   mode = test_mode;
   block_count = (mode == 3 ? BLOCKS : 128);
-  return allocate_blocks() && mi_run_on_thread(free_blocks) && all_freed();
+  if (!allocate_blocks()) return false;
+  trace_phase("start and join worker");
+  if (!mi_run_on_thread(free_blocks)) return false;
+  trace_phase("worker joined");
+  return all_freed();
+}
+
+static bool free_with_partial_publication(void) {
+  mi_thread_init();
+  mi_collect(true);
+  mi_theap_t* const theap = _mi_theap_main();
+  mi_free(blocks[0]);
+  const size_t budget = theap->free_batch.batched_total;
+  if (budget == 0) return false;
+  bool published = false;
+  for (size_t i = 0; i < MI_FREE_BATCH_COUNT; i++) {
+    mi_free_batch_entry_t* const entry = &theap->free_batch.entries[i];
+    if (entry->page != NULL) {
+      mi_free_batch_publish(theap, entry);
+      published = true;
+      break;
+    }
+  }
+  if (!published || theap->free_batch.batched_total != budget) return false;
+  mi_free(blocks[1]);
+  if (theap->free_batch.batched_total != 2 * budget) return false;
+  mi_collect(true);
+  if (theap->free_batch.batched_total != 0) return false;
+  for (size_t i = 2; i < block_count; i++) mi_free(blocks[i]);
+  mi_collect(true);
+  return theap->free_batch.batched_total == 0;
+}
+
+static bool test_batch_budget(void) {
+  mode = 0;
+  block_count = 128;
+  return allocate_blocks() && mi_run_on_thread(free_with_partial_publication) && all_freed();
 }
 
 static bool free_without_thread_state(void) {
@@ -292,9 +350,11 @@ static bool test_concurrent_owner_exit(void) {
 int main(void) {
   mi_option_set(mi_option_guarded_sample_rate, 0);
   CHECK("remote free explicit collect", test_remote_free(0));
+  trace_first_test = false;
   CHECK("remote free thread reinitialization", test_remote_free(1));
   CHECK("remote free automatic thread exit", test_remote_free(2));
   CHECK("remote free bounded cache", test_remote_free(3));
+  CHECK("batch budget survives partial publication", test_batch_budget());
   CHECK("free without thread initialization", test_uninitialized_free());
   CHECK("remote free abandoned owner", test_abandoned_owner());
   CHECK("destroy heap after remote frees", test_destroyed_heap());

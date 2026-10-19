@@ -652,12 +652,8 @@ static void mi_free_batch_publish(mi_theap_t* theap, mi_free_batch_entry_t* batc
   mi_assert_internal(mi_page_heap(page) == mi_theap_heap(theap));
   mi_block_t* const head = batch->head;
   mi_block_t* const tail = batch->tail;
-  const size_t bytes = batch->count * mi_page_block_size(page);
-  mi_assert_internal(theap->free_batch.batched_total >= bytes);
-  theap->free_batch.batched_total -= bytes;
   batch->page = NULL;
   batch->head = batch->tail = NULL;
-  batch->count = 0;
   // const bool allow_reclaim = (theap->tld != NULL && theap->tld->thread_id == _mi_prim_thread_id());
   mi_free_block_mt_publish(page, head, tail, true);
 }
@@ -670,7 +666,7 @@ void _mi_theap_free_batch_collect(mi_theap_t* theap) {
   for (size_t i = 0; i < MI_FREE_BATCH_COUNT; i++) {
     mi_free_batch_publish(theap, &theap->free_batch.entries[i]);
   }
-  mi_assert_internal(theap->free_batch.batched_total == 0);
+  theap->free_batch.batched_total = 0;
   theap->free_batch.collecting = false;
   theap->free_batch.enabled = enabled;
 }
@@ -697,7 +693,6 @@ static inline void mi_free_batch_push(mi_theap_t* theap, mi_free_batch_entry_t* 
   // Until publication these blocks remain counted as used and keep the page alive.
   mi_block_set_next(page, block, batch->head);
   batch->head = block;
-  batch->count++;
   theap->free_batch.batched_total += block_size;
   if mi_unlikely(theap->free_batch.batched_total >= MI_FREE_BATCH_BYTES) {
     _mi_theap_free_batch_collect(theap);
