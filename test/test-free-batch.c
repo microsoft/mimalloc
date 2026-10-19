@@ -12,6 +12,78 @@ static _Atomic(size_t) owner_ready;
 static _Atomic(size_t) owner_exit;
 static bool trace_first_test = true;
 
+#if MI_TEST_CRASH_INFO
+#include <dbghelp.h>
+
+static volatile size_t allocation_index;
+static const char* volatile allocation_phase = "not started";
+static void* volatile allocation_result;
+
+static LONG WINAPI report_crash(EXCEPTION_POINTERS* exception) {
+  static volatile LONG reporting;
+  if (InterlockedCompareExchange(&reporting, 1, 0) != 0) return EXCEPTION_CONTINUE_SEARCH;
+  const EXCEPTION_RECORD* record = exception->ExceptionRecord;
+  fprintf(stderr, "\n  free-batch: exception 0x%08lx at %p; allocation %zu, phase %s, result %p\n",
+          record->ExceptionCode, record->ExceptionAddress, allocation_index, allocation_phase, allocation_result);
+  if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && record->NumberParameters >= 2) {
+    fprintf(stderr, "  free-batch: access type %zu (0=read, 1=write, 8=execute), address %p\n",
+            (size_t)record->ExceptionInformation[0], (void*)record->ExceptionInformation[1]);
+  }
+  fflush(stderr);
+
+  char path[MAX_PATH];
+  const DWORD length = GetModuleFileNameA(NULL, path, sizeof(path));
+  if (length == 0 || length >= sizeof(path)) {
+    fprintf(stderr, "  free-batch: cannot locate executable for symbols (error %lu)\n", GetLastError());
+    fflush(stderr);
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+  char* separator = strrchr(path, '\\');
+  if (separator == NULL) {
+    fprintf(stderr, "  free-batch: executable path has no directory\n");
+    fflush(stderr);
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+  *separator = 0;
+  const HANDLE process = GetCurrentProcess();
+  SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS |
+                SYMOPT_FAIL_CRITICAL_ERRORS | SYMOPT_NO_PROMPTS | SYMOPT_IGNORE_NT_SYMPATH);
+  if (SymInitialize(process, path, TRUE)) {
+    struct {
+      SYMBOL_INFO info;
+      char name[256];
+    } symbol = { 0 };
+    symbol.info.SizeOfStruct = sizeof(SYMBOL_INFO);
+    symbol.info.MaxNameLen = sizeof(symbol.name);
+    const DWORD64 address = (DWORD64)(uintptr_t)record->ExceptionAddress;
+    DWORD64 displacement = 0;
+    if (SymFromAddr(process, address, &displacement, &symbol.info)) {
+      fprintf(stderr, "  free-batch: %s + 0x%llx\n", symbol.info.Name, (unsigned long long)displacement);
+    }
+    else {
+      fprintf(stderr, "  free-batch: symbol lookup failed (error %lu)\n", GetLastError());
+    }
+    IMAGEHLP_LINE64 line = { 0 };
+    line.SizeOfStruct = sizeof(line);
+    DWORD line_displacement = 0;
+    if (SymGetLineFromAddr64(process, address, &line_displacement, &line)) {
+      fprintf(stderr, "  free-batch: %s:%lu\n", line.FileName, line.LineNumber);
+    }
+    else {
+      fprintf(stderr, "  free-batch: source lookup failed (error %lu)\n", GetLastError());
+    }
+    if (!SymCleanup(process)) {
+      fprintf(stderr, "  free-batch: symbol cleanup failed (error %lu)\n", GetLastError());
+    }
+  }
+  else {
+    fprintf(stderr, "  free-batch: symbol initialization failed (error %lu)\n", GetLastError());
+  }
+  fflush(stderr);
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
 static void trace_phase(const char* phase) {
   if (trace_first_test) {
     fprintf(stderr, "\n  free-batch: %s\n", phase);
@@ -46,10 +118,26 @@ static bool allocate_blocks(void) {
   trace_phase("allocate blocks");
   for (size_t i = 0; i < block_count; i++) {
     sizes[i] = (mode == 3 ? 8 + (i * 197) % 16000 : 64);
+    #if MI_TEST_CRASH_INFO
+    if (trace_first_test) {
+      allocation_index = i;
+      allocation_result = NULL;
+      allocation_phase = "allocate";
+    }
+    #endif
     blocks[i] = (disposable == NULL ? mi_malloc(sizes[i]) : mi_heap_malloc(disposable, sizes[i]));
     if (blocks[i] == NULL) return false;
+    #if MI_TEST_CRASH_INFO
+    if (trace_first_test) {
+      allocation_result = blocks[i];
+      allocation_phase = "memset";
+    }
+    #endif
     memset(blocks[i], (int)(i % 251), sizes[i]);
   }
+  #if MI_TEST_CRASH_INFO
+  if (trace_first_test) { allocation_phase = "allocations complete"; }
+  #endif
   trace_phase("allocations complete");
   return true;
 }
@@ -348,8 +436,14 @@ static bool test_concurrent_owner_exit(void) {
 }
 
 int main(void) {
+  #if MI_TEST_CRASH_INFO
+  const LPTOP_LEVEL_EXCEPTION_FILTER previous_filter = SetUnhandledExceptionFilter(report_crash);
+  #endif
   mi_option_set(mi_option_guarded_sample_rate, 0);
   CHECK("remote free explicit collect", test_remote_free(0));
+  #if MI_TEST_CRASH_INFO
+  SetUnhandledExceptionFilter(previous_filter);
+  #endif
   trace_first_test = false;
   CHECK("remote free thread reinitialization", test_remote_free(1));
   CHECK("remote free automatic thread exit", test_remote_free(2));
