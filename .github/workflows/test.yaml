@@ -71,6 +71,14 @@ jobs:
           fi          
 
       # Basic
+      - name: Debug
+        if: matrix.tests == 'basic'
+        run: |
+          env
+          cmake . -B out/debug-${{ matrix.c_or_cxx }} -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL ${{ steps.cmake_args.outputs.CMAKE_CXX_OPT_DEFAULT }}
+          cmake --build out/debug-${{ matrix.c_or_cxx }} --parallel 4 --config Debug
+          ctest --test-dir out/debug-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Debug
+
       - name: Release
         if: matrix.tests == 'basic'
         run: |
@@ -84,14 +92,6 @@ jobs:
         with:
           name: ${{ matrix.os }}-${{ matrix.c_or_cxx }}-asm
           path: out/release-${{ matrix.c_or_cxx }}/CMakeFiles/mimalloc-static.dir/src/*.s
-
-      - name: Debug
-        if: matrix.tests == 'basic'
-        run: |
-          env
-          cmake . -B out/debug-${{ matrix.c_or_cxx }} -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL ${{ steps.cmake_args.outputs.CMAKE_CXX_OPT_DEFAULT }}
-          cmake --build out/debug-${{ matrix.c_or_cxx }} --parallel 4 --config Debug
-          ctest --test-dir out/debug-${{ matrix.c_or_cxx }} --verbose --timeout 240 -C Debug
 
       - name: Secure
         if: matrix.tests == 'basic'
