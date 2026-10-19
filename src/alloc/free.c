@@ -641,84 +641,130 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
 // Batch free'ing of cross-thread frees
 // ------------------------------------------------------
 
-static void mi_free_batch_publish(mi_tld_t* tld, mi_free_batch_entry_t* batch) {
+static void mi_free_batch_publish(mi_theap_t* theap, mi_free_batch_entry_t* batch) {
   mi_page_t* const page = batch->page;
   if (page == NULL) return;
+  mi_assert_internal(mi_page_heap(page) == mi_theap_heap(theap));
   mi_block_t* const head = batch->head;
   mi_block_t* const tail = batch->tail;
   const size_t bytes = batch->count * mi_page_block_size(page);
-  mi_assert_internal(tld->free_batch.batched_total >= bytes);
-  tld->free_batch.batched_total -= bytes;
+  mi_assert_internal(theap->free_batch.batched_total >= bytes);
+  theap->free_batch.batched_total -= bytes;
   batch->page = NULL;
   batch->head = batch->tail = NULL;
   batch->count = 0;
-  const bool allow_reclaim = (tld->thread_id == _mi_prim_thread_id());
-  mi_free_block_mt_publish(page, head, tail, allow_reclaim);
+  // const bool allow_reclaim = (theap->tld != NULL && theap->tld->thread_id == _mi_prim_thread_id());
+  mi_free_block_mt_publish(page, head, tail, true);
 }
 
-void _mi_free_collect(mi_tld_t* tld) {
-  if (tld == NULL || tld->free_batch.batched_total == 0 || tld->free_batch.collecting) return;
-  mi_heap_t* const heap = tld->free_batch.heap;
-  tld->free_batch.heap = NULL;
-  tld->free_batch.collecting = true;
+void _mi_free_collect(mi_theap_t* theap) {
+  if (theap == NULL || theap->free_batch.batched_total == 0 || theap->free_batch.collecting) return;
+  const bool enabled = theap->free_batch.enabled;
+  theap->free_batch.enabled = false;
+  theap->free_batch.collecting = true;
   for (size_t i = 0; i < MI_FREE_BATCH_COUNT; i++) {
-    mi_free_batch_publish(tld, &tld->free_batch.entries[i]);
+    mi_free_batch_publish(theap, &theap->free_batch.entries[i]);
   }
-  mi_assert_internal(tld->free_batch.batched_total == 0);
-  tld->free_batch.collecting = false;
-  tld->free_batch.heap = heap;
+  mi_assert_internal(theap->free_batch.batched_total == 0);
+  theap->free_batch.collecting = false;
+  theap->free_batch.enabled = enabled;
 }
 
-static inline void mi_free_batch_push(mi_tld_t* tld, mi_free_batch_entry_t* batch, mi_page_t* page, mi_block_t* block) {
+void _mi_free_collect_all(mi_tld_t* tld, bool disable) {
+  if (tld == NULL) return;
+  const bool was_disabled = tld->free_batch_disabled;
+  tld->free_batch_disabled = true;
+  mi_lock(&tld->theaps_lock) {
+    if (disable) {
+      for (mi_theap_t* theap = tld->theaps; theap != NULL; theap = theap->tnext) {
+        theap->free_batch.enabled = false;
+      }
+    }
+    for (mi_theap_t* theap = tld->theaps; theap != NULL; theap = theap->tnext) {
+      _mi_free_collect(theap);
+    }
+  }
+  if (!disable) { tld->free_batch_disabled = was_disabled; }
+}
+
+static inline void mi_free_batch_push(mi_theap_t* theap, mi_free_batch_entry_t* batch, mi_page_t* page, mi_block_t* block, size_t block_size) {
   // Until publication these blocks remain counted as used and keep the page alive.
   mi_block_set_next(page, block, batch->head);
   batch->head = block;
   batch->count++;
-  tld->free_batch.batched_total += mi_page_block_size(page);
-  if mi_unlikely(tld->free_batch.batched_total >= MI_FREE_BATCH_BYTES) {
-    _mi_free_collect(tld);
+  theap->free_batch.batched_total += block_size;
+  if mi_unlikely(theap->free_batch.batched_total >= MI_FREE_BATCH_BYTES) {
+    _mi_free_collect(theap);
   }
 }
 
-static mi_decl_noinline void mi_free_batch_miss(mi_tld_t* tld, mi_free_batch_entry_t* batch, mi_page_t* page, mi_block_t* block) {
-  // Destroyable heaps cannot retain pointers in other threads' caches.
-  // Detached metadata pages must also stay on the immediate path.
-  if (mi_page_heap(page) != tld->free_batch.heap || mi_page_thread_id(page) == MI_THREADID_DETACHED) {
+static mi_decl_noinline void mi_free_batch_miss(mi_theap_t* theap, mi_free_batch_entry_t* batch, mi_page_t* page, mi_block_t* block, size_t block_size) {
+  if mi_unlikely(mi_page_thread_id(page) == MI_THREADID_DETACHED) {
     mi_free_block_mt_publish(page, block, block, true);
     return;
   }
   if (batch->page != NULL) {
-    mi_heap_t* const heap = tld->free_batch.heap;
-    tld->free_batch.heap = NULL;
-    tld->free_batch.collecting = true;
-    mi_free_batch_publish(tld, batch);
-    tld->free_batch.collecting = false;
-    tld->free_batch.heap = heap;
+    theap->free_batch.enabled = false;
+    theap->free_batch.collecting = true;
+    mi_free_batch_publish(theap, batch);
+    theap->free_batch.collecting = false;
+    theap->free_batch.enabled = true;
   }
   batch->page = page;
   batch->tail = block;
-  mi_free_batch_push(tld, batch, page, block);
+  mi_free_batch_push(theap, batch, page, block, block_size);
 }
 
-static mi_decl_noinline void mi_free_block_mt_batch(mi_page_t* page, mi_block_t* block) {
-  mi_theap_t* const theap = _mi_theap_default();
-  mi_tld_t* const tld = (theap == NULL ? NULL : theap->tld);
-  const size_t block_size = mi_page_block_size(page);
-  if (tld == NULL || tld->free_batch.heap == NULL || block_size > MI_MEDIUM_MAX_OBJ_SIZE) {
+static inline void mi_free_block_mt_batch_in(mi_theap_t* theap, mi_page_t* page, mi_block_t* block, size_t block_size) {
+  if mi_unlikely(!theap->free_batch.enabled) {
+    mi_free_block_mt_publish(page, block, block, true);
+    return;
+  }
+  uintptr_t key = (uintptr_t)page / MI_SMALL_PAGE_SIZE;
+  key ^= key >> 9;
+  key ^= key >> 17;
+  mi_free_batch_entry_t* const batch = &theap->free_batch.entries[key & (MI_FREE_BATCH_COUNT - 1)];
+  if mi_likely(batch->page == page) {
+    mi_free_batch_push(theap, batch, page, block, block_size);
+  }
+  else {
+    mi_free_batch_miss(theap, batch, page, block, block_size);
+  }
+}
+
+static mi_decl_noinline void mi_free_block_mt_batch_init(mi_page_t* page, mi_block_t* block, mi_heap_t* heap, size_t block_size) {
+  mi_theap_t* const main = _mi_theap_main();
+  mi_tld_t* const tld = (main == NULL ? NULL : main->tld);
+  if mi_unlikely(tld == NULL || tld->free_batch_disabled ||
+                tld->subproc != heap->subproc || mi_heap_qsbr_is_enabled(heap) ||
+                mi_page_thread_id(page) == MI_THREADID_DETACHED) {
     mi_free_block_mt_publish(page, block, block, true);
     return;
   }
 
-  uintptr_t key = (uintptr_t)page / MI_SMALL_PAGE_SIZE;
-  key ^= key >> 9;
-  key ^= key >> 17;
-  mi_free_batch_entry_t* const batch = &tld->free_batch.entries[key & (MI_FREE_BATCH_COUNT - 1)];
-  if mi_likely(batch->page == page) {
-    mi_free_batch_push(tld, batch, page, block);
+  tld->free_batch_disabled = true;
+  mi_theap_t* const theap = _mi_heap_theap_get_or_init(heap);
+  tld->free_batch_disabled = false;
+  if mi_unlikely(theap == NULL || theap->tld != tld || mi_theap_heap_peek(theap) != heap) {
+    mi_free_block_mt_publish(page, block, block, true);
+    return;
   }
-  else {
-    mi_free_batch_miss(tld, batch, page, block);
+  mi_free_block_mt_batch_in(theap, page, block, block_size);
+}
+
+static mi_decl_noinline void mi_free_block_mt_batch(mi_page_t* page, mi_block_t* block) {
+  const size_t block_size = mi_page_block_size(page);
+  if mi_unlikely(block_size > MI_MEDIUM_MAX_OBJ_SIZE) {
+    mi_free_block_mt_publish(page, block, block, true);
+    return;
   }
+  mi_heap_t* const heap = mi_page_heap(page);
+  mi_theap_t* const theap = _mi_heap_theap_cached(heap);
+  if mi_unlikely(theap == NULL) {
+    mi_free_block_mt_batch_init(page, block, heap, block_size);
+    return;
+  }
+  mi_free_block_mt_batch_in(theap, page, block, block_size);
 }
 
 
