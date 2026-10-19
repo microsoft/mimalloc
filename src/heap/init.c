@@ -130,8 +130,7 @@ static mi_decl_cache_align mi_tld_t mi_tld_detached = {
   false,                  // in_profiler
   false,                  // is_in_threadpool
   MI_MEMID_STATIC,        // memid
-  NULL, 0, false,         // remote free cache
-  { { NULL, NULL, NULL, 0 } }
+  { NULL, 0, false, { { NULL, NULL, NULL, 0 } } }
 };
 
 #ifdef __cplusplus
@@ -270,10 +269,10 @@ mi_theap_t* _mi_theap_main(void) {
 static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc) {
   tld->subproc = subproc;
   tld->theaps = NULL;
-  tld->free_batch_heap = NULL;
-  tld->free_batch_bytes = 0;
-  tld->free_batch_collecting = false;
-  mi_memzero(tld->free_batches, sizeof(tld->free_batches));
+  tld->free_batch.heap = NULL;
+  tld->free_batch.batched_total = 0;
+  tld->free_batch.collecting = false;
+  mi_memzero(tld->free_batch.entries, sizeof(tld->free_batch.entries));
   mi_lock_init(&tld->theaps_lock);
   if (tld->thread_id == MI_THREADID_DETACHED) {
     tld->numa_node = -1;
@@ -312,7 +311,7 @@ static mi_tld_t* mi_tld_create(mi_subproc_t* subproc) {
 
 mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
   if (tld==NULL) return;
-  mi_assert_internal(tld->free_batch_bytes == 0);
+  mi_assert_internal(tld->free_batch.batched_total == 0);
   mi_atomic_decrement_relaxed(&tld->subproc->thread_count);
   tld->thread_id = (mi_threadid_t)(~0);          // it is best to set an invalid tid for tld_main as sometimes the same thread-id
                                                  // is reused by the OS after a thread has terminated. (see issue #1287)
@@ -396,7 +395,7 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
 
   mi_subproc_stat_increase(mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?
   if (_mi_subproc_is_main(theap->tld->subproc)) {
-    theap->tld->free_batch_heap = &mi_process_heap_main;
+    theap->tld->free_batch.heap = &mi_process_heap_main;
   }
   // _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
   return theap;
@@ -515,7 +514,7 @@ void _mi_thread_done(mi_theap_t* _theap_main)
   mi_tld_t* const tld = _theap_main->tld;
 
   if (tld->thread_id == _mi_prim_thread_id()) {
-    tld->free_batch_heap = NULL;
+    tld->free_batch.heap = NULL;
     _mi_free_collect(tld);
   }
 
@@ -651,7 +650,7 @@ static void mi_process_unwind_once(void)
 {
   mi_theap_t* const theap = _mi_theap_default();
   if (theap != NULL && theap->tld != NULL) {
-    theap->tld->free_batch_heap = NULL;
+    theap->tld->free_batch.heap = NULL;
     _mi_free_collect(theap->tld);
   }
 

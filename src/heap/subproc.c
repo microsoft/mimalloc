@@ -359,8 +359,8 @@ static void mi_fork_child_abandon_theaps(void) {
         mi_theap_t* const next = theap->hnext;
         mi_tld_t* const tld = theap->tld;
         if (tld != NULL && tld != tld_current && tld->thread_id != MI_THREADID_DETACHED) {
-          if (tld->free_batch_heap != NULL) {
-            tld->free_batch_heap = NULL;
+          if (tld->free_batch.heap != NULL) {
+            tld->free_batch.heap = NULL;
             _mi_free_collect(tld);
           }
           // remove from the heap list and push on the dead list
