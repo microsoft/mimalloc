@@ -508,7 +508,7 @@ void _mi_thread_done(mi_theap_t* _theap_main)
   mi_tld_t* const tld = _theap_main->tld;
 
   if (tld->thread_id == _mi_prim_thread_id()) {
-    _mi_free_collect_all(tld, true);
+    _mi_tld_free_batch_collect(tld, true);
   }
 
   // release dynamic thread_local's
@@ -643,7 +643,7 @@ static void mi_process_unwind_once(void)
 {
   mi_theap_t* const theap = _mi_theap_main();
   if (theap != NULL && theap->tld != NULL) {
-    _mi_free_collect_all(theap->tld, true);
+    _mi_tld_free_batch_collect(theap->tld, true);
   }
 
   // stop the profiler

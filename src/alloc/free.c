@@ -662,7 +662,7 @@ static void mi_free_batch_publish(mi_theap_t* theap, mi_free_batch_entry_t* batc
   mi_free_block_mt_publish(page, head, tail, true);
 }
 
-void _mi_free_collect(mi_theap_t* theap) {
+void _mi_theap_free_batch_collect(mi_theap_t* theap) {
   if (theap == NULL || theap->free_batch.batched_total == 0 || theap->free_batch.collecting) return;
   const bool enabled = theap->free_batch.enabled;
   theap->free_batch.enabled = false;
@@ -675,8 +675,9 @@ void _mi_free_collect(mi_theap_t* theap) {
   theap->free_batch.enabled = enabled;
 }
 
-void _mi_free_collect_all(mi_tld_t* tld, bool disable) {
+void _mi_tld_free_batch_collect(mi_tld_t* tld, bool disable) {
   if (tld == NULL) return;
+  mi_assert_internal(tld->thread_id == _mi_prim_thread_id());
   const bool was_disabled = tld->free_batch_disabled;
   tld->free_batch_disabled = true;
   mi_lock(&tld->theaps_lock) {
@@ -686,7 +687,7 @@ void _mi_free_collect_all(mi_tld_t* tld, bool disable) {
       }
     }
     for (mi_theap_t* theap = tld->theaps; theap != NULL; theap = theap->tnext) {
-      _mi_free_collect(theap);
+      _mi_theap_free_batch_collect(theap);
     }
   }
   if (!disable) { tld->free_batch_disabled = was_disabled; }
@@ -699,7 +700,7 @@ static inline void mi_free_batch_push(mi_theap_t* theap, mi_free_batch_entry_t* 
   batch->count++;
   theap->free_batch.batched_total += block_size;
   if mi_unlikely(theap->free_batch.batched_total >= MI_FREE_BATCH_BYTES) {
-    _mi_free_collect(theap);
+    _mi_theap_free_batch_collect(theap);
   }
 }
 

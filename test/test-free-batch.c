@@ -134,8 +134,13 @@ static bool free_separate_heaps(void) {
   second = _mi_heap_theap_peek(separate_heaps[1]);
   if (second == NULL || first->free_batch.batched_total == 0 ||
       second->free_batch.batched_total == 0) return false;
+  mi_theap_t* const previous = mi_theap_set_default(first);
   mi_collect(true);
-  return first->free_batch.batched_total == 0 && second->free_batch.batched_total == 0;
+  const bool collected_default = (first->free_batch.batched_total == 0 &&
+                                  second->free_batch.batched_total != 0);
+  mi_theap_set_default(previous);
+  mi_heap_collect(separate_heaps[1], true);
+  return collected_default && second->free_batch.batched_total == 0;
 }
 
 static bool test_separate_heaps(void) {
