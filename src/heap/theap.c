@@ -137,7 +137,7 @@ static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
   if (collect != MI_ABANDON) {     // skip on thread shutdown to avoid running user-code after process exit (issue #1377)
     _mi_deferred_free(theap, force);
   }
-  _mi_free_collect(theap);
+  _mi_theap_free_batch_collect(theap);
 
   // python/cpython#112532: we may be called from a thread that is not the owner of the theap
   // const bool is_main_thread = (_mi_is_main_thread() && theap->thread_id == _mi_thread_id());
@@ -170,7 +170,7 @@ void _mi_theap_abandon_owned_pages(mi_theap_t* theap) {
   mi_assert_internal(theap->tld == NULL);  // should be detached as we may access from another thread
   if (theap==NULL) return;
   theap->free_batch.enabled = false;
-  _mi_free_collect(theap);
+  _mi_theap_free_batch_collect(theap);
   for (size_t bin = 0; bin <= MI_BIN_FULL; bin++) {
     mi_page_queue_t* const pq = &theap->pages[bin];
     mi_page_t* page = pq->first;
@@ -191,8 +191,6 @@ void mi_theap_collect(mi_theap_t* theap, bool force) mi_attr_noexcept {
 
 void mi_collect(bool force) mi_attr_noexcept {
   // cannot really collect process wide, just a theap..
-  mi_theap_t* const main = _mi_theap_main();
-  if (main != NULL) { _mi_free_collect_all(main->tld, false); }
   mi_theap_collect(_mi_theap_default(), force);
 }
 

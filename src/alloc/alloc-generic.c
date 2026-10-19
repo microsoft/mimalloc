@@ -356,7 +356,7 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
     else {
       // otherwise we do a mini-collect
       _mi_deferred_free(theap, false);         // call potential deferred free routines      
-      _mi_free_collect(theap);
+      _mi_theap_free_batch_collect(theap);
       _mi_theap_collect_retired(theap, false); // free retired pages            
     }
   }

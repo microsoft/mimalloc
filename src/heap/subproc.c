@@ -360,7 +360,7 @@ static void mi_fork_child_abandon_theaps(void) {
         mi_tld_t* const tld = theap->tld;
         if (tld != NULL && tld != tld_current && tld->thread_id != MI_THREADID_DETACHED) {
           theap->free_batch.enabled = false;
-          _mi_free_collect(theap);
+          _mi_theap_free_batch_collect(theap);
           // remove from the heap list and push on the dead list
           if (theap->hnext != NULL) { theap->hnext->hprev = theap->hprev; }
           if (theap->hprev != NULL) { theap->hprev->hnext = theap->hnext; }
