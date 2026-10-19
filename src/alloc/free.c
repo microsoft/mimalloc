@@ -669,21 +669,44 @@ void _mi_free_collect(mi_tld_t* tld) {
   tld->free_batch.heap = heap;
 }
 
-static inline void mi_free_batch_push(mi_tld_t* tld, mi_free_batch_entry_t* batch, mi_page_t* page, mi_block_t* block) {
+static inline bool mi_free_batch_try_acquire(mi_tld_t* tld) {
+  // Owner only: 0 is owner-released; a foreign drainer must release with 2.
+  const size_t previous = mi_atomic_exchange_relaxed(&tld->free_batch.guard, 1);
+  if mi_likely(previous == 0) return true;
+  if (previous != 2) return false;
+  // Acquire the foreign release through the preceding RMW's release sequence.
+  return (mi_atomic_load_acquire(&tld->free_batch.guard) == 1);
+}
+
+static inline void mi_free_batch_release(mi_tld_t* tld) {
+  mi_atomic_store_release(&tld->free_batch.guard, 0);
+}
+
+static mi_decl_noinline void mi_free_batch_collect_finish(mi_tld_t* tld) {
+  _mi_free_collect(tld);
+  mi_free_batch_release(tld);
+}
+
+// The push and miss paths release the guard before returning.
+static inline void mi_free_batch_push(mi_tld_t* tld, mi_free_batch_entry_t* batch, mi_page_t* page, mi_block_t* block, size_t block_size) {
   // Until publication these blocks remain counted as used and keep the page alive.
   mi_block_set_next(page, block, batch->head);
   batch->head = block;
   batch->count++;
-  tld->free_batch.batched_total += mi_page_block_size(page);
+  tld->free_batch.batched_total += block_size;
   if mi_unlikely(tld->free_batch.batched_total >= MI_FREE_BATCH_BYTES) {
-    _mi_free_collect(tld);
+    mi_free_batch_collect_finish(tld);
+  }
+  else {
+    mi_free_batch_release(tld);
   }
 }
 
-static mi_decl_noinline void mi_free_batch_miss(mi_tld_t* tld, mi_free_batch_entry_t* batch, mi_page_t* page, mi_block_t* block) {
+static mi_decl_noinline void mi_free_batch_miss(mi_tld_t* tld, mi_free_batch_entry_t* batch, mi_page_t* page, mi_block_t* block, size_t block_size) {
   // Destroyable heaps cannot retain pointers in other threads' caches.
   // Detached metadata pages must also stay on the immediate path.
-  if (mi_page_heap(page) != tld->free_batch.heap || mi_page_thread_id(page) == MI_THREADID_DETACHED) {
+  if mi_unlikely(mi_page_heap(page) != tld->free_batch.heap || mi_page_thread_id(page) == MI_THREADID_DETACHED) {
+    mi_free_batch_release(tld);
     mi_free_block_mt_publish(page, block, block, true);
     return;
   }
@@ -697,14 +720,19 @@ static mi_decl_noinline void mi_free_batch_miss(mi_tld_t* tld, mi_free_batch_ent
   }
   batch->page = page;
   batch->tail = block;
-  mi_free_batch_push(tld, batch, page, block);
+  mi_free_batch_push(tld, batch, page, block, block_size);
 }
 
 static mi_decl_noinline void mi_free_block_mt_batch(mi_page_t* page, mi_block_t* block) {
   mi_theap_t* const theap = _mi_theap_default();
   mi_tld_t* const tld = (theap == NULL ? NULL : theap->tld);
   const size_t block_size = mi_page_block_size(page);
-  if (tld == NULL || tld->free_batch.heap == NULL || block_size > MI_MEDIUM_MAX_OBJ_SIZE) {
+  if mi_unlikely(tld == NULL || tld->free_batch.heap == NULL || block_size > MI_MEDIUM_MAX_OBJ_SIZE) {
+    mi_free_block_mt_publish(page, block, block, true);
+    return;
+  }
+
+  if mi_unlikely(!mi_free_batch_try_acquire(tld)) {
     mi_free_block_mt_publish(page, block, block, true);
     return;
   }
@@ -714,10 +742,10 @@ static mi_decl_noinline void mi_free_block_mt_batch(mi_page_t* page, mi_block_t*
   key ^= key >> 17;
   mi_free_batch_entry_t* const batch = &tld->free_batch.entries[key & (MI_FREE_BATCH_COUNT - 1)];
   if mi_likely(batch->page == page) {
-    mi_free_batch_push(tld, batch, page, block);
+    mi_free_batch_push(tld, batch, page, block, block_size);
   }
   else {
-    mi_free_batch_miss(tld, batch, page, block);
+    mi_free_batch_miss(tld, batch, page, block, block_size);
   }
 }
 

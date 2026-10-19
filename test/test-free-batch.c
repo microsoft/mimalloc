@@ -48,6 +48,7 @@ static bool free_blocks(void) {
     const unsigned char* p = (const unsigned char*)blocks[i];
     if (p[0] != i % 251 || p[sizes[i]-1] != i % 251) return false;
     mi_free(blocks[i]);
+    if (mi_atomic_load_relaxed(&tld->free_batch.guard) != 0) return false;
     if (tld->free_batch.batched_total >= MI_FREE_BATCH_BYTES) return false;
     if (tld->free_batch.batched_total != 0) pending = true;
   }
@@ -106,6 +107,47 @@ static bool test_destroyed_heap(void) {
   return disposable != NULL && allocate_blocks() && mi_run_on_thread(free_blocks);
 }
 
+static bool free_with_busy_guard(void) {
+  mi_thread_init();
+  mi_collect(true);
+  mi_tld_t* const tld = _mi_theap_default()->tld;
+  mi_free(blocks[0]);
+  const size_t pending = tld->free_batch.batched_total;
+  if (pending == 0) return false;
+
+  if (!mi_free_batch_try_acquire(tld)) return false;
+  mi_free(blocks[1]);
+  const bool bypassed = (tld->free_batch.batched_total == pending &&
+                        mi_atomic_load_relaxed(&tld->free_batch.guard) == 1);
+  mi_free_batch_release(tld);
+
+  mi_heap_t* const heap = tld->free_batch.heap;
+  tld->free_batch.heap = NULL;
+  tld->free_batch.collecting = true;
+  if (!mi_free_batch_try_acquire(tld)) return false;
+  mi_free(blocks[2]);
+  _mi_free_collect(tld);
+  const bool reentered = (tld->free_batch.batched_total == pending &&
+                         mi_atomic_load_relaxed(&tld->free_batch.guard) == 1);
+  tld->free_batch.collecting = false;
+  tld->free_batch.heap = heap;
+  mi_free_batch_release(tld);
+
+  mi_atomic_store_release(&tld->free_batch.guard, 2);
+  mi_free(blocks[3]);
+  const bool handed_back = (tld->free_batch.batched_total > pending &&
+                           mi_atomic_load_relaxed(&tld->free_batch.guard) == 0);
+  for (size_t i = 4; i < block_count; i++) mi_free(blocks[i]);
+  mi_collect(true);
+  return bypassed && reentered && handed_back && tld->free_batch.batched_total == 0;
+}
+
+static bool test_busy_guard(void) {
+  mode = 0;
+  block_count = 128;
+  return allocate_blocks() && mi_run_on_thread(free_with_busy_guard) && all_freed();
+}
+
 static bool departing_owner(void) {
   const bool allocated = allocate_blocks();
   mi_atomic_store_release(&owner_ready, allocated ? 1 : 2);
@@ -153,6 +195,7 @@ int main(void) {
   CHECK("free without thread initialization", test_uninitialized_free());
   CHECK("remote free abandoned owner", test_abandoned_owner());
   CHECK("destroy heap after remote frees", test_destroyed_heap());
+  CHECK("remote free busy guard and reentry", test_busy_guard());
   CHECK("remote free concurrent owner exit", test_concurrent_owner_exit());
   return print_test_summary();
 }

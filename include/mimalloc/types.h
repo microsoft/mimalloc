@@ -810,6 +810,7 @@ typedef struct mi_free_batch_s {
   size_t                batched_total;
   bool                  collecting;
   mi_free_batch_entry_t entries[MI_FREE_BATCH_COUNT];
+  _Atomic(size_t)       guard;
 } mi_free_batch_t;
 
 // Thread local data

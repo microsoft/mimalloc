@@ -129,7 +129,7 @@ static mi_decl_cache_align mi_tld_t mi_tld_detached = {
   false,                  // recurse
   false,                  // is_in_threadpool
   MI_MEMID_STATIC,        // memid
-  { NULL, 0, false, { { NULL, NULL, NULL, 0 } } }
+  { NULL, 0, false, { { NULL, NULL, NULL, 0 } }, MI_ATOMIC_VAR_INIT(0) }
 };
 
 #ifdef __cplusplus
@@ -271,6 +271,7 @@ static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc) 
   tld->free_batch.heap = NULL;
   tld->free_batch.batched_total = 0;
   tld->free_batch.collecting = false;
+  mi_atomic_store_relaxed(&tld->free_batch.guard, 0);
   mi_memzero(tld->free_batch.entries, sizeof(tld->free_batch.entries));
   mi_lock_init(&tld->theaps_lock);
   if (tld->thread_id == MI_THREADID_DETACHED) {
