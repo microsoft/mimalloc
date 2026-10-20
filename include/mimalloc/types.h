@@ -472,7 +472,7 @@ static inline mi_used_t mi_xused_used_reset(mi_used_t xused) { xused.used_alloc 
 //   that case the `xthreadid` is 0 or 4 (4 is for abandoned pages that
 //   are in the `pages_abandoned` lists of an arena, these are called "mapped" abandoned pages).
 // - page flags are in the bottom 3 bits of `xthread_id` for the fast path in `mi_free`.
-// - The layout below is optimized for `alloc/free.c:mi_free` and `alloc/alloc.c:mi_page_alloc`
+// - The layout below is optimized for `alloc/free.c:mi_free` and `alloc/alloc.c:mi_page_alloc` -- do not change it without careful consideration.
 
 typedef struct mi_page_s {  
   #if (MI_PAGE_META_IS_ALIGNED)
@@ -480,14 +480,14 @@ typedef struct mi_page_s {
   #endif
   _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= `theap->thread_id (or 0 or 4 if abandoned) | page_flags`)
   mi_block_t*               free;              // list of available free blocks (`malloc` allocates from this list)
+  mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
+  size_t                    block_size;        // const: size available in each block (always `>0`)  
   mi_used_t                 xused;             // number of blocks in use (including blocks in `thread_free`) (and the allocated count for statistics)
   #if MI_SIZE_SIZE < 8
   uint16_t                  xlast_used;        // for statistics; on 64-bit platforms it is in bits 32..47 of xused.
   uint16_t                  xlast_alloc;       // for sampling; on 64-bit platforms it is in bits 48..63 of xused.
   #endif
-  mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
- 
-  size_t                    block_size;        // const: size available in each block (always `>0`)
+  
   size_t                    page_offset;       // const: relative offset from the page to the start of the blocks
   uint16_t                  capacity;          // number of blocks committed
   uint16_t                  reserved;          // number of blocks reserved in memory
