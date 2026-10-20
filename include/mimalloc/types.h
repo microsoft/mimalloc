@@ -215,9 +215,9 @@ terms of the MIT license. A copy of the license can be found in the file
   #define MI_ARENA_SLICE_SHIFT              MI_SMALL_PAGE_SHIFT
   #elif MI_SECURE>=5 && __APPLE__ && MI_ARCH_ARM64
   #define MI_ARENA_SLICE_SHIFT              (17)                        // 128 KiB to not waste too much due to 16 KiB guard pages
-  #elif MI_SECURE>=5 && defined(PAGE_SIZE) && !defined(__wasi__)     // PAGE_SIZE is not a preprocessor constant on WASI
+  #elif MI_SECURE>=5 && defined(PAGE_SIZE) && !defined(__wasi__)        // see issue #1440
     #if PAGE_SIZE >= 16*MI_KiB
-    #define MI_ARENA_SLICE_SHIFT            (17)
+    #define MI_ARENA_SLICE_SHIFT            (17)                        // 128 KiB to not waste too much due to 16 KiB guard pages
     #endif
   #endif
   #ifndef MI_ARENA_SLICE_SHIFT
