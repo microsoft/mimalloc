@@ -70,7 +70,7 @@ typedef struct mi_thread_fun_args_s {
 #include <windows.h>
 static DWORD WINAPI mi_win_thread_entry(LPVOID varg) {
   mi_thread_fun_args_t* arg = (mi_thread_fun_args_t*)varg;
-  arg->result = arg->fun(); 
+  arg->result = arg->fun();
   return 0;
 }
 bool mi_run_on_thread(mi_thread_fun_t fun) {
@@ -85,7 +85,7 @@ bool mi_run_on_thread(mi_thread_fun_t fun) {
 #include <pthread.h>
 static void* mi_pthread_entry(void* varg) {
   mi_thread_fun_args_t* arg = (mi_thread_fun_args_t*)varg;
-  arg->result = arg->fun(); 
+  arg->result = arg->fun();
   return NULL;
 }
 bool mi_run_on_thread(mi_thread_fun_t fun) {

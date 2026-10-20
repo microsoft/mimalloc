@@ -417,7 +417,7 @@ int mi_version(void);
 int main(int argc, char** argv) {
   #ifdef MI_LINK_VERSION
     mi_version();
-  #endif  
+  #endif
   #if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
     mi_option_set(mi_option_arena_reserve, (long)(mi_arena_min_size()/1024) /* in KiB ! */);
     // mi_option_set(mi_option_purge_delay,1);

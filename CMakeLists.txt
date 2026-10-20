@@ -107,7 +107,7 @@ include("cmake/mimalloc-config-version.cmake")
 set(mi_sources
     src/prim/os.c
     src/prim/prim.c
-    src/prim/prim-tls.c 
+    src/prim/prim-tls.c
     src/util/libc.c
     src/util/options.c
     src/util/random.c
@@ -121,7 +121,7 @@ set(mi_sources
     src/alloc/alloc.c
     src/alloc/alloc-generic.c
     # src/alloc/free.c
-    # src/alloc/alloc-override.c    
+    # src/alloc/alloc-override.c
     src/alloc/alloc-aligned.c
     src/alloc/alloc-posix.c
     src/alloc/page.c
@@ -133,7 +133,7 @@ set(mi_sources
     src/heap/theap.c
     src/profile/sample-guarded.c
     src/profile/sample-profile.c
-    src/profile/pprof.c)  
+    src/profile/pprof.c)
 
 set(mi_cflags "")
 set(mi_cflags_static "")            # extra flags for a static library build
@@ -274,7 +274,7 @@ if(MI_USE_CXX)
   if(CMAKE_CXX_COMPILER_ID MATCHES "Intel" AND NOT CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM")
     list(APPEND mi_cflags -Kc++)
   elseif(MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
-    list(APPEND mi_cflags /Zc:__cplusplus)  
+    list(APPEND mi_cflags /Zc:__cplusplus)
   endif()
 endif()
 
@@ -339,7 +339,7 @@ if(MI_SECURE_FULL)
   message(STATUS "MI_SECURE_FULL is deprecated, use MI_SECURE=FULL instead")
   set(MI_SECURE "FULL")
 endif()
-if(MI_SECURE STREQUAL "FULL")  
+if(MI_SECURE STREQUAL "FULL")
   message(STATUS "Use full secure build (MI_SECURE=FULL, may be expensive)")
   list(APPEND mi_defines MI_SECURE=5)
 elseif(MI_SECURE)
@@ -504,7 +504,7 @@ if(MI_FREE_IS_CHECKED STREQUAL "ON")
   message(STATUS "Check validity eof pointers passed to 'mi_free' (MI_FREE_IS_CHECKED=ON)")
   list(APPEND mi_defines MI_FREE_IS_CHECKED=1)
 elseif(MI_SECURE)
-  message(STATUS "Check validity of pointers passed to 'mi_free' (MI_SECURE=ON, MI_FREE_IS_CHECKED=ON)")    
+  message(STATUS "Check validity of pointers passed to 'mi_free' (MI_SECURE=ON, MI_FREE_IS_CHECKED=ON)")
 elseif(MI_FREE_IS_CHECKED STREQUAL "SHARED")
   message(STATUS "Check validity of pointers passed to 'mi_free' only in the dynamic/shared link library (MI_FREE_IS_CHECKED=SHARED)")
   list(APPEND mi_cflags_dynamic -DMI_FREE_IS_CHECKED=1)
@@ -559,12 +559,12 @@ endif()
 if(MI_FREE_USE_PAGEMAP)
   message(STATUS "Always use the pagemap in mi_free (MI_FREE_USE_PAGEMAP=ON)")
   list(APPEND mi_defines MI_FREE_USE_PAGEMAP=1)
-endif()  
+endif()
 
 # deprecated
 if(MI_OPT_FREE_SMALL STREQUAL "DEFAULT")
   # do nothing
-elseif(MI_OPT_FREE_SMALL) 
+elseif(MI_OPT_FREE_SMALL)
   if(MI_GUARDED OR MI_SECURE)
     message(STATUS "Cannot enable MI_OPT_FREE_SMALL in secure or guarded mode (MI_OPT_FREE_SMALL=OFF)")
   else()
@@ -713,7 +713,7 @@ if(MI_WIN_INIT STREQUAL "DEFAULT")
     set(MI_WIN_INIT "FLS")
   endif()
 endif()
-  
+
 if(MI_WIN_INIT STREQUAL "RAW_DLLMAIN")
   message(STATUS "Use raw Dll main entry on Windows to initialize and finalize mimalloc (MI_WIN_INIT=RAW_DLLMAIN)")
   message(STATUS "Note: this can lead to link errors if other libraries also try to define a raw Dll main entry point")
@@ -756,7 +756,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU" AND NOT MI_CLANG_CL)
   endif()
   if(CMAKE_C_COMPILER_ID STREQUAL "AppleClang" AND MI_ARCH STREQUAL "arm64")
     list(APPEND mi_cflags -Xclang -fno-split-cold-code)
-  endif()  
+  endif()
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "Intel")
@@ -786,8 +786,8 @@ endif()
 
 # Compiler and architecture specific flags
 if(MI_OPT_ARCH MATCHES "^(1|ON|YES|TRUE|Y)$")
-  if(APPLE AND CMAKE_OSX_ARCHITECTURES AND CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang" )  
-    set(MI_OPT_ARCH "ON")    
+  if(APPLE AND CMAKE_OSX_ARCHITECTURES AND CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang" )
+    set(MI_OPT_ARCH "ON")
   elseif(MI_ARCH STREQUAL "arm64")
     if(APPLE)
       set(MI_OPT_ARCH "armv8.3")      # M1+ supports arm8.3-a (which includes LDAPR (load-aquire))
@@ -799,10 +799,10 @@ if(MI_OPT_ARCH MATCHES "^(1|ON|YES|TRUE|Y)$")
   elseif(MI_ARCH STREQUAL "x64")
     set(MI_OPT_ARCH "avx2")
   elseif(MI_ARCH MATCHES "riscv")
-    set(MI_OPT_ARCH "rv${MI_ARCH_BITS}gcb_zacas")  # fast bit scan and atomics (since 2023) 
-    # set(MI_OPT_ARCH "rv${MI_ARCH_BITS}gcb_zacas_zalasr")  # fast bit scan and atomics (since 2025) 
+    set(MI_OPT_ARCH "rv${MI_ARCH_BITS}gcb_zacas")  # fast bit scan and atomics (since 2023)
+    # set(MI_OPT_ARCH "rv${MI_ARCH_BITS}gcb_zacas_zalasr")  # fast bit scan and atomics (since 2025)
   else()
-    set(MI_OPT_ARCH OFF)              
+    set(MI_OPT_ARCH OFF)
   endif()
 endif()
 
@@ -810,7 +810,7 @@ endif()
 set(MI_OPT_ARCH_FLAGS "")
 if(NOT MI_OPT_ARCH MATCHES "^(0|OFF|NO|FALSE|N)$")
   # apple support for multi-arch binaries (#999)
-  if(APPLE AND CMAKE_OSX_ARCHITECTURES AND CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")  
+  if(APPLE AND CMAKE_OSX_ARCHITECTURES AND CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")
     if("arm64" IN_LIST CMAKE_OSX_ARCHITECTURES)
       list(APPEND MI_OPT_ARCH_FLAGS "-Xarch_arm64;-march=armv8.3-a")
     endif()
@@ -825,7 +825,7 @@ if(NOT MI_OPT_ARCH MATCHES "^(0|OFF|NO|FALSE|N)$")
     elseif(MI_OPT_ARCH MATCHES "^armv[89].*$")
       set(MI_OPT_ARCH_FLAGS "-march=${MI_OPT_ARCH}-a")    # fast atomics
     elseif(MI_OPT_ARCH MATCHES "^rva[0-9][0-9]$")
-      set(MI_OPT_ARCH_FLAGS "-march=${MI_OPT_ARCH}u${MI_ARCH_BITS}")      
+      set(MI_OPT_ARCH_FLAGS "-march=${MI_OPT_ARCH}u${MI_ARCH_BITS}")
     elseif(MI_OPT_ARCH MATCHES "^rv.*$")
       set(MI_OPT_ARCH_FLAGS "-march=${MI_OPT_ARCH}")
     else()
@@ -912,8 +912,8 @@ if(NOT WIN32 AND MI_PROFILE)
     list(APPEND mi_defines MI_HAS_UNISTDH=1)
   endif()
   CHECK_INCLUDE_FILES("execinfo.h" MI_HAS_EXECINFOH)
-  if(MI_HAS_EXECINFOH) 
-    list(APPEND mi_defines MI_HAS_EXECINFOH=1)    
+  if(MI_HAS_EXECINFOH)
+    list(APPEND mi_defines MI_HAS_EXECINFOH=1)
     # On FreeBSD (and some other BSDs) `backtrace`/`backtrace_symbols` are not part of
     # libc but live in a separate `libexecinfo` that must be linked explicitly.
     if(CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")
@@ -921,7 +921,7 @@ if(NOT WIN32 AND MI_PROFILE)
       if(MI_LIB_EXECINFO)
         list(APPEND mi_libraries "${MI_LIB_EXECINFO}")
       endif()
-    endif()    
+    endif()
   else()
     # No `execinfo.h` available (e.g. musl-based Linux distributions such as Alpine
     # do not implement `backtrace`); fall back to `libunwind` if it is installed.

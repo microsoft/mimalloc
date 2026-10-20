@@ -287,7 +287,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_transparent_huge_pages = (config->large_page_size <= MI_UNIX_MAX_THP_PAGE_SIZE) && unix_detect_thp();
   config->has_overcommit = unix_detect_overcommit();
   config->virtual_address_bits = unix_detect_virtual_address_bits();
-  
+
   // disable transparent huge pages for this process?
   #if (defined(__linux__) || defined(__ANDROID__)) && defined(PR_GET_THP_DISABLE)
   if (!mi_option_is_enabled(mi_option_allow_thp)) // disable THP if requested through an option
@@ -494,7 +494,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       else
       #endif
       #if !defined(MI_NO_THP)
-      if (allow_large && mi_option_is_enabled(mi_option_allow_thp)) {      
+      if (allow_large && mi_option_is_enabled(mi_option_allow_thp)) {
         #if defined(MADV_HUGEPAGE)
         if (_mi_os_has_thp()) {
           // Many Linux systems don't allow MAP_HUGETLB but they support instead
