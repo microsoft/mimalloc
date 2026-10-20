@@ -480,15 +480,24 @@ typedef struct mi_page_s {
   #endif
   _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= `theap->thread_id (or 0 or 4 if abandoned) | page_flags`)
   mi_block_t*               free;              // list of available free blocks (`malloc` allocates from this list)
+  #if MI_ARCH_ARM64
+  // Keep mutable fast-path fields apart from partially overlapping ARM64 load/store pairs.
+  size_t                    block_size;        // const: size available in each block (always `>0`)
+  #endif
   mi_used_t                 xused;             // number of blocks in use (including blocks in `thread_free`) (and the allocated count for statistics)
   #if MI_SIZE_SIZE < 8
   uint16_t                  xlast_used;        // for statistics; on 64-bit platforms it is in bits 32..47 of xused.
   uint16_t                  xlast_alloc;       // for sampling; on 64-bit platforms it is in bits 48..63 of xused.
   #endif
+  #if MI_ARCH_ARM64
+  size_t                    page_offset;       // const: relative offset from the page to the start of the blocks
   mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
- 
+  #else
+  mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   size_t                    block_size;        // const: size available in each block (always `>0`)
   size_t                    page_offset;       // const: relative offset from the page to the start of the blocks
+  #endif
+
   uint16_t                  capacity;          // number of blocks committed
   uint16_t                  reserved;          // number of blocks reserved in memory
   uint16_t                  slice_pcommitted;  // committed size in OS page sizes relative to the first arena slice of the page data (or 0 if the page is fully committed already)

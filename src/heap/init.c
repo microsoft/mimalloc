@@ -25,14 +25,22 @@ static const mi_page_t mi_page_empty = {
   #endif
   MI_ATOMIC_VAR_INIT(0),  // xthread_id
   NULL,                   // free
+  #if MI_ARCH_ARM64
+  0,                      // block_size
+  #endif
   {0},                    // xused
   #if MI_SIZE_SIZE < 8
   0,                      // xlast_used
   0,                      // xlast_alloc
   #endif
+  #if MI_ARCH_ARM64
+  0,                      // page_offset
+  NULL,                   // local_free
+  #else
   NULL,                   // local_free
   0,                      // block_size
   0,                      // page_offset
+  #endif
   0,                      // capacity
   0,                      // reserved capacity
   0,                      // slice_pcommitted
