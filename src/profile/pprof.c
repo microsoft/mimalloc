@@ -278,31 +278,7 @@ static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data
   MI_UNUSED(threshold); MI_UNUSED(ptr);
   mi_pprof_profiler_t* prof = downcast(profiler);
   mi_theap_t* theap = _mi_heap_theap(heap);
-  // Capturing a backtrace can itself allocate (notably `backtrace` on Linux can
-  // call `malloc` internally). When mimalloc overrides `malloc`, that allocation
-  // is sampled again and would recursively capture backtraces until the stack
-  // overflows. Detect that re-entrancy per thread (via the theap, which is only
-  // ever used by its owning thread) and skip the nested sample: it is attributed
-  // to no location, but `data` is still filled in so the matching `on_free` is safe.
-  if (theap->profiler_reserved2 != 0) {
-    // A nested allocation is attributed to no location, but its matching
-    // `on_free` still subtracts its size from the global in-use total, so the
-    // total has to be increased here as well. The threshold is deliberately not
-    // updated: a snapshot must never be attempted from inside a backtrace
-    // capture, and the next non-nested sample picks up the new total.
-    if (prof->inuse_interval_size > 0) {
-      mi_atomic_add_relaxed(&prof->inuse_bytes, requested_size);
-    }
-    if (data != NULL) {
-      mi_assert(data->user_data_size >= 2*sizeof(void*));
-      data->user_data[0] = NULL;
-      data->user_data[1] = (void*)((uintptr_t)requested_size);
-    }
-    return mi_exp_sample(theap, prof->sample_threshold);
-  }
-  theap->profiler_reserved2 = 1;
-  mi_location_t* loc = mi_location_get(prof);
-  theap->profiler_reserved2 = 0;
+  mi_location_t* loc = mi_location_get(prof);  // nested allocations (e.g. by `backtrace`) are not sampled (see `mi_profiler_on_alloc`)
   const size_t new_threshold = mi_exp_sample(theap, prof->sample_threshold);  // randomized (Poisson) next sample threshold
   const size_t alloc_size = requested_size;            // or mi_heap_usable_size(heap,ptr) ?
 

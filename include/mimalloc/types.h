@@ -804,6 +804,7 @@ struct mi_tld_s {
   mi_theap_t*           theaps;               // list of theaps in this thread (so we can abandon all when the thread terminates)
   mi_lock_t             theaps_lock;          // lock as the theaps list is sometimes accessed from another thread (on `mi_heap_free`)
   bool                  recurse;              // true if deferred was called; used to prevent infinite recursion.
+  bool                  in_profiler;          // true while in a profiler `on_alloc` callback; nested allocations are not sampled
   bool                  is_in_threadpool;     // true if this thread is part of a threadpool (and can run arbitrary tasks)
   mi_memid_t            memid;                // provenance of the tld memory itself (meta or OS)
 };

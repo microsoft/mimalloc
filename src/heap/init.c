@@ -126,6 +126,7 @@ static mi_decl_cache_align mi_tld_t mi_tld_detached = {
   NULL,                   // theaps list
   MI_LOCK_INITIALIZER,    // theaps lock
   false,                  // recurse
+  false,                  // in_profiler
   false,                  // is_in_threadpool
   MI_MEMID_STATIC         // memid
 };
