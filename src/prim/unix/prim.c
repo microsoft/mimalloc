@@ -200,7 +200,7 @@ static size_t unix_detect_large_page_size(void) {
     if (nread >= 1 && nread < (ssize_t)sizeof(buf)) {
       buf[nread] = 0;
       long size = 0;
-      if (_mi_strntol(buf, nread, NULL, &size) && size > 0 && size <= SIZE_MAX) {
+      if (_mi_strntol(buf, nread, NULL, &size) && size > 0 && (unsigned long)size <= SIZE_MAX) {
         large_page_size = (size_t)size;
       }
     }
