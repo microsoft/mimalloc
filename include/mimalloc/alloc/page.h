@@ -165,11 +165,20 @@ static inline size_t mi_page_committed(const mi_page_t* page) {
 
 static inline size_t mi_page_used(const mi_page_t* page) {
   mi_assert_internal(page != NULL);
-  return mi_xused_used_count(page->xused);
+  mi_assert_internal(mi_xused_used_count(page->xused) >= page->xfreed);
+  return (mi_xused_used_count(page->xused) - page->xfreed);
+}
+
+// subtract the pending local frees (`xfreed`) from `xused`
+static inline void mi_page_used_fold(mi_page_t* page) {
+  mi_assert_internal(mi_xused_used_count(page->xused) >= page->xfreed);
+  page->xused.used_alloc -= page->xfreed;
+  page->xfreed = 0;
 }
 
 static inline void mi_page_used_reset(mi_page_t* page) {
   page->xused = mi_xused_used_reset(page->xused);
+  page->xfreed = 0;
 }
 
 static inline size_t mi_page_alloc_count(const mi_page_t* page) {

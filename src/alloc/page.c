@@ -239,6 +239,7 @@ static void mi_theap_page_merge_stats(mi_theap_t* theapx, const mi_page_t* page,
 
 // Update stats for a page (and sample countdown). Can be called with a NULL `theapx`
 static void mi_theap_page_update_stats(mi_theap_t* theapx, mi_page_t* page) {
+  mi_page_used_fold(page);
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
   mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
   
@@ -381,6 +382,7 @@ static bool mi_page_thread_free_collect(mi_page_t* page)
 
 bool _mi_page_free_collect(mi_page_t* page, bool force) {
   mi_assert_internal(page!=NULL);
+  mi_page_used_fold(page);
 
   // collect the thread free list
   const bool collected_xfree = mi_page_thread_free_collect(page);
@@ -429,6 +431,7 @@ mi_block_t* _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
       page->free = page->local_free;
       page->local_free = NULL;
       page->free_is_zero = false;
+      mi_page_used_fold(page);
       _mi_page_update_sample_countdown(page);
     }    
   }
@@ -939,6 +942,7 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(mi_page_used(page) == 0);
   mi_assert_internal(page->xused.used_alloc == 0);
+  mi_assert_internal(page->xfreed == 0);
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(page->xthread_free == 1);
   mi_assert_internal(page->next == NULL);

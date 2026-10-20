@@ -489,6 +489,7 @@ typedef struct mi_page_s {
   #endif
   
   size_t                    page_offset;       // const: relative offset from the page to the start of the blocks
+  size_t                    xfreed;            // local frees not yet subtracted from `xused` (so `mi_free` does not update `xused` written by `mi_malloc`)
   uint16_t                  capacity;          // number of blocks committed
   uint16_t                  reserved;          // number of blocks reserved in memory
   uint16_t                  slice_pcommitted;  // committed size in OS page sizes relative to the first arena slice of the page data (or 0 if the page is fully committed already)

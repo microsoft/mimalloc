@@ -28,6 +28,7 @@ static inline bool mi_page_free_quick_collect(mi_page_t* page) {
   page->free = page->local_free;
   page->local_free = NULL;
   page->free_is_zero = false;  
+  mi_page_used_fold(page);
   _mi_page_update_sample_countdown(page);
   return true;
 }
