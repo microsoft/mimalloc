@@ -354,6 +354,69 @@ static bool test_reclaim(void) {
   return true;
 }
 
+static bool test_reclaim_delayed_empty(size_t size, bool os) {
+  const long previous = mi_option_get(mi_option_page_reclaim_on_free);
+  mi_option_set(mi_option_page_reclaim_on_free, -1);
+  worker_heap = mi_heap_new_qsbr();
+  mi_option_set(mi_option_page_reclaim_on_free, previous);
+  require(worker_heap != NULL);
+  mi_theap_t* theap = mi_heap_theap(worker_heap);
+  worker_size = size;
+  worker_empty = false;
+  worker_delete = false;
+  mi_option_set(mi_option_disallow_arena_alloc, os ? 1 : 0);
+  require(mi_run_on_thread(&allocate_and_exit));
+  mi_option_set(mi_option_disallow_arena_alloc, 0);
+  require((worker_page->memid.memkind != MI_MEM_ARENA) == os);
+  if (worker_blocks[1] != NULL) {
+    mi_free(worker_blocks[1]);
+    require(mi_page_is_abandoned(worker_page));
+    require(mi_page_claim_ownership(worker_page));
+    worker_page->retire_expire = 2;
+    require(!mi_abandoned_page_unown(worker_page, NULL));
+  }
+  mi_free(worker_blocks[0]);
+  require(!mi_page_is_abandoned(worker_page) && mi_page_theap(worker_page) == theap);
+  require(worker_page->heap == worker_heap && mi_page_all_free(worker_page));
+  require(worker_page->retire_expire == 0 && !mi_page_is_in_full(worker_page));
+  require(qsbr_count(theap) == 1 && page_count(worker_heap) == 1);
+  const uint64_t goal = worker_page->qsbr.goal;
+  require(goal != 0);
+  mi_heap_collect(worker_heap, true);
+  require(page_count(worker_heap) == 1 && worker_page->qsbr.goal == goal);
+  qsbr_complete();
+  mi_heap_collect(worker_heap, true);
+  require(page_count(worker_heap) == 0 && qsbr_count(theap) == 0);
+  mi_heap_destroy(worker_heap);
+  return true;
+}
+
+static bool test_reclaim_ready_pages(void) {
+  mi_heap_t* heap = mi_heap_new_qsbr();
+  require(heap != NULL);
+  mi_theap_t* theap = mi_heap_theap(heap);
+  void* blocks[128];
+  size_t count = 0;
+  size_t pages = 0;
+  mi_page_t* last = NULL;
+  while (pages < 3 && count < 128) {
+    void* p = mi_heap_malloc(heap, 8192);
+    require(p != NULL);
+    blocks[count++] = p;
+    if (mi_ptr_page(p) != last) { last = mi_ptr_page(p); pages++; }
+  }
+  require(pages == 3);
+  for (size_t i = 0; i < count; i++) { mi_free(blocks[i]); }
+  _mi_theap_collect_abandon(theap);
+  require(page_count(heap) == 3 && theap->page_count == 0);
+  qsbr_complete();
+  mi_page_t* page = _mi_page_fresh(theap, mi_page_queue(theap, 8192 + MI_PADDING_SIZE));
+  require(page != NULL && mi_page_immediate_available(page));
+  require(page_count(heap) == 1 && _mi_page_qsbr_is_clear(page));
+  mi_heap_destroy(heap);
+  return true;
+}
+
 static bool test_orphan(size_t size, bool os, bool empty) {
   worker_heap = mi_heap_new_qsbr();
   require(worker_heap != NULL);
@@ -468,6 +531,11 @@ int main(void) {
   CHECK("local reuse starts a new grace period", test_reuse(false));
   CHECK("remote reuse starts a new grace period", test_reuse(true));
   CHECK("reclaim preserves goal, appends at tail, and stops behind an unfinished head", test_reclaim());
+  CHECK("delayed empty arena page is reclaimed despite disabled reclaim", test_reclaim_delayed_empty(64, false));
+  CHECK("delayed empty OS page is reclaimed despite disabled reclaim", test_reclaim_delayed_empty(64, true));
+  CHECK("delayed empty arena singleton is reclaimed", test_reclaim_delayed_empty(2*MI_MiB, false));
+  CHECK("delayed empty OS singleton is reclaimed", test_reclaim_delayed_empty(2*MI_MiB, true));
+  CHECK("allocation retries when reclaim releases ready empty pages", test_reclaim_ready_pages());
   CHECK("live orphan, origin-only reclaim, no TLS on last free", test_orphan(64, false, false));
   CHECK("empty abandoned arena singleton", test_orphan(2*MI_MiB, false, true));
   CHECK("live abandoned arena singleton", test_orphan(2*MI_MiB, false, false));

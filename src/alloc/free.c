@@ -472,19 +472,29 @@ bool mi_cfree(void* p) mi_attr_noexcept {
 // 3. if it went to < 7/8th used, re-abandon to be mapped (so it can be found by theaps looking for free pages)
 // --------------------------------------------------------------------------------------------
 
-// Consume an empty page, either freeing it or leaving it abandoned until its grace period ends.
+// Consume an empty page, reclaiming delayed pages if this thread has a theap for their heap.
 static bool mi_abandoned_page_collect_empty(mi_page_t* page)
 {
   if (!mi_page_all_free(page)) return false;
   const bool should_delay = _mi_page_qsbr_should_delay(page);
   // first remove it from the abandoned pages in the arena (if mapped, this might wait for any readers to finish)
   _mi_arenas_page_unabandon(page,NULL);
-  if (!should_delay) {
+  if mi_likely(!should_delay) {
     _mi_page_qsbr_clear(page);
     _mi_arenas_page_free(page,NULL);
   }
   else {
-    _mi_arenas_page_abandon(page,NULL);
+    mi_heap_t* const heap = mi_page_heap(page);
+    mi_theap_t* const theap = mi_heap_theap(heap);
+    if (theap != NULL) {
+      // reclaim such that it gets part of the theap's qsbr list.
+      _mi_theap_page_reclaim(theap, page);
+    }
+    else {
+      mi_assert_internal(false);
+      // abandon as empty; it can only be collected by _mi_heap_collect_abandoned at this point
+      _mi_arenas_page_abandon(page,NULL);
+    }
   }
   return true;
 }
