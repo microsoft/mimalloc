@@ -199,7 +199,11 @@ static size_t mi_exp_sample(mi_theap_t* theap, size_t scale) {
   #endif
   const size_t r  = _mi_theap_random_next(theap) | 1;   
   const size_t lz = mi_clz(r);                                  // coarse -log2(U): Geometric(1/2)
-  const size_t frac_q8 = (r << (lz + 1)) >> (MI_SIZE_BITS - 8); // next 8 bits: fractional refinement, in [0,256)
+  // The highest set bit of `r` is at position `MI_SIZE_BITS-1-lz`; shift it out and
+  // take the next 8 bits as a fractional refinement in [0,256). When `r == 1`
+  // (lz == MI_SIZE_BITS-1) there are no fractional bits and the shift would be
+  // undefined, so the fraction is 0 there.
+  const size_t frac_q8 = (lz >= MI_SIZE_BITS - 1 ? 0 : (r << (lz + 1)) >> (MI_SIZE_BITS - 8));
   const size_t bits_q8 = (lz << 8) | frac_q8;                   // Q8 fixed-point estimate of -log2(U)
   const size_t ln_q8   = (bits_q8 * 177) >> 8;                  // -log2(U) -> -ln(U): *ln(2) (~177/256)
   size_t next = ((ln_q8 * scale) >> 8) + 1;                     // scale by the mean; +1 avoids a zero threshold
@@ -271,10 +275,34 @@ static bool mi_time_threshold_update(mi_msecs_t now, size_t time_interval_secs, 
 // Sample allocation event and update profiling data accordingly
 static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, mi_heap_t* heap) 
 {
-  MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(ptr);
+  MI_UNUSED(threshold); MI_UNUSED(ptr);
   mi_pprof_profiler_t* prof = downcast(profiler);
-  mi_location_t* loc = mi_location_get(prof);
   mi_theap_t* theap = _mi_heap_theap(heap);
+  // Capturing a backtrace can itself allocate (notably `backtrace` on Linux can
+  // call `malloc` internally). When mimalloc overrides `malloc`, that allocation
+  // is sampled again and would recursively capture backtraces until the stack
+  // overflows. Detect that re-entrancy per thread (via the theap, which is only
+  // ever used by its owning thread) and skip the nested sample: it is attributed
+  // to no location, but `data` is still filled in so the matching `on_free` is safe.
+  if (theap->profiler_reserved2 != 0) {
+    // A nested allocation is attributed to no location, but its matching
+    // `on_free` still subtracts its size from the global in-use total, so the
+    // total has to be increased here as well. The threshold is deliberately not
+    // updated: a snapshot must never be attempted from inside a backtrace
+    // capture, and the next non-nested sample picks up the new total.
+    if (prof->inuse_interval_size > 0) {
+      mi_atomic_add_relaxed(&prof->inuse_bytes, requested_size);
+    }
+    if (data != NULL) {
+      mi_assert(data->user_data_size >= 2*sizeof(void*));
+      data->user_data[0] = NULL;
+      data->user_data[1] = (void*)((uintptr_t)requested_size);
+    }
+    return mi_exp_sample(theap, prof->sample_threshold);
+  }
+  theap->profiler_reserved2 = 1;
+  mi_location_t* loc = mi_location_get(prof);
+  theap->profiler_reserved2 = 0;
   const size_t new_threshold = mi_exp_sample(theap, prof->sample_threshold);  // randomized (Poisson) next sample threshold
   const size_t alloc_size = requested_size;            // or mi_heap_usable_size(heap,ptr) ?
 
@@ -348,11 +376,12 @@ static void mi_cdecl on_snapshot(mi_profiler_t* profiler) {
 mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, size_t alloc_interval_size, size_t inuse_interval_size, size_t time_interval_secs) {
   // heap just for the profiler itself
   mi_heap_t* heap = mi_heap_new();
+  if (heap == NULL) return NULL;
   mi_heap_profile_disable(heap);  // don't sample allocations in this heap
 
   // allocate and initialize the profiler structure from this heap
   mi_pprof_profiler_t* prof = mi_heap_zalloc_tp(mi_pprof_profiler_t,heap);
-  if (prof == NULL) return NULL;
+  if (prof == NULL) { mi_heap_delete(heap); return NULL; }
   prof->sample_threshold = initial_threshold;
   prof->profile_heap = heap;
   prof->base_file_name = (base_file_name != NULL ? mi_heap_strndup(heap, base_file_name, 1024) : NULL);
@@ -379,7 +408,10 @@ mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_
   prof->time_interval_secs = time_interval_secs;
   mi_atomic_storei64_relaxed(&prof->time_interval_deadline, _mi_clock_now() + (mi_msecs_t)prof->time_interval_secs * 1000);  // deadline stays unreachable (now, i.e. always due) if disabled, but `on_alloc` never checks in that case
   if (!mi_locations_init(heap, &prof->locations)) {
-    mi_free(prof);
+    // `mi_heap_destroy` frees the live blocks of this private heap, i.e. the
+    // profiler object and the base file name. (`mi_heap_delete` would instead
+    // move them to the main heap, losing our only reference.)
+    mi_heap_destroy(heap);
     return NULL;
   }
   prof->profiler.initial_sample_rate = initial_threshold;
@@ -499,7 +531,7 @@ static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_
   if (loc == NULL) return NULL;
   if (callstack->count > 0) {
     loc->callstack.frames = (void**)mi_heap_mallocn(heap, callstack->count, sizeof(void*));
-    if (loc->callstack.frames == NULL) return NULL;
+    if (loc->callstack.frames == NULL) { mi_free(loc); return NULL; }  // free the not-yet-published location
     mi_memcpy(loc->callstack.frames, callstack->frames, callstack->count * sizeof(void*));
   }
   loc->callstack.count = callstack->count;
@@ -555,8 +587,8 @@ void mi_pprof_profiler_snapshot(mi_pprof_profiler_t* profiler) {
 
 // forward declarations; implemented further below.
 static void mi_pprof_write_mapped_libraries(FILE* f);
-static void mi_pprof_snapshot_text(mi_pprof_profiler_t* prof, const char* fname);
-static void mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname);
+static bool mi_pprof_snapshot_text(mi_pprof_profiler_t* prof, const char* fname);
+static bool mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname);
 
 
 // Detect if we are running with elevated privileges (e.g. a setuid/setgid executable or similar), 
@@ -622,15 +654,24 @@ static void mi_pprof_profiler_snapshot(mi_pprof_profiler_t* prof) {
   if (locations->buckets != NULL && prof->base_file_name != NULL) {
     const size_t seq = ++prof->snapshot_count;
     char fname[1024];
+    bool ok;
     if (!prof->format_text) {
       _mi_snprintf(fname, sizeof(fname), "%s.%04zu.pb", prof->base_file_name, seq);
-      mi_pprof_snapshot_proto(prof, fname);
+      ok = mi_pprof_snapshot_proto(prof, fname);
     }
     else {
       _mi_snprintf(fname, sizeof(fname), "%s.%04zu.heap", prof->base_file_name, seq);
-      mi_pprof_snapshot_text(prof, fname);
+      ok = mi_pprof_snapshot_text(prof, fname);
     }
-    _mi_verbose_message("pprof profiler snapshot: %s\n", fname);
+    // A snapshot is best effort: it can fail when the profiler's own heap is out
+    // of memory (or the file cannot be created), in which case no (or only a
+    // partial) snapshot is written. Never let that affect the profiled program.
+    if (ok) {
+      _mi_verbose_message("pprof profiler snapshot: %s\n", fname);
+    }
+    else {
+      _mi_verbose_message("pprof profiler: unable to write snapshot (out of memory?)\n");
+    }
   }
   if (was_running) { mi_profiler_start(&prof->profiler); }
 }
@@ -719,18 +760,24 @@ typedef struct {
   mi_pprof_module_t* modules;
   size_t              count;
   size_t              capacity;
+  bool                failed;  // set if an allocation failed; the mapping list is then incomplete
 } mi_pprof_modules_t;
 
 static void mi_pprof_modules_add(mi_heap_t* heap, mi_pprof_modules_t* mods, uintptr_t start, uintptr_t end, const char* path) {
+  if (mods->failed) return;
   if (mods->count == mods->capacity) {
     const size_t new_capacity = (mods->capacity == 0 ? 16 : mods->capacity * 2);
-    mods->modules = (mi_pprof_module_t*)mi_heap_realloc(heap, mods->modules, new_capacity * sizeof(*mods->modules));
+    mi_pprof_module_t* const new_modules = (mi_pprof_module_t*)mi_heap_realloc(heap, mods->modules, new_capacity * sizeof(*mods->modules));
+    if (new_modules == NULL) { mods->failed = true; return; }
+    mods->modules = new_modules;
     mods->capacity = new_capacity;
   }
+  char* const copy = (path != NULL ? mi_heap_strndup(heap, path, 1024) : NULL);
+  if (path != NULL && copy == NULL) { mods->failed = true; return; }
   mi_pprof_module_t* m = &mods->modules[mods->count++];
   m->start = start;
   m->end = end;
-  m->path = (path != NULL ? mi_heap_strndup(heap, path, 1024) : NULL);
+  m->path = copy;
 }
 
 static void mi_pprof_modules_done(mi_pprof_modules_t* mods) {
@@ -982,6 +1029,7 @@ static void mi_pprof_collect_modules(mi_heap_t* heap, mi_pprof_modules_t* mods) 
   mods->modules = NULL;
   mods->count = 0;
   mods->capacity = 0;
+  mods->failed = false;
   #if defined(__linux__)
   mi_pprof_collect_modules_linux(heap, mods);
   #elif defined(_WIN32)
@@ -1017,10 +1065,10 @@ static void mi_pprof_write_mapped_libraries(FILE* f) {
 // a header line with the totals, followed by one line per unique call
 // location, and a trailer with the mapped libraries (used by `pprof` to
 // symbolize the addresses).
-static void mi_pprof_snapshot_text(mi_pprof_profiler_t* prof, const char* fname) {
+static bool mi_pprof_snapshot_text(mi_pprof_profiler_t* prof, const char* fname) {
   mi_locations_t* locations = &prof->locations;
   FILE* f = mi_pprof_fopen(fname, false);
-  if (f == NULL) return;
+  if (f == NULL) return false;
 
   // first pass: compute the totals over all locations
   // (snapshot is assumed to run single-threaded while sampling is stopped, so
@@ -1058,7 +1106,9 @@ static void mi_pprof_snapshot_text(mi_pprof_profiler_t* prof, const char* fname)
   }
 
   mi_pprof_write_mapped_libraries(f);
-  fclose(f);
+  const bool ok = (ferror(f) == 0);
+  if (fclose(f) != 0) return false;
+  return ok;
 }
 
 
@@ -1086,11 +1136,14 @@ static void mi_pprof_snapshot_text(mi_pprof_profiler_t* prof, const char* fname)
 // ---------------------------------------------------------------------------
 
 // A simple growable byte buffer, allocated from the profiler's own heap.
+// If an allocation fails, `failed` is set and all further writes become no-ops;
+// the caller must check it and discard the whole snapshot.
 typedef struct {
   mi_heap_t* heap;
   uint8_t*   data;
   size_t     size;
   size_t     capacity;
+  bool       failed;
 } mi_pb_buf_t;
 
 static void mi_pb_init(mi_pb_buf_t* b, mi_heap_t* heap) {
@@ -1098,6 +1151,7 @@ static void mi_pb_init(mi_pb_buf_t* b, mi_heap_t* heap) {
   b->data = NULL;
   b->size = 0;
   b->capacity = 0;
+  b->failed = false;
 }
 
 static void mi_pb_done(mi_pb_buf_t* b) {
@@ -1105,18 +1159,24 @@ static void mi_pb_done(mi_pb_buf_t* b) {
   b->data = NULL;
   b->size = 0;
   b->capacity = 0;
+  b->failed = false;
 }
 
-static void mi_pb_reserve(mi_pb_buf_t* b, size_t extra) {
-  if (b->size + extra <= b->capacity) return;
+static bool mi_pb_reserve(mi_pb_buf_t* b, size_t extra) {
+  if (b->failed) return false;
+  if (b->size + extra <= b->capacity) return true;
   size_t new_capacity = (b->capacity == 0 ? 4096 : b->capacity * 2);
   while (new_capacity < b->size + extra) { new_capacity *= 2; }
-  b->data = (uint8_t*)mi_heap_realloc(b->heap, b->data, new_capacity);
+  uint8_t* const new_data = (uint8_t*)mi_heap_realloc(b->heap, b->data, new_capacity);
+  if (new_data == NULL) { b->failed = true; return false; }  // keep the old buffer (and capacity) intact
+  b->data = new_data;
   b->capacity = new_capacity;
+  return true;
 }
 
 static void mi_pb_bytes(mi_pb_buf_t* b, const void* p, size_t n) {
-  mi_pb_reserve(b, n);
+  if (n == 0) return;  // avoid calling memcpy with a NULL source
+  if (!mi_pb_reserve(b, n)) return;
   memcpy(b->data + b->size, p, n);
   b->size += n;
 }
@@ -1164,6 +1224,7 @@ static void mi_pb_len_field(mi_pb_buf_t* b, uint32_t field, const void* data, si
 }
 
 static void mi_pb_message_field(mi_pb_buf_t* b, uint32_t field, const mi_pb_buf_t* msg) {
+  if (msg->failed) { b->failed = true; return; }  // propagate a failure from the nested message
   mi_pb_len_field(b, field, msg->data, msg->size);
 }
 
@@ -1199,6 +1260,7 @@ typedef struct {
   mi_pb_string_entry_t* entries;
   size_t                count;
   size_t                capacity;
+  bool                  failed;  // set if an allocation failed; the table is then incomplete
   mi_pb_buf_t           table;  // the serialized `string_table` entries (Profile field 6)
 } mi_pb_strings_t;
 
@@ -1207,6 +1269,7 @@ static void mi_pb_strings_init(mi_pb_strings_t* strings, mi_heap_t* heap) {
   strings->entries = NULL;
   strings->count = 0;
   strings->capacity = 0;
+  strings->failed = false;
   mi_pb_init(&strings->table, heap);
   mi_pb_len_field(&strings->table, 6, "", 0);  // index 0 must always be ""
 }
@@ -1218,20 +1281,26 @@ static void mi_pb_strings_done(mi_pb_strings_t* strings) {
 }
 
 static int64_t mi_pb_strings_intern(mi_pb_strings_t* strings, const char* s) {
+  if (strings->failed) return 0;
   if (s == NULL) { s = ""; }
   for (size_t i = 0; i < strings->count; i++) {
     if (_mi_streq(strings->entries[i].str, s)) { return strings->entries[i].index; }
   }
   if (strings->count == strings->capacity) {
     const size_t new_capacity = (strings->capacity == 0 ? 32 : strings->capacity * 2);
-    strings->entries = (mi_pb_string_entry_t*)mi_heap_realloc(strings->heap, strings->entries, new_capacity * sizeof(*strings->entries));
+    mi_pb_string_entry_t* const new_entries = (mi_pb_string_entry_t*)mi_heap_realloc(strings->heap, strings->entries, new_capacity * sizeof(*strings->entries));
+    if (new_entries == NULL) { strings->failed = true; return 0; }
+    strings->entries = new_entries;
     strings->capacity = new_capacity;
   }
+  char* const copy = mi_heap_strndup(strings->heap, s, 1024);
+  if (copy == NULL) { strings->failed = true; return 0; }
   const int64_t index = (int64_t)(strings->count + 1);  // index 0 is reserved for ""
-  strings->entries[strings->count].str = mi_heap_strndup(strings->heap, s, 1024);
+  strings->entries[strings->count].str = copy;
   strings->entries[strings->count].index = index;
   strings->count++;
   mi_pb_len_field(&strings->table, 6, s, strlen(s));
+  if (strings->table.failed) { strings->failed = true; return 0; }
   return index;
 }
 
@@ -1252,12 +1321,14 @@ typedef struct {
   mi_heap_t*            heap;
   size_t                bucket_count;
   mi_pb_addr_entry_t**  buckets;
+  bool                  failed;  // set if an allocation failed (the map is then unusable)
 } mi_pb_addr_map_t;
 
 static void mi_pb_addr_map_init(mi_pb_addr_map_t* map, mi_heap_t* heap, size_t bucket_count) {
   map->heap = heap;
   map->bucket_count = (bucket_count == 0 ? 1 : bucket_count);
   map->buckets = (mi_pb_addr_entry_t**)mi_heap_zalloc(heap, map->bucket_count * sizeof(*map->buckets));
+  map->failed = (map->buckets == NULL);
 }
 
 static void mi_pb_addr_map_done(mi_pb_addr_map_t* map) {
@@ -1278,12 +1349,13 @@ static void mi_pb_addr_map_done(mi_pb_addr_map_t* map) {
 // returns that (setting `*is_new` to true) if this is the first time `addr`
 // is seen.
 static uint64_t mi_pb_addr_map_find_or_insert(mi_pb_addr_map_t* map, uintptr_t addr, uint64_t next_id, bool* is_new) {
-  if (map->buckets == NULL) { *is_new = false; return 0; }
+  if (map->failed || map->buckets == NULL) { map->failed = true; *is_new = false; return 0; }
   const size_t idx = (size_t)(addr ^ (addr >> 16)) % map->bucket_count;
   for (mi_pb_addr_entry_t* e = map->buckets[idx]; e != NULL; e = e->next) {
     if (e->addr == addr) { *is_new = false; return e->id; }
   }
   mi_pb_addr_entry_t* e = mi_heap_malloc_tp(mi_pb_addr_entry_t, map->heap);
+  if (e == NULL) { map->failed = true; *is_new = false; return 0; }
   e->addr = addr;
   e->id = next_id;
   e->next = map->buckets[idx];
@@ -1303,7 +1375,9 @@ static uint64_t mi_pprof_find_mapping_id(const mi_pprof_modules_t* mods, uintptr
 
 // Write out the current profiler data as a raw (uncompressed) `perftools.
 // profiles.Profile` protobuf message (see the file-level comment above).
-static void mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname) {
+// Returns `false` if any allocation failed (in which case no file is written):
+// the snapshot is best effort and must never crash the profiled program.
+static bool mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname) {
   mi_heap_t* heap = prof->profile_heap;
   mi_locations_t* locations = &prof->locations;
 
@@ -1311,6 +1385,17 @@ static void mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname
   mi_pb_init(&profile, heap);
   mi_pb_strings_t strings;
   mi_pb_strings_init(&strings, heap);
+  mi_pprof_modules_t mods;
+  mods.modules = NULL;
+  mods.count = 0;
+  mods.capacity = 0;
+  mods.failed = false;
+  mi_pb_addr_map_t addr_map;
+  addr_map.heap = heap;
+  addr_map.bucket_count = 0;
+  addr_map.buckets = NULL;
+  addr_map.failed = false;
+  bool ok = true;
 
   const int64_t str_count         = mi_pb_strings_intern(&strings, "count");
   const int64_t str_bytes         = mi_pb_strings_intern(&strings, "bytes");
@@ -1320,6 +1405,7 @@ static void mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname
   const int64_t str_inuse_bytes   = mi_pb_strings_intern(&strings, "inuse_bytes");
   const int64_t str_space         = mi_pb_strings_intern(&strings, "space");
   const int64_t str_thread        = mi_pb_strings_intern(&strings, "thread");
+  if (strings.failed) { ok = false; goto done; }
 
   // Profile.sample_type = 1: [alloc_objects:count, alloc_bytes:bytes, inuse_objects:count, inuse_bytes:bytes]
   {
@@ -1337,8 +1423,8 @@ static void mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname
 
   // Profile.mapping = 3: the modules loaded into this process, so `pprof` can
   // symbolize the (raw) addresses recorded in each `Location` below.
-  mi_pprof_modules_t mods;
   mi_pprof_collect_modules(heap, &mods);
+  if (mods.failed) { ok = false; goto done; }
   for (size_t i = 0; i < mods.count; i++) {
     const mi_pprof_module_t* m = &mods.modules[i];
     mi_pb_buf_t mapping;
@@ -1351,14 +1437,15 @@ static void mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname
     }
     mi_pb_message_field(&profile, 3, &mapping);
     mi_pb_done(&mapping);
+    if (profile.failed || strings.failed) { ok = false; goto done; }
   }
 
   // Profile.location = 4 and Profile.sample = 2: one (deduplicated) `Location`
   // per unique frame address, and one `Sample` per unique call site (i.e. one
   // per entry in our own locations hash table), exactly mirroring the text
   // format's aggregation.
-  mi_pb_addr_map_t addr_map;
   mi_pb_addr_map_init(&addr_map, heap, locations->bucket_count);
+  if (addr_map.failed) { ok = false; goto done; }
   uint64_t next_location_id = 1;
 
   for (size_t i = 0; i < locations->bucket_count; i++) {
@@ -1372,6 +1459,7 @@ static void mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname
         const uintptr_t addr = (uintptr_t)loc->callstack.frames[j];
         bool is_new = false;
         const uint64_t id = mi_pb_addr_map_find_or_insert(&addr_map, addr, next_location_id, &is_new);
+        if (addr_map.failed) { ok = false; goto done; }
         location_ids[j] = id;
         if (is_new) {
           next_location_id++;
@@ -1406,11 +1494,9 @@ static void mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname
       }
       mi_pb_message_field(&profile, 2, &sample);
       mi_pb_done(&sample);
+      if (profile.failed) { ok = false; goto done; }
     }
   }
-
-  mi_pb_addr_map_done(&addr_map);
-  mi_pprof_modules_done(&mods);
 
   // Profile.period_type = 11 / Profile.period = 12: matches the convention
   // used by Go's heap profiles ("space"/"bytes", sampling period in bytes).
@@ -1427,15 +1513,27 @@ static void mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname
 
   // the string table (Profile.string_table = 6) can only be finalized now,
   // since strings were interned into it while building the message above.
+  if (strings.failed) { ok = false; goto done; }
   mi_pb_bytes(&profile, strings.table.data, strings.table.size);
-  mi_pb_strings_done(&strings);
+  if (profile.failed) { ok = false; goto done; }
 
-  FILE* f = mi_pprof_fopen(fname, true);
-  if (f != NULL) {
-    fwrite(profile.data, 1, profile.size, f);
-    fclose(f);
+done:
+  mi_pb_addr_map_done(&addr_map);
+  mi_pprof_modules_done(&mods);
+  mi_pb_strings_done(&strings);
+  if (ok) {
+    FILE* f = mi_pprof_fopen(fname, true);
+    if (f == NULL) {
+      ok = false;
+    }
+    else {
+      const size_t written = fwrite(profile.data, 1, profile.size, f);
+      if (written != profile.size) { ok = false; }
+      if (fclose(f) != 0) { ok = false; }
+    }
   }
   mi_pb_done(&profile);
+  return ok;
 }
 
 #endif  // MI_PROFILE

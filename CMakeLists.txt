@@ -1223,8 +1223,10 @@ if (MI_BUILD_TESTS)
     add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_ARENA_EAGER_COMMIT=0 MIMALLOC_PAGE_COMMIT_ON_DEMAND=0 $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
     elseif((NOT MI_PROFILE) AND (TEST_NAME STREQUAL "profile" OR TEST_NAME STREQUAL "pprof" OR TEST_NAME STREQUAL "stress-pprof"))
     # don't add as a test
-    elseif(NOT APPLE AND (TEST_NAME STREQUAL "pprof" OR TEST_NAME STREQUAL "stress-pprof"))
-    # don't add as a test
+    elseif(NOT APPLE AND TEST_NAME STREQUAL "stress-pprof")
+    # don't add as a test (stress-pprof is only run on macOS so far)
+    elseif(TEST_NAME STREQUAL "pprof" AND NOT APPLE AND NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux"))
+    # don't add as a test on platforms where the pprof test is not verified yet
     else()
     add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
     endif()
