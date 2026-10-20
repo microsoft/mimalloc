@@ -139,6 +139,10 @@ and before allocating a huge page; its calls compile away when `MI_QSBR=0`.
 
 ## Owned pages and reuse
 
+QSBR heaps follow `mi_option_page_full_retain` like ordinary heaps: nonnegative
+values allow full pages to be abandoned, while negative values keep them in
+the theap's full queue. QSBR does not force full-queue retention.
+
 A delayed owned page belongs to two independent lists:
 
 - Its ordinary mimalloc size-class queue, so it remains available for allocation.
@@ -207,11 +211,12 @@ A page may also become empty only after its owner has terminated. A zero goal
 in this case is **not** evidence of safety: `mi_page_qsbr_should_delay` must
 establish a new grace period using the heap's stable domain. On a free-side
 release attempt, an unfinished empty page is reclaimed into the calling
-thread's existing theap for the same heap, if one exists. Ordinary release
-then resets its retirement countdown and queues it for QSBR collection.
-This includes singleton and OS pages and bypasses nonempty-page reclaim
-limits. If no such theap exists, the page remains abandoned without
-initializing thread state. Thread-exit abandonment is unchanged.
+thread's theap for the same heap, creating that theap and initializing the
+thread if needed. Ordinary release then resets its retirement countdown and
+queues it for QSBR collection. This includes singleton and OS pages and
+bypasses nonempty-page reclaim limits. The runtime must ensure that QSBR
+allocations are not freed by late TLS destructors after mimalloc thread
+shutdown. Thread-exit abandonment is unchanged.
 
 A goal is a target QSBR sequence identifying the grace period that must finish
 before releasing the page. Zero means that no goal has been recorded, not that
@@ -248,10 +253,10 @@ before creating heaps that need a particular mode.
 
 For heaps created by `mi_heap_new_qsbr()`, positive values are capped at `0`;
 negative values remain disabled. Thus a free can reclaim a nonempty protected
-page only into its originating theap. Empty pages delayed by QSBR use the
-existing same-heap theap regardless of this policy. This cap does not change
-allocation-side reclaim: other theaps may still obtain compatible abandoned
-pages from the same heap when looking for a fresh page.
+page only into its originating theap. Empty pages delayed by QSBR use a
+same-heap theap, creating it if needed, regardless of this policy. This cap
+does not change allocation-side reclaim: other theaps may still obtain
+compatible abandoned pages from the same heap when looking for a fresh page.
 
 This change also fixes a v3 eligibility fallthrough: an ineligible non-origin
 theap could previously reclaim a page when its destination queue was empty.
