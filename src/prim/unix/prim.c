@@ -486,7 +486,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   if (p == NULL) {
     *is_large = false;
     p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, flags, fd);
-    if (p!=NULL && _mi_os_canuse_large_page(size, try_alignment)) {
+    if (p!=NULL && _mi_os_mayuse_large_page(p, size)) {
       #if defined(MADV_NOHUGEPAGE)
       if (_mi_os_large_page_size() > MI_UNIX_MAX_THP_PAGE_SIZE) {
         (void)unix_madvise(p, size, MADV_NOHUGEPAGE);  // prevent using a transparent huge page, see issue #1431
