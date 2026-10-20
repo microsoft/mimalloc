@@ -235,6 +235,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   mi_memcpy_aligned(theap, &_mi_theap_empty, sizeof(mi_theap_t));
   theap->memid = memid;
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
+  theap->profile_never = false;  // only set for the empty and meta theaps (see `mi_theap_profile_never`)
   mi_atomic_store_release(&theap->refcount,1);
   mi_atomic_store_ptr_release(mi_subproc_t,&theap->subproc,heap->subproc);
   mi_assert_internal(theap->stats.size == sizeof(mi_stats_t));

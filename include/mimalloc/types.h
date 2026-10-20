@@ -651,7 +651,7 @@ struct mi_theap_s {
   bool                  allow_page_reclaim;                  // `true` if this theap can reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this theap can abandon pages to reduce memory footprint
   bool                  is_detached;                         // `true` if `tld->thread_id == MI_THREADID_DETACHED`
-  bool                  profile_disabled;                    // if `true`, this theap is permanently excluded from profiling
+  bool                  profile_never;                       // if `true`, this theap is never profiled (only the empty and meta theaps)
 
   // sampling
   size_t                sample_countdown;                    // sample countdown in requested bytes (don't change the field order; see `internal.h:mi_theap_get_free_small_page`)

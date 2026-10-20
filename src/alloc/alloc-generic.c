@@ -330,8 +330,8 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
     theap->generic_collect_count += theap->generic_count;
     theap->generic_count = 0;
 
-    // check if the profiler is enabled (unless this theap is permanently excluded, see `mi_theap_profile_disable`)
-    if (!theap->profile_disabled) {
+    // check if the profiler is enabled (unless this theap is permanently excluded, see `mi_theap_profile_never`)
+    if (!theap->profile_never) {
       mi_heap_t* const heap = mi_theap_heap(theap);
       mi_profiler_t* prof = mi_atomic_load_ptr_relaxed(mi_profiler_t, &heap->profiler);
       const bool prof_enabled = (prof!=NULL && mi_profiler_is_enabled(prof));
