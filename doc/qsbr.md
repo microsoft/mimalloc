@@ -202,7 +202,9 @@ The page keeps its stable heap context and goal, but
 dereference it.
 
 Ordinary empty arena pages remain in the existing per-heap abandoned size-class
-maps and can be reclaimed by allocation. Reclaim does not require waiting if
+maps and can be reclaimed by allocation. If a full regular arena page becomes
+empty while abandonment collects concurrent frees, delayed release re-abandons
+it as mapped before releasing ownership. Reclaim does not require waiting if
 the runtime permits compatible reuse. Empty arena singletons are **not** put in
 those maps; they remain in the all-pages map. OS pages stay in the existing
 abandoned OS-page list. No new shared delayed-page list is introduced.

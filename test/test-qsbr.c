@@ -545,6 +545,48 @@ static bool test_free_during_unown(bool from_free) {
   return true;
 }
 
+static bool test_full_page_free_during_unown(void) {
+  mi_heap_t* heap = mi_heap_new_qsbr();
+  require(heap != NULL);
+  mi_theap_t* theap = mi_heap_theap(heap);
+  const size_t size = 8192;
+  full_page_blocks[0] = mi_heap_malloc(heap, size);
+  require(full_page_blocks[0] != NULL);
+  mi_page_t* page = mi_ptr_page(full_page_blocks[0]);
+  require(page->memid.memkind == MI_MEM_ARENA && !mi_page_is_singleton(page));
+  full_page_count = page->reserved;
+  require(full_page_count <= sizeof(full_page_blocks)/sizeof(full_page_blocks[0]));
+  for (size_t i = 1; i < full_page_count; i++) {
+    full_page_blocks[i] = mi_heap_malloc(heap, size);
+    require(full_page_blocks[i] != NULL && mi_ptr_page(full_page_blocks[i]) == page);
+  }
+  require(mi_page_is_full(page));
+  if (!mi_page_is_abandoned(page)) { _mi_page_abandon(page, mi_page_queue_of(page)); }
+  require(mi_page_is_abandoned(page) && !mi_page_is_abandoned_mapped(page));
+  require(mi_page_claim_ownership(page));
+  // Keep the frees pending until the unmapped page is unowned.
+  for (size_t i = 0; i < full_page_count; i++) { mi_free(full_page_blocks[i]); }
+  require(mi_page_is_full(page));
+  require(!mi_abandoned_page_unown(page, theap));
+  require(mi_page_all_free(page) && !mi_page_is_owned(page) && mi_page_is_abandoned_mapped(page));
+  const uint64_t goal = page->qsbr.goal;
+  require(goal != 0 && !page->qsbr_in_queue);
+  const size_t bin = _mi_bin(mi_page_block_size(page));
+  require(mi_atomic_load_relaxed(&heap->abandoned_count[bin]) == 1);
+  mi_page_t* reclaimed = _mi_page_fresh(theap, mi_page_queue(theap, size + MI_PADDING_SIZE));
+  require(reclaimed == page && page->qsbr.goal == goal && page->qsbr_in_queue);
+  require(mi_atomic_load_relaxed(&heap->abandoned_count[bin]) == 0);
+  void* p = mi_heap_malloc(heap, size);
+  require(p != NULL && mi_ptr_page(p) == page);
+  mi_free(p);
+  mi_heap_collect(heap, true);
+  qsbr_complete();
+  _mi_theap_qsbr_collect_delayed(theap);
+  require(page_count(heap) == 0 && qsbr_count(theap) == 0);
+  mi_heap_destroy(heap);
+  return true;
+}
+
 static bool test_destroy_empty_orphan(void) {
   worker_heap = mi_heap_new_qsbr();
   require(worker_heap != NULL);
@@ -586,6 +628,7 @@ int main(void) {
   CHECK("live abandoned OS singleton", test_orphan(2*MI_MiB, true, false));
   CHECK("last frees during abandonment unown", test_free_during_unown(false));
   CHECK("last frees during free-side unown", test_free_during_unown(true));
+  CHECK("full arena page becomes mapped on delayed last frees during unown", test_full_page_free_during_unown());
   CHECK("terminal destroy of an empty orphan without a prior sweep", test_destroy_empty_orphan());
   CHECK("protected delete rejected, terminal destroy unlinks", test_terminal_destroy(false));
   CHECK("cross-thread terminal destroy unlinks before freeing the owner", test_terminal_destroy(true));
