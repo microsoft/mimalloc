@@ -74,6 +74,17 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <sys/syscall.h>
 #endif
 
+// MSan does not intercept raw syscalls, so memory they write must be marked as initialized
+#if defined(__has_feature)
+  #if __has_feature(memory_sanitizer)
+  #include <sanitizer/msan_interface.h>  // __msan_unpoison
+  #define mi_msan_unpoison(p,size)  __msan_unpoison(p,size)
+  #endif
+#endif
+#ifndef mi_msan_unpoison
+#define mi_msan_unpoison(p,size)
+#endif
+
 #if !defined(MADV_DONTNEED) && defined(POSIX_MADV_DONTNEED)  // QNX
 #define MADV_DONTNEED  POSIX_MADV_DONTNEED
 #endif
@@ -97,7 +108,9 @@ static inline int mi_prim_open(const char* fpath, int open_flags) {
   return syscall(SYS_open,fpath,open_flags,0);
 }
 static inline ssize_t mi_prim_read(int fd, void* buf, size_t bufsize) {
-  return syscall(SYS_read,fd,buf,bufsize);
+  ssize_t nread = syscall(SYS_read,fd,buf,bufsize);
+  if (nread > 0) { mi_msan_unpoison(buf, (size_t)nread); }
+  return nread;
 }
 static inline int mi_prim_close(int fd) {
   return syscall(SYS_close,fd);
@@ -287,7 +300,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_transparent_huge_pages = (config->large_page_size <= MI_UNIX_MAX_THP_PAGE_SIZE) && unix_detect_thp();
   config->has_overcommit = unix_detect_overcommit();
   config->virtual_address_bits = unix_detect_virtual_address_bits();
-  
+
   // disable transparent huge pages for this process?
   #if (defined(__linux__) || defined(__ANDROID__)) && defined(PR_GET_THP_DISABLE)
   if (!mi_option_is_enabled(mi_option_allow_thp)) // disable THP if requested through an option
@@ -486,15 +499,16 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   if (p == NULL) {
     *is_large = false;
     p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, flags, fd);
-    if (p!=NULL && _mi_os_canuse_large_page(size, try_alignment)) {
+    if (p!=NULL) {
       #if defined(MADV_NOHUGEPAGE)
-      if (_mi_os_large_page_size() > MI_UNIX_MAX_THP_PAGE_SIZE) {
-        (void)unix_madvise(p, size, MADV_NOHUGEPAGE);  // prevent using a transparent huge page, see issue #1431
+      const size_t large_page_size = _mi_os_large_page_size();
+      if (large_page_size > MI_UNIX_MAX_THP_PAGE_SIZE && size >= large_page_size) {
+        (void)unix_madvise(p, size, MADV_NOHUGEPAGE);  // prevent using large transparent huge pages, see issue #1431
       }
       else
       #endif
       #if !defined(MI_NO_THP)
-      if (allow_large && mi_option_is_enabled(mi_option_allow_thp)) {      
+      if (allow_large && mi_option_is_enabled(mi_option_allow_thp) && _mi_os_canuse_large_page(size,try_alignment)) {
         #if defined(MADV_HUGEPAGE)
         if (_mi_os_has_thp()) {
           // Many Linux systems don't allow MAP_HUGETLB but they support instead
@@ -1002,6 +1016,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
     static _Atomic(uintptr_t) no_getrandom; // = 0
     if (mi_atomic_load_acquire(&no_getrandom)==0) {
       ssize_t ret = syscall(SYS_getrandom, buf, buf_len, GRND_NONBLOCK);
+      if (ret > 0) { mi_msan_unpoison(buf, (size_t)ret); }
       if (ret >= 0) return (buf_len == (size_t)ret);
       if (errno != ENOSYS) return false;
       mi_atomic_store_release(&no_getrandom, (uintptr_t)1); // don't call again, and fall back to /dev/urandom

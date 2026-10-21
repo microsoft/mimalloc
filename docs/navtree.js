@@ -889,7 +889,7 @@ function initNavTree(toroot,relpath,allMembersFile) {
         rows = Array.from(table.querySelectorAll("tr[class^='memitem:'] td.memItemRight, tr[class^='memitem:'] td.memItemLeft.anon, tr[class=groupHeader] td"));
       }
       function hasSubItems() {
-        return item.memTitles.length>0 || rows.some(function(el) { 
+        return item.memTitles.length>0 || rows.some(function(el) {
           return el.offsetParent !== null; // check if visible
         });
       }
@@ -1125,7 +1125,7 @@ function initNavTree(toroot,relpath,allMembersFile) {
           const targetPos = offsetTop(scrollTarget)-navy-ulOffset;
           const targetOffset=targetPos+my;
           if ( (scrollDown && targetOffset>lastScrollTargetOffset) ||
-              (!scrollDown && targetOffset<lastScrollTargetOffset)) 
+              (!scrollDown && targetOffset<lastScrollTargetOffset))
           { // force panel to scroll in the same direction as content window
             if (pagenavcontents) {
               pagenavcontents.scrollTo({

@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_STATS_H
 #define MIMALLOC_STATS_H
 
-#include <mimalloc.h>
+#include "mimalloc.h"
 #include <string.h>   // memset
 #include <stdint.h>   // int64_t
 
@@ -91,7 +91,7 @@ typedef struct mi_stat_counter_s {
   MI_STAT_COUNT(malloc_huge)                /* allocated bytes in huge pages */ \
   MI_STAT_COUNTER(malloc_normal_count)      /* number of blocks <= MI_LARGE_OBJ_SIZE_MAX */ \
   MI_STAT_COUNTER(malloc_huge_count)        /* number of huge bloks */ \
-  
+
 
 // Size bins for chunks
 typedef enum mi_chunkbin_e {
@@ -112,8 +112,8 @@ typedef enum mi_chunkbin_e {
 
 typedef struct mi_stats_s
 {
-  size_t size;          // size of the mi_stats_t structure 
-  size_t version;       
+  size_t size;          // size of the mi_stats_t structure
+  size_t version;
 
   mi_decl_align(8)  MI_STAT_FIELDS()
 

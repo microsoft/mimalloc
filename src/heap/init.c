@@ -127,6 +127,7 @@ static mi_decl_cache_align mi_tld_t mi_tld_detached = {
   NULL,                   // theaps list
   MI_LOCK_INITIALIZER,    // theaps lock
   false,                  // recurse
+  false,                  // in_profiler
   false,                  // is_in_threadpool
   MI_MEMID_STATIC         // memid
 };
@@ -135,7 +136,7 @@ static mi_decl_cache_align mi_tld_t mi_tld_detached = {
 extern // fix warning in C++ for const variables with internal linkage
 #endif
 mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
-  MI_SMALL_PAGES_EMPTY,   // direct small pages  
+  MI_SMALL_PAGES_EMPTY,   // direct small pages
   &mi_tld_detached,       // tld
   MI_ATOMIC_VAR_INIT(NULL), // heap
   MI_ATOMIC_VAR_INIT(NULL), // subproc
@@ -143,9 +144,9 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   0,                      // full page retain
   false,                  // allow reclaim
   true,                   // allow abandon
-  true,                   // is_detached 
-  true,                   // profile_disabled: this static empty theap must never be sampled
-  ~MI_ZU(0),              // sample countdown: "-1" (with a sample rate of 0, so we won't write to the empty theap with MI_SAMPLE==2)  
+  true,                   // is_detached
+  true,                   // profile_never: this static empty theap must never be sampled
+  ~MI_ZU(0),              // sample countdown: "-1" (with a sample rate of 0, so we won't write to the empty theap with MI_SAMPLE==2)
   0, 0,                   // sample rate, requested
   0, 0,                   // profile rate, countdown
   0, 0, 0, 0,             // guarded rate, countdown, min, max
@@ -226,7 +227,7 @@ static void mi_heap_main_init_once(void) {
   mi_process_theap_meta.page_full_retain = 2;
   mi_process_theap_meta.sample_rate = 0; // no sampling for meta data
   mi_process_theap_meta.sample_countdown = 0;
-  mi_theap_profile_disable(&mi_process_theap_meta);  // permanently exclude from profiling, see `mi_theap_profile_disable`
+  mi_theap_profile_never(&mi_process_theap_meta);  // permanently exclude from profiling, see `mi_theap_profile_never`
   subproc_main->theap_meta = &mi_process_theap_meta;
 
   // mi_heap_theap_set(&mi_process_heap_main,&mi_process_theap_main); // set in `mi_thread_init(_theap_default)`
@@ -489,7 +490,7 @@ void mi_thread_done(void) mi_attr_noexcept {
 }
 
 void _mi_thread_done(mi_theap_t* _theap_main)
-{  
+{
   // NULL can be passed on some platforms
   if (_theap_main==NULL) {
     _theap_main = _mi_theap_default();
@@ -570,7 +571,7 @@ void _mi_auto_process_init(void) {
   }
 
   // check if we should start the pprof profiler
-  _mi_pprof_profiler_init();  
+  _mi_pprof_profiler_init();
 }
 
 
@@ -631,7 +632,7 @@ void mi_process_init(void) mi_attr_noexcept {
 }
 
 // Called once on process exit (when the process/dll is exiting gracefully)
-static void mi_process_unwind_once(void) 
+static void mi_process_unwind_once(void)
 {
   // stop the profiler
   _mi_pprof_profiler_done();
