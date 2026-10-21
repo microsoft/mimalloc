@@ -107,16 +107,11 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
   do {
     mi_block_set_next(page, block, mi_tf_block(tf_old));
     tf_new = mi_tf_create(block, true);
-    if (mi_tf_is_owned(tf_old)) {
-      if (mi_atomic_cas_weak_release(&page->xthread_free, &tf_old, tf_new)) break; // release is enough if we don't change ownership
-    }
-    else {
-      if (mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new)) break; // otherwise we need acquire-release
-    }
-  } while(true);
+  } while(!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new));
 
   // and atomically try to collect the page if it was abandoned
-  const bool is_newly_owned = mi_tf_is_owned(tf_new) && !mi_tf_is_owned(tf_old);
+  mi_assert_internal(mi_tf_is_owned(tf_new));
+  const bool is_newly_owned = !mi_tf_is_owned(tf_old); // && mi_tf_is_owned(tf_new)
   if (is_newly_owned) {
     mi_assert_internal(mi_page_is_abandoned(page));
     // mi_assert_internal(!mi_page_is_abandoned_mapped(page));
