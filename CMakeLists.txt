@@ -1227,6 +1227,8 @@ if (MI_BUILD_TESTS)
     # don't add as a test (stress-pprof is only run on macOS so far)
     elseif(TEST_NAME STREQUAL "pprof" AND NOT APPLE AND NOT (CMAKE_SYSTEM_NAME STREQUAL "Linux"))
     # don't add as a test on platforms where the pprof test is not verified yet
+    elseif(TEST_NAME STREQUAL "pprof" AND MI_ARCH STREQUAL "arm32")
+    # don't add as a test on arm32 (C code has no unwind tables by default so backtraces are empty)
     else()
     add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
     endif()
