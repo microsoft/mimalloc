@@ -49,7 +49,6 @@ void*         _mi_os_alloc_aligned_at_offset(mi_subproc_t* subproc, size_t size,
 
 void*         _mi_os_get_aligned_hint(size_t try_alignment, size_t size);
 bool          _mi_os_canuse_large_page(size_t size, size_t alignment);
-bool          _mi_os_mayuse_large_page(const void* p, size_t size);
 
 size_t        _mi_os_large_page_size(void);
 void*         _mi_os_alloc_huge_os_pages(mi_subproc_t* subproc, size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);

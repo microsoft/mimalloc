@@ -96,12 +96,6 @@ bool _mi_os_canuse_large_page(size_t size, size_t alignment) {
   return ((size % mi_os_mem_config.large_page_size) == 0 && (alignment % mi_os_mem_config.large_page_size) == 0);
 }
 
-bool _mi_os_mayuse_large_page(const void* p, size_t size) {
-  // if we have access, check the size and alignment requirements
-  if (mi_os_mem_config.large_page_size == 0) return false;
-  return ((size >= mi_os_mem_config.large_page_size) && mi_is_aligned(p, mi_os_mem_config.large_page_size));
-}
-
 // round to a good OS allocation size (bounded by max 12.5% waste)
 size_t _mi_os_good_alloc_size(size_t size) {
   size_t align_size;
