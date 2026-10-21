@@ -510,11 +510,11 @@ typedef enum mi_option_e {
   mi_option_arena_max_object_size,      // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit).
   mi_option_arena_is_numa_local,        // experimental: associate local numa node with an initial arena allocation
   mi_option_stats_merge_on_collect,     // on each theap collection, the theap stats are merged automatically with the parent heap
-  mi_option_profile_alloc_interval,     // number of allocated bytes between automatic snapshots of the heap profiler (internally, this value is in KiB; use `mi_option_get_size`) (=1GiB, disabled)
-  mi_option_profile_inuse_interval,     // number of in-use bytes grown between automatic snapshots of the heap profiler (internally, this value is in KiB; use `mi_option_get_size`) (=0, disabled)
+  mi_option_profile_alloc_interval,     // number of allocated bytes between automatic snapshots of the heap profiler (=1GiB)
+  mi_option_profile_inuse_interval,     // number of in-use bytes grown between automatic snapshots of the heap profiler (=0, disabled)
   mi_option_profile_time_interval,      // number of seconds between automatic snapshots of the  heap profiler (=0, disabled)
-  mi_option_profile_sample_rate,        // sample rate (in bytes) for heap profiler (internally, this value is in KiB; use `mi_option_get_size`) (=512 KiB)
-  mi_option_stats_merge_threshold,      // on a page stats update, merge theap stats into the parent heap if N bytes were freed/allocated (=0, disabled)
+  mi_option_profile_sample_rate,        // sample rate (in bytes) for heap profiler (=512 KiB)
+  mi_option_stats_merge_threshold,      // on a page stats update, merge theap stats into the parent heap if N bytes were freed/allocated; 0 disables (=512 KiB)
   mi_option_arena_purge_immediate_size, // ranges above this size are purged immediately
   _mi_option_last,
   // legacy option names

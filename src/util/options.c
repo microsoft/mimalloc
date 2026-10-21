@@ -196,12 +196,12 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { 0,   MI_OPTION_UNINIT, MI_OPTION(arena_is_numa_local) },      // associate local numa node with an initial arena allocation
   { MI_DEFAULT_STATS_MERGE_ON_COLLECT,
          MI_OPTION_UNINIT, MI_OPTION(stats_merge_on_collect) },   // on each theap collect, stats are merged with the parent heap
-  { MI_MiB, MI_OPTION_UNINIT, MI_OPTION(profile_alloc_interval) },// N KiB (=1 GiB default) between automatic dumps of the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`); 0 disables automatic dumping
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(profile_inuse_interval) },   // N KiB between automatic dumps of the `MIMALLOC_PROFILE` heap profiler whenever in-use bytes grow by that amount (use `option_get_size`); 0 disables (default)
+  { MI_GiB, MI_OPTION_UNINIT, MI_OPTION(profile_alloc_interval) },// N bytes (=1 GiB default) between automatic dumps of the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`); 0 disables automatic dumping
+  { 0,   MI_OPTION_UNINIT, MI_OPTION(profile_inuse_interval) },   // N bytes between automatic dumps of the `MIMALLOC_PROFILE` heap profiler whenever in-use bytes grow by that amount (use `option_get_size`); 0 disables (default)
   { 0,   MI_OPTION_UNINIT, MI_OPTION(profile_time_interval) },    // N seconds between automatic dumps of the `MIMALLOC_PROFILE` heap profiler; 0 disables (default)
-  { 512, MI_OPTION_UNINIT, MI_OPTION(profile_sample_rate) },      // sample rate in KiB for the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`) (=512 KiB)
+  { 512*MI_KiB, MI_OPTION_UNINIT, MI_OPTION(profile_sample_rate) }, // sample rate in bytes for the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`) (=512 KiB)
   { MI_DEFAULT_STATS_MERGE_THRESHOLD,
-         MI_OPTION_UNINIT, MI_OPTION(stats_merge_threshold) },    // on a page stats update, merge theap stats into the heap if N bytes were freed/allocated (=0, disabled)
+         MI_OPTION_UNINIT, MI_OPTION(stats_merge_threshold) },    // on a page stats update, merge theap stats into the heap if N bytes were freed/allocated; 0 disables (=512 KiB)
   { MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE,
          MI_OPTION_UNINIT, MI_OPTION(arena_purge_immediate_size) }, // ranges above this size are purged immediately
 
@@ -706,7 +706,7 @@ static void mi_option_init(mi_option_desc_t* desc) {
         // the size is interpreted in bytes.
         size_t size = (value < 0 ? 0 : (size_t)value);
         bool overflow = false;
-        if (*end == 'K') { end++; }
+        if (*end == 'K') { overflow = mi_mul_overflow(size,MI_KiB,&size); end++; }
         #if MI_SIZE_SIZE >= 4
         else if (*end == 'M') { overflow = mi_mul_overflow(size,MI_MiB,&size); end++; }
         else if (*end == 'G') { overflow = mi_mul_overflow(size,MI_GiB,&size); end++; }

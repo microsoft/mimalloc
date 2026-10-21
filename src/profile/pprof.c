@@ -115,7 +115,7 @@ static size_t  mi_prim_backtrace(void** buffer, size_t max_depth, size_t* hash);
 // This allows profiling an arbitrary program (with no code changes) by
 // overriding its allocator with a mimalloc shared library build and setting
 // `MIMALLOC_PROFILE=<base_file_name>`
-// (and optionally `MIMALLOC_PROFILE_ALLOC_INTERVAL=<KiB>` to periodically snapshot
+// (and optionally `MIMALLOC_PROFILE_ALLOC_INTERVAL=<bytes>` to periodically snapshot
 // while the program is running).
 // ---------------------------------------------------------------------------
 #ifndef MI_PROFILE_USE_BUILTIN
@@ -133,8 +133,8 @@ void _mi_pprof_profiler_init(void) {
   if (mi_is_elevated_process()) return;  // don't let an untrusted environment influence a privileged process
   char fname[1024];
   if (_mi_getenv("mimalloc_profile", fname, sizeof(fname)) != 0 || fname[0] == 0) return;  // `MIMALLOC_PROFILE` not set
-  const size_t sample_rate   = mi_option_get_size(mi_option_profile_sample_rate);           // 16 KiB by default
-  const size_t alloc_interval_size = mi_option_get_size(mi_option_profile_alloc_interval);        // 0 by default (no automatic interval snapshots)
+  const size_t sample_rate   = mi_option_get_size(mi_option_profile_sample_rate);           // 512 KiB by default
+  const size_t alloc_interval_size = mi_option_get_size(mi_option_profile_alloc_interval);        // 1 GiB by default
   const size_t inuse_interval_size = mi_option_get_size(mi_option_profile_inuse_interval);        // 0 by default (no automatic interval snapshots)
   const size_t time_interval_secs = mi_option_get_clamp(mi_option_profile_time_interval,0,24*60*60L);  // 0 by default (no automatic interval snapshots)
   mi_profiler_t* profiler = mi_pprof_profiler_new(sample_rate, fname, alloc_interval_size, inuse_interval_size, time_interval_secs);
@@ -1349,39 +1349,24 @@ static uint64_t mi_pprof_find_mapping_id(const mi_pprof_modules_t* mods, uintptr
   return 0;
 }
 
-// Write out the current profiler data as a raw (uncompressed) `perftools.
-// profiles.Profile` protobuf message (see the file-level comment above).
-// Returns `false` if any allocation failed (in which case no file is written):
-// the snapshot is best effort and must never crash the profiled program.
-static bool mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname) {
+// Build the current profiler data as a raw (uncompressed) `perftools.profiles.Profile`
+// protobuf message in `profile` (see the file-level comment above).
+// Returns `false` if any allocation failed; the caller releases all buffers in either case.
+static bool mi_pprof_build_proto(mi_pprof_profiler_t* prof, mi_pb_buf_t* profile, mi_pb_strings_t* strings,
+                                 mi_pprof_modules_t* mods, mi_pb_addr_map_t* addr_map)
+{
   mi_heap_t* heap = prof->profile_heap;
   mi_locations_t* locations = &prof->locations;
 
-  mi_pb_buf_t profile;
-  mi_pb_init(&profile, heap);
-  mi_pb_strings_t strings;
-  mi_pb_strings_init(&strings, heap);
-  mi_pprof_modules_t mods;
-  mods.modules = NULL;
-  mods.count = 0;
-  mods.capacity = 0;
-  mods.failed = false;
-  mi_pb_addr_map_t addr_map;
-  addr_map.heap = heap;
-  addr_map.bucket_count = 0;
-  addr_map.buckets = NULL;
-  addr_map.failed = false;
-  bool ok = true;
-
-  const int64_t str_count         = mi_pb_strings_intern(&strings, "count");
-  const int64_t str_bytes         = mi_pb_strings_intern(&strings, "bytes");
-  const int64_t str_alloc_objects = mi_pb_strings_intern(&strings, "alloc_objects");
-  const int64_t str_alloc_bytes   = mi_pb_strings_intern(&strings, "alloc_bytes");
-  const int64_t str_inuse_objects = mi_pb_strings_intern(&strings, "inuse_objects");
-  const int64_t str_inuse_bytes   = mi_pb_strings_intern(&strings, "inuse_bytes");
-  const int64_t str_space         = mi_pb_strings_intern(&strings, "space");
-  const int64_t str_thread        = mi_pb_strings_intern(&strings, "thread");
-  if (strings.failed) { ok = false; goto done; }
+  const int64_t str_count         = mi_pb_strings_intern(strings, "count");
+  const int64_t str_bytes         = mi_pb_strings_intern(strings, "bytes");
+  const int64_t str_alloc_objects = mi_pb_strings_intern(strings, "alloc_objects");
+  const int64_t str_alloc_bytes   = mi_pb_strings_intern(strings, "alloc_bytes");
+  const int64_t str_inuse_objects = mi_pb_strings_intern(strings, "inuse_objects");
+  const int64_t str_inuse_bytes   = mi_pb_strings_intern(strings, "inuse_bytes");
+  const int64_t str_space         = mi_pb_strings_intern(strings, "space");
+  const int64_t str_thread        = mi_pb_strings_intern(strings, "thread");
+  if (strings->failed) return false;
 
   // Profile.sample_type = 1: [alloc_objects:count, alloc_bytes:bytes, inuse_objects:count, inuse_bytes:bytes]
   {
@@ -1392,36 +1377,36 @@ static bool mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname
       mi_pb_init(&vt, heap);
       mi_pb_int64_field(&vt, 1, types[i]);
       mi_pb_int64_field(&vt, 2, units[i]);
-      mi_pb_message_field(&profile, 1, &vt);
+      mi_pb_message_field(profile, 1, &vt);
       mi_pb_done(&vt);
     }
   }
 
   // Profile.mapping = 3: the modules loaded into this process, so `pprof` can
   // symbolize the (raw) addresses recorded in each `Location` below.
-  mi_pprof_collect_modules(heap, &mods);
-  if (mods.failed) { ok = false; goto done; }
-  for (size_t i = 0; i < mods.count; i++) {
-    const mi_pprof_module_t* m = &mods.modules[i];
+  mi_pprof_collect_modules(heap, mods);
+  if (mods->failed) return false;
+  for (size_t i = 0; i < mods->count; i++) {
+    const mi_pprof_module_t* m = &mods->modules[i];
     mi_pb_buf_t mapping;
     mi_pb_init(&mapping, heap);
     mi_pb_uint64_field(&mapping, 1, (uint64_t)(i + 1));    // id
     mi_pb_uint64_field(&mapping, 2, (uint64_t)m->start);   // memory_start
     mi_pb_uint64_field(&mapping, 3, (uint64_t)m->end);     // memory_limit
     if (m->path != NULL) {
-      mi_pb_int64_field(&mapping, 5, mi_pb_strings_intern(&strings, m->path));  // filename
+      mi_pb_int64_field(&mapping, 5, mi_pb_strings_intern(strings, m->path));  // filename
     }
-    mi_pb_message_field(&profile, 3, &mapping);
+    mi_pb_message_field(profile, 3, &mapping);
     mi_pb_done(&mapping);
-    if (profile.failed || strings.failed) { ok = false; goto done; }
+    if (profile->failed || strings->failed) return false;
   }
 
   // Profile.location = 4 and Profile.sample = 2: one (deduplicated) `Location`
   // per unique frame address, and one `Sample` per unique call site (i.e. one
   // per entry in our own locations hash table), exactly mirroring the text
   // format's aggregation.
-  mi_pb_addr_map_init(&addr_map, heap, locations->bucket_count);
-  if (addr_map.failed) { ok = false; goto done; }
+  mi_pb_addr_map_init(addr_map, heap, locations->bucket_count);
+  if (addr_map->failed) return false;
   uint64_t next_location_id = 1;
 
   for (size_t i = 0; i < locations->bucket_count; i++) {
@@ -1434,17 +1419,17 @@ static bool mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname
       for (size_t j = 0; j < frame_count; j++) {
         const uintptr_t addr = (uintptr_t)loc->callstack.frames[j];
         bool is_new = false;
-        const uint64_t id = mi_pb_addr_map_find_or_insert(&addr_map, addr, next_location_id, &is_new);
-        if (addr_map.failed) { ok = false; goto done; }
+        const uint64_t id = mi_pb_addr_map_find_or_insert(addr_map, addr, next_location_id, &is_new);
+        if (addr_map->failed) return false;
         location_ids[j] = id;
         if (is_new) {
           next_location_id++;
           mi_pb_buf_t location;
           mi_pb_init(&location, heap);
           mi_pb_uint64_field(&location, 1, id);                                    // id
-          mi_pb_uint64_field(&location, 2, mi_pprof_find_mapping_id(&mods, addr));  // mapping_id
+          mi_pb_uint64_field(&location, 2, mi_pprof_find_mapping_id(mods, addr));   // mapping_id
           mi_pb_uint64_field(&location, 3, (uint64_t)addr);                        // address
-          mi_pb_message_field(&profile, 4, &location);
+          mi_pb_message_field(profile, 4, &location);
           mi_pb_done(&location);
         }
       }
@@ -1468,9 +1453,9 @@ static bool mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname
         mi_pb_message_field(&sample, 3, &label);
         mi_pb_done(&label);
       }
-      mi_pb_message_field(&profile, 2, &sample);
+      mi_pb_message_field(profile, 2, &sample);
       mi_pb_done(&sample);
-      if (profile.failed) { ok = false; goto done; }
+      if (profile->failed) return false;
     }
   }
 
@@ -1481,33 +1466,53 @@ static bool mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname
     mi_pb_init(&period_type, heap);
     mi_pb_int64_field(&period_type, 1, str_space);
     mi_pb_int64_field(&period_type, 2, str_bytes);
-    mi_pb_message_field(&profile, 11, &period_type);
+    mi_pb_message_field(profile, 11, &period_type);
     mi_pb_done(&period_type);
   }
-  mi_pb_int64_field(&profile, 12, (int64_t)prof->sample_threshold);      // period
-  mi_pb_int64_field(&profile, 9, (int64_t)_mi_clock_now() * 1000);       // clock_now is in milli-secs
+  mi_pb_int64_field(profile, 12, (int64_t)prof->sample_threshold);      // period
+  mi_pb_int64_field(profile, 9, (int64_t)_mi_clock_now() * 1000);       // clock_now is in milli-secs
 
   // the string table (Profile.string_table = 6) can only be finalized now,
   // since strings were interned into it while building the message above.
-  if (strings.failed) { ok = false; goto done; }
-  mi_pb_bytes(&profile, strings.table.data, strings.table.size);
-  if (profile.failed) { ok = false; goto done; }
+  if (strings->failed) return false;
+  mi_pb_bytes(profile, strings->table.data, strings->table.size);
+  if (profile->failed) return false;
+  return true;
+}
 
-done:
+static bool mi_pprof_write_file(const char* fname, const mi_pb_buf_t* profile) {
+  FILE* f = mi_pprof_fopen(fname, true);
+  if (f == NULL) return false;
+  bool ok = (fwrite(profile->data, 1, profile->size, f) == profile->size);
+  if (fclose(f) != 0) { ok = false; }
+  return ok;
+}
+
+// Write out the current profiler data as a protobuf `Profile` message.
+// Returns `false` if any allocation failed (in which case no file is written):
+// the snapshot is best effort and must never crash the profiled program.
+static bool mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname) {
+  mi_heap_t* heap = prof->profile_heap;
+  mi_pb_buf_t profile;
+  mi_pb_init(&profile, heap);
+  mi_pb_strings_t strings;
+  mi_pb_strings_init(&strings, heap);
+  mi_pprof_modules_t mods;
+  mods.modules = NULL;
+  mods.count = 0;
+  mods.capacity = 0;
+  mods.failed = false;
+  mi_pb_addr_map_t addr_map;
+  addr_map.heap = heap;
+  addr_map.bucket_count = 0;
+  addr_map.buckets = NULL;
+  addr_map.failed = false;
+
+  bool ok = mi_pprof_build_proto(prof, &profile, &strings, &mods, &addr_map);
   mi_pb_addr_map_done(&addr_map);
   mi_pprof_modules_done(&mods);
   mi_pb_strings_done(&strings);
-  if (ok) {
-    FILE* f = mi_pprof_fopen(fname, true);
-    if (f == NULL) {
-      ok = false;
-    }
-    else {
-      const size_t written = fwrite(profile.data, 1, profile.size, f);
-      if (written != profile.size) { ok = false; }
-      if (fclose(f) != 0) { ok = false; }
-    }
-  }
+  if (ok) { ok = mi_pprof_write_file(fname, &profile); }
   mi_pb_done(&profile);
   return ok;
 }
