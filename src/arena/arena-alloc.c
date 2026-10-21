@@ -340,7 +340,7 @@ void _mi_arenas_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t mem
   }
 
   // try to purge expired decommits
-  // mi_arenas_try_purge(false, false, NULL);
+  mi_arenas_try_purge(false, false, subproc, 0);
 }
 
 // Purge the arenas; if `force_purge` is true, amenable parts are purged even if not yet expired
