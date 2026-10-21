@@ -597,6 +597,117 @@ bool test_pprof_concurrent_threads(void) {
 #endif // !defined(_WIN32)
 
 // ---------------------------------------------------------------------------
+// Allocation failure: exhaust the mimalloc arenas (with OS allocation
+// disabled) and then drain the profiler's own heap by creating many distinct
+// sampled call stacks. Every following allocation from the profiler heap must
+// then fail, so taking a snapshot exercises the out-of-memory paths
+// deterministically: it must neither crash nor leave a partial snapshot file.
+// Linux only for now: the arena exhaustion below is verified on Linux, and the
+// pprof test is also run on macOS where it has not been verified yet.
+// ---------------------------------------------------------------------------
+#if defined(__linux__)
+
+#define PPROF_OOM_BASE_NAME       "profile/test-pprof-oom"
+#define PPROF_OOM_MAX_BLOCKS      (20000)
+#define PPROF_OOM_BLOCK_SIZE      (64 * 1024)
+#define PPROF_OOM_RECURSION_DEPTH (120)
+#define PPROF_OOM_RECURSION_REPS  (4)
+
+static void* pprof_oom_blocks[PPROF_OOM_MAX_BLOCKS];
+static void* volatile pprof_oom_sink;
+
+// Four distinct recursive allocation sites: each recursion depth produces a
+// different (truncated) call stack, so sampling them creates many distinct
+// locations -- and thus many allocations -- in the profiler's own heap.
+#define PPROF_OOM_DEFINE_RECURSION(N) \
+  static void pprof_oom_rec_##N(size_t depth) { \
+    void* p = mi_malloc(24 + (depth & 31)); \
+    pprof_oom_sink = p; \
+    if (depth < PPROF_OOM_RECURSION_DEPTH) { pprof_oom_rec_##N(depth + 1); } \
+    mi_free(p); \
+  }
+
+PPROF_OOM_DEFINE_RECURSION(0)
+PPROF_OOM_DEFINE_RECURSION(1)
+PPROF_OOM_DEFINE_RECURSION(2)
+PPROF_OOM_DEFINE_RECURSION(3)
+
+// Returns the size of `fname`, or -1 if it does not exist.
+static long file_size(const char* fname) {
+  FILE* f = fopen(fname, "rb");
+  if (f == NULL) return -1;
+  fseek(f, 0, SEEK_END);
+  const long size = ftell(f);
+  fclose(f);
+  return size;
+}
+
+bool test_pprof_snapshot_oom(void) {
+  CHECK_BODY("pprof: snapshot degrades gracefully when profiler allocations fail") {
+    char proto_fname[1024];
+    snprintf(proto_fname, sizeof(proto_fname), "%s.0001.pb", PPROF_OOM_BASE_NAME);
+    char recovery_fname[1024];
+    snprintf(recovery_fname, sizeof(recovery_fname), "%s.0002.pb", PPROF_OOM_BASE_NAME);
+    remove(proto_fname);
+    remove(recovery_fname);
+
+    // sample every allocation so the recursion below creates a location per depth
+    mi_profiler_t* prof = mi_pprof_profiler_new(1, PPROF_OOM_BASE_NAME, 0, 0, 0);
+    result = (prof != NULL);
+    if (result) {
+      mi_profile(prof);
+      mi_profiler_start(prof);
+
+      // the failures below are expected: do not print them
+      const long old_show_errors = mi_option_get(mi_option_show_errors);
+      mi_option_set(mi_option_show_errors, 0);
+
+      // 1. exhaust the arenas: from now on no new pages can be allocated
+      mi_option_set(mi_option_disallow_os_alloc, 1);
+      size_t block_count = 0;
+      while (block_count < PPROF_OOM_MAX_BLOCKS) {
+        void* b = mi_malloc(PPROF_OOM_BLOCK_SIZE);
+        if (b == NULL) break;
+        pprof_oom_blocks[block_count++] = b;
+      }
+      result = (block_count > 0);
+
+      // 2. drain the profiler heap's remaining free space: these allocations
+      //    still fit in its current pages, so they keep creating locations
+      //    until no room is left for another one.
+      for (size_t rep = 0; rep < PPROF_OOM_RECURSION_REPS; rep++) {
+        pprof_oom_rec_0(1);
+        pprof_oom_rec_1(1);
+        pprof_oom_rec_2(1);
+        pprof_oom_rec_3(1);
+      }
+
+      // 3. the snapshot cannot allocate: it must return normally and leave no file
+      mi_profiler_snapshot(prof);
+      result = result && (file_size(proto_fname) < 0);
+
+      // 4. restore memory and check that snapshots work again
+      for (size_t i = 0; i < block_count; i++) { mi_free(pprof_oom_blocks[i]); }
+      block_count = 0;
+      mi_option_set(mi_option_disallow_os_alloc, 0);
+      mi_option_set(mi_option_show_errors, old_show_errors);
+
+      allocate_and_free(20000, 64);
+      mi_profiler_snapshot(prof);
+      result = result && (file_size(recovery_fname) > 0);
+
+      remove(proto_fname);
+      remove(recovery_fname);
+      mi_profile(NULL);
+      mi_pprof_profiler_delete(prof);
+    }
+  }
+  return true;
+}
+
+#endif // defined(__linux__)
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -612,6 +723,10 @@ int main(void) {
 #if !defined(_WIN32)
   // this test also leaves its pprof files
   test_pprof_concurrent_threads();
+#endif
+#if defined(__linux__)
+  // last: this one deliberately exhausts the allocator before restoring it
+  test_pprof_snapshot_oom();
 #endif
   return print_test_summary();
 }

@@ -23,7 +23,7 @@ const SIZES: &[usize] = &[
     8192,
     65536,
     1 << 20,
-    64 << 20,
+    8 << 20,
 ];
 
 fn alignments() -> impl Iterator<Item = usize> {

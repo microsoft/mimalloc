@@ -219,17 +219,36 @@ static bool remote_free(void) {
   return true;
 }
 
+static bool remote_free_abandoned(void) {
+  require(!_mi_thread_is_initialized());
+  mi_page_t* page = mi_ptr_page(remote_block);
+  require(mi_page_is_abandoned(page));
+  mi_free(remote_block);
+  require(_mi_thread_is_initialized());
+  mi_theap_t* theap = _mi_page_associated_theap_peek(page);
+  require(theap != NULL && !mi_page_is_abandoned(page));
+  require(mi_page_theap(page) == theap && mi_page_all_free(page));
+  require(page->qsbr.goal != 0 && page->qsbr_in_queue && qsbr_count(theap) == 1);
+  return true;
+}
+
 static void* full_page_blocks[1024];
 static size_t full_page_count;
 
 static bool remote_free_full_page(void) {
-  for (size_t i = 0; i < full_page_count; i++) { mi_free(full_page_blocks[i]); }
-  return true;
+  for (size_t i = 0; i + 1 < full_page_count; i++) { mi_free(full_page_blocks[i]); }
+  remote_block = full_page_blocks[full_page_count - 1];
+  return (mi_page_is_abandoned(mi_ptr_page(remote_block)) ? remote_free_abandoned() : remote_free());
 }
 
-static bool test_page_free(size_t size) {
+static bool test_page_free(size_t size, bool abandon) {
   mi_heap_t* heap = mi_heap_new_qsbr();
   require(heap != NULL);
+  const long previous = mi_option_get(mi_option_page_full_retain);
+  mi_option_set(mi_option_page_full_retain, abandon ? 0 : -1);
+  mi_theap_t* theap = mi_heap_theap(heap);
+  mi_option_set(mi_option_page_full_retain, previous);
+  require(theap != NULL && theap->allow_page_abandon == abandon);
   full_page_blocks[0] = mi_heap_malloc(heap, size);
   require(full_page_blocks[0] != NULL);
   mi_page_t* page = mi_ptr_page(full_page_blocks[0]);
@@ -240,20 +259,33 @@ static bool test_page_free(size_t size) {
     require(full_page_blocks[i] != NULL && mi_ptr_page(full_page_blocks[i]) == page);
   }
   require(mi_page_is_full(page));
-  if (!mi_page_is_in_full(page)) {
+  if (!mi_page_is_abandoned(page) && !mi_page_is_in_full(page)) {
     _mi_page_to_full(page, mi_page_queue_of(page));
   }
-  require(mi_page_is_in_full(page));
+  require(mi_page_is_abandoned(page) == abandon);
+  require(mi_page_is_in_full(page) == !abandon);
   require(mi_run_on_thread(&remote_free_full_page));
-  _mi_page_free_collect(page, true);
-  require(mi_page_all_free(page) && mi_page_is_in_full(page));
-  require(!_mi_page_free(page, mi_page_queue_of(page)));
-  require(mi_atomic_load_relaxed(&last_page_bytes) == page->capacity * mi_page_block_size(page));
-  require(!mi_page_is_in_full(page) && page->retire_expire == 0);
-  mi_theap_t* theap = mi_heap_theap(heap);
-  require(theap->qsbr_first == page && theap->qsbr_last == page && page_count(heap) == 1);
-  qsbr_complete();
-  require(_mi_page_free(page, mi_page_queue_of(page)));
+  if (abandon) {
+    require(mi_page_is_abandoned(page) && !mi_page_is_owned(page));
+    require(mi_page_all_free(page) && !page->qsbr_in_queue && qsbr_count(theap) == 0);
+    const uint64_t goal = page->qsbr.goal;
+    require(goal != 0);
+    require(mi_atomic_load_relaxed(&last_page_bytes) == page->capacity * mi_page_block_size(page));
+    _mi_heap_collect_abandoned(heap);
+    require(page_count(heap) == 1 && page->qsbr.goal == goal);
+    qsbr_complete();
+    _mi_heap_collect_abandoned(heap);
+  }
+  else {
+    _mi_page_free_collect(page, true);
+    require(mi_page_all_free(page) && mi_page_is_in_full(page));
+    require(!_mi_page_free(page, mi_page_queue_of(page)));
+    require(mi_atomic_load_relaxed(&last_page_bytes) == page->capacity * mi_page_block_size(page));
+    require(!mi_page_is_in_full(page) && page->retire_expire == 0);
+    require(theap->qsbr_first == page && theap->qsbr_last == page && page_count(heap) == 1);
+    qsbr_complete();
+    require(_mi_page_free(page, mi_page_queue_of(page)));
+  }
   require(theap->qsbr_first == NULL && theap->qsbr_last == NULL && page_count(heap) == 0);
   mi_heap_destroy(heap);
   return true;
@@ -354,6 +386,69 @@ static bool test_reclaim(void) {
   return true;
 }
 
+static bool test_reclaim_delayed_empty(size_t size, bool os) {
+  const long previous = mi_option_get(mi_option_page_reclaim_on_free);
+  mi_option_set(mi_option_page_reclaim_on_free, -1);
+  worker_heap = mi_heap_new_qsbr();
+  mi_option_set(mi_option_page_reclaim_on_free, previous);
+  require(worker_heap != NULL);
+  mi_theap_t* theap = mi_heap_theap(worker_heap);
+  worker_size = size;
+  worker_empty = false;
+  worker_delete = false;
+  mi_option_set(mi_option_disallow_arena_alloc, os ? 1 : 0);
+  require(mi_run_on_thread(&allocate_and_exit));
+  mi_option_set(mi_option_disallow_arena_alloc, 0);
+  require((worker_page->memid.memkind != MI_MEM_ARENA) == os);
+  if (worker_blocks[1] != NULL) {
+    mi_free(worker_blocks[1]);
+    require(mi_page_is_abandoned(worker_page));
+    require(mi_page_claim_ownership(worker_page));
+    worker_page->retire_expire = 2;
+    require(!mi_abandoned_page_unown(worker_page, NULL));
+  }
+  mi_free(worker_blocks[0]);
+  require(!mi_page_is_abandoned(worker_page) && mi_page_theap(worker_page) == theap);
+  require(worker_page->heap == worker_heap && mi_page_all_free(worker_page));
+  require(worker_page->retire_expire == 0 && !mi_page_is_in_full(worker_page));
+  require(qsbr_count(theap) == 1 && page_count(worker_heap) == 1);
+  const uint64_t goal = worker_page->qsbr.goal;
+  require(goal != 0);
+  mi_heap_collect(worker_heap, true);
+  require(page_count(worker_heap) == 1 && worker_page->qsbr.goal == goal);
+  qsbr_complete();
+  mi_heap_collect(worker_heap, true);
+  require(page_count(worker_heap) == 0 && qsbr_count(theap) == 0);
+  mi_heap_destroy(worker_heap);
+  return true;
+}
+
+static bool test_reclaim_ready_pages(void) {
+  mi_heap_t* heap = mi_heap_new_qsbr();
+  require(heap != NULL);
+  mi_theap_t* theap = mi_heap_theap(heap);
+  void* blocks[128];
+  size_t count = 0;
+  size_t pages = 0;
+  mi_page_t* last = NULL;
+  while (pages < 3 && count < 128) {
+    void* p = mi_heap_malloc(heap, 8192);
+    require(p != NULL);
+    blocks[count++] = p;
+    if (mi_ptr_page(p) != last) { last = mi_ptr_page(p); pages++; }
+  }
+  require(pages == 3);
+  for (size_t i = 0; i < count; i++) { mi_free(blocks[i]); }
+  _mi_theap_collect_abandon(theap);
+  require(page_count(heap) == 3 && theap->page_count == 0);
+  qsbr_complete();
+  mi_page_t* page = _mi_page_fresh(theap, mi_page_queue(theap, 8192 + MI_PADDING_SIZE));
+  require(page != NULL && mi_page_immediate_available(page));
+  require(page_count(heap) == 1 && _mi_page_qsbr_is_clear(page));
+  mi_heap_destroy(heap);
+  return true;
+}
+
 static bool test_orphan(size_t size, bool os, bool empty) {
   worker_heap = mi_heap_new_qsbr();
   require(worker_heap != NULL);
@@ -376,8 +471,9 @@ static bool test_orphan(size_t size, bool os, bool empty) {
       require(mi_page_is_abandoned(worker_page) && theap->page_count == 0);
     }
     remote_block = worker_blocks[0];
-    require(mi_run_on_thread(&remote_free));
+    require(mi_run_on_thread(&remote_free_abandoned));
     require(worker_page->qsbr.goal != 0 && mi_page_all_free(worker_page));
+    require(mi_page_is_abandoned(worker_page) && !mi_page_is_owned(worker_page) && !worker_page->qsbr_in_queue);
   }
   _mi_heap_collect_abandoned(worker_heap);
   require(page_count(worker_heap) == 1);
@@ -431,12 +527,63 @@ static bool test_free_during_unown(bool from_free) {
   else {
     require(!mi_abandoned_page_unown(worker_page, NULL));
   }
-  require(mi_page_all_free(worker_page) && !mi_page_is_owned(worker_page));
-  require(worker_page->qsbr.goal != 0 && mi_page_is_abandoned_mapped(worker_page));
+  require(mi_page_all_free(worker_page) && worker_page->qsbr.goal != 0);
+  if (from_free) {
+    require(!mi_page_is_abandoned(worker_page) && mi_page_is_owned(worker_page));
+    require(_mi_page_associated_theap_peek(worker_page) == mi_page_theap(worker_page));
+    require(worker_page->qsbr_in_queue);
+  }
+  else {
+    require(!mi_page_is_owned(worker_page) && mi_page_is_abandoned_mapped(worker_page));
+    require(!worker_page->qsbr_in_queue);
+  }
   qsbr_complete();
-  _mi_heap_collect_abandoned(worker_heap);
+  if (from_free) { mi_heap_collect(worker_heap, true); }
+           else { _mi_heap_collect_abandoned(worker_heap); }
   require(page_count(worker_heap) == 0);
   mi_heap_destroy(worker_heap);
+  return true;
+}
+
+static bool test_full_page_free_during_unown(void) {
+  mi_heap_t* heap = mi_heap_new_qsbr();
+  require(heap != NULL);
+  mi_theap_t* theap = mi_heap_theap(heap);
+  const size_t size = 8192;
+  full_page_blocks[0] = mi_heap_malloc(heap, size);
+  require(full_page_blocks[0] != NULL);
+  mi_page_t* page = mi_ptr_page(full_page_blocks[0]);
+  require(page->memid.memkind == MI_MEM_ARENA && !mi_page_is_singleton(page));
+  full_page_count = page->reserved;
+  require(full_page_count <= sizeof(full_page_blocks)/sizeof(full_page_blocks[0]));
+  for (size_t i = 1; i < full_page_count; i++) {
+    full_page_blocks[i] = mi_heap_malloc(heap, size);
+    require(full_page_blocks[i] != NULL && mi_ptr_page(full_page_blocks[i]) == page);
+  }
+  require(mi_page_is_full(page));
+  if (!mi_page_is_abandoned(page)) { _mi_page_abandon(page, mi_page_queue_of(page)); }
+  require(mi_page_is_abandoned(page) && !mi_page_is_abandoned_mapped(page));
+  require(mi_page_claim_ownership(page));
+  // Keep the frees pending until the unmapped page is unowned.
+  for (size_t i = 0; i < full_page_count; i++) { mi_free(full_page_blocks[i]); }
+  require(mi_page_is_full(page));
+  require(!mi_abandoned_page_unown(page, theap));
+  require(mi_page_all_free(page) && !mi_page_is_owned(page) && mi_page_is_abandoned_mapped(page));
+  const uint64_t goal = page->qsbr.goal;
+  require(goal != 0 && !page->qsbr_in_queue);
+  const size_t bin = _mi_bin(mi_page_block_size(page));
+  require(mi_atomic_load_relaxed(&heap->abandoned_count[bin]) == 1);
+  mi_page_t* reclaimed = _mi_page_fresh(theap, mi_page_queue(theap, size + MI_PADDING_SIZE));
+  require(reclaimed == page && page->qsbr.goal == goal && page->qsbr_in_queue);
+  require(mi_atomic_load_relaxed(&heap->abandoned_count[bin]) == 0);
+  void* p = mi_heap_malloc(heap, size);
+  require(p != NULL && mi_ptr_page(p) == page);
+  mi_free(p);
+  mi_heap_collect(heap, true);
+  qsbr_complete();
+  _mi_theap_qsbr_collect_delayed(theap);
+  require(page_count(heap) == 0 && qsbr_count(theap) == 0);
+  mi_heap_destroy(heap);
   return true;
 }
 
@@ -444,12 +591,11 @@ static bool test_destroy_empty_orphan(void) {
   worker_heap = mi_heap_new_qsbr();
   require(worker_heap != NULL);
   worker_size = 64;
-  worker_empty = false;
+  worker_empty = true;
   worker_delete = false;
   require(mi_run_on_thread(&allocate_and_exit));
-  mi_free(worker_blocks[0]);
-  mi_free(worker_blocks[1]);
-  require(mi_page_all_free(worker_page) && worker_page->qsbr.goal != 0);
+  require(mi_page_all_free(worker_page) && worker_goal != 0 && worker_page->qsbr.goal == worker_goal);
+  require(mi_page_is_abandoned(worker_page) && !mi_page_is_owned(worker_page) && !worker_page->qsbr_in_queue);
   mi_heap_destroy(worker_heap);
   return true;
 }
@@ -463,18 +609,26 @@ int main(void) {
   CHECK("delayed prefix beyond retirement cache", test_delayed_prefix());
   CHECK("abandon unlinks a middle queue entry before losing its owner", test_abandon_queued_page());
   CHECK("delayed lists are per theap with independent heap contexts", test_separate_delayed_lists());
-  CHECK("page free retains, unfills, and releases a small page", test_page_free(MI_SMALL_MAX_OBJ_SIZE/2));
-  CHECK("page free retains, unfills, and releases an automatically full page", test_page_free(MI_SMALL_MAX_OBJ_SIZE+1));
+  CHECK("full queue retains, unfills, and releases a small page", test_page_free(MI_SMALL_MAX_OBJ_SIZE/2, false));
+  CHECK("full queue retains, unfills, and releases an automatically full page", test_page_free(MI_SMALL_MAX_OBJ_SIZE+1, false));
+  CHECK("full small page is abandoned, reclaimed on last free, and released after exit", test_page_free(MI_SMALL_MAX_OBJ_SIZE/2, true));
+  CHECK("automatically full page is abandoned, reclaimed on last free, and released after exit", test_page_free(MI_SMALL_MAX_OBJ_SIZE+1, true));
   CHECK("local reuse starts a new grace period", test_reuse(false));
   CHECK("remote reuse starts a new grace period", test_reuse(true));
   CHECK("reclaim preserves goal, appends at tail, and stops behind an unfinished head", test_reclaim());
-  CHECK("live orphan, origin-only reclaim, no TLS on last free", test_orphan(64, false, false));
+  CHECK("delayed empty arena page is reclaimed despite disabled reclaim", test_reclaim_delayed_empty(64, false));
+  CHECK("delayed empty OS page is reclaimed despite disabled reclaim", test_reclaim_delayed_empty(64, true));
+  CHECK("delayed empty arena singleton is reclaimed", test_reclaim_delayed_empty(2*MI_MiB, false));
+  CHECK("delayed empty OS singleton is reclaimed", test_reclaim_delayed_empty(2*MI_MiB, true));
+  CHECK("allocation retries when reclaim releases ready empty pages", test_reclaim_ready_pages());
+  CHECK("live orphan, origin-only reclaim, last free initializes a receiving thread", test_orphan(64, false, false));
   CHECK("empty abandoned arena singleton", test_orphan(2*MI_MiB, false, true));
   CHECK("live abandoned arena singleton", test_orphan(2*MI_MiB, false, false));
   CHECK("empty abandoned OS singleton", test_orphan(2*MI_MiB, true, true));
   CHECK("live abandoned OS singleton", test_orphan(2*MI_MiB, true, false));
   CHECK("last frees during abandonment unown", test_free_during_unown(false));
   CHECK("last frees during free-side unown", test_free_during_unown(true));
+  CHECK("full arena page becomes mapped on delayed last frees during unown", test_full_page_free_during_unown());
   CHECK("terminal destroy of an empty orphan without a prior sweep", test_destroy_empty_orphan());
   CHECK("protected delete rejected, terminal destroy unlinks", test_terminal_destroy(false));
   CHECK("cross-thread terminal destroy unlinks before freeing the owner", test_terminal_destroy(true));

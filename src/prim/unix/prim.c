@@ -74,6 +74,17 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <sys/syscall.h>
 #endif
 
+// MSan does not intercept raw syscalls, so memory they write must be marked as initialized
+#if defined(__has_feature)
+  #if __has_feature(memory_sanitizer)
+  #include <sanitizer/msan_interface.h>  // __msan_unpoison
+  #define mi_msan_unpoison(p,size)  __msan_unpoison(p,size)
+  #endif
+#endif
+#ifndef mi_msan_unpoison
+#define mi_msan_unpoison(p,size)
+#endif
+
 #if !defined(MADV_DONTNEED) && defined(POSIX_MADV_DONTNEED)  // QNX
 #define MADV_DONTNEED  POSIX_MADV_DONTNEED
 #endif
@@ -81,7 +92,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MADV_FREE  POSIX_MADV_FREE
 #endif
 
-#define MI_UNIX_LARGE_PAGE_SIZE (2*MI_MiB) // todo: can we query the OS for this?
+#define MI_UNIX_MAX_THP_PAGE_SIZE (8*MI_MiB)        // above this we do not use madvise for transparent huge pages (see issue #1431)
 
 //------------------------------------------------------------------------------------
 // Use syscalls for some primitives to allow for libraries that override open/read/close etc.
@@ -97,7 +108,9 @@ static inline int mi_prim_open(const char* fpath, int open_flags) {
   return syscall(SYS_open,fpath,open_flags,0);
 }
 static inline ssize_t mi_prim_read(int fd, void* buf, size_t bufsize) {
-  return syscall(SYS_read,fd,buf,bufsize);
+  ssize_t nread = syscall(SYS_read,fd,buf,bufsize);
+  if (nread > 0) { mi_msan_unpoison(buf, (size_t)nread); }
+  return nread;
 }
 static inline int mi_prim_close(int fd) {
   return syscall(SYS_close,fd);
@@ -134,12 +147,13 @@ static bool unix_detect_overcommit(void) {
   #if defined(__linux__)
     int fd = mi_prim_open("/proc/sys/vm/overcommit_memory", O_RDONLY);
     if (fd >= 0) {
-      char buf[32];
-      ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+      char buf[64];
+      ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf)-1);
       mi_prim_close(fd);
       // <https://www.kernel.org/doc/Documentation/vm/overcommit-accounting>
       // 0: heuristic overcommit, 1: always overcommit, 2: never overcommit (ignore NORESERVE)
-      if (nread >= 1) {
+      if (nread >= 1 && nread < (ssize_t)sizeof(buf)) {
+        buf[nread] = 0;
         os_overcommit = (buf[0] == '0' || buf[0] == '1');
       }
     }
@@ -161,12 +175,12 @@ static bool unix_detect_thp(void) {
   int fd = mi_prim_open("/sys/kernel/mm/transparent_hugepage/enabled", O_RDONLY);
   if (fd >= 0) {
     char buf[64];
-    ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+    ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf)-1);
     mi_prim_close(fd);
     // <https://www.kernel.org/doc/html/latest/admin-guide/mm/transhuge.html>
     // between brackets is the current value, for example: always [madvise] never
-    if (nread >= 1) {
-      if (nread > 64) { nread = 64; }
+    if (nread >= 1 && nread < (ssize_t)sizeof(buf)) {
+      buf[nread] = 0;
       thp_enabled = (_mi_strnstr(buf,nread,"[never]") == NULL);
     }
   }
@@ -175,17 +189,18 @@ static bool unix_detect_thp(void) {
 }
 
 static size_t unix_detect_large_page_size(void) {
-  size_t large_page_size = MI_UNIX_LARGE_PAGE_SIZE;
+  size_t large_page_size = 2*MI_MiB;  // assume 512*4KiB by default
   #if defined(__linux__)
   // get the transparent huge page size from the pmd size
   const int fd = mi_prim_open("/sys/kernel/mm/transparent_hugepage/hpage_pmd_size", O_RDONLY);
   if (fd >= 0) {
     char buf[64];
-    const ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+    const ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf)-1);
     mi_prim_close(fd);
-    if (nread >= 1) {
+    if (nread >= 1 && nread < (ssize_t)sizeof(buf)) {
+      buf[nread] = 0;
       long size = 0;
-      if (_mi_strtol(buf, NULL, &size) && size > 0 && size <= SIZE_MAX) {
+      if (_mi_strntol(buf, nread, NULL, &size) && size > 0 && size <= SIZE_MAX) {
         large_page_size = (size_t)size;
       }
     }
@@ -257,9 +272,10 @@ static size_t unix_detect_virtual_address_bits(void) {
     const int fd = mi_prim_open("/proc/cpuinfo", O_RDONLY);
     if (fd >= 0) {
       char buf[2048];
-      const ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf));
+      const ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf)-1);
       mi_prim_close(fd);
-      if ((nread >= 1) && (nread <= (ssize_t)sizeof(buf))) {
+      if ((nread >= 1) && (nread < (ssize_t)sizeof(buf))) {
+        buf[nread] = 0;
         if (_mi_strnstr(buf, nread, "sv39")) { return 39; }
         else if (_mi_strnstr(buf, nread, "sv48")) { return 48; }
         else if (_mi_strnstr(buf, nread, "sv57")) { return 57; }
@@ -278,19 +294,12 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     config->alloc_granularity = (size_t)psize;
     unix_detect_physical_memory(config->page_size, &config->physical_memory_in_kib);
   }
-  config->large_page_size = unix_detect_large_page_size();
-  config->has_overcommit = unix_detect_overcommit();
   config->has_partial_free = true;    // mmap can free in parts
   config->has_virtual_reserve = true; // todo: check if this true for NetBSD?  (for anonymous mmap with PROT_NONE)
+  config->large_page_size = unix_detect_large_page_size();
+  config->has_transparent_huge_pages = (config->large_page_size <= MI_UNIX_MAX_THP_PAGE_SIZE) && unix_detect_thp();
+  config->has_overcommit = unix_detect_overcommit();
   config->virtual_address_bits = unix_detect_virtual_address_bits();
-
-  // if large pages are too large, disable madvise for transparent huge pages; see issue #1431
-  if (config->large_page_size > 4*MI_UNIX_LARGE_PAGE_SIZE) {
-    config->has_transparent_huge_pages = false;
-  }
-  else {
-    config->has_transparent_huge_pages = unix_detect_thp();  
-  }
 
   // disable transparent huge pages for this process?
   #if (defined(__linux__) || defined(__ANDROID__)) && defined(PR_GET_THP_DISABLE)
@@ -490,30 +499,39 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   if (p == NULL) {
     *is_large = false;
     p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, flags, fd);
-    #if !defined(MI_NO_THP)
-    if (p != NULL && allow_large && mi_option_is_enabled(mi_option_allow_thp) && _mi_os_canuse_large_page(size, try_alignment)) {
-      #if defined(MADV_HUGEPAGE)
-      if (_mi_os_canuse_thp()) {
-        // Many Linux systems don't allow MAP_HUGETLB but they support instead
-        // transparent huge pages (THP). Generally, it is not required to call `madvise` with MADV_HUGE
-        // though since properly aligned allocations will already use large pages if available
-        // in that case -- in particular for our large regions (in `memory.c`).
-        // However, some systems only allow THP if called with explicit `madvise`, so
-        // when large OS pages are enabled for mimalloc, we call `madvise` anyways.
-        if (unix_madvise(p, size, MADV_HUGEPAGE) == 0) {
-          // *is_large = true; // possibly
-        };
+    if (p!=NULL) {
+      #if defined(MADV_NOHUGEPAGE)
+      const size_t large_page_size = _mi_os_large_page_size();
+      if (large_page_size > MI_UNIX_MAX_THP_PAGE_SIZE && size >= large_page_size) {
+        (void)unix_madvise(p, size, MADV_NOHUGEPAGE);  // prevent using large transparent huge pages, see issue #1431
       }
-      #elif defined(__sun)
-      struct memcntl_mha cmd = {0};
-      cmd.mha_pagesize = _mi_os_large_page_size();
-      cmd.mha_cmd = MHA_MAPSIZE_VA;
-      if (memcntl((caddr_t)p, size, MC_HAT_ADVISE, (caddr_t)&cmd, 0, 0) == 0) {
-        // *is_large = true; // possibly
+      else
+      #endif
+      #if !defined(MI_NO_THP)
+      if (allow_large && mi_option_is_enabled(mi_option_allow_thp) && _mi_os_canuse_large_page(size,try_alignment)) {
+        #if defined(MADV_HUGEPAGE)
+        if (_mi_os_has_thp()) {
+          // Many Linux systems don't allow MAP_HUGETLB but they support instead
+          // transparent huge pages (THP). Generally, it is not required to call `madvise` with MADV_HUGE
+          // though since properly aligned allocations will already use large pages if available
+          // in that case -- in particular for our large regions (in `memory.c`).
+          // However, some systems only allow THP if called with explicit `madvise`, so
+          // when large OS pages are enabled for mimalloc, we call `madvise` anyways.
+          if (unix_madvise(p, size, MADV_HUGEPAGE) == 0) {
+            // *is_large = true; // possibly
+          };
+        }
+        #elif defined(__sun)
+        struct memcntl_mha cmd = {0};
+        cmd.mha_pagesize = _mi_os_large_page_size();
+        cmd.mha_cmd = MHA_MAPSIZE_VA;
+        if (memcntl((caddr_t)p, size, MC_HAT_ADVISE, (caddr_t)&cmd, 0, 0) == 0) {
+          // *is_large = true; // possibly
+        }
+        #endif
       }
       #endif
     }
-    #endif
   }
   return p;
 }
@@ -998,6 +1016,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
     static _Atomic(uintptr_t) no_getrandom; // = 0
     if (mi_atomic_load_acquire(&no_getrandom)==0) {
       ssize_t ret = syscall(SYS_getrandom, buf, buf_len, GRND_NONBLOCK);
+      if (ret > 0) { mi_msan_unpoison(buf, (size_t)ret); }
       if (ret >= 0) return (buf_len == (size_t)ret);
       if (errno != ENOSYS) return false;
       mi_atomic_store_release(&no_getrandom, (uintptr_t)1); // don't call again, and fall back to /dev/urandom

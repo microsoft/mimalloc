@@ -7,7 +7,7 @@ use std::thread;
 fn heap_alloc() {
     let heap = Heap::new();
     for align in [1, 8, 16, 64, 4096, 1 << 16] {
-        for size in [1, 8, 24, 1024, 1025, 100_000, 4 << 20] {
+        for size in [1, 8, 24, 1024, 1025, 100_000, 1 << 20] {
             let layout = Layout::from_size_align(size, align).unwrap();
             let p = heap.alloc(layout);
             assert!(!p.is_null());

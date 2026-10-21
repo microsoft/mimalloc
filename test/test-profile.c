@@ -30,9 +30,9 @@ typedef struct {
   void*     last_ptr;
 } my_profiler_t;
 
-static inline my_profiler_t* downcast( mi_profiler_t* prof ) { 
-  return (my_profiler_t*)prof; 
-} 
+static inline my_profiler_t* downcast( mi_profiler_t* prof ) {
+  return (my_profiler_t*)prof;
+}
 
 // We store ptr in user_data so on_free can verify the round-trip.
 
@@ -41,15 +41,15 @@ static inline my_profiler_t* downcast( mi_profiler_t* prof ) {
 static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, mi_heap_t* heap) {
   MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(requested_size);
   my_profiler_t* prof = downcast(profiler);
-  assert(bytes_since_last_sample >= requested_size);  
+  assert(bytes_since_last_sample >= requested_size);
   prof->alloc_count++;
   prof->last_ptr      = ptr;
   prof->last_size     = requested_size;
-  prof->last_upscaled = bytes_since_last_sample;   
-  // store ptr to verify round-trip 
+  prof->last_upscaled = bytes_since_last_sample;
+  // store ptr to verify round-trip
   assert(data->user_data_size >= sizeof(void*));
   assert(data->user_data_size >= prof->profiler.sample_data_size);
-  data->user_data[0] = ptr; 
+  data->user_data[0] = ptr;
   return TEST_THRESHOLD;
 }
 
@@ -58,15 +58,15 @@ static void mi_cdecl on_free(mi_profiler_t* profiler, mi_profiler_sample_data_t*
   my_profiler_t* prof = downcast(profiler);
   prof->free_count++;
   // verify the user_data round-trip
-  assert(data->user_data[0] == ptr);  
+  assert(data->user_data[0] == ptr);
 }
 
 static my_profiler_t my_profiler = {
   { // profiler_t
     NULL,            // reserved
     sizeof(void*),   // needed sample data size
-    0,               // initial sample rate (default)        
-    &on_alloc,       
+    0,               // initial sample rate (default)
+    &on_alloc,
     &on_free,
     NULL,            // on_realloc
     NULL,            // on_snapshot
@@ -115,7 +115,7 @@ bool test_profiler_record_fields(void) {
       void* p = mi_malloc(1024);
       mi_free(p);
     }
-    assert(count!=MAXLOOP);    
+    assert(count!=MAXLOOP);
     result = (my_profiler.last_ptr != NULL && my_profiler.last_size > 0 && my_profiler.last_upscaled > 0 && count!=MAXLOOP);
   }
   return true;

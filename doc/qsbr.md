@@ -125,9 +125,10 @@ physical release. The runtime never calls that primitive or implements the
 release operation itself.
 
 `_mi_page_abandon` unlinks the page before clearing its theap ownership,
-preserving its goal. `_mi_theap_page_reclaim` appends an empty page with an
-existing goal to the receiving theap's queue, or clears stale state on an
-active page. Neither operation is delegated to the runtime.
+preserving its goal. `_mi_theap_page_reclaim` clears stale state on an active
+page, or calls `_mi_page_free` for an empty page to release it or queue it on
+the receiving theap. It returns `true` if the page was freed; allocation-side
+callers retry in that case. Neither operation is delegated to the runtime.
 
 `_mi_theap_qsbr_collect_delayed` drains its theap's queue, collecting cross-thread
 frees and calling the ordinary `_mi_page_free`. It removes active pages from
@@ -137,6 +138,10 @@ from the new head. This operation is called during maintenance, collection,
 and before allocating a huge page; its calls compile away when `MI_QSBR=0`.
 
 ## Owned pages and reuse
+
+QSBR heaps follow `mi_option_page_full_retain` like ordinary heaps: nonnegative
+values allow full pages to be abandoned, while negative values keep them in
+the theap's full queue. QSBR does not force full-queue retention.
 
 A delayed owned page belongs to two independent lists:
 
@@ -149,8 +154,8 @@ unlinked page from a singleton queue without dereferencing an abandoned page's
 old theap. Only owned pages can be queued. A recorded goal alone does not imply
 queue membership: abandoned pages retain their goals after being unlinked.
 
-The queue is FIFO, not goal-sorted. Reclamation preserves a goal and appends at
-the tail, even if the goal is older than the head's. As in CPython's v2 adapter,
+The queue is FIFO, not goal-sorted. Reclamation preserves an unfinished goal and
+appends at the tail, even if the goal is older than the head's. As in CPython's v2 adapter,
 the delayed collector stops at the first unfinished goal, so a ready page
 behind it can remain retained. It does not scan past that head or require a
 goal-comparison primitive. Other release attempts, such as a forced heap walk,
@@ -197,15 +202,23 @@ The page keeps its stable heap context and goal, but
 dereference it.
 
 Ordinary empty arena pages remain in the existing per-heap abandoned size-class
-maps and can be reclaimed by allocation. Reclaim does not require waiting if
+maps and can be reclaimed by allocation. If a full regular arena page becomes
+empty while abandonment collects concurrent frees, delayed release re-abandons
+it as mapped before releasing ownership. Reclaim does not require waiting if
 the runtime permits compatible reuse. Empty arena singletons are **not** put in
 those maps; they remain in the all-pages map. OS pages stay in the existing
 abandoned OS-page list. No new shared delayed-page list is introduced.
 
 A page may also become empty only after its owner has terminated. A zero goal
 in this case is **not** evidence of safety: `mi_page_qsbr_should_delay` must
-establish a new grace period using the heap's stable domain. An unfinished page
-remains abandoned rather than falling through to nonempty-page reclaim logic.
+establish a new grace period using the heap's stable domain. On a free-side
+release attempt, an unfinished empty page is reclaimed into the calling
+thread's theap for the same heap, creating that theap and initializing the
+thread if needed. Ordinary release then resets its retirement countdown and
+queues it for QSBR collection. This includes singleton and OS pages and
+bypasses nonempty-page reclaim limits. The runtime must ensure that QSBR
+allocations are not freed by late TLS destructors after mimalloc thread
+shutdown. Thread-exit abandonment is unchanged.
 
 A goal is a target QSBR sequence identifying the grace period that must finish
 before releasing the page. Zero means that no goal has been recorded, not that
@@ -235,16 +248,17 @@ and free-side reclaim decisions, in ordinary and QSBR-enabled builds. Changing
 the global option affects newly created heaps, not existing heaps or their
 future theaps.
 
-The reclaim-on-free modes retain their existing meanings: `-1` disables it,
-`0` allows the originating theap only, and `1` also permits cross-theap reclaim
-subject to the existing limits. Set the global option before creating heaps
-that need a particular mode.
+The nonempty-page reclaim-on-free modes retain their existing meanings:
+`-1` disables it, `0` allows the originating theap only, and `1` also permits
+cross-theap reclaim subject to the existing limits. Set the global option
+before creating heaps that need a particular mode.
 
 For heaps created by `mi_heap_new_qsbr()`, positive values are capped at `0`;
-negative values remain disabled. Thus a free can reclaim a protected page only
-into its originating theap. This cap does not change allocation-side reclaim:
-other theaps may still obtain compatible abandoned pages from the same heap
-when looking for a fresh page.
+negative values remain disabled. Thus a free can reclaim a nonempty protected
+page only into its originating theap. Empty pages delayed by QSBR use a
+same-heap theap, creating it if needed, regardless of this policy. This cap
+does not change allocation-side reclaim: other theaps may still obtain
+compatible abandoned pages from the same heap when looking for a fresh page.
 
 This change also fixes a v3 eligibility fallthrough: an ineligible non-origin
 theap could previously reclaim a page when its destination queue was empty.

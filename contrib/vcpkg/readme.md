@@ -1,11 +1,11 @@
 # Vcpkg support
 
-This directory is meant to provide the sources for the official [vcpkg port] 
+This directory is meant to provide the sources for the official [vcpkg port]
 of mimalloc, but can also be used to override the official port with
 your own variant.
 
-For example, you can edit the [`portfile.cmake`](portfile.cmake) 
-to check out a specific commit, version, or branch of mimalloc, or set further options. 
+For example, you can edit the [`portfile.cmake`](portfile.cmake)
+to check out a specific commit, version, or branch of mimalloc, or set further options.
 You can install such custom port as:
 
 ```sh
@@ -19,7 +19,7 @@ See also the vcpkg [documentation](https://learn.microsoft.com/en-us/vcpkg/produ
 
 # Using mimalloc from vcpkg
 
-When using [cmake with vcpkg](https://learn.microsoft.com/en-us/vcpkg/get_started/get-started?pivots=shell-powershell), 
+When using [cmake with vcpkg](https://learn.microsoft.com/en-us/vcpkg/get_started/get-started?pivots=shell-powershell),
 you can use mimalloc from the `CMakeLists.txt` as:
 
 ```cmake
@@ -33,7 +33,7 @@ See [`test/CMakeLists.txt](../../test/CMakeLists.txt) for more examples.
 # Acknowledgements
 
 The original port for vckpg was contributed by many people, including: @vicroms, @myd7349, @PhoubeHui, @LilyWangL,
-@JonLiu1993, @RT2Code, Remy Tassoux, @wangao, @BillyONeal, @jiayuehua, @dg0yt, @gerar-ryan-immersaview, @nickdademo, 
+@JonLiu1993, @RT2Code, Remy Tassoux, @wangao, @BillyONeal, @jiayuehua, @dg0yt, @gerar-ryan-immersaview, @nickdademo,
 and @jimwang118 -- Thank you so much!
 
 

@@ -6,7 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 /* -----------------------------------------------------------
-  The "slow" allocation path (`mi_malloc_generic`), including 
+  The "slow" allocation path (`mi_malloc_generic`), including
   finding suitable pages with free blocks.
 ----------------------------------------------------------- */
 
@@ -28,7 +28,7 @@ static inline bool mi_page_free_quick_collect(mi_page_t* page) {
   // move local_free to free
   page->free = page->local_free;
   page->local_free = NULL;
-  page->free_is_zero = false;  
+  page->free_is_zero = false;
   _mi_page_update_sample_countdown(page);
   return true;
 }
@@ -151,7 +151,7 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
 
   if (page == NULL) {
     _mi_theap_collect_retired(theap, false); // perhaps make a page available
-    page = _mi_page_fresh(theap, pq);         
+    page = _mi_page_fresh(theap, pq);
     mi_assert_internal(page == NULL || mi_page_immediate_available(page));
     if (page == NULL && first_try) {
       // out-of-memory _or_ an abandoned page with free blocks was reclaimed, try once again
@@ -209,7 +209,7 @@ static inline mi_page_t* mi_page_queue_find_free(mi_theap_t* theap, mi_page_queu
   if (page==NULL) {
     page = mi_page_queue_find_free_ex(theap, pq, true);
     if (page==NULL) return NULL;
-  }  
+  }
   mi_assert_internal(mi_page_immediate_available(page));
   mi_assert_internal(mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
@@ -285,14 +285,14 @@ static mi_page_t* mi_find_page(mi_theap_t* theap, size_t size, size_t huge_align
 
 // The program should only install a single deferred free handler before doing allocation.
 static _Atomic(void*) deferred_free; // is `mi_deferred_free_fun*` (but some platforms don't support atomic function pointers)
-static _Atomic(void*) deferred_arg;   
+static _Atomic(void*) deferred_arg;
 
 void _mi_deferred_free(mi_theap_t* theap, bool force) {
   theap->heartbeat++;
   mi_deferred_free_fun* const fun = (mi_deferred_free_fun*)mi_atomic_load_ptr_acquire(void,&deferred_free);
   if (fun != NULL && !theap->tld->recurse) {
     theap->tld->recurse = true;
-    void* const arg = mi_atomic_load_ptr_acquire(void,&deferred_arg);  
+    void* const arg = mi_atomic_load_ptr_acquire(void,&deferred_arg);
     fun(force, theap->heartbeat, arg);
     theap->tld->recurse = false;
   }
@@ -300,7 +300,7 @@ void _mi_deferred_free(mi_theap_t* theap, bool force) {
 
 void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noexcept {
   mi_atomic_store_ptr_release(void,&deferred_arg, arg);
-  mi_atomic_store_ptr_release(void,&deferred_free, (void*)fn);  
+  mi_atomic_store_ptr_release(void,&deferred_free, (void*)fn);
 }
 
 
@@ -320,7 +320,7 @@ static mi_theap_t* mi_theap_init(mi_theap_t* theap) {
   return theap;
 }
 
-static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap) 
+static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
 {
   theap = mi_theap_init(theap);
   if (theap==NULL) return NULL;
@@ -331,8 +331,8 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
     theap->generic_collect_count += theap->generic_count;
     theap->generic_count = 0;
 
-    // check if the profiler is enabled (unless this theap is permanently excluded, see `mi_theap_profile_disable`)
-    if (!theap->profile_disabled) {
+    // check if the profiler is enabled (unless this theap is permanently excluded, see `mi_theap_profile_never`)
+    if (!theap->profile_never) {
       mi_heap_t* const heap = mi_theap_heap(theap);
       mi_profiler_t* prof = mi_atomic_load_ptr_relaxed(mi_profiler_t, &heap->profiler);
       const bool prof_enabled = (prof!=NULL && mi_profiler_is_enabled(prof));
@@ -355,9 +355,9 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
     // }
     else {
       // otherwise we do a mini-collect
-      _mi_deferred_free(theap, false);         // call potential deferred free routines      
+      _mi_deferred_free(theap, false);         // call potential deferred free routines
       _mi_theap_free_batch_collect(theap);
-      _mi_theap_collect_retired(theap, false); // free retired pages            
+      _mi_theap_collect_retired(theap, false); // free retired pages
     }
   }
   return theap;
@@ -367,41 +367,18 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
   Generic allocation
 ----------------------------------------------------------- */
 
-static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage) 
-{  
-  // initialize if necessary
-  theap = mi_malloc_generic_admin(theap);
-  if (theap==NULL) return NULL;
-  
-  // check allocation size
+static bool mi_malloc_generic_check_size(size_t size) {
   const size_t req_size = size - MI_PADDING_SIZE;
   if mi_unlikely(req_size > MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE) {
     _mi_error_message(EOVERFLOW, "allocation request is too large (%zu bytes)\n", req_size);
-    return NULL;
+    return false;
   }
+  return true;
+}
 
-  // take a sample?
-  bool sample_countdown_is_adjusted = false;
-  if mi_unlikely(mi_theap_should_sample(theap,req_size)) {
-    if (huge_alignment==0 && theap->sample_rate!=0) {
-      return _mi_theap_malloc_sampled(theap,req_size,zero,ppage);    
-    }    
-    mi_assert_internal(!_mi_is_empty_theap(theap));       // cannot write to the empty theap
-    mi_assert_internal(req_size <= MI_SAMPLE_COUNTDOWN_MAX);
-    if (theap->sample_rate==0) {
-      theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;  // reset the countdown counter    
-    }
-    #if MI_SAMPLE==2
-    else {
-      // huge_alignment!=0 so we need to adjust the countdown 
-      mi_assert_internal(huge_alignment!=0);
-      mi_assert_internal(theap->sample_countdown <= SIZE_MAX - req_size);
-      sample_countdown_is_adjusted = true;
-      theap->sample_countdown += req_size;                // adjust such that after `_mi_page_malloc_zero` the countdown is correct again
-    }
-    #endif    
-  }
-
+// Allocate from a page of the right size (without sampling)
+static void* mi_malloc_generic_from_page(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage, size_t sample_countdown_adjust)
+{
   // find (or allocate) a page of the right size
   mi_page_t* page = mi_find_page(theap, size, huge_alignment);
   if mi_unlikely(page == NULL) { // first time out of memory, try to collect and retry the allocation once more
@@ -410,9 +387,9 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
   }
 
   if mi_unlikely(page == NULL) { // out of memory
-    if (sample_countdown_is_adjusted) { theap->sample_countdown -= req_size; }  // unadjust again if we failed to find a page
-    _mi_error_message(ENOMEM, "unable to allocate memory (%zu bytes)\n", req_size);
-    return NULL;  
+    theap->sample_countdown -= sample_countdown_adjust;  // unadjust again if we failed to find a page
+    _mi_error_message(ENOMEM, "unable to allocate memory (%zu bytes)\n", size - MI_PADDING_SIZE);
+    return NULL;
   }
 
   mi_assert_internal(mi_page_immediate_available(page));
@@ -425,15 +402,59 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
   void* const p = _mi_page_malloc_zero(theap,page,size,zero);
   mi_assert_internal(p != NULL);
   _mi_page_update_sample_countdown(page);
-  
+
   // move full pages to the full queue
-  // this will also call _mi_page_update_stats for huge pages  
+  // this will also call _mi_page_update_stats for huge pages
   if (mi_page_block_size(page) > MI_SMALL_MAX_OBJ_SIZE) {
     if (mi_page_is_full(page)) {
       _mi_page_to_full(page, mi_page_queue_of(page));
     }
-  }  
+  }
   return p;
+}
+
+// Called when the sample countdown is reached: take a sample if possible, or otherwise allocate from a page
+static mi_decl_noinline void* mi_malloc_generic_sample(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage)
+{
+  const size_t req_size = size - MI_PADDING_SIZE;
+  if (huge_alignment==0 && theap->sample_rate!=0) {
+    return _mi_theap_malloc_sampled(theap,req_size,zero,ppage);
+  }
+  mi_assert_internal(!_mi_is_empty_theap(theap));       // cannot write to the empty theap
+  mi_assert_internal(req_size <= MI_SAMPLE_COUNTDOWN_MAX);
+  size_t sample_countdown_adjust = 0;
+  if (theap->sample_rate==0) {
+    theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;  // reset the countdown counter
+  }
+  #if MI_SAMPLE==2
+  else {
+    // huge_alignment!=0 so we need to adjust the countdown
+    mi_assert_internal(huge_alignment!=0);
+    mi_assert_internal(theap->sample_countdown <= SIZE_MAX - req_size);
+    sample_countdown_adjust = req_size;
+    theap->sample_countdown += req_size;                // adjust such that after `_mi_page_malloc_zero` the countdown is correct again
+  }
+  #endif
+  return mi_malloc_generic_from_page(theap, size, zero, huge_alignment, ppage, sample_countdown_adjust);
+}
+
+static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage)
+{
+  // initialize if necessary
+  theap = mi_malloc_generic_admin(theap);
+  if (theap==NULL) return NULL;
+
+  // check allocation size
+  if (!mi_malloc_generic_check_size(size)) return NULL;
+
+  if mi_unlikely(mi_theap_should_sample(theap, size - MI_PADDING_SIZE)) {
+    // sampled allocation
+    return mi_malloc_generic_sample(theap, size, zero, huge_alignment, ppage);
+  }
+  else {
+    // direct allocation
+    return mi_malloc_generic_from_page(theap, size, zero, huge_alignment, ppage, 0);
+  }
 }
 
 
@@ -455,9 +476,9 @@ mi_decl_restrict void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t
 
   // fast path objects that fit in a small page
   if mi_likely(mi_theap_is_initialized(theap) && ++theap->generic_count < 1000 && huge_alignment==0) {
-    const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`         
+    const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
     if (req_size < MI_SMALL_MAX_OBJ_SIZE)
-    { 
+    {
       #if MI_SAMPLE
       if mi_likely(!mi_theap_should_sample(theap,req_size)) // ensure we don't need to take a sample
       #endif
@@ -466,7 +487,7 @@ mi_decl_restrict void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t
         mi_assert_internal(pq!=NULL && !mi_page_queue_is_huge(pq));
         page = mi_page_queue_find_free(theap,pq);
         // mi_assert_internal(mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE);
-        if (page!=NULL) {        
+        if (page!=NULL) {
           if (ppage!=NULL) { *ppage = page; }
           mi_assert_internal(mi_page_immediate_available(page)); // we should never recurse in _mi_page_malloc_zero
           void* p = _mi_page_malloc_zero(theap,page,size,zero);  // always succeeds
@@ -483,14 +504,14 @@ mi_decl_restrict void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t
 // Generic allocation without sampling
 mi_decl_restrict void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
-  theap = mi_theap_init(theap);
+  // do the admin first as it can update the sample rate; we never call it (or the sampling path) recursively here
+  theap = mi_malloc_generic_admin(theap);
   if (theap==NULL) return NULL;
-  const size_t sample_rate = theap->sample_rate;
+  if (!mi_malloc_generic_check_size(size)) return NULL;
   const size_t sample_countdown = theap->sample_countdown;
-  theap->sample_rate = 0;  // prevent a recursive call to mi_theap_malloc_sampled from _mi_malloc_generic
-  theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;
-  void* p = _mi_malloc_generic(theap, size, (zero ? 1 : 0), ppage);
-  theap->sample_rate = sample_rate;
-  theap->sample_countdown = sample_countdown;
+  theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;  // don't count this allocation
+  void* p = mi_malloc_generic_from_page(theap, size, zero, 0, ppage, 0);
+  // the sample rate may have changed (e.g. by a profiler `on_free` callback during a collect)
+  theap->sample_countdown = (theap->sample_rate!=0 && sample_countdown > theap->sample_rate ? theap->sample_rate : sample_countdown);
   return p;
 }

@@ -429,7 +429,7 @@ div.line {
 	font-size: 13px;
 	min-height: 13px;
 	line-height: 1.2;
-	text-wrap: wrap; 
+	text-wrap: wrap;
 	word-break: break-all;
 	white-space: -moz-pre-wrap; /* Moz */
 	white-space: -pre-wrap;     /* Opera 4-6 */
@@ -666,19 +666,19 @@ span.xmlcdata {
 	color: black;
 }
 
-span.vhdldigit { 
+span.vhdldigit {
 	color: #FF00FF;
 }
 
-span.vhdlchar { 
+span.vhdlchar {
 	color: #000000;
 }
 
-span.vhdlkeyword { 
+span.vhdlkeyword {
 	color: #700070;
 }
 
-span.vhdllogic { 
+span.vhdllogic {
 	color: #FF0000;
 }
 

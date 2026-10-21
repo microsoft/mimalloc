@@ -23,7 +23,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
    > valgrind ./test-wrong
 
-   
+
    ASAN
    ----------
    Compile in an "out/debug" folder:
@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
   (void)(argv);
   int* p = (int*)mi(malloc)(3*sizeof(int));
   p[0] = 1;
-  
+
   int* r = (int*)mi_malloc_aligned(8,16);
   mi_free(r);
 
@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
   char* c = (char*)mi(malloc)(3);
   printf("invalid byte: over: %d, under: %d\n", c[4], c[-1]);
   mi(free)(c);
-  
+
   // double free
   mi(free)(c);
 

@@ -339,7 +339,7 @@ static mi_page_t* mi_page_meta_select(uint8_t* slice_start, size_t slice_count, 
   mi_assert_internal(page_meta == NULL || page_meta->block_size == 0);
   mi_page_t* page;
   size_t offset;
-  if (page_meta == NULL 
+  if (page_meta == NULL
       #if MI_PAGE_META_SMALL_IS_ALIGNED
       // small pages keep the page meta data in front of the slices for a fast `mi_free_small`
       // (note: it is important that the separate `page_meta->block_size == 0` for `mi_arena_page_at_slice`)
@@ -543,7 +543,7 @@ static bool mi_arenas_page_commit_first_block(mi_theap_t* theap, mi_memid_t memi
 }
 
 // Prepare the page memory: zero the page meta data if it is in front of the slices, set the guard page, etc.
-static void mi_arenas_page_init_memory(mi_theap_t* theap, mi_page_t* page, uint8_t* slice_start, size_t slice_count, size_t block_start, size_t page_noguard_size, mi_memid_t* memid) 
+static void mi_arenas_page_init_memory(mi_theap_t* theap, mi_page_t* page, uint8_t* slice_start, size_t slice_count, size_t block_start, size_t page_noguard_size, mi_memid_t* memid)
 {
   MI_UNUSED(theap); MI_UNUSED(slice_count); MI_UNUSED(block_start); MI_UNUSED(page_noguard_size);
 
@@ -579,7 +579,7 @@ static void mi_arenas_page_init_memory(mi_theap_t* theap, mi_page_t* page, uint8
 
 // Initialize the fields of the page meta data.
 static void mi_arenas_page_init_meta(mi_theap_t* theap, mi_page_t* page, uint8_t* slice_start, size_t block_start, size_t block_size, bool os_align,
-                                     size_t page_noguard_size, size_t commit_size, mi_memid_t memid) 
+                                     size_t page_noguard_size, size_t commit_size, mi_memid_t memid)
 {
   const size_t reserved = (os_align ? 1 : (page_noguard_size - block_start) / block_size);
   mi_assert_internal(reserved > 0 && reserved <= UINT16_MAX);
@@ -603,7 +603,7 @@ static void mi_arenas_page_init_meta(mi_theap_t* theap, mi_page_t* page, uint8_t
 
 #if MI_PAGE_META_IS_ALIGNED
 // Point the aligned page meta entries of the slices to the actual page meta data.
-static void mi_arenas_page_link_aligned_meta(mi_page_t* page, uint8_t* slice_start, size_t slice_count, size_t max_page_meta_count) 
+static void mi_arenas_page_link_aligned_meta(mi_page_t* page, uint8_t* slice_start, size_t slice_count, size_t max_page_meta_count)
 {
   mi_page_t* const page_meta = mi_aligned_ptr_page0(slice_start);
   mi_atomic_store_ptr_release(mi_page_t,&page_meta->self,page);
@@ -627,7 +627,7 @@ static void mi_arenas_page_link_aligned_meta(mi_page_t* page, uint8_t* slice_sta
 
 // Register a fresh page in its arena pages and the page map, and claim ownership.
 // On failure the page is freed.
-static bool mi_arenas_page_register(mi_theap_t* theap, mi_page_t* page, mi_arena_pages_t* arena_pages) 
+static bool mi_arenas_page_register(mi_theap_t* theap, mi_page_t* page, mi_arena_pages_t* arena_pages)
 {
   // register in the arena_pages
   if (arena_pages!=NULL) {
@@ -917,11 +917,23 @@ static bool mi_abandoned_page_unown(mi_page_t* page, mi_theap_t* current_theapx)
     mi_assert_internal(mi_tf_is_owned(tf_old));
     while mi_unlikely(mi_tf_block(tf_old) != NULL) {
       _mi_page_free_collect(page, false);  // update used
-      if (mi_page_all_free(page) && !_mi_page_qsbr_should_delay(page)) {
-        _mi_page_qsbr_clear(page);
-        _mi_arenas_page_unabandon(page, current_theapx);
-        _mi_arenas_page_free(page, current_theapx);
-        return true;
+      if (mi_page_all_free(page)) {
+        if (!_mi_page_qsbr_should_delay(page)) {
+          _mi_page_qsbr_clear(page);
+          _mi_arenas_page_unabandon(page, current_theapx);
+          _mi_arenas_page_free(page, current_theapx);
+          return true;
+        }
+        #if MI_QSBR
+        else if (page->memid.memkind == MI_MEM_ARENA &&
+                 !mi_page_is_singleton(page) && !mi_page_is_abandoned_mapped(page))
+        {
+          // if empty and qsbr delayed, we re-abandon to mapped so it can be reused
+          _mi_arenas_page_unabandon(page, current_theapx);
+          _mi_arenas_page_abandon(page, current_theapx);   // cannot recurse due to `!mi_page_is_abandoned_mapped(page)`
+          return false;
+        }
+        #endif
       }
       tf_old = mi_atomic_load_relaxed(&page->xthread_free);
     }
@@ -954,7 +966,7 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_heap_t* heap = mi_page_heap(page);
   if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)
       #if MI_QSBR
-      && !mi_page_is_singleton(page)
+      && !mi_page_is_singleton(page) // an arena singleton has size > MI_LARGE_MAX_OBJ_SIZE and bin==MI_BIN_HUGE
       #endif
      ) {
     // make available for allocations

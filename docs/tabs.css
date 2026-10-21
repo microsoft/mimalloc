@@ -62,7 +62,7 @@
 	position: relative;
 }
 
-.tablist li.current a:after {   
+.tablist li.current a:after {
 	content: '';
 	position: absolute;
 	left: 15px;

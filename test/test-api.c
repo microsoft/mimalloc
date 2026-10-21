@@ -108,7 +108,7 @@ int main(void) {
   #endif
   CHECK_BODY("calloc-overflow") {
     // use (size_t)&mi_calloc to get some number without triggering compiler warnings
-    result = (mi_calloc((size_t)&mi_calloc,SIZE_MAX/1000) == NULL);    
+    result = (mi_calloc((size_t)&mi_calloc,SIZE_MAX/1000) == NULL);
   };
   CHECK_BODY("malloc-large") {   // see PR #544.
     void* p = mi_malloc(67108872);
@@ -119,14 +119,14 @@ int main(void) {
     result = (mi_malloc_size(p) >= 42 && mi_malloc_usable_size(p) >= 42);
     mi_free(p);
   };
-  
+
   CHECK_BODY("calloc0") {
     void* p = mi_calloc(0,1000);
-    const size_t usable = mi_usable_size(p);    
+    const size_t usable = mi_usable_size(p);
     result = (usable <= 16);
     mi_free(p);
   };
-  
+
   CHECK_BODY("mi_urealloc_invalid") {
     void* p = mi_malloc(64);
     size_t pre, post;
@@ -134,7 +134,7 @@ int main(void) {
     mi_free(p);
     result = (q==NULL || q==(uint8_t*)p+3);
   }
-  
+
   // ---------------------------------------------------
   // Extended
   // ---------------------------------------------------
@@ -246,7 +246,7 @@ int main(void) {
     }
     result = ok;
   };
-  
+
   CHECK_BODY("malloc-aligned9") { // test large alignments
     bool ok = true;
     void* p[8];
@@ -270,7 +270,7 @@ int main(void) {
     }
     result = ok;
   };
-  
+
   CHECK_BODY("malloc-aligned9a") { // test large alignments
     void* p = mi_zalloc_aligned(1024 * 1024, 2);
     mi_free(p);
@@ -278,7 +278,7 @@ int main(void) {
     mi_free(p);
     result = true;
   };
-  
+
   CHECK_BODY("malloc-aligned10") {
     bool ok = true;
     void* p[10+1];
@@ -304,7 +304,7 @@ int main(void) {
     result = (((uintptr_t)p % 0x100) == 0); // #602
     mi_free(p);
   }
-  
+
   CHECK_BODY("mimalloc-aligned13") {
     bool ok = true;
     for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size++ ) {
@@ -393,13 +393,13 @@ int main(void) {
     void* ptr = mi_zalloc_aligned(n, alignment);
     assert(mem_is_zero(ptr,n));
     memset(ptr,123,n/2);
-    
+
     ptr = mi_rezalloc_aligned(ptr, n/2, alignment);
     assert(mem_has_vals((uint8_t*)ptr,n/2,123));
-    
+
     ptr = mi_rezalloc_aligned(ptr, n, alignment);
     assert(mem_has_vals((uint8_t*)ptr,n/2,123));
-    result = mem_is_zero((uint8_t*)ptr + n/2, n/2);    
+    result = mem_is_zero((uint8_t*)ptr + n/2, n/2);
     mi_free(ptr);
   }
 
@@ -532,7 +532,7 @@ int main(void) {
       mi_free_size(p,size + MI_SMALL_SIZE_MAX);
     }
   }
-  
+
   CHECK_BODY("free_small3") {
     for(size_t n = 1; n < MI_SMALL_SIZE_MAX/sizeof(int); n *=2) {
       const size_t size = n*sizeof(int);
@@ -583,9 +583,9 @@ int main(void) {
     // traversal and space accounting works as expected.
     const size_t arena_size = 24 * MI_GiB;
     const size_t allocation_size = 63 * MI_MiB;
-    const size_t allocation_count = 272; 
+    const size_t allocation_count = 272;
     const size_t alignment = mi_arena_min_alignment();
-    
+
     mi_arena_id_t arena_id = NULL;
     bool ok = (0==mi_reserve_os_memory_ex(arena_size,false /* commit */,false /* allow large */,
                                  true /* exclusive */, &arena_id));
@@ -609,7 +609,7 @@ int main(void) {
       fprintf(stderr, "allocated %zu MiB from the parent arena and its children\n", allocation_count * allocation_size / MI_MiB);
       mi_heap_destroy(heap);
     }
-    // mi_arena_destroy(arena_id); 
+    // mi_arena_destroy(arena_id);
     result = ok;
   }
   #endif
@@ -619,8 +619,8 @@ int main(void) {
   // ---------------------------------------------------
   // C++
   // ---------------------------------------------------
-  
-  #if defined(__cplusplus) && !defined(_MSC_VER)  
+
+  #if defined(__cplusplus) && !defined(_MSC_VER)
   CHECK_BODY("c++ new-handler") {
     std::set_new_handler([]{ throw std::bad_alloc(); });
     void* p = mi_new_nothrow(SIZE_MAX/2);
@@ -653,11 +653,11 @@ int main(void) {
   CHECK_BODY("heap-os2") {
     // @zoxc opus bug #3.
     mi_collect(true);
-    mi_stats_t_decl(stats0); 
+    mi_stats_t_decl(stats0);
     mi_stats_get(&stats0);
 
     mi_heap_t* h = mi_heap_new();
-    long failed = 0;      
+    long failed = 0;
     for(int i = 0; i < 10; i++) {
       int* p = (int*)mi_heap_malloc_aligned(h, 1<<20, 2<<20);   // forced OS allocation
       if (p==NULL) {
@@ -670,9 +670,9 @@ int main(void) {
     mi_heap_destroy(h);
 
     mi_collect(true);
-    mi_stats_t_decl(stats1); 
-    mi_stats_get(&stats1);    
-    result = (stats0.pages.current == stats1.pages.current);    
+    mi_stats_t_decl(stats1);
+    mi_stats_get(&stats1);
+    result = (stats0.pages.current == stats1.pages.current);
     if (!result) {
       fprintf(stderr, "heap-os2: pages: %ld != %ld (failed: %ld)\n", (long)stats0.pages.current, (long)stats1.pages.current, failed);
     }
@@ -718,20 +718,20 @@ int main(void) {
   //CHECK("theap_arena_destroy", test_theap_arena_destroy());
   //CHECK("theap_arena_delete", test_theap_arena_delete());
 
-  
+
   // ---------------------------------------------------
   // Threads
   // ---------------------------------------------------
   CHECK_BODY("thread_zero_aligned_first") {
     result = mi_run_on_thread(&test_zero_aligned_first);
   }
-  
+
   #ifdef __cplusplus
   CHECK_BODY("thread_new_first") {
     result = mi_run_on_thread(&test_new_first);
   }
   #endif
-  
+
   //mi_stats_print(NULL);
 
   // ---------------------------------------------------
