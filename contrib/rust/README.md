@@ -13,10 +13,34 @@ static GLOBAL: MiMalloc = MiMalloc;
 - `MiMalloc`: the global allocator (with fast paths for small and sized allocations).
 - `Heap`: first-class heaps that can be shared between threads; dropping a heap
   keeps its live blocks valid (`Heap::destroy` frees them all at once).
+- `Arena`: reserve memory for heaps that only allocate in it (see [Arenas](#arenas)).
 - `sys`: the raw C API (`mimalloc.h`).
 - Both `MiMalloc` and `&Heap` implement `core::alloc::Allocator` on Rust 1.100+
   (or on an older nightly with the `nightly` feature).
 - Helpers such as `collect`, `option_set`, `stats_print` and `stats_json`.
+
+## Arenas
+
+An arena is a large area of memory that heaps allocate from. A heap created with
+`Heap::new_in_arena` only allocates in its arena, and returns null when the arena is full.
+
+```rust
+use mimalloc::{Arena, Heap, ReserveOptions};
+
+let options = ReserveOptions { exclusive: true, ..ReserveOptions::default() };
+let arena = Arena::reserve_from_os(64 << 20, options).unwrap();
+let heap = Heap::new_in_arena(arena);
+```
+
+- `Arena::reserve_from_os` reserves fresh OS memory; `Arena::from_static_memory` uses memory
+  that lives forever (such as a leaked `Box`); `Arena::from_external_memory` (unsafe) uses any
+  other memory.
+  They return `None` if the arena cannot be created.
+- An `exclusive` arena keeps all other heaps out; otherwise any heap can use it as well.
+- Arenas cannot be removed, so they live until the process exits.
+- Arenas need at least `Arena::min_size()` bytes (32 MiB on 64-bit), and their start is
+  aligned to `Arena::min_alignment()` (256 MiB on 64-bit), so memory at an unaligned address
+  needs `2 * Arena::min_alignment()` bytes.
 
 ## Features
 
