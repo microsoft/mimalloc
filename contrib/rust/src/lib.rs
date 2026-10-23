@@ -16,7 +16,7 @@ terms of the MIT license. A copy of the license can be found in the file
 //! static GLOBAL: MiMalloc = MiMalloc;
 //! ```
 //!
-//! First-class heaps are available as [`Heap`], and the raw C API is in [`sys`].
+//! First-class heaps are available as [`Heap`], arenas as [`Arena`], and the raw C API is in [`sys`].
 //! Both `MiMalloc` and `&Heap` implement the `Allocator` trait on Rust 1.100+
 //! (or with the `nightly` feature on older nightly compilers).
 #![no_std]
@@ -24,9 +24,11 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #[cfg(any(feature = "nightly", allocator_api_stable))]
 mod allocator;
+mod arena;
 mod heap;
 pub use mimalloc_sys as sys;
 
+pub use arena::{Arena, ExternalMemory, ReserveOptions};
 pub use heap::Heap;
 
 use core::alloc::{GlobalAlloc, Layout};

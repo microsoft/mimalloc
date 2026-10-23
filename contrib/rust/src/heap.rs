@@ -4,7 +4,7 @@ This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
-use crate::{MiString, free_sized, is_malloc_aligned, sys};
+use crate::{Arena, MiString, free_sized, is_malloc_aligned, sys};
 use core::alloc::Layout;
 use core::ptr::{self, NonNull};
 
@@ -31,12 +31,16 @@ impl Heap {
         NonNull::new(sys::mi_heap_new()).map(|raw| Heap { raw })
     }
 
-    /// Create a new heap that only allocates in the given arena.
+    /// Create a new heap that only allocates in the given arena; panics if this fails.
     ///
-    /// # Safety
-    /// `arena` must be a valid arena id.
-    pub unsafe fn new_in_arena(arena: sys::mi_arena_id_t) -> Option<Self> {
-        NonNull::new(unsafe { sys::mi_heap_new_in_arena(arena) }).map(|raw| Heap { raw })
+    /// When the arena is full, allocation returns null; the heap never falls back to other memory.
+    pub fn new_in_arena(arena: Arena) -> Self {
+        Self::try_new_in_arena(arena).expect("mimalloc: unable to create a heap in the arena")
+    }
+
+    /// Create a new heap that only allocates in the given arena.
+    pub fn try_new_in_arena(arena: Arena) -> Option<Self> {
+        NonNull::new(unsafe { sys::mi_heap_new_in_arena(arena.as_raw()) }).map(|raw| Heap { raw })
     }
 
     pub fn as_ptr(&self) -> *mut sys::mi_heap_t {
