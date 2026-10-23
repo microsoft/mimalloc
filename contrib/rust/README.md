@@ -1,7 +1,10 @@
 # mimalloc for Rust
 
 Rust bindings for [mimalloc](https://github.com/microsoft/mimalloc), built directly
-from the mimalloc sources in this repository.
+from the mimalloc sources in this repository. As usual for Rust FFI bindings, these are split into two crates:
+
+- `mimalloc-sys` (in `sys/`): builds and links the C library and has the raw C API.
+- `mimalloc`: the global allocator, heaps, and safe helpers (with the raw API re-exported as `mimalloc::sys`).
 
 ```rust
 use mimalloc::MiMalloc;
@@ -30,7 +33,10 @@ static GLOBAL: MiMalloc = MiMalloc;
 | `win_direct_tls`    | Use direct TLS slots on Windows |
 | `no_thp`            | Disable transparent huge pages by default on Linux |
 | `opt_arch`          | Architecture specific optimizations (as `-DMI_OPT_ARCH=ON`) |
-| `nightly`           | `Allocator` support on nightly compilers before Rust 1.100 |
+| `nightly`           | `Allocator` support on nightly compilers before Rust 1.100 (`mimalloc` only) |
+
+All features except `nightly` are build options of the C library in `mimalloc-sys`
+(and are forwarded by `mimalloc`).
 
 Architecture optimizations are also enabled automatically if the Rust target features
 already imply them (e.g. `-C target-cpu=native`).
@@ -48,10 +54,10 @@ For example: `MIMALLOC_DEFINES="MI_DEBUG=3 MI_SKIP_COLLECT_ON_EXIT=1" cargo buil
 
 ## Using the crate
 
-The C sources are found in the following order:
+The C sources are found by `mimalloc-sys` in the following order:
 1. The `MIMALLOC_SRC_DIR` environment variable.
-2. A vendored `mimalloc/` directory next to `Cargo.toml` (with `include/`, `src/`, and `LICENSE`).
-3. The enclosing repository (`../..`).
+2. A vendored `mimalloc/` directory next to `sys/Cargo.toml` (with `include/`, `src/`, and `LICENSE`).
+3. The enclosing repository (`../../..` from `sys/`).
 
 Within this repository, use a path or git dependency:
 
@@ -60,8 +66,11 @@ Within this repository, use a path or git dependency:
 mimalloc = { path = ".../mimalloc/contrib/rust" }
 ```
 
-To publish a crate based on this one, copy `contrib/rust`, vendor the sources into
-`mimalloc/` (`cp -r ../../include ../../src ../../LICENSE mimalloc/`), and rename the package.
+To publish crates based on these, copy `contrib/rust`, vendor the sources into
+`sys/mimalloc/` (`cp -r ../../include ../../src ../../LICENSE sys/mimalloc/`), and rename both
+packages (the names `mimalloc` and `mimalloc-sys` are already taken on crates.io). The
+`mimalloc` crate depends on the exact version of `mimalloc-sys` as its fast paths depend
+on internal entry points such as `mi_wmalloc_small` and `MI_SMALL_SIZE_MAX`.
 
 ## Performance tips
 
@@ -71,9 +80,9 @@ To publish a crate based on this one, copy `contrib/rust`, vendor the sources in
   [profile.release]
   lto = "thin"
   ```
-- Optimize mimalloc in debug builds too:
+- Optimize mimalloc in debug builds too (the C library is compiled as part of `mimalloc-sys`):
   ```toml
-  [profile.dev.package.mimalloc]
+  [profile.dev.package.mimalloc-sys]
   opt-level = 3
   ```
 - Cross-language LTO can inline the allocation fast paths into Rust code: build with
@@ -83,7 +92,7 @@ To publish a crate based on this one, copy `contrib/rust`, vendor the sources in
 ## Testing
 
 ```sh
-cargo test
+cargo test --workspace
 cargo test --release --features secure
 cargo test --features debug,override
 cargo +nightly test --features nightly

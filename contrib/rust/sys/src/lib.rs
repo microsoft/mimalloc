@@ -7,7 +7,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 //! Raw bindings to the mimalloc C API (`mimalloc.h` and `mimalloc-stats.h`).
 //!
-//! See the C header for the documentation of each function.
+//! See the C header for the documentation of each function. This crate builds and
+//! links the mimalloc C library; see the `mimalloc` crate for the global allocator.
+#![no_std]
 #![allow(non_camel_case_types, non_upper_case_globals)]
 
 use core::ffi::{c_char, c_int, c_long, c_ulonglong, c_void};
@@ -560,3 +562,8 @@ unsafe extern "C" {
     pub fn mi_free_size_aligned(p: *mut c_void, size: usize, alignment: usize);
     pub fn mi_free_aligned(p: *mut c_void, alignment: usize);
 }
+
+// keep the malloc overrides when linking statically
+#[cfg(feature = "override")]
+#[used]
+static OVERRIDE: extern "C" fn(usize) -> *mut c_void = mi_malloc;

@@ -25,7 +25,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #[cfg(any(feature = "nightly", allocator_api_stable))]
 mod allocator;
 mod heap;
-pub mod sys;
+pub use mimalloc_sys as sys;
 
 pub use heap::Heap;
 
@@ -226,8 +226,3 @@ impl core::fmt::Debug for MiString {
         core::fmt::Debug::fmt(self.as_c_str(), f)
     }
 }
-
-// keep the malloc overrides when linking statically
-#[cfg(feature = "override")]
-#[used]
-static OVERRIDE: extern "C" fn(usize) -> *mut core::ffi::c_void = sys::mi_malloc;

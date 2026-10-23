@@ -1,0 +1,41 @@
+# ----------------------------------------------------------------------------
+# Copyright (c) 2018-2026, Microsoft Research, Daan Leijen
+# This is free software; you can redistribute it and/or modify it under the
+# terms of the MIT license. A copy of the license can be found in the file
+# "LICENSE" at the root of this distribution.
+# -----------------------------------------------------------------------------
+[package]
+name = "mimalloc-sys"
+version = "3.6.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "Raw bindings to the mimalloc memory allocator (builds and links the C library)"
+repository = "https://github.com/microsoft/mimalloc"
+keywords = ["mimalloc", "allocator", "malloc", "ffi"]
+categories = ["memory-management", "external-ffi-bindings", "no-std"]
+links = "mimalloc"
+# a published crate should vendor the C sources in `mimalloc/` (see the readme)
+include = ["/src", "/build.rs", "/README.md", "/mimalloc/LICENSE", "/mimalloc/include", "/mimalloc/src"]
+
+[features]
+default = []
+# security mitigations (guard pages, randomization, encoded free lists, double free detection)
+secure = []
+# also override the standard `malloc`, `free`, etc. in the final binary
+override = []
+# build mimalloc with assertions and internal invariant checks
+debug = []
+# as `debug` but only when `debug_assertions` are enabled
+debug_in_debug = []
+# use the local-dynamic TLS model (when mimalloc is part of a dynamically loaded library)
+local_dynamic_tls = []
+# use only direct TLS slots on Windows (faster but requires fewer than 64 TLS slots in total)
+win_direct_tls = []
+# disable transparent huge pages by default on Linux
+no_thp = []
+# use architecture specific optimizations (as cmake `-DMI_OPT_ARCH=ON`)
+opt_arch = []
+
+[build-dependencies]
+cc = "1.2"
