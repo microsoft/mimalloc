@@ -1,6 +1,5 @@
 // Issue #981: test overriding allocation in a DLL that is compiled independent of mimalloc.
 // This is imported by the `mimalloc-test-override` project.
-#include <string>
 #include <iostream>
 #include "main-override-dep.h"
 
@@ -43,9 +42,6 @@ public:
 };
 
 static Static s = Static();
-
-
-#include <windows.h>
 
 BOOL WINAPI DllMain(HINSTANCE module, DWORD reason, LPVOID reserved) {
   (void)(reserved);

@@ -4,6 +4,7 @@ This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
+#include <string.h>
 #include "mimalloc.h"
 #include "mimalloc/types.h"
 
@@ -285,6 +286,30 @@ int main(void) {
     mi_free(p);
     // First sizeof(void*) bytes will contain housekeeping data, skip these
     result = check_debug_fill_freed(p + sizeof(void*), malloc_size - sizeof(void*));
+  };
+  CHECK_BODY("fill-preserve") {
+    const size_t preserve = 3*sizeof(void*) + 3;  // not word aligned
+    const size_t malloc_size = MI_SMALL_SIZE_MAX / 2;
+    mi_heap_t* heap = mi_heap_new();
+    mi_heap_set_debug_fill_preserve(heap, preserve);
+    uint8_t* p = (uint8_t*)mi_heap_malloc(heap, malloc_size);
+    void* keep_alive = mi_heap_malloc(heap, malloc_size);  // keep the page alive during collection
+    result &= check_debug_fill_uninit(p + preserve, malloc_size - preserve);
+    memset(p, 0x42, preserve);
+    mi_free(p);
+    // the first word is used for the free list
+    for (size_t i = sizeof(void*); i < preserve; i++) { result &= (p[i] == 0x42); }
+    result &= check_debug_fill_freed(p + preserve, malloc_size - preserve);
+    mi_heap_collect(heap, true);  // make the freed block available for immediate reuse
+    uint8_t* q = (uint8_t*)mi_heap_malloc(heap, malloc_size);
+    result &= (q == p);
+    if (q == p) {
+      for (size_t i = sizeof(void*); i < preserve; i++) { result &= (q[i] == 0x42); }
+      result &= check_debug_fill_uninit(q + preserve, malloc_size - preserve);
+    }
+    mi_free(q);
+    mi_free(keep_alive);
+    mi_heap_delete(heap);
   };
   #endif
 #endif

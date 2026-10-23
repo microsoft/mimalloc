@@ -58,7 +58,7 @@ Notable aspects of the design include:
   over our benchmarks.
 - __first-class heaps__: efficiently create and use multiple heaps to allocate across different regions.
   A heap can be destroyed at once instead of deallocating each object separately.
-  v3.2+ has true first-class heaps where one can allocate in a heap from any thread.   
+  v3.2+ has true first-class heaps where one can allocate in a heap from any thread.
 - __bounded__: it does not suffer from _blowup_ \[1\], has bounded worst-case allocation
   times (_wcat_) (upto OS primitives), bounded space overhead (~0.2% meta-data, with low
   internal fragmentation), and has no internal points of contention using only atomic operations.
@@ -67,13 +67,13 @@ Notable aspects of the design include:
   and often uses less memory. A nice property is that it does consistently well over a wide range
   of benchmarks. There is also good huge OS page support for larger server programs.
 
-There are three maintained versions of mimalloc. All versions are mostly equal except for 
-how the OS memory is handled. New development is mostly on v3, while v1 and v2 are maintained 
-with security and bug fixes. 
+There are three maintained versions of mimalloc. All versions are mostly equal except for
+how the OS memory is handled. New development is mostly on v3, while v1 and v2 are maintained
+with security and bug fixes.
 
-- __v3__ __recommended__: simplifies the lock-free design of previous versions, and improves sharing of 
-        memory between threads. On certain large workloads this version may use 
-        (much) less memory. Also supports true first-class heaps (that can allocate from any thread) 
+- __v3__ __recommended__: simplifies the lock-free design of previous versions, and improves sharing of
+        memory between threads. On certain large workloads this version may use
+        (much) less memory. Also supports true first-class heaps (that can allocate from any thread)
         and has more efficient heap-walking (for the CPython GC for example).
         (release tags: `v3.4.x`, development branch `dev3`).
 - __v2__ __stable__: Uses thread-local segments to reduce fragmentation. (release tags: `v2.4.x`, development branch `dev2`)
@@ -125,14 +125,14 @@ Further information:
 /// Free previously allocated memory.
 /// The pointer `p` must have been allocated before (or be \a NULL).
 /// @param p  pointer to the block that is freed, or \a NULL.
-/// See also mi_cfree() for a checked free that validates the pointer 
+/// See also mi_cfree() for a checked free that validates the pointer
 /// before free-ing.
 /// @see mi_cfree()
 void  mi_free(void* p);
 
 /// Checked `free`: just as mi_free() but always checks if the pointer `p` belongs to our heap
 /// @param p  pointer to a block that is freed, or any other arbitrary pointer.
-/// This is safe to use when a pointer might be invalid or allocated by 
+/// This is safe to use when a pointer might be invalid or allocated by
 /// another allocator (in which case the pointer is ignored and not freed).
 void  mi_cfree(void* p);
 
@@ -280,6 +280,15 @@ char* mi_realpath(const char* fname, char* resolved_name);
 /// @see mi_good_size()
 size_t mi_usable_size(void* p);
 
+/// Return the current owner thread-id of the page containing a live allocation.
+/// @param p A mimalloc allocation, or \a NULL.
+/// @returns The mimalloc thread id, or 0 for \a NULL, abandoned pages, or
+///          pages belonging to a detached thread-local heap.
+///
+/// This is a snapshot of current page ownership, not the original allocating
+/// thread. This is mimalloc's internal thread identity scheme, not necessarily the native OS thread-id.
+size_t mi_thread_id_of(const void* p);
+
 /// Return the probable allocation block size for a given required size.
 /// @param size The minimal required size in bytes.
 /// @returns the size `n` that will be allocated, where `n >= size`.
@@ -348,12 +357,12 @@ void* mi_realloc_aligned_at(void* p, size_t newsize, size_t alignment, size_t of
 
 
 /// \defgroup typed Typed Macros
-/// Typed allocation macros. 
+/// Typed allocation macros.
 /// For example:
 /// ```
 /// int* p = mi_malloc_tp(int)
 /// ```
-/// On __v3__ these can improve performance as they use the `mi_<malloc>_csize` api's that 
+/// On __v3__ these can improve performance as they use the `mi_<malloc>_csize` api's that
 /// in turn can use mi_malloc_small(), mi_free_small(), etc.
 /// \{
 
@@ -500,18 +509,18 @@ void* mi_heap_recalloc_aligned_at(mi_heap_t* heap, void* p, size_t newcount, siz
 
 
 /// \defgroup heap Heaps
-/// First-class heaps. 
-/// Heaps allow allocations to be grouped, and for example be 
-/// destroyed in one go. Heaps can also be associated with 
+/// First-class heaps.
+/// Heaps allow allocations to be grouped, and for example be
+/// destroyed in one go. Heaps can also be associated with
 /// a specific allocation arena (`mi_heap_new_in_arena()`).
 ///
-/// __v1__,__v2__: heaps are only semi-first-class and 
+/// __v1__,__v2__: heaps are only semi-first-class and
 ///    __one can only use heap allocation functions from the thread that created the heap__.
 ///    (of course, mi_free() can always be used from any thread to free objects from any heap).
 ///
 /// __v3__: heaps are fully first-class and can be used to allocate efficiently from
-///    from any thread. 
-///    In v3, the old v1/v2 heaps still exist but are now called _theaps_ (mi_theap_t()) for 
+///    from any thread.
+///    In v3, the old v1/v2 heaps still exist but are now called _theaps_ (mi_theap_t()) for
 ///    thread-local heaps. A v3 heap creates internally such theaps on demand
 ///    to efficiently allocate without needing taking locks for example.
 ///
@@ -519,14 +528,14 @@ void* mi_heap_recalloc_aligned_at(mi_heap_t* heap, void* p, size_t newcount, siz
 
 /// Type of first-class heaps.
 ///
-/// __v1__,__v2__: in mimalloc v1 and v2, 
+/// __v1__,__v2__: in mimalloc v1 and v2,
 /// a heap can only be used for allocation in
 /// the thread that created this heap!
 struct mi_heap_s;
 
 /// Type of first-class heaps.
-/// 
-/// __v1__,__v2__: in mimalloc v1 and v2, 
+///
+/// __v1__,__v2__: in mimalloc v1 and v2,
 /// a heap can only be used for allocation in
 /// the thread that created this heap!
 typedef struct mi_heap_s mi_heap_t;
@@ -535,8 +544,8 @@ typedef struct mi_heap_s mi_heap_t;
 mi_heap_t* mi_heap_new();
 
 /// Delete a previously allocated heap.
-/// This will release internal resources but not free 
-/// still allocated blocks in this heap (and should be 
+/// This will release internal resources but not free
+/// still allocated blocks in this heap (and should be
 /// `mi_free`'d later on as usual).
 ///
 /// Note: trying to delete the main heap of a subprocess is ignored.
@@ -577,7 +586,7 @@ void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node);
 /// @brief __v3__: the main heap (of the current sub-process)
 /// @return a pointer to the main heap
 /// Every (sub)process has a main heap that cannot be deleted
-/// or destroyed until (sub)process exit. If other heaps are 
+/// or destroyed until (sub)process exit. If other heaps are
 /// deleted their live objects are migrated to the main heap.
 mi_heap_t* mi_heap_main(void);
 
@@ -727,8 +736,10 @@ typedef bool (mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* a
 /// @param arg Extra argument passed to \a visitor.
 /// @returns \a true if all areas and blocks were visited.
 ///
-/// Note: requires the option mi_option_visit_abandoned() to be set
-/// at the start of the program to visit all abandoned blocks as well.
+/// Visits all areas and blocks in the heap.
+/// Other threads must not access this heap during the visit
+/// (but thread termination is synchronized internally). The visitor runs under the heap's
+/// lock and must not re-enter the heap (through allocating or free-ing).
 bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
 /// @brief __v1__,__v2__: Visit all areas and blocks in abandoned heaps.
@@ -884,7 +895,7 @@ mi_heap_t* mi_heap_new_ex(int heap_tag, bool allow_destroy, mi_arena_id_t arena_
 
 
 /// \defgroup subproc Subprocesses
-/// A sub-process contains its own arena's and heaps that are fully separate from the main (sub) process. 
+/// A sub-process contains its own arena's and heaps that are fully separate from the main (sub) process.
 ///
 /// A thread can belong to only one subprocess at a time.
 /// This can be used to separate out logically separate parts
@@ -893,8 +904,8 @@ mi_heap_t* mi_heap_new_ex(int heap_tag, bool allow_destroy, mi_arena_id_t arena_
 /// \{
 
 /// A process can associate threads with sub-processes.
-/// Sub-processes are isolated and will not reclaim or visit memory 
-/// from other sub-processes. 
+/// Sub-processes are isolated and will not reclaim or visit memory
+/// from other sub-processes.
 /// Each subprocess always has an associated main heap.
 typedef void* mi_subproc_id_t;
 
@@ -920,7 +931,7 @@ void mi_subproc_destroy(mi_subproc_id_t subproc);
 void mi_subproc_delete(mi_subproc_id_t subproc);
 
 /// @brief Add the current thread to the given sub-process.
-/// This should be called right after a thread is created 
+/// This should be called right after a thread is created
 /// (and no allocation has taken place yet).
 void mi_subproc_add_current_thread(mi_subproc_id_t subproc);
 
@@ -949,7 +960,7 @@ bool mi_subproc_visit_heaps(mi_subproc_id_t subproc, mi_heap_visit_fun* visitor,
 /// \{
 
 /// Maximum size allowed for small allocations in
-/// #mi_malloc_small, #mi_zalloc_small, #mi_heap_malloc_small, #mi_heap_zalloc_small, 
+/// #mi_malloc_small, #mi_zalloc_small, #mi_heap_malloc_small, #mi_heap_zalloc_small,
 /// #mi_theap_malloc_small, and #mi_theap_zalloc_small (usually `128*sizeof(void*)` (= 1KB on 64-bit systems))
 #define MI_SMALL_SIZE_MAX   (128*sizeof(void*))
 
@@ -967,7 +978,7 @@ int  mi_version(void);
 /// resource usage by calling this every once in a while.
 void mi_collect(bool force);
 
-/// __v3__: Communicate that a thread is in a threadpool. 
+/// __v3__: Communicate that a thread is in a threadpool.
 /// This is done automatically for threads in the Windows threadpool,
 /// but if using a custom threadpool it is good to call this on worker threads.
 /// Internally, mimalloc uses different locality heuristics for worker threads
@@ -1073,7 +1084,7 @@ void* mi_malloc_small(size_t size);
 /// with care!
 void* mi_zalloc_small(size_t size);
 
-/// __v3__: Can be used to free an object that was allocated with mi_malloc_small() or 
+/// __v3__: Can be used to free an object that was allocated with mi_malloc_small() or
 /// any allocation with a size < MI_SMALL_SIZE_MAX()
 /// @param p Pointer that was returned from #mi_malloc_small et al. (or \a NULL )
 /// @details
@@ -1090,7 +1101,7 @@ void* mi_zalloc_small(size_t size);
 /// @see mi_theap_zalloc_small()
 void mi_free_small(void* p);
 
-/// __v3__: Can be used to free an object that was allocated with mi_malloc_small() or 
+/// __v3__: Can be used to free an object that was allocated with mi_malloc_small() or
 /// any allocation with a size < MI_SMALL_SIZE_MAX()
 /// @param p Pointer that was returned from #mi_malloc_small et al. Cannot be \a NULL !
 /// @details
@@ -1138,9 +1149,9 @@ void mi_free_small_nonnull(void* p);
 /// Statistics. See [include/mimalloc-stats.h](https://github.com/microsoft/mimalloc/blob/main/include/mimalloc-stats.h) for the full definition.
 struct mi_stats_s {
   /// initialize with `sizeof(mi_stats_t)` (so linking dynamically with a separately compiled mimalloc is safe)
-  size_t size;      
+  size_t size;
   /// initialize with `MI_STAT_VERSION (so linking dynamically with a separately compiled mimalloc is safe)
-  size_t version;  
+  size_t version;
 };
 
 /// Statistics. See [include/mimalloc-stats.h](https://github.com/microsoft/mimalloc/blob/main/include/mimalloc-stats.h) for the full definition.
@@ -1188,7 +1199,7 @@ void mi_stats_print_out(mi_output_fun* out, void* arg);
 
 /// @brief Get the statistics for the current subprocess aggregated over all its heaps.
 /// @param stats Pointer to a mi_stats_t() structure (declared as `mi_stats_t_decl(name)`).
-/// @return \a true if \a stats is not \a NULL, and if \a stats->size 
+/// @return \a true if \a stats is not \a NULL, and if \a stats->size
 /// and \a stats->version match the `sizeof(mi_stats_t)` and `MI_STAT_VERSION`
 /// with the linked mimalloc version.
 bool mi_stats_get(mi_stats_t* stats);
@@ -1206,7 +1217,7 @@ size_t  mi_stats_get_bin_size(size_t bin);
 /// @brief __v3__: Return statistics for a given heap.
 /// @param heap The heap.
 /// @param stats Pointer to a mi_stats_t() structure (declared as `mi_stats_t_decl(name)`).
-/// @return \a true if \a stats is not \a NULL, and if \a stats->size 
+/// @return \a true if \a stats is not \a NULL, and if \a stats->size
 /// and \a stats->version match the `sizeof(mi_stats_t)` and `MI_STAT_VERSION`
 /// with the linked mimalloc version.
 bool mi_heap_stats_get(mi_heap_t* heap, mi_stats_t* stats);
@@ -1233,7 +1244,7 @@ void mi_heap_stats_merge_to_subproc(mi_heap_t* heap);
 /// @brief __v3__: Get statistics for a given subprocess aggregated over all its heaps.
 /// @param subproc_id The subprocess
 /// @param stats Pointer to a mi_stats_t() structure (declared as `mi_stats_t_decl(name)`).
-/// @return \a true if \a stats is not \a NULL, and if \a stats->size 
+/// @return \a true if \a stats is not \a NULL, and if \a stats->size
 /// and \a stats->version match the `sizeof(mi_stats_t)` and `MI_STAT_VERSION`
 /// with the linked mimalloc version.
 bool mi_subproc_stats_get(mi_subproc_id_t subproc_id, mi_stats_t* stats);
@@ -1309,7 +1320,7 @@ typedef enum mi_option_e {
   mi_option_reserve_huge_os_pages,    ///< reserve N huge OS pages (1GiB pages) at startup
   mi_option_reserve_huge_os_pages_at, ///< Reserve N huge OS pages at a specific NUMA node N.
   mi_option_reserve_os_memory,        ///< reserve specified amount of OS memory in an arena at startup (internally, this value is in KiB; use mi_option_get_size())
-  mi_option_allow_large_os_pages,     ///< allow large (2 or 4 MiB) OS pages, implies eager commit. 
+  mi_option_allow_large_os_pages,     ///< allow large (2 or 4 MiB) OS pages, implies eager commit.
   mi_option_purge_decommits,          ///< should a memory purge decommit? (=1). Set to 0 to use memory reset on a purge (instead of decommit)
   mi_option_arena_reserve,            ///< initial memory size for arena reservation (= 1 GiB on 64-bit) (internally, this value is in KiB; use mi_option_get_size())
   mi_option_os_tag,                   ///< tag used for OS logging (macOS only for now) (=100)
@@ -1321,7 +1332,7 @@ typedef enum mi_option_e {
   mi_option_guarded_min,              ///< only used when building with MI_GUARDED: minimal rounded object size for guarded objects (=0)
   mi_option_guarded_max,              ///< only used when building with MI_GUARDED: maximal rounded object size for guarded objects (=0)
   mi_option_guarded_precise,          ///< disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
-  mi_option_guarded_sample_rate,      ///< 1 out of N allocations in the min/max range will be guarded (=1000)
+  mi_option_guarded_sample_rate,      ///< guard an object in the min/max range about every N requested bytes (=0)
   mi_option_guarded_sample_seed,      ///< can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0)
 
   // experimental options
@@ -1331,7 +1342,7 @@ typedef enum mi_option_e {
   mi_option_abandoned_page_purge,     ///< __v1__,__v2__: immediately purge delayed purges on thread termination
   mi_option_purge_delay,              ///< memory purging is delayed by N milli seconds; use 0 for immediate purging or -1 for no purging at all. (=10)
   mi_option_use_numa_nodes,           ///< 0 = use all available numa nodes, otherwise use at most N nodes.
-  mi_option_disallow_os_alloc,        ///< 1 = do not use OS memory for allocation (but only programmatically reserved arenas)  
+  mi_option_disallow_os_alloc,        ///< 1 = do not use OS memory for allocation (but only programmatically reserved arenas)
   mi_option_max_segment_reclaim,        ///< __v2__: max. percentage of the abandoned segments can be reclaimed per try (=10%)
   mi_option_destroy_on_exit,            ///< if set, release all memory on exit; sometimes used for dynamic unloading but can be unsafe
   mi_option_arena_purge_mult,           ///< multiplier for `purge_delay` for the purging delay for arenas (=10)
@@ -1351,8 +1362,8 @@ typedef enum mi_option_e {
   mi_option_page_max_reclaim,           ///< __v3__: don't reclaim pages of the same originating theap if we already own N pages (in that size class) (=-1 (unlimited))
   mi_option_page_cross_thread_max_reclaim, ///< __v3__: don't reclaim pages across threads if we already own N pages (in that size class) (=16)
   mi_option_minimal_purge_size,         ///< __v3__: set minimal purge size (in KiB) (=0). By default set to either 64 or 2048 if THP is enabled. (internal value is in KiB so use mi_option_get_size())
-  mi_option_arena_max_object_size,      ///< __v3__: set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit). 
-  
+  mi_option_arena_max_object_size,      ///< __v3__: set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit).
+
   _mi_option_last
 } mi_option_t;
 
@@ -1379,10 +1390,10 @@ void  mi_option_set_default(mi_option_t option, long value);
 /// for special cases like runtime systems that keep their own thread-local
 /// state.
 /// The "theaps" are thread-local heaps that __v3__ uses internally
-/// to implement efficient first-class heaps. 
-/// 
+/// to implement efficient first-class heaps.
+///
 /// __v1__,__v2__: the `mi_heap_t` heaps in v1/v2 are exactly these `mi_theap_t`
-/// theaps in v3. 
+/// theaps in v3.
 /// \{
 
 /// Type of thread-local heaps.
@@ -1392,7 +1403,7 @@ struct mi_theap_s;
 typedef struct mi_theap_s mi_theap_t;
 
 /// @brief Return the thread-local theap for the given heap.
-/// @param heap The owning heap. 
+/// @param heap The owning heap.
 /// @return The theap that serves thread-local allocations for the given `heap`.
 /// This can be used by runtime systems to request the thread-local theap
 /// once and then use it in its allocation functions (like mi_theap_malloc() or mi_theap_malloc_small() ) to avoid re-looking up
@@ -1476,9 +1487,12 @@ void* mi_aligned_offset_recalloc(void* p, size_t newcount, size_t size, size_t a
 /// @param size The size in bytes.
 /// __v3__: this can improve performance for objects with a \a size < MI_SMALL_SIZE_MAX()
 /// as it will use mi_free_small() internally. Always use this if possible.
+/// Note: it is not allowed to use mi_free_size() for aligned allocations,
+/// use mi_free_size_aligned() (mi_free()) instead.
 /// @see mi_free_tp()
 /// @see mi_free_csize()
 /// @see mi_free_size_nonnull()
+/// @see mi_free_size_aligned()
 void mi_free_size(void* p, size_t size);
 
 /// @brief Free a non-NULL pointer that was allocated with a known size.
@@ -1486,17 +1500,24 @@ void mi_free_size(void* p, size_t size);
 /// @param size The size in bytes.
 /// __v3__: this can improve performance for objects with a \a size < MI_SMALL_SIZE_MAX()
 /// as it will use mi_free_small_nonnull() internally. Always use this if possible.
+/// Note: it is not allowed to use mi_free_size() for aligned allocations,
+/// use mi_free_size_aligned() (or mi_free()) instead.
 /// @see mi_free_tp()
 /// @see mi_free_csize()
+/// @see mi_free_size_aligned()
 void mi_free_size_nonnull(void* p, size_t size);
 
 /// @brief Free an object that was allocated aligned.
 /// @param p The pointer to the object (or \a NULL )
 /// @param size The size of the object as allocated.
 /// @param alignment The requested alignment at the allocation.
-/// Currently just defers to mi_free_size()
+/// This can be faster than using mi_free() for aligned allocations.
 void mi_free_size_aligned(void* p, size_t size, size_t alignment);
 
+/// @brief Free an object that was allocated aligned.
+/// @param p The pointer to the object (or \a NULL )
+/// @param alignment The requested alignment at the allocation.
+/// At this time just defers to mi_free() but it can be optimized in the future for aligned allocations.
 void mi_free_aligned(void* p, size_t alignment);
 
 /// \}
@@ -1608,8 +1629,8 @@ The examples use the default compiler. If you like to use another, use:
 
 ## Cmake with Visual Studio
 
-You can also use cmake on Windows. Open a Visual Studio 2022 development prompt 
-and invoke `cmake` with the right [generator](https://cmake.org/cmake/help/latest/generator/Visual%20Studio%2017%202022.html) 
+You can also use cmake on Windows. Open a Visual Studio 2022 development prompt
+and invoke `cmake` with the right [generator](https://cmake.org/cmake/help/latest/generator/Visual%20Studio%2017%202022.html)
 and architecture, like:
 
 ```
@@ -1622,7 +1643,7 @@ The cmake build type is specified when actually building, for example:
 > cmake --build . --config=Release
 ```
 
-You can also install the [LLVM toolset](https://learn.microsoft.com/en-us/cpp/build/clang-support-msbuild?view=msvc-170#install-1) 
+You can also install the [LLVM toolset](https://learn.microsoft.com/en-us/cpp/build/clang-support-msbuild?view=msvc-170#install-1)
 on Windows to build with the `clang-cl` compiler directly:
 
 ```
@@ -1771,7 +1792,7 @@ Advanced options:
 Further options for large workloads and services:
 
 - `MIMALLOC_ALLOW_THP=1`: By default always allow transparent huge pages (THP) on Linux systems. On Android only this is
-   by default off. When set to `0`, THP is disabled for the process that mimalloc runs in. 
+   by default off. When set to `0`, THP is disabled for the process that mimalloc runs in.
    In mimalloc v3.2+, If enabled, mimalloc also sets
    the `MIMALLOC_MINIMAL_PURGE_SIZE` to 2MiB to avoid potentially breaking up transparent huge pages.
 - `MIMALLOC_USE_NUMA_NODES=N`: pretend there are at most `N` NUMA nodes. If not set, the actual NUMA nodes are detected
@@ -1847,10 +1868,10 @@ the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-i
 
 ### Dynamic Override on Windows
 
-<span id="override_on_windows">Dynamically overriding on mimalloc on Windows</span> 
-is robust and has the particular advantage to be able to redirect all malloc/free calls 
-that go through the (dynamic) C runtime allocator, including those from other DLL's or 
-libraries. As it intercepts all allocation calls on a low level, it can be used reliably 
+<span id="override_on_windows">Dynamically overriding on mimalloc on Windows</span>
+is robust and has the particular advantage to be able to redirect all malloc/free calls
+that go through the (dynamic) C runtime allocator, including those from other DLL's or
+libraries. As it intercepts all allocation calls on a low level, it can be used reliably
 on large programs that include other 3rd party components.
 There are four requirements to make the overriding work well:
 
@@ -1858,15 +1879,15 @@ There are four requirements to make the overriding work well:
 
 2. Link your program explicitly with the `mimalloc.lib` export library for the `mimalloc.dll`.
    (which must be compiled with `-DMI_OVERRIDE=ON`, which is the default though).
-   To ensure the `mimalloc.dll` is actually loaded at run-time it is easiest 
+   To ensure the `mimalloc.dll` is actually loaded at run-time it is easiest
    to insert some call to the mimalloc API in the `main` function, like `mi_version()`
    (or use the `/include:mi_version` switch on the linker command, or
-   similarly, `#pragma comment(linker, "/include:mi_version")` in some source file). 
-   See the `mimalloc-test-override` project for an example on how to use this. 
+   similarly, `#pragma comment(linker, "/include:mi_version")` in some source file).
+   See the `mimalloc-test-override` project for an example on how to use this.
 
-3. The `mimalloc-redirect.dll` must be put in the same directory as the main 
+3. The `mimalloc-redirect.dll` must be put in the same directory as the main
    `mimalloc.dll` at runtime (as it is a dependency of that DLL).
-   The redirection DLL ensures that all calls to the C runtime malloc API get 
+   The redirection DLL ensures that all calls to the C runtime malloc API get
    redirected to mimalloc functions (which reside in `mimalloc.dll`).
 
 4. Ensure the `mimalloc.dll` comes as early as possible in the import
@@ -1879,7 +1900,7 @@ is also recommended to also override the `new`/`delete` operations (by including
 a single(!) source file in your project).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
-overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully 
+overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully
 redirected.
 
 For different platforms than x64, you may need a specific [redirection dll](bin).
@@ -1998,7 +2019,7 @@ As always, evaluate with care as part of an overall security strategy as all of 
 
 ## Debug Mode
 
-When _mimalloc_ is built using debug mode, (`-DCMAKE_BUILD_TYPE=Debug`), 
+When _mimalloc_ is built using debug mode, (`-DCMAKE_BUILD_TYPE=Debug`),
 various checks are done at runtime to catch development errors.
 
 - Statistics are maintained in detail for each object size. They can be shown using `MIMALLOC_SHOW_STATS=1` at runtime.
@@ -2015,15 +2036,15 @@ allocated with a guard page takes at least 8 KiB memory for the guard page and i
 a guard page for every allocation may be too expensive both in terms of memory, and in terms of performance with
 many system calls. Therefore, there are various environment variables (and options) to tune this:
 
-- `MIMALLOC_GUARDED_SAMPLE_RATE=N`: Set the sample rate to `N` (by default 4000). This mode places a guard page
-  behind every `N` suitable object allocations (per thread). Since the performance in guarded mode without placing
-  guard pages is close to release mode, this can be used to enable guard pages even in production to catch latent 
+- `MIMALLOC_GUARDED_SAMPLE_RATE=N`: Set the sample rate to `N` (by default 0). This mode places a guard page
+  behind a suitable object about every `N` requested bytes (per thread). Since the performance in guarded mode without placing
+  guard pages is close to release mode, this can be used to enable guard pages even in production to catch latent
   buffer overflow bugs. Set the sample rate to `1` to guard every object, and to `0` to place no guard pages at all.
 
 - `MIMALLOC_GUARDED_SAMPLE_SEED=N`: Start sampling at `N` (by default random). Can be used to reproduce a buffer
   overflow if needed.
 
-- `MIMALLOC_GUARDED_MIN=N`, `MIMALLOC_GUARDED_MAX=N`: Minimal and maximal _rounded_ object sizes for which a guard 
+- `MIMALLOC_GUARDED_MIN=N`, `MIMALLOC_GUARDED_MAX=N`: Minimal and maximal _rounded_ object sizes for which a guard
   page is considered (`0` and `1GiB` respectively). If you suspect a buffer overflow occurs with an object of size
   141, set the minimum and maximum to `148` and the sample rate to `1` to have all of those guarded.
 

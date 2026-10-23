@@ -1,5 +1,5 @@
 on:
-  workflow_dispatch:   # run the workflow manually 
+  workflow_dispatch:   # run the workflow manually
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -9,9 +9,9 @@ permissions:
   contents: write
 
 env:
-  RELEASE: Release v3.5.3
+  RELEASE: Release v3.6.0
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  
+
 name: Release
 jobs:
   build:
@@ -19,9 +19,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        branch: [v3.5.3, v2.5.2, v1.15.2]  # [dev,dev2,dev3]
+        branch: [v3.6.0] #, v2.5.2, v1.15.2]  # [dev,dev2,dev3]
         # we build on the oldest ubuntu version for better binary compatibility.
-        os: [windows-latest, macOS-latest, macos-15-intel, ubuntu-22.04, ubuntu-22.04-arm]  
+        os: [windows-latest, macOS-latest, macos-15-intel, ubuntu-22.04, ubuntu-22.04-arm]
 
     steps:
       # Checkout: https://github.com/actions/checkout
@@ -31,6 +31,7 @@ jobs:
           ref: ${{ matrix.branch }}
           fetch-tags: true
           fetch-depth: 0
+          persist-credentials: false
 
       # Build
       - name: Build (Windows)
@@ -42,14 +43,14 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           ./bin/bundle.sh
-                
+
       # Create a release: https://github.com/softprops/action-gh-release (MIT license)
       - name: Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        if: ${{ env.RELEASE != '' && env.RELEASE != 'no' }} 
+        if: ${{ env.RELEASE != '' && env.RELEASE != 'no' }}
         with:
           name: ${{ env.RELEASE }}
           draft: true
           body_path: doc/release-notes.md
           files: |
-            out/bundle/*.tar.gz            
+            out/bundle/*.tar.gz

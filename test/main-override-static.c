@@ -50,10 +50,10 @@ int main() {
   // double_free1();
   // double_free2();
   // corrupt_free();
-  // invalid_free();  
+  // invalid_free();
   // block_overflow1();
   // block_overflow2();
-  test_canary_leak();
+  // test_canary_leak();
   // test_aslr();
   // test_reserved();
   // negative_stat();
@@ -308,7 +308,6 @@ static void test_dep(void) {
 // Experiment with huge OS pages
 #if 0
 
-#include <mimalloc/types.h>
 #include <mimalloc/internal.h>
 #include <unistd.h>
 #include <sys/mman.h>

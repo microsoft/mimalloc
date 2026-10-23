@@ -11,7 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 /*
 Testing allocators is difficult as bugs may only surface after particular
 allocation patterns. The main approach to testing _mimalloc_ is therefore
-to have extensive internal invariant checking (see `page_is_valid` in `page.c`
+to have extensive internal invariant checking (see `page_is_valid` in `alloc/page.c`
 for example), which is enabled in debug mode with `-DMI_DEBUG_FULL=ON`.
 The main testing is then to run `mimalloc-bench` [1] using full invariant checking
 to catch any potential problems over a wide range of intensive allocation bench
@@ -29,6 +29,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 #include <errno.h>
 
 #ifdef __cplusplus
+#include <new>
 #include <vector>
 #endif
 
@@ -55,8 +56,17 @@ bool test_stl_theap_allocator3(void);
 bool test_stl_theap_allocator4(void);
 
 static bool test_zero_aligned_first(void);
+static bool test_aligned_all(void);
+static bool test_heap_destroy_xthread_free(void);
+static bool test_heap_destroy_stale_theap(void);
 #ifdef __cplusplus
 static bool test_new_first(void);
+#endif
+
+#if !MI_QSBR
+static void mi_cdecl qsbr_record_error(int err, void* arg) {
+  *(int*)arg = err;
+}
 #endif
 
 static bool mem_has_vals(const uint8_t* p, size_t size, uint8_t val) {
@@ -98,20 +108,25 @@ int main(void) {
   #endif
   CHECK_BODY("calloc-overflow") {
     // use (size_t)&mi_calloc to get some number without triggering compiler warnings
-    result = (mi_calloc((size_t)&mi_calloc,SIZE_MAX/1000) == NULL);    
+    result = (mi_calloc((size_t)&mi_calloc,SIZE_MAX/1000) == NULL);
   };
   CHECK_BODY("malloc-large") {   // see PR #544.
     void* p = mi_malloc(67108872);
     mi_free(p);
   };
-  
+  CHECK_BODY("malloc-size") {
+    void* p = mi_malloc(42);
+    result = (mi_malloc_size(p) >= 42 && mi_malloc_usable_size(p) >= 42);
+    mi_free(p);
+  };
+
   CHECK_BODY("calloc0") {
     void* p = mi_calloc(0,1000);
-    const size_t usable = mi_usable_size(p);    
+    const size_t usable = mi_usable_size(p);
     result = (usable <= 16);
     mi_free(p);
   };
-  
+
   CHECK_BODY("mi_urealloc_invalid") {
     void* p = mi_malloc(64);
     size_t pre, post;
@@ -119,7 +134,7 @@ int main(void) {
     mi_free(p);
     result = (q==NULL || q==(uint8_t*)p+3);
   }
-  
+
   // ---------------------------------------------------
   // Extended
   // ---------------------------------------------------
@@ -231,7 +246,7 @@ int main(void) {
     }
     result = ok;
   };
-  
+
   CHECK_BODY("malloc-aligned9") { // test large alignments
     bool ok = true;
     void* p[8];
@@ -255,7 +270,7 @@ int main(void) {
     }
     result = ok;
   };
-  
+
   CHECK_BODY("malloc-aligned9a") { // test large alignments
     void* p = mi_zalloc_aligned(1024 * 1024, 2);
     mi_free(p);
@@ -263,7 +278,7 @@ int main(void) {
     mi_free(p);
     result = true;
   };
-  
+
   CHECK_BODY("malloc-aligned10") {
     bool ok = true;
     void* p[10+1];
@@ -289,7 +304,7 @@ int main(void) {
     result = (((uintptr_t)p % 0x100) == 0); // #602
     mi_free(p);
   }
-  
+
   CHECK_BODY("mimalloc-aligned13") {
     bool ok = true;
     for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size++ ) {
@@ -321,6 +336,9 @@ int main(void) {
       }
     }
     result = ok;
+  }
+  CHECK_BODY("mimalloc-aligned15") {
+    result = test_aligned_all();
   }
   CHECK_BODY("malloc-aligned-at1") {
     void* p = mi_malloc_aligned_at(48,32,0); result = (p != NULL && ((uintptr_t)(p) + 0) % 32 == 0); mi_free(p);
@@ -375,15 +393,26 @@ int main(void) {
     void* ptr = mi_zalloc_aligned(n, alignment);
     assert(mem_is_zero(ptr,n));
     memset(ptr,123,n/2);
-    
+
     ptr = mi_rezalloc_aligned(ptr, n/2, alignment);
     assert(mem_has_vals((uint8_t*)ptr,n/2,123));
-    
+
     ptr = mi_rezalloc_aligned(ptr, n, alignment);
     assert(mem_has_vals((uint8_t*)ptr,n/2,123));
-    result = mem_is_zero((uint8_t*)ptr + n/2, n/2);    
+    result = mem_is_zero((uint8_t*)ptr + n/2, n/2);
     mi_free(ptr);
   }
+
+  #if !MI_QSBR
+  CHECK_BODY("heap-qsbr-unavailable") {
+    int err = 0;
+    mi_register_error(&qsbr_record_error, &err);
+    mi_heap_t* heap = mi_heap_new_qsbr();
+    mi_register_error(NULL, NULL);
+    result = (heap == NULL && err == ENOSYS);
+    if (heap != NULL) { mi_heap_destroy(heap); }
+  }
+  #endif
 
   CHECK_BODY("heap_aligned1") {
     mi_heap_t* heap = mi_heap_new();
@@ -427,6 +456,51 @@ int main(void) {
     mi_free(p);
   };
 
+  CHECK_BODY("reallocarray-overflow") {
+    uint8_t* p = (uint8_t*)mi_malloc(32);
+    if (p == NULL) { result = false; }
+    else {
+      memset(p, 0x5A, 32);
+      errno = 0;
+      void* q = mi_reallocarray(p, SIZE_MAX / 2 + 1, 2);
+      result = (q == NULL && errno == EOVERFLOW && mem_has_vals(p, 32, 0x5A));
+      mi_free(q == NULL ? p : q);
+    }
+  };
+
+  CHECK_BODY("reallocarr-grow") {
+    void* p = mi_malloc(32);
+    if (p == NULL) { result = false; }
+    else {
+      memset(p, 0x5A, 32);
+      int err = mi_reallocarr(&p, 64, 2);
+      result = (err == 0 && mi_usable_size(p) >= 128 && mem_has_vals((uint8_t*)p, 32, 0x5A));
+      mi_free(p);
+    }
+  };
+
+  CHECK_BODY("reallocarr-zero-count") {
+    void* p = mi_malloc(32);
+    if (p == NULL) { result = false; }
+    else {
+      int err = mi_reallocarr(&p, 0, 2);
+      result = (err == 0 && p == NULL);
+      mi_free(p);
+    }
+  };
+
+  CHECK_BODY("reallocarr-overflow") {
+    void* p = mi_malloc(32);
+    if (p == NULL) { result = false; }
+    else {
+      memset(p, 0x5A, 32);
+      void* original = p;
+      int err = mi_reallocarr(&p, SIZE_MAX / 2 + 1, 2);
+      result = (err == EOVERFLOW && p == original && mem_has_vals((uint8_t*)p, 32, 0x5A));
+      mi_free(original);
+    }
+  };
+
   CHECK_BODY("realloc-guarded") {      // issue #1304
  	  void* shared_ptr = NULL;
     for (int iterations = 0; iterations < 64; ++iterations) {
@@ -458,7 +532,7 @@ int main(void) {
       mi_free_size(p,size + MI_SMALL_SIZE_MAX);
     }
   }
-  
+
   CHECK_BODY("free_small3") {
     for(size_t n = 1; n < MI_SMALL_SIZE_MAX/sizeof(int); n *=2) {
       const size_t size = n*sizeof(int);
@@ -509,9 +583,9 @@ int main(void) {
     // traversal and space accounting works as expected.
     const size_t arena_size = 24 * MI_GiB;
     const size_t allocation_size = 63 * MI_MiB;
-    const size_t allocation_count = 272; 
+    const size_t allocation_count = 272;
     const size_t alignment = mi_arena_min_alignment();
-    
+
     mi_arena_id_t arena_id = NULL;
     bool ok = (0==mi_reserve_os_memory_ex(arena_size,false /* commit */,false /* allow large */,
                                  true /* exclusive */, &arena_id));
@@ -535,7 +609,7 @@ int main(void) {
       fprintf(stderr, "allocated %zu MiB from the parent arena and its children\n", allocation_count * allocation_size / MI_MiB);
       mi_heap_destroy(heap);
     }
-    // mi_arena_destroy(arena_id); 
+    // mi_arena_destroy(arena_id);
     result = ok;
   }
   #endif
@@ -545,8 +619,8 @@ int main(void) {
   // ---------------------------------------------------
   // C++
   // ---------------------------------------------------
-  
-  #if defined(__cplusplus) && !defined(_MSC_VER)  
+
+  #if defined(__cplusplus) && !defined(_MSC_VER)
   CHECK_BODY("c++ new-handler") {
     std::set_new_handler([]{ throw std::bad_alloc(); });
     void* p = mi_new_nothrow(SIZE_MAX/2);
@@ -558,7 +632,7 @@ int main(void) {
       (void)(p);
       result = false;
     }
-    catch(std::bad_alloc) {
+    catch(const std::bad_alloc&) {
       result = true;
     }
   }
@@ -579,11 +653,11 @@ int main(void) {
   CHECK_BODY("heap-os2") {
     // @zoxc opus bug #3.
     mi_collect(true);
-    mi_stats_t_decl(stats0); 
+    mi_stats_t_decl(stats0);
     mi_stats_get(&stats0);
 
     mi_heap_t* h = mi_heap_new();
-    long failed = 0;      
+    long failed = 0;
     for(int i = 0; i < 10; i++) {
       int* p = (int*)mi_heap_malloc_aligned(h, 1<<20, 2<<20);   // forced OS allocation
       if (p==NULL) {
@@ -596,12 +670,27 @@ int main(void) {
     mi_heap_destroy(h);
 
     mi_collect(true);
-    mi_stats_t_decl(stats1); 
-    mi_stats_get(&stats1);    
-    result = (stats0.pages.current == stats1.pages.current);    
+    mi_stats_t_decl(stats1);
+    mi_stats_get(&stats1);
+    result = (stats0.pages.current == stats1.pages.current);
     if (!result) {
       fprintf(stderr, "heap-os2: pages: %ld != %ld (failed: %ld)\n", (long)stats0.pages.current, (long)stats1.pages.current, failed);
     }
+  }
+
+  CHECK_BODY("heap-destroy-os-pages") {   // regular OS-backed owned pages must not be orphaned on heap destroy
+    mi_collect(true);
+    mi_stats_t_decl(stats0);
+    mi_stats_get(&stats0);
+    mi_option_set(mi_option_disallow_arena_alloc, 1);   // force all pages to be OS allocated
+    mi_heap_t* h = mi_heap_new();
+    for (int i = 0; i < 1000; i++) { (void)mi_heap_malloc(h, 48); }  // owned OS-backed pages with live blocks
+    mi_heap_destroy(h);
+    mi_option_set(mi_option_disallow_arena_alloc, 0);
+    mi_collect(true);
+    mi_stats_t_decl(stats1);
+    mi_stats_get(&stats1);
+    result = (stats0.pages.current == stats1.pages.current);  // orphaned if destroy missed the owned OS pages
   }
 
   #define NHEAPS (1000)
@@ -614,7 +703,14 @@ int main(void) {
     }
     for (size_t i = 0; i < NHEAPS; i++) {
       mi_heap_destroy(heaps[i]);
-    }  
+    }
+  }
+
+  CHECK_BODY("heap-destroy-xthread-free") {   // destroy a heap with live blocks and pending cross-thread frees
+    result = test_heap_destroy_xthread_free();
+  }
+  CHECK_BODY("heap-destroy-stale-theap") {    // a thread's cached theap must not survive the destroy of its heap
+    result = test_heap_destroy_stale_theap();
   }
 
   //CHECK("theap_destroy", test_theap1());
@@ -622,20 +718,20 @@ int main(void) {
   //CHECK("theap_arena_destroy", test_theap_arena_destroy());
   //CHECK("theap_arena_delete", test_theap_arena_delete());
 
-  
+
   // ---------------------------------------------------
   // Threads
   // ---------------------------------------------------
   CHECK_BODY("thread_zero_aligned_first") {
     result = mi_run_on_thread(&test_zero_aligned_first);
   }
-  
+
   #ifdef __cplusplus
   CHECK_BODY("thread_new_first") {
     result = mi_run_on_thread(&test_new_first);
   }
   #endif
-  
+
   //mi_stats_print(NULL);
 
   // ---------------------------------------------------
@@ -813,6 +909,43 @@ static bool test_zero_aligned_first(void) {
 }
 
 
+// ---------------------------------------------------------------------------
+// Aligned allocation for all size classes and alignments up to 4KiB (including huge blocks).
+// Keeps several blocks live so alignment is checked beyond the first block in a page.
+// ---------------------------------------------------------------------------
+
+static bool test_aligned_check(size_t size, size_t align, bool zero) {
+  void* p[8];
+  bool ok = true;
+  for (int i = 0; i < 8; i++) {
+    p[i] = (zero ? mi_zalloc_aligned(size, align) : mi_malloc_aligned(size, align));
+    if (p[i] == NULL || ((uintptr_t)p[i] % align) != 0 || mi_usable_size(p[i]) < size || (zero && !mem_is_zero(p[i], size))) {
+      ok = false;
+    }
+    if (p[i] != NULL) { memset(p[i], 0xAB, size); }
+  }
+  for (int i = 0; i < 8; i++) {
+    mi_free(p[i]);
+  }
+  return ok;
+}
+
+static bool test_aligned_all(void) {
+  bool ok = true;
+  for (size_t size = 0; size <= 300*1024 && ok; size += (size < 16*1024 ? 8 : 512)) {
+    for (size_t align = 8; align <= 4096 && ok; align *= 2) {
+      ok = test_aligned_check(size, align, ((size/8) & 1) != 0);
+    }
+  }
+  for (size_t size = 4*1024*1024 - 4096; size <= 4*1024*1024 + 3*4096 && ok; size += 1024) {
+    for (size_t align = 8; align <= 4096 && ok; align *= 2) {
+      ok = test_aligned_check(size, align, false);
+    }
+  }
+  return ok;
+}
+
+
 #ifdef __cplusplus
 static bool test_new_first(void) {
   char* p = (char*)mi_new(20);
@@ -822,3 +955,149 @@ static bool test_new_first(void) {
 }
 #endif
 
+
+
+// ---------------------------------------------------------------------------
+// Heap destroy with blocks that were freed by another thread (and not yet collected).
+// The destroyed pages still have live blocks; the pending thread-free block must
+// not be reported as "corrupted meta-data in thread-free list".
+// ---------------------------------------------------------------------------
+
+static void* xthread_free_block;
+static long  xthread_efault_count;
+
+static bool xthread_free_fun(void) {
+  mi_free(xthread_free_block);            // pushes onto the thread-free list of a page owned by the main thread
+  return true;
+}
+
+static void xthread_count_efault(int err, void* arg) {
+  (void)arg;
+  if (err == EFAULT) { xthread_efault_count++; }
+}
+
+static bool test_heap_destroy_xthread_free(void) {
+  mi_heap_t* heap = mi_heap_new();
+  if (heap == NULL) return false;
+  void* live = mi_heap_malloc(heap, 32);  // stays live, so the page is destroyed rather than freed
+  xthread_free_block = mi_heap_malloc(heap, 32);
+  if (live == NULL || xthread_free_block == NULL) return false;
+  if (!mi_run_on_thread(&xthread_free_fun)) return false;
+
+  xthread_efault_count = 0;
+  mi_register_error(&xthread_count_efault, NULL);  // the default handler aborts in debug mode
+  mi_heap_destroy(heap);
+  mi_register_error(NULL, NULL);
+  return (xthread_efault_count == 0);
+}
+
+
+// ---------------------------------------------------------------------------
+// A thread that last allocated from a heap keeps that theap in its `_mi_theap_cached`.
+// If another thread destroys the heap and a new heap is allocated at the same address,
+// the stale cached theap must not be used for the new heap (it has `tld==NULL` and its
+// pages were destroyed).
+// ---------------------------------------------------------------------------
+
+typedef struct test_gate_s {
+  int step;
+  #ifdef _WIN32
+  CRITICAL_SECTION   lock;
+  CONDITION_VARIABLE cond;
+  #else
+  pthread_mutex_t    lock;
+  pthread_cond_t     cond;
+  #endif
+} test_gate_t;
+
+#ifdef _WIN32
+static void test_gate_init(test_gate_t* g) { g->step = 0; InitializeCriticalSection(&g->lock); InitializeConditionVariable(&g->cond); }
+static void test_gate_done(test_gate_t* g) { DeleteCriticalSection(&g->lock); }
+static void test_gate_set(test_gate_t* g, int step) {
+  EnterCriticalSection(&g->lock); g->step = step; LeaveCriticalSection(&g->lock);
+  WakeAllConditionVariable(&g->cond);
+}
+static void test_gate_wait(test_gate_t* g, int step) {
+  EnterCriticalSection(&g->lock);
+  while (g->step < step) { SleepConditionVariableCS(&g->cond, &g->lock, INFINITE); }
+  LeaveCriticalSection(&g->lock);
+}
+typedef HANDLE test_thread_t;
+static void stale_theap_worker(void);
+static DWORD WINAPI test_thread_entry(LPVOID arg) { (void)arg; stale_theap_worker(); return 0; }
+static bool test_thread_start(test_thread_t* t) {
+  *t = CreateThread(NULL, 0, &test_thread_entry, NULL, 0, NULL);
+  return (*t != NULL);
+}
+static void test_thread_join(test_thread_t t) { WaitForSingleObject(t, INFINITE); CloseHandle(t); }
+#else
+static void test_gate_init(test_gate_t* g) { g->step = 0; pthread_mutex_init(&g->lock, NULL); pthread_cond_init(&g->cond, NULL); }
+static void test_gate_done(test_gate_t* g) { pthread_cond_destroy(&g->cond); pthread_mutex_destroy(&g->lock); }
+static void test_gate_set(test_gate_t* g, int step) {
+  pthread_mutex_lock(&g->lock); g->step = step; pthread_mutex_unlock(&g->lock);
+  pthread_cond_broadcast(&g->cond);
+}
+static void test_gate_wait(test_gate_t* g, int step) {
+  pthread_mutex_lock(&g->lock);
+  while (g->step < step) { pthread_cond_wait(&g->cond, &g->lock); }
+  pthread_mutex_unlock(&g->lock);
+}
+typedef pthread_t test_thread_t;
+static void stale_theap_worker(void);
+static void* test_thread_entry(void* arg) { (void)arg; stale_theap_worker(); return NULL; }
+static bool test_thread_start(test_thread_t* t) {
+  return (pthread_create(t, NULL, &test_thread_entry, NULL) == 0);
+}
+static void test_thread_join(test_thread_t t) { pthread_join(t, NULL); }
+#endif
+
+static test_gate_t stale_gate;
+static mi_heap_t*  stale_heap;       // published through the gate
+static bool        stale_result;
+
+static void stale_theap_worker(void) {
+  void* p = mi_heap_malloc(stale_heap, 16);  // creates this thread's theap of `stale_heap` (may leave the main theap cached)
+  mi_free(p);
+  p = mi_heap_malloc(stale_heap, 16);        // now `_mi_theap_cached` is this thread's theap of `stale_heap`
+  test_gate_set(&stale_gate, 1);
+  test_gate_wait(&stale_gate, 2);            // meanwhile: heap destroyed, new heap (likely) at the same address
+  void* q = mi_heap_malloc(stale_heap, 16);  // must not use the cached theap of the destroyed heap
+  stale_result = (p != NULL && q != NULL && mi_heap_contains(stale_heap, q));
+  mi_free(q);
+}
+
+#define STALE_MAX_HEAPS (1000)
+
+static bool test_heap_destroy_stale_theap(void) {
+  test_gate_init(&stale_gate);
+  mi_heap_t* const destroyed = mi_heap_new();
+  if (destroyed == NULL) return false;
+  stale_heap = destroyed;
+  stale_result = false;
+
+  test_thread_t thread;
+  if (!test_thread_start(&thread)) return false;
+  test_gate_wait(&stale_gate, 1);
+  mi_heap_destroy(destroyed);
+
+  // allocate heaps until one reuses the address of the destroyed heap
+  mi_heap_t* heaps[STALE_MAX_HEAPS];
+  size_t count = 0;
+  bool reused = false;
+  while (count < STALE_MAX_HEAPS) {
+    mi_heap_t* const heap = mi_heap_new();
+    if (heap == NULL) break;
+    heaps[count++] = heap;
+    if (heap == destroyed) { reused = true; break; }
+  }
+  if (count == 0) return false;
+  stale_heap = heaps[count-1];
+
+  test_gate_set(&stale_gate, 2);
+  test_thread_join(thread);
+  for (size_t i = 0; i < count; i++) { mi_heap_destroy(heaps[i]); }
+  test_gate_done(&stale_gate);
+
+  if (!reused) { fprintf(stderr, "(heap address not reused, inconclusive) "); }
+  return stale_result;
+}

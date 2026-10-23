@@ -12,7 +12,6 @@
 #include <thread>
 #include <random>
 #include <chrono>
-#include <assert.h>
 
 #ifdef _WIN32
 #include <mimalloc-new-delete.h>
@@ -223,11 +222,7 @@ static void test_stl_allocators() {
 
 #if 0
 #include <algorithm>
-#include <chrono>
 #include <functional>
-#include <iostream>
-#include <thread>
-#include <vector>
 
 static void test_mixed0() {
     std::vector<std::unique_ptr<std::size_t>> numbers(1024 * 1024 * 100);
@@ -551,13 +546,13 @@ void test_perf(void)
 
 static int sum2;
 
-static void escape(uint8_t* p, size_t n) { 
+static void escape(uint8_t* p, size_t n) {
   if (n==0) return;
   p[std::rand() % n] = 42;
   sum2 += p[std::rand() % n];
 }
 
-void test_perf2(void) {  
+void test_perf2(void) {
   for (size_t i = 0; i < 100000000; i++) {
     const size_t n = 1000;
     uint8_t* p = (uint8_t*)calloc(1, n);
@@ -604,7 +599,7 @@ void escape5(uint8_t* p, size_t n) {
     p[i] = (uint8_t)(i & 0xFF);
   }
   p[rand() % n] = (uint8_t)(n&0xFF);
-  // asm volatile("" : : "g"(p) : "memory");   
+  // asm volatile("" : : "g"(p) : "memory");
 }
 
 static long gsum5;

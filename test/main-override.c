@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <assert.h>
 #include <string.h>
 #include <mimalloc.h>
 // #include <mimalloc-override.h>
@@ -13,7 +12,7 @@ int main() {
      printf("p1: malloc failed to allocate in heap region\n");
      return 1;
   }
-  
+
 
   void* p2 = malloc(24);
   if (!mi_is_in_heap_region(p2)) {

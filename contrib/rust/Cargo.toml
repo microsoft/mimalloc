@@ -1,0 +1,42 @@
+# ----------------------------------------------------------------------------
+# Copyright (c) 2018-2026, Microsoft Research, Daan Leijen
+# This is free software; you can redistribute it and/or modify it under the
+# terms of the MIT license. A copy of the license can be found in the file
+# "LICENSE" at the root of this distribution.
+# -----------------------------------------------------------------------------
+[package]
+name = "mimalloc"
+version = "3.6.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "Rust bindings and global allocator for the mimalloc memory allocator"
+repository = "https://github.com/microsoft/mimalloc"
+keywords = ["mimalloc", "allocator", "malloc", "heap"]
+categories = ["memory-management", "api-bindings", "no-std"]
+include = ["/src", "/tests", "/build.rs", "/README.md"]
+
+[workspace]
+members = ["sys"]
+
+[features]
+default = []
+# build options of the C library (see `sys/Cargo.toml`)
+secure = ["mimalloc-sys/secure"]
+override = ["mimalloc-sys/override"]
+debug = ["mimalloc-sys/debug"]
+debug_in_debug = ["mimalloc-sys/debug_in_debug"]
+local_dynamic_tls = ["mimalloc-sys/local_dynamic_tls"]
+win_direct_tls = ["mimalloc-sys/win_direct_tls"]
+no_thp = ["mimalloc-sys/no_thp"]
+opt_arch = ["mimalloc-sys/opt_arch"]
+# implement `core::alloc::Allocator` on nightly compilers before Rust 1.100 (where it is stable)
+nightly = []
+# for compatibility with the `mimalloc` crate of mimalloc_rust (the full API is always available)
+extended = []
+arena = []
+nightly_allocator_api = ["nightly"]
+
+[dependencies]
+# the exact version as the fast paths depend on `MI_SMALL_SIZE_MAX` and internal entry points
+mimalloc-sys = { version = "=3.6.0", path = "sys" }
