@@ -6,36 +6,38 @@
 # -----------------------------------------------------------------------------
 [package]
 name = "mimalloc"
-version = "3.6.0"
-edition = "2024"
-rust-version = "1.85"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
 description = "Rust bindings and global allocator for the mimalloc memory allocator"
-repository = "https://github.com/microsoft/mimalloc"
-keywords = ["mimalloc", "allocator", "malloc", "heap"]
-categories = ["memory-management", "api-bindings", "no-std"]
-links = "mimalloc"
-# a published crate should vendor the C sources in `mimalloc/` (see the readme)
-include = ["/src", "/tests", "/build.rs", "/README.md", "/mimalloc/LICENSE", "/mimalloc/include", "/mimalloc/src"]
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+# The mimalloc-sys crate is responsible for vendoring the C sources
+include = ["/src", "/tests", "/build.rs", "/README.md"]
+
+[dependencies]
+mimalloc-sys = { path = "mimalloc-sys", version = "3.6.0" }
 
 [features]
 default = []
 # security mitigations (guard pages, randomization, encoded free lists, double free detection)
-secure = []
+secure = ["mimalloc-sys/secure"]
 # also override the standard `malloc`, `free`, etc. in the final binary
-override = []
+override = ["mimalloc-sys/override"]
 # build mimalloc with assertions and internal invariant checks
-debug = []
+debug = ["mimalloc-sys/debug"]
 # as `debug` but only when `debug_assertions` are enabled
-debug_in_debug = []
+debug_in_debug = ["mimalloc-sys/debug_in_debug"]
 # use the local-dynamic TLS model (when mimalloc is part of a dynamically loaded library)
-local_dynamic_tls = []
+local_dynamic_tls = ["mimalloc-sys/local_dynamic_tls"]
 # use only direct TLS slots on Windows (faster but requires fewer than 64 TLS slots in total)
-win_direct_tls = []
+win_direct_tls = ["mimalloc-sys/win_direct_tls"]
 # disable transparent huge pages by default on Linux
-no_thp = []
+no_thp = ["mimalloc-sys/no_thp"]
 # use architecture specific optimizations (as cmake `-DMI_OPT_ARCH=ON`)
-opt_arch = []
+opt_arch = ["mimalloc-sys/opt_arch"]
 # implement `core::alloc::Allocator` on nightly compilers before Rust 1.100 (where it is stable)
 nightly = []
 # for compatibility with the `mimalloc` crate of mimalloc_rust (the full API is always available)
@@ -43,5 +45,15 @@ extended = []
 arena = []
 nightly_allocator_api = ["nightly"]
 
-[build-dependencies]
-cc = "1.2"
+[workspace]
+members = [".", "mimalloc-sys"]
+resolver = "3"
+
+[workspace.package]
+version = "3.6.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/microsoft/mimalloc"
+keywords = ["mimalloc", "allocator", "malloc", "heap"]
+categories = ["memory-management", "api-bindings", "no-std"]

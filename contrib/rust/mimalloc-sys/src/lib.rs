@@ -8,6 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 //! Raw bindings to the mimalloc C API (`mimalloc.h` and `mimalloc-stats.h`).
 //!
 //! See the C header for the documentation of each function.
+#![no_std]
 #![allow(non_camel_case_types, non_upper_case_globals)]
 
 use core::ffi::{c_char, c_int, c_long, c_ulonglong, c_void};

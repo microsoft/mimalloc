@@ -22,10 +22,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #![no_std]
 #![cfg_attr(feature = "nightly", feature(allocator_api), allow(stable_features))]
 
+pub extern crate mimalloc_sys as sys;
+
 #[cfg(any(feature = "nightly", allocator_api_stable))]
 mod allocator;
 mod heap;
-pub mod sys;
 
 pub use heap::Heap;
 

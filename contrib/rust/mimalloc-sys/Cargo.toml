@@ -1,0 +1,35 @@
+# ----------------------------------------------------------------------------
+# Copyright (c) 2018-2026, Microsoft Research, Daan Leijen
+# This is free software; you can redistribute it and/or modify it under the
+# terms of the MIT license. A copy of the license can be found in the file
+# "LICENSE" at the root of this distribution.
+# -----------------------------------------------------------------------------
+[package]
+name = "mimalloc-sys"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Raw rust bindings for the mimalloc memory allocator"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+links = "mimalloc"
+# The published crate should vendor the C sources in `mimalloc/` (see the readme)
+include = ["/src", "/build.rs", "/mimalloc/LICENSE", "/mimalloc/include", "/mimalloc/src"]
+
+[features]
+default = []
+# See mimalloc/README.md for description of these options
+secure = []
+override = []
+debug = []
+debug_in_debug = []
+local_dynamic_tls = []
+win_direct_tls = []
+no_thp = []
+opt_arch = []
+
+[build-dependencies]
+cc = "1.2"
+

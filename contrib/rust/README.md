@@ -13,7 +13,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 - `MiMalloc`: the global allocator (with fast paths for small and sized allocations).
 - `Heap`: first-class heaps that can be shared between threads; dropping a heap
   keeps its live blocks valid (`Heap::destroy` frees them all at once).
-- `sys`: the raw C API (`mimalloc.h`).
+- `mimalloc-sys`: the raw C API (`mimalloc.h`).
 - Both `MiMalloc` and `&Heap` implement `core::alloc::Allocator` on Rust 1.100+
   (or on an older nightly with the `nightly` feature).
 - Helpers such as `collect`, `option_set`, `stats_print` and `stats_json`.
@@ -50,8 +50,8 @@ For example: `MIMALLOC_DEFINES="MI_DEBUG=3 MI_SKIP_COLLECT_ON_EXIT=1" cargo buil
 
 The C sources are found in the following order:
 1. The `MIMALLOC_SRC_DIR` environment variable.
-2. A vendored `mimalloc/` directory next to `Cargo.toml` (with `include/`, `src/`, and `LICENSE`).
-3. The enclosing repository (`../..`).
+2. A vendored `mimalloc/` directory next to `mimalloc-sys/Cargo.toml` (with `include/`, `src/`, and `LICENSE`).
+3. The enclosing repository (`../../..`).
 
 Within this repository, use a path or git dependency:
 
@@ -61,7 +61,7 @@ mimalloc = { path = ".../mimalloc/contrib/rust" }
 ```
 
 To publish a crate based on this one, copy `contrib/rust`, vendor the sources into
-`mimalloc/` (`cp -r ../../include ../../src ../../LICENSE mimalloc/`), and rename the package.
+`mimalloc-sys/mimalloc/` (`cp -r ../../include ../../src ../../LICENSE mimalloc-sys/mimalloc/`), and rename the packages.
 
 ## Performance tips
 
