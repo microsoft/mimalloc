@@ -59,12 +59,13 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
 
   // actual free: push on the local free list fast-path
   // (we count frees in `xfreed` instead of decrementing `xused` to avoid a store-to-load dependency between malloc and free)
-  const size_t freed = page->xfreed + 1;
   mi_block_t* lfree = page->local_free;
+  const uint16_t used = mi_xused_used_count(page->xused);
+  const size_t freed = (size_t)page->xfreed + 1;
+  page->xfreed = (uint32_t)freed;
   mi_block_set_next(page, block, lfree);
-  page->xfreed = freed;
   page->local_free = block;
-  const bool is_empty = (mi_xused_used_count(page->xused) == freed);
+  const bool is_empty = (used == freed);
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
   if mi_unlikely(is_empty) {      // is used count zero ?
     _mi_page_qsbr_clear(page);    // a new empty interval must not reuse an earlier grace period

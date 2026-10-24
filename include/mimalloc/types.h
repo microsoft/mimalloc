@@ -448,9 +448,9 @@ typedef union mi_used_s {
   } le;  // little-endian layout
 } mi_used_t;
 
-static inline size_t mi_xused_used_count(mi_used_t xused)    { return (xused.used_alloc & 0xFFFF); }
-static inline size_t mi_xused_alloc_count(mi_used_t xused)   { return ((xused.used_alloc>>16) & 0xFFFF); }
-static inline mi_used_t mi_xused_used_reset(mi_used_t xused) { xused.used_alloc =  xused.used_alloc & ~0xFFFF; return xused; }
+static inline uint16_t  mi_xused_used_count(mi_used_t xused)   { return (uint16_t)(xused.used_alloc); }
+static inline uint16_t  mi_xused_alloc_count(mi_used_t xused)  { return (uint16_t)(xused.used_alloc>>16); }
+static inline mi_used_t mi_xused_used_reset(mi_used_t xused)   { xused.used_alloc =  xused.used_alloc & ~0xFFFF; return xused; }
 
 // A page contains blocks of one specific size (`block_size`).
 // Each page has three list of free blocks:
@@ -493,8 +493,8 @@ typedef struct mi_page_s {
   uint16_t                  xlast_alloc;       // for sampling; on 64-bit platforms it is in bits 48..63 of xused.
   #endif
 
-  size_t                    page_offset;       // const: relative offset from the page to the start of the blocks
-  size_t                    xfreed;            // local frees not yet subtracted from `xused` (so `mi_free` does not update `xused` written by `mi_malloc`)
+  uint32_t                  xfreed;            // local frees not yet subtracted from `xused` (so `mi_free` does not update `xused` written by `mi_malloc`) (32-bit to avoid store-forwarding stalls from wider loads)
+  uint32_t                  page_woffset;      // const: offset from the page to the start of the blocks (in `size_t` units, so up to 32 GiB)
   uint16_t                  capacity;          // number of blocks committed
   uint16_t                  reserved;          // number of blocks reserved in memory
   uint16_t                  slice_pcommitted;  // committed size in OS page sizes relative to the first arena slice of the page data (or 0 if the page is fully committed already)

@@ -587,7 +587,9 @@ static void mi_arenas_page_init_meta(mi_theap_t* theap, mi_page_t* page, uint8_t
   // initialize the page start
   uint8_t* const start = slice_start + block_start;
   mi_assert_internal(start > (uint8_t*)page);
-  page->page_offset = start - (uint8_t*)page;
+  const size_t page_offset = (size_t)(start - (uint8_t*)page);
+  mi_assert_internal((page_offset % MI_SIZE_SIZE) == 0 && (page_offset / MI_SIZE_SIZE) <= UINT32_MAX);
+  page->page_woffset = (uint32_t)(page_offset / MI_SIZE_SIZE);
 
   // initialize page meta-data
   page->reserved = (uint16_t)reserved;
