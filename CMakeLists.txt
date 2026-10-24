@@ -1215,7 +1215,7 @@ if (MI_BUILD_TESTS)
   if(EMSCRIPTEN)
     add_link_options(-sALLOW_MEMORY_GROWTH=1)
     if(CMAKE_C_FLAGS MATCHES "-pthread")
-      add_link_options(-pthread -sPTHREAD_POOL_SIZE=40)  # pre-spawn workers so threads can start while main blocks
+      add_link_options(-pthread -sPTHREAD_POOL_SIZE=40 -Wno-pthreads-mem-growth)  # pre-spawn workers so threads can start while main blocks
     endif()
   endif()
 
