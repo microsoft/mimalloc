@@ -924,19 +924,34 @@ if(NOT WIN32 AND MI_PROFILE)
     endif()
   else()
     # No `execinfo.h` available (e.g. musl-based Linux distributions such as Alpine
-    # do not implement `backtrace`); fall back to `libunwind` if it is installed.
-    CHECK_INCLUDE_FILES("libunwind.h" MI_HAS_LIBUNWINDH)
-    if(MI_HAS_LIBUNWINDH)
-      find_link_library("unwind" MI_LIB_UNWIND)
-      if(MI_LIB_UNWIND)
-        list(APPEND mi_defines MI_HAS_LIBUNWINDH=1)
-        list(APPEND mi_libraries "${MI_LIB_UNWIND}")
-      endif()
+    # do not implement `backtrace`); fall back to `_Unwind_Backtrace` from `unwind.h`
+    # which is provided by the compiler's unwinder (libgcc_s or LLVM libunwind).
+    include(CheckCSourceCompiles)
+    set(mi_unwind_test_source "
+      #include <unwind.h>
+      #include <stdint.h>
+      static _Unwind_Reason_Code mi_unwind_test(struct _Unwind_Context* ctx, void* arg) {
+        *(uintptr_t*)arg = (uintptr_t)_Unwind_GetIP(ctx);
+        return _URC_END_OF_STACK;
+      }
+      int main(void) { uintptr_t ip = 0; _Unwind_Backtrace(&mi_unwind_test, &ip); return (ip == 0); }")
+    check_c_source_compiles("${mi_unwind_test_source}" MI_HAS_UNWINDH)
+    if(NOT MI_HAS_UNWINDH)
+      foreach(mi_unwind_lib IN ITEMS gcc_s unwind)
+        set(CMAKE_REQUIRED_LIBRARIES ${mi_unwind_lib})
+        check_c_source_compiles("${mi_unwind_test_source}" MI_HAS_UNWINDH_${mi_unwind_lib})
+        unset(CMAKE_REQUIRED_LIBRARIES)
+        if(MI_HAS_UNWINDH_${mi_unwind_lib})
+          set(MI_HAS_UNWINDH ON)
+          list(APPEND mi_libraries ${mi_unwind_lib})
+          break()
+        endif()
+      endforeach()
+    endif()
+    if(MI_HAS_UNWINDH)
+      list(APPEND mi_defines MI_HAS_UNWINDH=1)
     else()
-      message(WARNING "No backtrace support available: neither execinfo.h nor libunwind.h found.")
-      if(EXISTS "/etc/alpine-release")
-        message(STATUS "(On Alpine Linux, use `apk add libunwind-dev` to add the libunwind library)")
-      endif()
+      message(WARNING "No backtrace support available: neither execinfo.h nor unwind.h (_Unwind_Backtrace) found.")
     endif()
   endif()
   # FreeBSD (and DragonFly) need `kinfo_getvmmap` (in `libutil`) to collect the

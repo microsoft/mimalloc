@@ -672,7 +672,7 @@ static void mi_pprof_profiler_snapshot(mi_pprof_profiler_t* prof) {
 // Basic backtraces
 // ---------------------------------------------------------------------------
 
-#if MI_HAS_EXECINFOH || MI_HAS_LIBUNWINDH
+#if MI_HAS_EXECINFOH || MI_HAS_UNWINDH
 static size_t mi_backtrace_hash(void** frames, size_t depth) {
   size_t hash = MI_FNV_OFFSET_BASIS;
   for (size_t i = 0; i < depth; i++) {
@@ -710,20 +710,30 @@ static mi_decl_noinline size_t mi_prim_backtrace(void** buffer, size_t max_depth
   *hash = mi_backtrace_hash(buffer, depth);  // no platform-provided hash, compute our own
   return depth;
 }
-#elif MI_HAS_LIBUNWINDH
-#define UNW_LOCAL_ONLY
-#include <libunwind.h>  // unw_backtrace
+#elif MI_HAS_UNWINDH
+#include <unwind.h>     // _Unwind_Backtrace (from the compiler's unwinder: libgcc_s or LLVM libunwind)
+typedef struct mi_unwind_state_s {
+  void** buffer;
+  size_t max_depth;
+  size_t skip;
+  size_t depth;
+} mi_unwind_state_t;
+
+static _Unwind_Reason_Code mi_unwind_frame(struct _Unwind_Context* ctx, void* arg) {
+  mi_unwind_state_t* const st = (mi_unwind_state_t*)arg;
+  const uintptr_t ip = (uintptr_t)_Unwind_GetIP(ctx);
+  if (ip == 0) return _URC_END_OF_STACK;
+  if (st->skip > 0) { st->skip--; return _URC_NO_REASON; }
+  st->buffer[st->depth++] = (void*)ip;
+  return (st->depth >= st->max_depth ? _URC_END_OF_STACK : _URC_NO_REASON);
+}
+
 static mi_decl_noinline size_t mi_prim_backtrace(void** buffer, size_t max_depth, size_t* hash) {
   // used as a fallback on platforms without `execinfo.h` (e.g. musl-based Linux like Alpine)
-  const size_t skip = 1 + MI_BACKTRACE_SKIP_FRAMES;  // +1 for `mi_prim_backtrace`'s own frame
-  if (max_depth <= skip) { *hash = 0; return 0; }
-  if (max_depth > INT_MAX) { max_depth = INT_MAX; }
-  const size_t raw_depth = (size_t)unw_backtrace(buffer, (int)(max_depth - skip));
-  if (raw_depth <= skip) { *hash = 0; return 0; }
-  const size_t depth = raw_depth - skip;
-  memmove(buffer, buffer + skip, depth * sizeof(void*));
-  *hash = mi_backtrace_hash(buffer, depth);  // no platform-provided hash, compute our own
-  return depth;
+  mi_unwind_state_t st = { buffer, max_depth, 1 + MI_BACKTRACE_SKIP_FRAMES /* +1 for `mi_prim_backtrace`'s own frame */, 0 };
+  if (max_depth > 0) { _Unwind_Backtrace(&mi_unwind_frame, &st); }
+  *hash = mi_backtrace_hash(buffer, st.depth);  // no platform-provided hash, compute our own
+  return st.depth;
 }
 #else
 static size_t mi_prim_backtrace(void** buffer, size_t max_depth, size_t* hash) {
