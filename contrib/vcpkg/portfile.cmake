@@ -9,7 +9,7 @@ vcpkg_from_github(
   # The sha512 is the hash of the tar.gz bundle.
   # (To get the sha512, run `vcpkg install "mimalloc[override]" --overlay-ports=<dir of this file>` and copy the sha from the error message.)
   # (and maybe `vcpkg remove mimalloc` first to remove any previous install)
-  SHA512 601bdf622d0bc7521edf0cc73d1caec9d976bcd1faa689ff48cc18a9a6a3b2294b571fc71d3266b38907bc5aad10a41d92d03d2cdde139a30b08357ee7bc25c5
+  SHA512 8a8013ee856fa57e9620929542ffd24c114439365a4d06a41a25fad7aed27a77c5a0e2104fde3d2f67990190644de88d6b7fed964a574d6913977ff5edbe4839
 )
 
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS

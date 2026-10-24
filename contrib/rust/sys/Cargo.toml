@@ -6,7 +6,7 @@
 # -----------------------------------------------------------------------------
 [package]
 name = "mimalloc-sys"
-version = "3.6.0"
+version = "3.6.1"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
@@ -39,3 +39,4 @@ opt_arch = []
 
 [build-dependencies]
 cc = "1.2"
+rustversion = "1"
