@@ -29,6 +29,11 @@ static bool mi_heap_has_page(mi_heap_t* heap, mi_arena_t* arena, mi_page_t* page
 }
 #endif
 
+// Restrict a pointer to page meta data to the page meta data only
+static mi_page_t* mi_page_meta_bounded(void* p) {
+  return (mi_page_t*)mi_ptr_data(p, sizeof(mi_page_t));
+}
+
 mi_page_t* mi_arena_page_at_slice(mi_arena_t* arena, size_t slice_index) {
   mi_assert_internal(slice_index < arena->slice_count);
   #if MI_PAGE_META_IS_ALIGNED
@@ -39,13 +44,13 @@ mi_page_t* mi_arena_page_at_slice(mi_arena_t* arena, size_t slice_index) {
     mi_page_t* const page = &arena->pages_meta[slice_index];
     #if MI_PAGE_META_SMALL_IS_ALIGNED
     // pages with small blocks still have the page at the start of the slice (and set the `block_size` in pages_meta to 0)
-    if (page->block_size>0) return page;
+    if (page->block_size>0) return mi_page_meta_bounded(page);
     #else
-    return page;
+    return mi_page_meta_bounded(page);
     #endif
   }
   // fall through (for MI_PAGE_META_SMALL_IS_ALIGNED)
-  return (mi_page_t*)mi_arena_slice_start(arena,slice_index);
+  return mi_page_meta_bounded(mi_arena_slice_start(arena,slice_index));
   #endif
 }
 
@@ -363,7 +368,7 @@ static mi_page_t* mi_page_meta_select(uint8_t* slice_start, size_t slice_count, 
   offset += mi_page_block_cache_offset(slice_start, slice_count, block_size, offset, os_align);
   mi_assert_internal(os_align || offset < MI_ARENA_SLICE_SIZE);  // so `mi_page_slice_start` can align down the page start
   *block_start = offset;
-  return page;
+  return mi_page_meta_bounded(page);
 }
 
 #if MI_PAGE_META_IS_ALIGNED
@@ -591,7 +596,7 @@ static void mi_arenas_page_init_meta(mi_theap_t* theap, mi_page_t* page, uint8_t
   uint8_t* const start = slice_start + block_start;
   mi_assert_internal(start > (uint8_t*)page);
   #if MI_CHERI
-  page->page_start = (uint8_t*)mi_ptr_bounded(start, reserved * block_size);  // all blocks are derived from this
+  page->page_start = (uint8_t*)mi_ptr_data(start, reserved * block_size);  // all blocks are derived from this
   #else
   page->page_offset = start - (uint8_t*)page;
   #endif
@@ -1264,12 +1269,20 @@ typedef struct mi_heap_delete_visit_info_s {
   mi_theap_t* theap;
 } mi_heap_delete_visit_info_t;
 
+static mi_page_t* mi_heap_area_page(const mi_heap_area_t* area) {
+  #if MI_CHERI
+  return mi_ptr_page(area->blocks);  // `reserved1` is not set to not leak the page meta data
+  #else
+  return (mi_page_t*)area->reserved1;
+  #endif
+}
+
 static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {
   MI_UNUSED(block); MI_UNUSED(block_size); MI_UNUSED(heap);
   const mi_heap_delete_visit_info_t* info = (const mi_heap_delete_visit_info_t*)arg;
   mi_heap_t*  heap_target           = info->heap_target;
   mi_theap_t* const theap           = NULL; // info->theap;       mi_assert_internal(mi_theap_heap(theap) == heap);
-  mi_page_t*  const page            = (mi_page_t*)area->reserved1;
+  mi_page_t*  const page            = mi_heap_area_page(area);
 
   mi_page_claim_ownership(page);       // claim ownership
   _mi_page_qsbr_clear(page); // deletion requires an unprotected heap; destruction requires no readers

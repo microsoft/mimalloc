@@ -256,7 +256,7 @@ static bool owned_record(const mi_heap_t* heap, const mi_heap_area_t* area, void
   if (heap != visit_heap) return false;
   if (block == NULL) {
     visit->used += area->used;
-    const mi_page_t* page = (const mi_page_t*)area->reserved1;
+    const mi_page_t* page = mi_ptr_page(area->blocks);
     if (page->memid.memkind == MI_MEM_ARENA) { visit->arena_areas++; }
     else { visit->os_areas++; }
     return true;

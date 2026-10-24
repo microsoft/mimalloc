@@ -431,8 +431,8 @@ static inline void* mi_ptr_from_addr(mi_addr_t addr) {
 #else
 #define MI_CHERI_PERM_SW_VMEM   0
 #endif
-// permissions that user pointers never have
-#define MI_CHERI_PERMS_NOT_USER (__CHERI_CAP_PERMISSION_PERMIT_EXECUTE__ | __CHERI_CAP_PERMISSION_PERMIT_SEAL__ | \
+// permissions that data pointers (user blocks and internal meta data) never need
+#define MI_CHERI_PERMS_NOT_DATA (__CHERI_CAP_PERMISSION_PERMIT_EXECUTE__ | __CHERI_CAP_PERMISSION_PERMIT_SEAL__ | \
                                  __CHERI_CAP_PERMISSION_PERMIT_UNSEAL__  | __CHERI_CAP_PERMISSION_ACCESS_SYSTEM_REGISTERS__ | \
                                  MI_CHERI_PERM_SW_VMEM)
 #endif
@@ -466,14 +466,19 @@ static inline void* mi_ptr_bounded(void* p, size_t size) {
   #endif
 }
 
-// Prepare a (non-NULL) pointer to be handed out to the user: bounded to `size` bytes and with data permissions only
-static inline void* mi_ptr_user(void* p, size_t size) {
+// Restrict a (non-NULL) pointer to `size` bytes and data permissions only
+static inline void* mi_ptr_data(void* p, size_t size) {
   #if MI_CHERI
-  return mi_ptr_bounded(__builtin_cheri_perms_and(p, ~(size_t)MI_CHERI_PERMS_NOT_USER), size);
+  return mi_ptr_bounded(__builtin_cheri_perms_and(p, ~(size_t)MI_CHERI_PERMS_NOT_DATA), size);
   #else
   MI_UNUSED(size);
   return p;
   #endif
+}
+
+// Prepare a (non-NULL) pointer to be handed out to the user
+static inline void* mi_ptr_user(void* p, size_t size) {
+  return mi_ptr_data(p, size);
 }
 
 // Re-derive `p` from the capability `auth` (when `p` lacks the bounds or permissions, e.g. a user pointer)

@@ -62,7 +62,7 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size, size_t
     mi_free(block);
     return NULL;
   }
-  uint8_t* guard_page = (uint8_t*)block + block_size - os_page_size;
+  uint8_t* guard_page = (uint8_t*)mi_page_vmem_ptr(page, (uint8_t*)block + block_size - os_page_size);
   // note: the alignment of the guard page relies on blocks being os_page_size aligned which
   // is ensured in `mi_arena_page_alloc_fresh`.
   mi_assert_internal(mi_is_aligned(block, os_page_size));
@@ -155,7 +155,7 @@ void _mi_page_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
   const size_t psize = _mi_os_page_size();
   mi_assert_internal(bsize > psize);
   if (page->memid.is_pinned) return;  // no guard page was set (see `mi_block_ptr_set_guarded`)
-  void* gpage = (uint8_t*)block + bsize - psize;
+  void* gpage = mi_page_vmem_ptr(page, (uint8_t*)block + bsize - psize);
   mi_assert_internal(mi_is_aligned(gpage, psize));
   _mi_os_unprotect(gpage, psize);
 }
@@ -163,7 +163,7 @@ void _mi_page_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
 // unguard a whole page (called from `mi_heap_destroy`)
 void _mi_page_unguard_all(mi_page_t* page) {
   if mi_likely(!mi_page_has_interior_pointers(page) || page->memid.is_pinned) return;
-  uint8_t* const start = mi_page_start(page);
+  uint8_t* const start = (uint8_t*)mi_page_vmem_ptr(page, mi_page_start(page));
   const size_t psize = mi_page_committed(page);
   _mi_os_unprotect(start,psize);  // unprotect all at once as we cannot know which blocks are guarded
 }

@@ -146,20 +146,35 @@ static inline bool mi_page_meta_is_separated(const mi_page_t* page) {
 }
 
 static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
-  if (mi_page_meta_is_separated(page)) {
-    // page meta info is at a separate location (at `arena->pages`)
-    #if MI_CHERI
-    // derive from the arena as the page start is bounded to the blocks
+  #if MI_CHERI
+  // derive from the arena or OS memory as both the page meta data and the page start are bounded
+  if (page->memid.memkind == MI_MEM_ARENA) {
     const mi_memid_arena_info_t* const ainfo = &page->memid.mem.arena;
     return (uint8_t*)ainfo->arena->start + ((size_t)ainfo->slice_index * MI_ARENA_SLICE_SIZE);
-    #else
+  }
+  else {
+    return (uint8_t*)mi_ptr_rederive(page->memid.mem.os.base, (void*)page);  // page meta info is at the start
+  }
+  #else
+  if (mi_page_meta_is_separated(page)) {
+    // page meta info is at a separate location (at `arena->pages`)
     return (uint8_t*)mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN);
-    #endif
   }
   else {
     // page meta info is at the start of the page slices
     return (uint8_t*)page;
   }
+  #endif
+}
+
+// Re-derive `p` in the page memory with the authority to change its protection (on CHERI)
+static inline void* mi_page_vmem_ptr(const mi_page_t* page, void* p) {
+  #if MI_CHERI
+  return mi_ptr_rederive(mi_page_slice_start(page), p);
+  #else
+  MI_UNUSED(page);
+  return p;
+  #endif
 }
 
 // This gives the offset relative to the start slice of a page.
