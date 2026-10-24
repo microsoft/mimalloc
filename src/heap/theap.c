@@ -652,13 +652,13 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
 
   // create a bitmap of free blocks.
   #define MI_MAX_BLOCKS   (MI_SMALL_PAGE_SIZE / sizeof(void*))
-  uintptr_t free_map[MI_MAX_BLOCKS / MI_INTPTR_BITS];
-  const uintptr_t bmapsize = mi_divide_up(page->capacity, MI_INTPTR_BITS);
-  memset(free_map, 0, bmapsize * sizeof(intptr_t));
-  if (page->capacity % MI_INTPTR_BITS != 0) {
+  size_t free_map[MI_MAX_BLOCKS / MI_SIZE_BITS];
+  const size_t bmapsize = mi_divide_up(page->capacity, MI_SIZE_BITS);
+  memset(free_map, 0, bmapsize * sizeof(size_t));
+  if (page->capacity % MI_SIZE_BITS != 0) {
     // mark left-over bits at the end as free
-    size_t shift   = (page->capacity % MI_INTPTR_BITS);
-    uintptr_t mask = (UINTPTR_MAX << shift);
+    size_t shift   = (page->capacity % MI_SIZE_BITS);
+    size_t mask    = (SIZE_MAX << shift);
     free_map[bmapsize - 1] = mask;
   }
 
@@ -681,9 +681,9 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
     size_t blockidx = mi_fast_divide(offset, magic, shift);
     mi_assert_internal(blockidx == offset / bsize);
     mi_assert_internal(blockidx < MI_MAX_BLOCKS);
-    size_t bitidx = (blockidx / MI_INTPTR_BITS);
-    size_t bit = blockidx - (bitidx * MI_INTPTR_BITS);
-    free_map[bitidx] |= ((uintptr_t)1 << bit);
+    size_t bitidx = (blockidx / MI_SIZE_BITS);
+    size_t bit = blockidx - (bitidx * MI_SIZE_BITS);
+    free_map[bitidx] |= ((size_t)1 << bit);
   }
   mi_assert_internal(page->capacity == (free_count + mi_page_used(page)));
 
@@ -695,7 +695,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
   for (size_t i = 0; i < bmapsize; i++) {
     if (free_map[i] == 0) {
       // every block is in use
-      for (size_t j = 0; j < MI_INTPTR_BITS; j++) {
+      for (size_t j = 0; j < MI_SIZE_BITS; j++) {
         #if MI_DEBUG>1
         used_count++;
         #endif
@@ -705,7 +705,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
     }
     else {
       // visit the used blocks in the mask
-      uintptr_t m = ~free_map[i];
+      size_t m = ~free_map[i];
       while (m != 0) {
         #if MI_DEBUG>1
         used_count++;
@@ -714,7 +714,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
         if (!visitor(heap, area, block + (bitidx * bsize), ubsize, arg)) return false;
         m &= m - 1;  // clear least significant bit
       }
-      block += bsize * MI_INTPTR_BITS;
+      block += bsize * MI_SIZE_BITS;
     }
   }
   mi_assert_internal(mi_page_used(page) == used_count);

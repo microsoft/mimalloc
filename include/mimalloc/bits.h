@@ -36,10 +36,13 @@ terms of the MIT license. A copy of the license can be found in the file
 // but we also need:
 //  i == (intptr_t)((void*)i)
 // or otherwise one might define an intptr_t type that is larger than a pointer...
+//
+// On CHERI, pointers are 128-bit capabilities but `INTPTR_MAX` is `INT64_MAX`
+// (as only the address is an integer value), so we use `__SIZEOF_POINTER__` if available.
 // ------------------------------------------------------
 
-#if INTPTR_MAX > INT64_MAX
-# define MI_INTPTR_SHIFT (4)  // assume 128-bit  (as on arm CHERI for example)
+#if (INTPTR_MAX > INT64_MAX) || (defined(__SIZEOF_POINTER__) && __SIZEOF_POINTER__ == 16)
+# define MI_INTPTR_SHIFT (4)  // 128-bit (as on CHERI for example)
 #elif INTPTR_MAX == INT64_MAX
 # define MI_INTPTR_SHIFT (3)
 #elif INTPTR_MAX == INT32_MAX
