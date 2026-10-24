@@ -467,18 +467,13 @@ static inline void* mi_ptr_bounded(void* p, size_t size) {
 }
 
 // Restrict a (non-NULL) pointer to `size` bytes and data permissions only
-static inline void* mi_ptr_data(void* p, size_t size) {
+static inline void* mi_ptr_bounded_data(void* p, size_t size) {
   #if MI_CHERI
   return mi_ptr_bounded(__builtin_cheri_perms_and(p, ~(size_t)MI_CHERI_PERMS_NOT_DATA), size);
   #else
   MI_UNUSED(size);
   return p;
   #endif
-}
-
-// Prepare a (non-NULL) pointer to be handed out to the user
-static inline void* mi_ptr_user(void* p, size_t size) {
-  return mi_ptr_data(p, size);
 }
 
 // Re-derive `p` from the capability `auth` (when `p` lacks the bounds or permissions, e.g. a user pointer)
@@ -491,7 +486,7 @@ static inline void* mi_ptr_rederive(void* auth, void* p) {
   #endif
 }
 
-// Limit `size` to the bytes accessible through `p` (`size` if not on CHERI)
+// Limit `size` to the bytes accessible through `p` (`size` if not on a system with provenance)
 static inline size_t mi_ptr_bounds_limit(const void* p, size_t size) {
   #if MI_CHERI
   const size_t len = (size_t)__builtin_cheri_length_get(p);

@@ -358,8 +358,8 @@ static bool mi_page_map_init_once(void) {
   mi_lock_init(&pmap->lock);
   mi_atomic_store_release(&pmap->committed_count, commit_count);
   // mi_atomic_store_release(&pmap->committed_addr, mi_page_map_addr_of_index(commit_count));
-  mi_atomic_store_ptr_release(mi_page_t*, &pmap->submaps[0], (mi_submap_t)mi_ptr_data(sub0, submap_size));
-  mi_atomic_store_ptr_release(mi_page_map_t, &__mi_page_map, (mi_page_map_t*)mi_ptr_data(pmap, reserve_size));  // see `mi_page_map_vmem`
+  mi_atomic_store_ptr_release(mi_page_t*, &pmap->submaps[0], (mi_submap_t)mi_ptr_bounded_data(sub0, submap_size));
+  mi_atomic_store_ptr_release(mi_page_map_t, &__mi_page_map, (mi_page_map_t*)mi_ptr_bounded_data(pmap, reserve_size));  // see `mi_page_map_vmem`
   mi_assert_internal(mi_ptr_page(NULL)==NULL);
   return true;
 }

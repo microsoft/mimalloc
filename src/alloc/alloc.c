@@ -154,7 +154,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
     if (!page->free_is_zero) {
       mi_assert_internal(bsize%MI_SIZE_SIZE == 0);
       #if !MI_PADDING
-      return mi_ptr_user(mi_memzero_block(block,bsize), size);  // use tail-call
+      return mi_ptr_bounded_data(mi_memzero_block(block,bsize), size);  // use tail-call
       #else
       mi_memzero_block(block,bsize);
       #endif
@@ -169,7 +169,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
   #if MI_PADDING // && !MI_TRACK_ENABLED
   mi_page_block_setup_padding(page,block,size);
   #endif
-  return mi_ptr_user(block, size - MI_PADDING_SIZE);  // bounded to the requested size (see `mi_usable_size`)
+  return mi_ptr_bounded_data(block, size - MI_PADDING_SIZE);  // bounded to the requested size (see `mi_usable_size`)
 }
 
 // extra entries for improved efficiency in `alloc/alloc-aligned.c` (and in `alloc/alloc-generic.c:mi_malloc_generic`.

@@ -137,7 +137,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
     mi_assert_internal(mi_page_block_size(page) <= MI_SMALL_MAX_OBJ_SIZE);
   }
   #endif
-  return mi_ptr_user(p, size - MI_PADDING_SIZE);
+  return mi_ptr_bounded_data(p, size - MI_PADDING_SIZE);
 }
 
 

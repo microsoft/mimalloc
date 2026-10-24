@@ -195,7 +195,7 @@ void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
     *size = arena->total_size;
   }
   #if MI_CHERI
-  return mi_ptr_data(mi_arena_start(arena), 0);  // only expose the address
+  return mi_ptr_bounded_data(mi_arena_start(arena), 0);  // only expose the address
   #else
   return mi_arena_start(arena);
   #endif
@@ -503,7 +503,7 @@ static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_
 
 
 static mi_arena_t* mi_arena_info(void* area) {
-  return (mi_arena_t*)mi_ptr_data((uint8_t*)area + _mi_size_of_slices(mi_arena_page_meta_aligned_slice_count()), sizeof(mi_arena_t));
+  return (mi_arena_t*)mi_ptr_bounded_data((uint8_t*)area + _mi_size_of_slices(mi_arena_page_meta_aligned_slice_count()), sizeof(mi_arena_t));
 }
 
 static size_t mi_arena_info_slices_needed(size_t slice_count, size_t* bitmap_base) {
@@ -531,7 +531,7 @@ static mi_bbitmap_t* mi_arena_bbitmap_init(mi_subproc_t* subproc, size_t slice_c
   mi_bbitmap_t* bbitmap = (mi_bbitmap_t*)(*base);
   const size_t size = mi_bbitmap_init(subproc, bbitmap, slice_count, true /* already zero */);
   *base = (*base) + size;
-  return (mi_bbitmap_t*)mi_ptr_data(bbitmap, size);
+  return (mi_bbitmap_t*)mi_ptr_bounded_data(bbitmap, size);
 }
 
 
@@ -617,7 +617,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
     arena->pages_main.pages_abandoned[i] = mi_arena_bitmap_init(slice_count, &base);
   }
   #if MI_PAGE_META_IS_SEPARATED && !MI_PAGE_META_IS_ALIGNED
-  arena->pages_meta = (mi_page_t*)mi_ptr_data(base, slice_count * sizeof(mi_page_t));
+  arena->pages_meta = (mi_page_t*)mi_ptr_bounded_data(base, slice_count * sizeof(mi_page_t));
   base += (slice_count * sizeof(mi_page_t));
   #else
   arena->pages_meta = NULL;

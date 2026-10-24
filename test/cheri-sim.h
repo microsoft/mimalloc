@@ -6,7 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 /* ----------------------------------------------------------------------------
-Simulate a CHERI purecap target on 64-bit Linux (clang only) to test
+Simulate a CHERI purecap target on 64-bit Linux or macOS (clang only) to test
 the CHERI code paths. Pointers are not actually 16 bytes, and bounds and permissions
 are not enforced, but an address with bit 62 set is treated as "untagged".
 Use as:
@@ -50,3 +50,13 @@ static inline unsigned long mi_sim_repr_mask(unsigned long n) {
 #define __CHERI_CAP_PERMISSION_PERMIT_UNSEAL__            512
 #define __CHERI_CAP_PERMISSION_ACCESS_SYSTEM_REGISTERS__  1024
 
+
+#if defined(__APPLE__) && defined(__aarch64__)
+// for local testing on macOS: provide the thread pointer for the TLS slots (or the tests hang)
+static inline void** mi_sim_tp(void) {
+  uint64_t tp;
+  __asm__ ("mrs %0, tpidrro_el0\n\tbic %0, %0, #7" : "=r" (tp));
+  return (void**)tp;
+}
+#define MI_PRIM_THREAD_POINTER mi_sim_tp
+#endif

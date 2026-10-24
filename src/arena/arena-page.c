@@ -31,7 +31,7 @@ static bool mi_heap_has_page(mi_heap_t* heap, mi_arena_t* arena, mi_page_t* page
 
 // Restrict a pointer to page meta data to the page meta data only
 static mi_page_t* mi_page_meta_bounded(void* p) {
-  return (mi_page_t*)mi_ptr_data(p, sizeof(mi_page_t));
+  return (mi_page_t*)mi_ptr_bounded_data(p, sizeof(mi_page_t));
 }
 
 mi_page_t* mi_arena_page_at_slice(mi_arena_t* arena, size_t slice_index) {
@@ -596,7 +596,7 @@ static void mi_arenas_page_init_meta(mi_theap_t* theap, mi_page_t* page, uint8_t
   uint8_t* const start = slice_start + block_start;
   mi_assert_internal(start > (uint8_t*)page);
   #if MI_CHERI
-  page->page_start = (uint8_t*)mi_ptr_data(start, reserved * block_size);  // all blocks are derived from this
+  page->page_start = (uint8_t*)mi_ptr_bounded_data(start, reserved * block_size);  // all blocks are derived from this
   #else
   page->page_offset = start - (uint8_t*)page;
   #endif
