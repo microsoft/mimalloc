@@ -293,37 +293,56 @@ typedef void* mi_nothrow_t;
   // See <https://itanium-cxx-abi.github.io/cxx-abi/abi.html#mangling>
   // ------------------------------------------------------
 
-  void _ZdlPv(void* p)            MI_FORWARD0(mi_free,p) // delete
-  void _ZdaPv(void* p)            MI_FORWARD0(mi_free,p) // delete[]
-  void _ZdlPvm(void* p, size_t n) MI_FORWARD02(mi_free_size,p,n)
-  void _ZdaPvm(void* p, size_t n) MI_FORWARD02(mi_free_size,p,n)
+  void _ZdlPv(void* p)                                                           MI_FORWARD0(mi_free,p) // delete
+  void _ZdaPv(void* p)                                                           MI_FORWARD0(mi_free,p) // delete[]
 
-  void _ZdlPvSt11align_val_t(void* p, size_t al)            { mi_free_aligned(p,al); }
-  void _ZdaPvSt11align_val_t(void* p, size_t al)            { mi_free_aligned(p,al); }
-  void _ZdlPvmSt11align_val_t(void* p, size_t n, size_t al) { mi_free_size_aligned(p,n,al); }
-  void _ZdaPvmSt11align_val_t(void* p, size_t n, size_t al) { mi_free_size_aligned(p,n,al); }
+  void _ZdlPvSt11align_val_t(void* p, size_t al)                                 { mi_free_aligned(p,al); }
+  void _ZdaPvSt11align_val_t(void* p, size_t al)                                 { mi_free_aligned(p,al); }
 
-  void _ZdlPvRKSt9nothrow_t(void* p, mi_nothrow_t tag)      { MI_UNUSED(tag); mi_free(p); }  // operator delete(void*, std::nothrow_t const&)
-  void _ZdaPvRKSt9nothrow_t(void* p, mi_nothrow_t tag)      { MI_UNUSED(tag); mi_free(p); }  // operator delete[](void*, std::nothrow_t const&)
+  void _ZdlPvRKSt9nothrow_t(void* p, mi_nothrow_t tag)                           { MI_UNUSED(tag); mi_free(p); }  // operator delete(void*, std::nothrow_t const&)
+  void _ZdaPvRKSt9nothrow_t(void* p, mi_nothrow_t tag)                           { MI_UNUSED(tag); mi_free(p); }  // operator delete[](void*, std::nothrow_t const&)
   void _ZdlPvSt11align_val_tRKSt9nothrow_t(void* p, size_t al, mi_nothrow_t tag) { MI_UNUSED(tag); mi_free_aligned(p,al); } // operator delete(void*, std::align_val_t, std::nothrow_t const&)
   void _ZdaPvSt11align_val_tRKSt9nothrow_t(void* p, size_t al, mi_nothrow_t tag) { MI_UNUSED(tag); mi_free_aligned(p,al); } // operator delete[](void*, std::align_val_t, std::nothrow_t const&)
 
-  #if (MI_SIZE_SIZE==8) || (MI_SIZE_SIZE==4 && defined(__EMSCRIPTEN__))  // pr #1257
-    void* _Znwm(size_t n)                             MI_FORWARD1(mi_new,n)  // new 64-bit
-    void* _Znam(size_t n)                             MI_FORWARD1(mi_new,n)  // new[] 64-bit
-    void* _ZnwmRKSt9nothrow_t(size_t n, mi_nothrow_t tag) { MI_UNUSED(tag); return mi_new_nothrow(n); }
-    void* _ZnamRKSt9nothrow_t(size_t n, mi_nothrow_t tag) { MI_UNUSED(tag); return mi_new_nothrow(n); }
-    void* _ZnwmSt11align_val_t(size_t n, size_t al)   MI_FORWARD2(mi_new_aligned, n, al)
-    void* _ZnamSt11align_val_t(size_t n, size_t al)   MI_FORWARD2(mi_new_aligned, n, al)
+  // the mangling of `size_t` depends on its underlying type: `y` for `unsigned long long` (64-bit MinGW),
+  // `m` for `unsigned long` (LP64, and also 32-bit on Apple (arm64_32) and wasm (pr #1257)), and `j` for `unsigned int`.
+  #if defined(_WIN64) && (MI_SIZE_SIZE==8)
+    void _ZdlPvy(void* p, size_t n)                            MI_FORWARD02(mi_free_size,p,n)
+    void _ZdaPvy(void* p, size_t n)                            MI_FORWARD02(mi_free_size,p,n)
+    void _ZdlPvySt11align_val_t(void* p, size_t n, size_t al)  { mi_free_size_aligned(p,n,al); }
+    void _ZdaPvySt11align_val_t(void* p, size_t n, size_t al)  { mi_free_size_aligned(p,n,al); }
+    void* _Znwy(size_t n)                                      MI_FORWARD1(mi_new,n)  // new
+    void* _Znay(size_t n)                                      MI_FORWARD1(mi_new,n)  // new[]
+    void* _ZnwyRKSt9nothrow_t(size_t n, mi_nothrow_t tag)      { MI_UNUSED(tag); return mi_new_nothrow(n); }
+    void* _ZnayRKSt9nothrow_t(size_t n, mi_nothrow_t tag)      { MI_UNUSED(tag); return mi_new_nothrow(n); }
+    void* _ZnwySt11align_val_t(size_t n, size_t al)            MI_FORWARD2(mi_new_aligned, n, al)
+    void* _ZnaySt11align_val_t(size_t n, size_t al)            MI_FORWARD2(mi_new_aligned, n, al)
+    void* _ZnwySt11align_val_tRKSt9nothrow_t(size_t n, size_t al, mi_nothrow_t tag) { MI_UNUSED(tag); return mi_new_aligned_nothrow(n,al); }
+    void* _ZnaySt11align_val_tRKSt9nothrow_t(size_t n, size_t al, mi_nothrow_t tag) { MI_UNUSED(tag); return mi_new_aligned_nothrow(n,al); }
+  #elif (MI_SIZE_SIZE==8) || (MI_SIZE_SIZE==4 && (defined(__APPLE__) || defined(__EMSCRIPTEN__) || defined(__wasm__)))
+    void _ZdlPvm(void* p, size_t n)                            MI_FORWARD02(mi_free_size,p,n)
+    void _ZdaPvm(void* p, size_t n)                            MI_FORWARD02(mi_free_size,p,n)
+    void _ZdlPvmSt11align_val_t(void* p, size_t n, size_t al)  { mi_free_size_aligned(p,n,al); }
+    void _ZdaPvmSt11align_val_t(void* p, size_t n, size_t al)  { mi_free_size_aligned(p,n,al); }
+    void* _Znwm(size_t n)                                      MI_FORWARD1(mi_new,n)  // new
+    void* _Znam(size_t n)                                      MI_FORWARD1(mi_new,n)  // new[]
+    void* _ZnwmRKSt9nothrow_t(size_t n, mi_nothrow_t tag)      { MI_UNUSED(tag); return mi_new_nothrow(n); }
+    void* _ZnamRKSt9nothrow_t(size_t n, mi_nothrow_t tag)      { MI_UNUSED(tag); return mi_new_nothrow(n); }
+    void* _ZnwmSt11align_val_t(size_t n, size_t al)            MI_FORWARD2(mi_new_aligned, n, al)
+    void* _ZnamSt11align_val_t(size_t n, size_t al)            MI_FORWARD2(mi_new_aligned, n, al)
     void* _ZnwmSt11align_val_tRKSt9nothrow_t(size_t n, size_t al, mi_nothrow_t tag) { MI_UNUSED(tag); return mi_new_aligned_nothrow(n,al); }
     void* _ZnamSt11align_val_tRKSt9nothrow_t(size_t n, size_t al, mi_nothrow_t tag) { MI_UNUSED(tag); return mi_new_aligned_nothrow(n,al); }
   #elif (MI_SIZE_SIZE==4)
-    void* _Znwj(size_t n)                             MI_FORWARD1(mi_new,n)  // new 64-bit
-    void* _Znaj(size_t n)                             MI_FORWARD1(mi_new,n)  // new[] 64-bit
-    void* _ZnwjRKSt9nothrow_t(size_t n, mi_nothrow_t tag) { MI_UNUSED(tag); return mi_new_nothrow(n); }
-    void* _ZnajRKSt9nothrow_t(size_t n, mi_nothrow_t tag) { MI_UNUSED(tag); return mi_new_nothrow(n); }
-    void* _ZnwjSt11align_val_t(size_t n, size_t al)   MI_FORWARD2(mi_new_aligned, n, al)
-    void* _ZnajSt11align_val_t(size_t n, size_t al)   MI_FORWARD2(mi_new_aligned, n, al)
+    void _ZdlPvj(void* p, size_t n)                            MI_FORWARD02(mi_free_size,p,n)
+    void _ZdaPvj(void* p, size_t n)                            MI_FORWARD02(mi_free_size,p,n)
+    void _ZdlPvjSt11align_val_t(void* p, size_t n, size_t al)  { mi_free_size_aligned(p,n,al); }
+    void _ZdaPvjSt11align_val_t(void* p, size_t n, size_t al)  { mi_free_size_aligned(p,n,al); }
+    void* _Znwj(size_t n)                                      MI_FORWARD1(mi_new,n)  // new
+    void* _Znaj(size_t n)                                      MI_FORWARD1(mi_new,n)  // new[]
+    void* _ZnwjRKSt9nothrow_t(size_t n, mi_nothrow_t tag)      { MI_UNUSED(tag); return mi_new_nothrow(n); }
+    void* _ZnajRKSt9nothrow_t(size_t n, mi_nothrow_t tag)      { MI_UNUSED(tag); return mi_new_nothrow(n); }
+    void* _ZnwjSt11align_val_t(size_t n, size_t al)            MI_FORWARD2(mi_new_aligned, n, al)
+    void* _ZnajSt11align_val_t(size_t n, size_t al)            MI_FORWARD2(mi_new_aligned, n, al)
     void* _ZnwjSt11align_val_tRKSt9nothrow_t(size_t n, size_t al, mi_nothrow_t tag) { MI_UNUSED(tag); return mi_new_aligned_nothrow(n,al); }
     void* _ZnajSt11align_val_tRKSt9nothrow_t(size_t n, size_t al, mi_nothrow_t tag) { MI_UNUSED(tag); return mi_new_aligned_nothrow(n,al); }
   #else
