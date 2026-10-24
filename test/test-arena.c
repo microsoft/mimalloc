@@ -469,10 +469,10 @@ static bool read_thread_ids(void) {
   for (size_t i = 0; i < 3; i++) {
     const uint8_t* p = (const uint8_t*)thread_id_blocks[i];
     if (mi_thread_id_of(p) != thread_id_owner ||
-        mi_thread_id_of(p + 1) != thread_id_owner ||
+        mi_thread_id_of(p + sizeof(size_t)) != thread_id_owner ||
         mi_thread_id_of(p + 2 * sizeof(size_t)) != thread_id_owner) return false;
   }
-  return (mi_thread_id_of((const uint8_t*)thread_id_blocks[2] + MI_SMALL_SIZE_MAX - 1) == thread_id_owner);
+  return (mi_thread_id_of((const uint8_t*)thread_id_blocks[2] + MI_SMALL_SIZE_MAX - sizeof(size_t)) == thread_id_owner);
 }
 
 static bool allocate_thread_id_blocks(void) {

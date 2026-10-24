@@ -238,7 +238,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
         { page = mi_ptr_page(p); }
       #endif
       if mi_unlikely(page==NULL && check_p_for_null) {
-        #if MI_DEBUG
+        #if MI_DEBUG || defined(__CHERI_PURE_CAPABILITY__)  // on CHERI also report in release (e.g. untagged pointers)
         if (p!=NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
         #endif
         return false;
@@ -669,8 +669,8 @@ mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
 }
 
 mi_decl_nodiscard size_t mi_thread_id_of(const void* p) mi_attr_noexcept {
-  if (p == NULL) return 0;
-  const mi_page_t* const page = mi_ptr_page(p);
+  const mi_page_t* const page = mi_ptr_page_validate(p,"mi_thread_id_of");
+  if (page == NULL) return 0;
   const mi_threadid_t tid = mi_page_thread_id(page);
   return (tid <= MI_THREADID_DETACHED ? 0 : tid);
 }

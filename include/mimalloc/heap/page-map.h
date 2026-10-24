@@ -92,6 +92,14 @@ static inline size_t mi_page_map_index(const void* p, size_t* sub_idx) {
   return (u / MI_PAGE_MAP_SUB_COUNT);
 }
 
+// Index for looking up a (user) pointer; on CHERI untagged (e.g. forged) pointers map to index 0 (and thus a NULL page)
+static inline size_t mi_page_map_lookup_index(const void* p, size_t* sub_idx) {
+  #if defined(__CHERI_PURE_CAPABILITY__)
+  if (!__builtin_cheri_tag_get(p)) { p = NULL; }
+  #endif
+  return mi_page_map_index(p, sub_idx);
+}
+
 static inline mi_page_map_t* mi_page_map(void) {
   return mi_atomic_load_ptr_relaxed(mi_page_map_t,&__mi_page_map);
 }
@@ -103,14 +111,14 @@ static inline mi_submap_t mi_page_map_at(const mi_page_map_t* pmap, size_t idx) 
 static inline mi_page_t* mi_unchecked_ptr_page(const void* p) {
   const mi_page_map_t* pmap = mi_page_map();
   size_t sub_idx;
-  const size_t idx = mi_page_map_index(p, &sub_idx);
+  const size_t idx = mi_page_map_lookup_index(p, &sub_idx);
   return mi_page_map_at(pmap,idx)[sub_idx];  // NULL if p==NULL
 }
 
 static inline mi_page_t* mi_checked_ptr_page(const void* p) {
   const mi_page_map_t* pmap = mi_page_map();
   size_t sub_idx;
-  const size_t idx = mi_page_map_index(p, &sub_idx);
+  const size_t idx = mi_page_map_lookup_index(p, &sub_idx);
   const size_t committed_count = mi_atomic_load_relaxed(&pmap->committed_count);
   if mi_unlikely(idx >= committed_count) return NULL;
   // #if MI_MIN_VABITS < MI_INTPTR_BITS   // is still invalid if free is called before the pagemap is initialized
