@@ -592,6 +592,10 @@ static inline mi_block_t* mi_block_nextx( const mi_page_t* page, const mi_block_
   mi_block_t* next;
   #if MI_ENCODE_FREELIST
   next = (mi_block_t*)mi_ptr_decode(page, block->next, keys);
+  #elif MI_CHERI
+  MI_UNUSED(keys);
+  const mi_addr_t addr = (mi_addr_t)block->next;
+  next = (addr==0 ? NULL : mi_page_block_from_addr(page, addr));
   #else
   MI_UNUSED(keys); MI_UNUSED(page);
   next = (mi_block_t*)block->next;
@@ -604,6 +608,9 @@ static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const
   mi_track_mem_undefined(block,sizeof(mi_block_t));
   #if MI_ENCODE_FREELIST
   block->next = mi_ptr_encode(null, next, keys);
+  #elif MI_CHERI
+  MI_UNUSED(keys); MI_UNUSED(null);
+  block->next = (mi_encoded_t)mi_addr(next);  // never store a capability in a (freed) block
   #else
   MI_UNUSED(keys); MI_UNUSED(null);
   block->next = (mi_encoded_t)next;

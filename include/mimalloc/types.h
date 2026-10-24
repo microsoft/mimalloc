@@ -395,7 +395,7 @@ size_t        _mi_memid_size(mi_memid_t memid);
 // ------------------------------------------------------
 
 // The free lists use encoded next fields
-// (Only actually encodes when MI_ENCODED_FREELIST is defined.)
+// (Only actually encodes when MI_ENCODED_FREELIST is defined; on CHERI it only holds an address.)
 typedef uintptr_t  mi_encoded_t;
 
 // thread id's
