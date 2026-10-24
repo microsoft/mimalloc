@@ -129,7 +129,7 @@ typedef int32_t  mi_ssize_t;
 // maximum virtual address bits in a user-space pointer
 #if MI_DEFAULT_VIRTUAL_ADDRESS_BITS > 0
 #define MI_MAX_VABITS     MI_DEFAULT_VIRTUAL_ADDRESS_BITS
-#elif   MI_ARCH_X64
+#elif MI_ARCH_X64 && (MI_INTPTR_SIZE > 4)   // not on x32
 #define MI_MAX_VABITS     (47)
 #elif MI_INTPTR_SIZE > 4
 #define MI_MAX_VABITS     (48)
@@ -208,7 +208,11 @@ static inline size_t mi_popcount(size_t x) {
     if (_mi_cpu_has_popcnt) { return mi_msc_builtinz(__popcnt)(x); }
                        else { return _mi_popcount_generic(x); }      // see issue #1291
   #elif MI_ARCH_X64 && defined(__BMI1__)
+    #if (MI_SIZE_BITS == 64)
     return (size_t)_mm_popcnt_u64(x);
+    #else
+    return (size_t)_mm_popcnt_u32(x);  // x32
+    #endif
   #else
     #define MI_HAS_FAST_POPCOUNT  0
     return (x<=1 ? x : _mi_popcount_generic(x));
