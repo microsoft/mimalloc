@@ -513,26 +513,33 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
   // return (mi_ptr_page(p) == mi_ptr_page(q));
 }
 
+// Encoding uses just the address (as `size_t`); on CHERI we derive the pointer provenance from `null` (the page).
 static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {
-  const uintptr_t k1 = keys[0];
+  const size_t k1 = (size_t)keys[0];
   #if MI_PAGE_KEY_COUNT==2
-  const uintptr_t k2 = keys[1];
+  const size_t k2 = (size_t)keys[1];
   #else
-  const uintptr_t k2 = mi_rotr(k1,13);
+  const size_t k2 = mi_rotr(k1,13);
   #endif
-  void* p = (void*)(mi_rotr(x - k1, k1) ^ k2);
-  return (p==null ? NULL : p);
+  const size_t addr = (mi_rotr((size_t)x - k1, k1) ^ k2);
+  const size_t null_addr = (size_t)(uintptr_t)null;
+  if (addr == null_addr) return NULL;
+  #if defined(__CHERI_PURE_CAPABILITY__)
+  return ((uint8_t*)null + (addr - null_addr));
+  #else
+  return (void*)(uintptr_t)addr;
+  #endif
 }
 
 static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const uintptr_t* keys) {
-  const uintptr_t k1 = keys[0];
+  const size_t k1 = (size_t)keys[0];
   #if MI_PAGE_KEY_COUNT==2
-  const uintptr_t k2 = keys[1];
+  const size_t k2 = (size_t)keys[1];
   #else
-  const uintptr_t k2 = mi_rotr(k1,13);
+  const size_t k2 = mi_rotr(k1,13);
   #endif
-  const uintptr_t x = (uintptr_t)(p==NULL ? null : p);
-  return mi_rotl(x ^ k2, k1) + k1;
+  const size_t x = (size_t)(uintptr_t)(p==NULL ? null : p);
+  return (mi_encoded_t)(mi_rotl(x ^ k2, k1) + k1);
 }
 
 static inline uint32_t mi_ptr_encode_canary(const void* null, const void* p, const uintptr_t* keys) {
