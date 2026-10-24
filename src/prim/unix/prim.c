@@ -264,7 +264,7 @@ static size_t unix_detect_virtual_address_bits(void) {
       #endif
       {
         if (probe.key != -1) { // If a key is unknown to the kernel, its key field will be cleared to -1.
-          return (MI_SIZE_BITS - mi_clz((uintptr_t)probe.value));
+          return (MI_SIZE_BITS - mi_clz((size_t)probe.value));
         }
       }
     #endif

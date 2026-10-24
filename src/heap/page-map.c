@@ -509,7 +509,7 @@ void _mi_page_map_unregister_range(void* start, size_t size) {
   if mi_unlikely(pmap == NULL) return;
   const size_t slice_count = mi_divide_up(size, MI_ARENA_SLICE_SIZE);
   size_t sub_idx;
-  const uintptr_t idx = mi_page_map_index(start, &sub_idx);
+  const size_t idx = mi_page_map_index(start, &sub_idx);
   mi_page_map_set_range(pmap, NULL, idx, sub_idx, slice_count);  // todo: avoid committing if not already committed?
 }
 
