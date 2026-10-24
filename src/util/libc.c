@@ -441,7 +441,7 @@ int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
         uintmax_t x = 0;
         if (c == 'x' || c == 'u') {
           if (numtype == 'z')       x = va_arg(args, size_t);
-          else if (numtype == 't')  x = va_arg(args, uintptr_t); // unsigned ptrdiff_t
+          else if (numtype == 't')  x = va_arg(args, size_t);   // unsigned ptrdiff_t
           else if (numtype == 'L')  x = va_arg(args, unsigned long long);
           else if (numtype == 'l')  x = va_arg(args, unsigned long);
           else if (numtype == '8')  x = va_arg(args, uint64_t);
@@ -456,7 +456,7 @@ int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
           width = (width >= 2 ? width - 2 : 0);
         }
         if (width == 0 && (c == 'x' || c == 'p')) {
-          if (c == 'p')   { width = 2 * (x <= UINT32_MAX ? 4 : ((x >> 16) <= UINT32_MAX ? 6 : sizeof(void*))); }
+          if (c == 'p')   { width = 2 * (x <= UINT32_MAX ? 4 : ((x >> 16) <= UINT32_MAX ? 6 : sizeof(size_t))); }
           if (width == 0) { width = 2; }
           if (alignright) { fill = '0'; }
         }
@@ -465,7 +465,7 @@ int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
       else if (c == 'i' || c == 'd') {
         // signed
         intmax_t x = 0;
-        if (numtype == 'z')       x = va_arg(args, intptr_t );
+        if (numtype == 'z')       x = va_arg(args, ptrdiff_t);  // signed size_t
         else if (numtype == 't')  x = va_arg(args, ptrdiff_t);
         else if (numtype == 'L')  x = va_arg(args, long long);
         else if (numtype == 'l')  x = va_arg(args, long);

@@ -1101,7 +1101,7 @@ static bool mi_pprof_snapshot_text(mi_pprof_profiler_t* prof, const char* fname)
                  (uint64_t)inuse_count, (uint64_t)inuse_bytes,
                  (uint64_t)loc->alloc_count, (uint64_t)loc->alloc_bytes);
       for (size_t j = 0; j < loc->callstack.count; j++) {
-        mi_fprintf(f, " 0x%tx", (uintptr_t)loc->callstack.frames[j]);
+        mi_fprintf(f, " 0x%tx", (size_t)(uintptr_t)loc->callstack.frames[j]);
       }
       fprintf(f, "\n");
     }

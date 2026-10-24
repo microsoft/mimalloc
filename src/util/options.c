@@ -549,7 +549,7 @@ void _mi_fprintf( mi_output_fun* out, void* arg, const char* fmt, ... ) {
 static void mi_vfprintf_thread(mi_output_fun* out, void* arg, const char* prefix, const char* fmt, va_list args) {
   if (prefix != NULL && _mi_strnlen(prefix,33) <= 32) { // && !_mi_is_main_thread()) {
     char tprefix[64];
-    _mi_snprintf(tprefix, sizeof(tprefix), "%sthread 0x%tx: ", prefix, (uintptr_t)_mi_thread_id());
+    _mi_snprintf(tprefix, sizeof(tprefix), "%sthread 0x%tx: ", prefix, (size_t)_mi_thread_id());
     mi_vfprintf(out, arg, tprefix, fmt, args);
   }
   else {
@@ -660,7 +660,7 @@ void _mi_error_message(int err, const char* fmt, ...) {
 }
 
 mi_decl_noinline mi_block_t* _mi_block_next_is_corrupted(const mi_page_t* page, const mi_block_t* block, const mi_block_t* next) {
-  _mi_error_message(EFAULT, "corrupted free list entry of size %zub at %p: value 0x%zx\n", mi_page_block_size(page), block, (uintptr_t)next);
+  _mi_error_message(EFAULT, "corrupted free list entry of size %zub at %p: value 0x%zx\n", mi_page_block_size(page), block, (size_t)(uintptr_t)next);
   return NULL;
 }
 
