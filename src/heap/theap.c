@@ -598,7 +598,7 @@ void _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page) {
   const size_t ubsize = mi_page_usable_block_size(page);
   area->reserved = page->reserved * bsize;
   area->committed = page->capacity * bsize;
-  area->blocks = mi_page_start(page);
+  area->blocks = mi_ptr_user(mi_page_start(page), area->reserved);
   area->used = mi_page_used(page);   // number of blocks in use (#553)
   area->block_size = ubsize;
   area->full_block_size = bsize;
@@ -636,7 +636,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
   // optimize page with one block
   if (page->capacity == 1) {
     mi_assert_internal(mi_page_used(page) == 1 && page->free == NULL);
-    return visitor(heap, area, pstart, ubsize, arg);
+    return visitor(heap, area, mi_ptr_user(pstart, ubsize), ubsize, arg);
   }
   mi_assert(bsize <= UINT32_MAX);
 
@@ -644,7 +644,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
   if (mi_page_used(page) == page->capacity) {
     uint8_t* block = pstart;
     for (size_t i = 0; i < page->capacity; i++) {
-      if (!visitor(heap, area, block, ubsize, arg)) return false;
+      if (!visitor(heap, area, mi_ptr_user(block, ubsize), ubsize, arg)) return false;
       block += bsize;
     }
     return true;
@@ -699,7 +699,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
         #if MI_DEBUG>1
         used_count++;
         #endif
-        if (!visitor(heap, area, block, ubsize, arg)) return false;
+        if (!visitor(heap, area, mi_ptr_user(block, ubsize), ubsize, arg)) return false;
         block += bsize;
       }
     }
@@ -711,7 +711,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
         used_count++;
         #endif
         size_t bitidx = mi_ctz(m);
-        if (!visitor(heap, area, block + (bitidx * bsize), ubsize, arg)) return false;
+        if (!visitor(heap, area, mi_ptr_user(block + (bitidx * bsize), ubsize), ubsize, arg)) return false;
         m &= m - 1;  // clear least significant bit
       }
       block += bsize * MI_SIZE_BITS;

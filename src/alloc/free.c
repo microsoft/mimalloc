@@ -238,7 +238,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
         { page = mi_ptr_page(p); }
       #endif
       if mi_unlikely(page==NULL && check_p_for_null) {
-        #if MI_DEBUG || defined(__CHERI_PURE_CAPABILITY__)  // on CHERI also report in release (e.g. untagged pointers)
+        #if MI_DEBUG || MI_CHERI  // on CHERI also report in release (e.g. untagged pointers)
         if (p!=NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
         #endif
         return false;
@@ -655,11 +655,11 @@ size_t _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr_noexce
   mi_assert_internal(mi_ptr_page_validate(p,"_mi_page_usable_size") == page);
   const mi_block_t* block = _mi_page_ptr_unalign(page, p); // for safety, always unalign
   if mi_likely((const void*)block==page) {
-    return mi_page_usable_size_of(page, block, false /* is guarded */);
+    return mi_ptr_bounds_limit(p, mi_page_usable_size_of(page, block, false /* is guarded */));
   }
   else {
     // split out to separate routine for improved code generation
-    return mi_page_usable_aligned_size_of(page, p, block);
+    return mi_ptr_bounds_limit(p, mi_page_usable_aligned_size_of(page, p, block));
   }
 }
 

@@ -185,7 +185,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #if !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
 // guarded can put small allocations into big blocks in a medium page (which would make `mi_free_small` fail)
 // on CHERI we cannot derive the page from a (bounded) user pointer
-#if (defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0) || MI_SECURE || MI_GUARDED || defined(__CHERI_PURE_CAPABILITY__)
+#if (defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0) || MI_SECURE || MI_GUARDED || MI_CHERI
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0
 #elif (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED)
 #define MI_PAGE_META_SMALL_IS_ALIGNED   1
@@ -495,7 +495,7 @@ typedef struct mi_page_s {
   uint16_t                  xlast_alloc;       // for sampling; on 64-bit platforms it is in bits 48..63 of xused.
   #endif
 
-  #if defined(__CHERI_PURE_CAPABILITY__)
+  #if MI_CHERI
   uint8_t*                  page_start;        // const: start of the blocks; the capability from which all blocks are derived
   #else
   size_t                    page_offset;       // const: relative offset from the page to the start of the blocks

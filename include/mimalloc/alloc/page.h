@@ -54,7 +54,7 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
 
 // Page start
 static inline uint8_t* mi_page_start(const mi_page_t* page) {
-  #if defined(__CHERI_PURE_CAPABILITY__)
+  #if MI_CHERI
   return page->page_start;
   #else
   // multiplication must be done in `size_t`
@@ -148,7 +148,13 @@ static inline bool mi_page_meta_is_separated(const mi_page_t* page) {
 static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
   if (mi_page_meta_is_separated(page)) {
     // page meta info is at a separate location (at `arena->pages`)
+    #if MI_CHERI
+    // derive from the arena as the page start is bounded to the blocks
+    const mi_memid_arena_info_t* const ainfo = &page->memid.mem.arena;
+    return (uint8_t*)ainfo->arena->start + ((size_t)ainfo->slice_index * MI_ARENA_SLICE_SIZE);
+    #else
     return (uint8_t*)mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN);
+    #endif
   }
   else {
     // page meta info is at the start of the page slices

@@ -94,7 +94,7 @@ static inline size_t mi_page_map_index(const void* p, size_t* sub_idx) {
 
 // Index for looking up a (user) pointer; on CHERI untagged (e.g. forged) pointers map to index 0 (and thus a NULL page)
 static inline size_t mi_page_map_lookup_index(const void* p, size_t* sub_idx) {
-  #if defined(__CHERI_PURE_CAPABILITY__)
+  #if MI_CHERI
   if (!__builtin_cheri_tag_get(p)) { p = NULL; }
   #endif
   return mi_page_map_index(p, sub_idx);

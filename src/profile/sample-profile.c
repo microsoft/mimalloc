@@ -179,7 +179,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
     // Set up the profiled block as an interior pointer so the interior "slow" path is taken on mi_free (where we catch it to call on_free)
     mi_page_set_has_interior_pointers(page, true);
     block->next = MI_BLOCK_TAG_PROFILED;
-    p = (uint8_t*)block + user_offset;
+    p = mi_ptr_bounded((uint8_t*)block + user_offset, req_size);  // exclude the profile data in front
     mi_profiler_sample_data_t* const sample_data = (mi_profiler_sample_data_t*)((uint8_t*)block + sample_data_offset);
     sample_data->user_data_size = sample_user_data_size;
 

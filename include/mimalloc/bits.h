@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2019-2024 Microsoft Research, Daan Leijen
+Copyright (c) 2019-2026 Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -106,6 +106,10 @@ typedef int32_t  mi_ssize_t;
 #endif
 #endif
 
+#if defined(__CHERI_PURE_CAPABILITY__)
+#define MI_CHERI          1
+#endif
+
 #if MI_ARCH_X64 && defined(__AVX2__)
 #include <immintrin.h>
 #elif MI_ARCH_ARM64 && MI_OPT_SIMD
@@ -149,55 +153,19 @@ typedef int32_t  mi_ssize_t;
 #endif
 
 // On CHERI, always use the page map in `mi_free` as we cannot derive the page meta-data from a (bounded) user pointer
-#if defined(__CHERI_PURE_CAPABILITY__) && !defined(MI_FREE_USE_PAGEMAP)
+#if MI_CHERI && !defined(MI_FREE_USE_PAGEMAP)
 #define MI_FREE_USE_PAGEMAP  1
 #endif
 
 // use a flat page-map or a 2-level one
 #ifndef MI_PAGE_MAP_FLAT
-#if MI_MAX_VABITS <= 40 && !defined(__APPLE__) && !defined(__CHERI_PURE_CAPABILITY__) && !MI_SECURE && !MI_FREE_IS_CHECKED && MI_FREE_USE_PAGEMAP
+#if MI_MAX_VABITS <= 40 && !defined(__APPLE__) && !MI_CHERI && !MI_SECURE && !MI_FREE_IS_CHECKED && MI_FREE_USE_PAGEMAP
 #define MI_PAGE_MAP_FLAT  1
 #else
 #define MI_PAGE_MAP_FLAT  0
 #endif
 #endif
 
-// ------------------------------------------------------
-// Raw addresses: the integer value of a pointer (without provenance).
-// Usually `mi_addr_t == uintptr_t == size_t`, but on CHERI `uintptr_t` is a 128-bit capability
-// while the address (`ptraddr_t`) is 64-bit. Use `mi_addr(p)` to get the address of a pointer
-// (and derive pointers from an existing pointer to keep provenance).
-// ------------------------------------------------------
-
-#if defined(__PTRADDR_TYPE__)
-typedef __PTRADDR_TYPE__  mi_addr_t;
-#else
-typedef uintptr_t         mi_addr_t;
-#endif
-#define MI_AU(x)          ((mi_addr_t)(x))
-
-// Get the address part of a pointer (without provenance)
-static inline mi_addr_t mi_addr(const void* p) {
-  #if defined(__CHERI_PURE_CAPABILITY__)
-  return (mi_addr_t)__builtin_cheri_address_get(p);
-  #else
-  return (mi_addr_t)(uintptr_t)(p);
-  #endif
-}
-
-// Derive a pointer with address `addr` from `p` (keeping the provenance of `p`)
-static inline void* mi_ptr_with_addr(const void* p, mi_addr_t addr) {
-  #if defined(__CHERI_PURE_CAPABILITY__)
-  return (void*)__builtin_cheri_address_set(p, addr);
-  #else
-  return (void*)((uintptr_t)p + (addr - mi_addr(p)));
-  #endif
-}
-
-// A pointer from an address without provenance
-static inline void* mi_ptr_from_addr(mi_addr_t addr) {
-  return (void*)(uintptr_t)addr;
-}
 
 /* --------------------------------------------------------------------------------
   Builtin's
@@ -265,8 +233,6 @@ static inline size_t mi_popcount(size_t x) {
 #ifndef MI_HAS_FAST_POPCOUNT
 #define MI_HAS_FAST_POPCOUNT 1
 #endif
-
-
 
 size_t _mi_clz_generic(size_t x);
 size_t _mi_ctz_generic(size_t x);
@@ -404,6 +370,132 @@ static inline uint32_t mi_rotl32(uint32_t x, uint32_t r) {
     // avoid UB when `rshift==0`. See <https://blog.regehr.org/archives/1063>
     const unsigned int rshift = (unsigned int)(r) & 31;
     return ((x << rshift) | (x >> ((-rshift) & 31)));
+  #endif
+}
+
+
+// ------------------------------------------------------
+// Raw addresses: the integer value of a pointer (without provenance).
+// Usually `mi_addr_t == uintptr_t == size_t`, but on CHERI `uintptr_t` is a 128-bit capability
+// while the address (`ptraddr_t`) is 64-bit. Use `mi_addr(p)` to get the address of a pointer
+// (and derive pointers from an existing pointer to keep provenance).
+// ------------------------------------------------------
+
+#if defined(__PTRADDR_TYPE__)
+typedef __PTRADDR_TYPE__  mi_addr_t;
+#else
+typedef uintptr_t         mi_addr_t;
+#endif
+#define MI_AU(x)          ((mi_addr_t)(x))
+
+// Get the address part of a pointer (without provenance)
+static inline mi_addr_t mi_addr(const void* p) {
+  #if MI_CHERI
+  return (mi_addr_t)__builtin_cheri_address_get(p);
+  #else
+  return (mi_addr_t)(uintptr_t)(p);
+  #endif
+}
+
+// Derive a pointer with address `addr` from `p` (keeping the provenance of `p`)
+static inline void* mi_ptr_with_addr(const void* p, mi_addr_t addr) {
+  #if MI_CHERI
+  return (void*)__builtin_cheri_address_set(p, addr);
+  #else
+  return (void*)((uintptr_t)p + (addr - mi_addr(p)));
+  #endif
+}
+
+// A pointer from an address without provenance
+static inline void* mi_ptr_from_addr(mi_addr_t addr) {
+  return (void*)(uintptr_t)addr;
+}
+
+// ------------------------------------------------------
+// Capability bounds and permissions (only on CHERI).
+// Internally all blocks are derived from the page start which is bounded to the block area
+// of the page, while pointers handed out to the user are bounded to their block and lose
+// any non-data permissions.
+// ------------------------------------------------------
+
+#if MI_CHERI
+#if defined(__has_include)
+#if __has_include(<cheri/cherireg.h>)
+#include <cheri/cherireg.h>     // CHERI_PERM_SW_VMEM on CheriBSD
+#endif
+#endif
+#if defined(CHERI_PERM_SW_VMEM)
+#define MI_CHERI_PERM_SW_VMEM   CHERI_PERM_SW_VMEM            // permission to (un)map memory
+#elif defined(CHERI_PERM_CHERIABI_VMMAP)
+#define MI_CHERI_PERM_SW_VMEM   CHERI_PERM_CHERIABI_VMMAP     // older CheriBSD
+#else
+#define MI_CHERI_PERM_SW_VMEM   0
+#endif
+// permissions that user pointers never have
+#define MI_CHERI_PERMS_NOT_USER (__CHERI_CAP_PERMISSION_PERMIT_EXECUTE__ | __CHERI_CAP_PERMISSION_PERMIT_SEAL__ | \
+                                 __CHERI_CAP_PERMISSION_PERMIT_UNSEAL__  | __CHERI_CAP_PERMISSION_ACCESS_SYSTEM_REGISTERS__ | \
+                                 MI_CHERI_PERM_SW_VMEM)
+#endif
+
+// The alignment needed for exactly representable bounds of `size` bytes (always a power of 2, and 1 if not on CHERI)
+static inline size_t mi_bounds_align(size_t size) {
+  #if MI_CHERI
+  return ~(size_t)__builtin_cheri_representable_alignment_mask(size) + 1;
+  #else
+  MI_UNUSED(size);
+  return 1;
+  #endif
+}
+
+// Round `size` up such that bounds of that size can be exactly representable (`size` if not on CHERI)
+static inline size_t mi_bounds_size(size_t size) {
+  #if MI_CHERI
+  return __builtin_cheri_round_representable_length(size);
+  #else
+  return size;
+  #endif
+}
+
+// Restrict `p` to `size` bytes (rounded outward if that is not exactly representable)
+static inline void* mi_ptr_bounded(void* p, size_t size) {
+  #if MI_CHERI
+  return __builtin_cheri_bounds_set(p, size);
+  #else
+  MI_UNUSED(size);
+  return p;
+  #endif
+}
+
+// Prepare a (non-NULL) pointer to be handed out to the user: bounded to `size` bytes and with data permissions only
+static inline void* mi_ptr_user(void* p, size_t size) {
+  #if MI_CHERI
+  return mi_ptr_bounded(__builtin_cheri_perms_and(p, ~(size_t)MI_CHERI_PERMS_NOT_USER), size);
+  #else
+  MI_UNUSED(size);
+  return p;
+  #endif
+}
+
+// Re-derive `p` from the capability `auth` (when `p` lacks the bounds or permissions, e.g. a user pointer)
+static inline void* mi_ptr_rederive(void* auth, void* p) {
+  #if MI_CHERI
+  return mi_ptr_with_addr(auth, mi_addr(p));
+  #else
+  MI_UNUSED(auth);
+  return p;
+  #endif
+}
+
+// Limit `size` to the bytes accessible through `p` (`size` if not on CHERI)
+static inline size_t mi_ptr_bounds_limit(const void* p, size_t size) {
+  #if MI_CHERI
+  const size_t len = (size_t)__builtin_cheri_length_get(p);
+  const size_t ofs = (size_t)__builtin_cheri_offset_get(p);
+  const size_t avail = (ofs <= len ? len - ofs : 0);
+  return (size <= avail ? size : avail);
+  #else
+  MI_UNUSED(p);
+  return size;
   #endif
 }
 

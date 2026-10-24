@@ -735,7 +735,7 @@ and possibly associated with a specific NUMA node. (use `numa_node>=0`)
 #define MI_HUGE_OS_PAGE_SIZE  (MI_GiB)
 
 
-#if (MI_SIZE_SIZE >= 8) && !defined(__CHERI_PURE_CAPABILITY__)  // on CHERI the separately mapped huge pages cannot be covered by one capability
+#if (MI_SIZE_SIZE >= 8) && !MI_CHERI  // on CHERI the separately mapped huge pages cannot be covered by one capability
 // To ensure proper alignment, use our own area for huge OS pages
 static mi_decl_cache_align _Atomic(mi_addr_t)  mi_huge_start; // = 0
 

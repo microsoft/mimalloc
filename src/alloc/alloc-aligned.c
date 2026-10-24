@@ -130,7 +130,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
     mi_track_mem_defined(p, sizeof(mi_block_t));
     #endif
   }
-  return aligned_p;
+  return mi_ptr_bounded(aligned_p, size);  // exclude the bytes in front of the aligned pointer
 }
 
 // Generic primitive aligned allocation -- split out for better codegen
@@ -346,7 +346,7 @@ static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t
   if (p == NULL) return mi_theap_malloc_zero_aligned_at(theap,newsize,alignment,offset,zero,NULL);
   const size_t size = mi_usable_size(p);
   if (newsize <= size && newsize >= (size - (size / 2)) && ((mi_addr(p) + offset) & (alignment-1)) == 0) {
-    return p;  // reallocation still fits, is aligned and not more than 50% waste
+    return mi_ptr_bounded(p, newsize);  // reallocation still fits, is aligned and not more than 50% waste
   }
   else {
     // note: we don't zero allocate upfront so we only zero initialize the expanded part (at the cost of calling mi_usable_size)

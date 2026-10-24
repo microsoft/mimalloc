@@ -279,7 +279,8 @@ static size_t mi_page_meta_in_front_block_start(size_t block_size, bool os_align
     // otherwise start after the info
     offset = mi_page_info_size();
   }
-  return mi_align_up(offset,MI_MAX_ALIGN_SIZE);
+  // on CHERI, also align such that every block has exact bounds (os_align is already aligned enough)
+  return mi_align_up(offset, (os_align ? MI_MAX_ALIGN_SIZE : mi_max(MI_MAX_ALIGN_SIZE, mi_bounds_align(block_size))));
 }
 
 // The usable size of a page area (excluding the guard page at the end in secure mode).
@@ -325,12 +326,14 @@ static size_t mi_page_block_cache_offset(uint8_t* slice_start, size_t slice_coun
   if (MI_PAGE_CACHE_OFFSET == 0 || os_align) return 0;
   if (!mi_block_size_has_cache_offset(block_size)) return mi_page_small_block_cache_offset(slice_start, slice_count, block_size);
   if (!mi_page_block_can_cache_offset(block_size, os_align)) return 0;
+  const size_t unit = mi_max(MI_PAGE_CACHE_OFFSET_UNIT, mi_bounds_align(block_size));  // on CHERI, keep exact bounds
+  if (unit > MI_PAGE_CACHE_OFFSET_MAX) return 0;
   const size_t page_noguard_size = mi_arenas_page_noguard_size(_mi_size_of_slices(slice_count));
   mi_assert_internal(block_start + block_size <= page_noguard_size);
   size_t slack = (page_noguard_size - block_start) % block_size;
-  if (slack < MI_PAGE_CACHE_OFFSET_UNIT && block_size < page_noguard_size/8) { slack += block_size; }
-  const size_t noffsets = 1 + (slack < MI_PAGE_CACHE_OFFSET_MAX ? slack : MI_PAGE_CACHE_OFFSET_MAX) / MI_PAGE_CACHE_OFFSET_UNIT;
-  return mi_page_cache_offset_index(slice_start, slice_count, noffsets) * MI_PAGE_CACHE_OFFSET_UNIT;
+  if (slack < unit && block_size < page_noguard_size/8) { slack += block_size; }
+  const size_t noffsets = 1 + (slack < MI_PAGE_CACHE_OFFSET_MAX ? slack : MI_PAGE_CACHE_OFFSET_MAX) / unit;
+  return mi_page_cache_offset_index(slice_start, slice_count, noffsets) * unit;
 }
 
 // Use the separate (zero initialized) `page_meta` if available and not preferring in front of the slices,
@@ -587,8 +590,8 @@ static void mi_arenas_page_init_meta(mi_theap_t* theap, mi_page_t* page, uint8_t
   // initialize the page start
   uint8_t* const start = slice_start + block_start;
   mi_assert_internal(start > (uint8_t*)page);
-  #if defined(__CHERI_PURE_CAPABILITY__)
-  page->page_start = start;
+  #if MI_CHERI
+  page->page_start = (uint8_t*)mi_ptr_bounded(start, reserved * block_size);  // all blocks are derived from this
   #else
   page->page_offset = start - (uint8_t*)page;
   #endif
@@ -672,6 +675,8 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   // all blocks must be naturally aligned (as relied upon by `mi_malloc_aligned`)
   mi_assert_internal(block_size % mi_natural_alignment_of_size(block_size) == 0);
   mi_assert_internal(mi_is_aligned(slice_start + block_start, mi_natural_alignment_of_size(block_size)));
+  // on CHERI, all blocks must have exactly representable bounds
+  mi_assert_internal(mi_bounds_size(block_size) == block_size && mi_is_aligned(slice_start + block_start, mi_bounds_align(block_size)));
 
   // commit the first block (if needed)
   const size_t alloc_size        = _mi_size_of_slices(slice_count);
@@ -751,7 +756,7 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_theap_t* theap, size_t block
   #if MI_PAGE_META_IS_ALIGNED
   const size_t info_size = 0;
   #else
-  const size_t info_size = (os_align ? MI_PAGE_ALIGN : mi_page_info_size());
+  const size_t info_size = (os_align ? MI_PAGE_ALIGN : mi_align_up(mi_page_info_size(), mi_bounds_align(block_size)));  // see `mi_page_meta_in_front_block_start`
   #endif
   // room for the cache offset of the block (committed but not touched)
   const size_t cache_offset_size = (mi_page_block_can_cache_offset(block_size, os_align) ? MI_PAGE_CACHE_OFFSET_MAX : 0);

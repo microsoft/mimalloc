@@ -96,7 +96,7 @@ static inline void** mi_prim_thread_pointer(void) {
   return (void**)__builtin_thread_pointer();
 }
 #elif defined(__GNUC__) && !defined(__CYGWIN__)
-  #if defined(__CHERI_PURE_CAPABILITY__)
+  #if MI_CHERI
   #define MI_NO_THREAD_POINTER (1)
   #elif defined(__aarch64__)
   static inline void** mi_prim_thread_pointer(void) {
