@@ -87,11 +87,11 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
   if (ppage!=NULL) { *ppage = page; }
 
   // .. and align within the allocation
-  const uintptr_t align_mask = alignment - 1;  // for any x, `(x & align_mask) == (x % alignment)`
-  const uintptr_t poffset = ((uintptr_t)p + offset) & align_mask;
-  const uintptr_t adjust  = (poffset == 0 ? 0 : alignment - poffset);
+  const size_t align_mask = alignment - 1;  // for any x, `(x & align_mask) == (x % alignment)`
+  const size_t poffset = (size_t)((mi_addr(p) + offset) & align_mask);
+  const size_t adjust  = (poffset == 0 ? 0 : alignment - poffset);
   mi_assert_internal(adjust < alignment);
-  void* aligned_p = (void*)((uintptr_t)p + adjust);
+  void* aligned_p = mi_ptr_with_addr(p, mi_addr(p) + adjust);
 
   // note: after the above allocation, the page may be abandoned now (as it became full, see `alloc/alloc-generic.c:_mi_malloc_generic`)
   // and we no longer own it. We should be careful to only read constant fields in the page,
@@ -115,7 +115,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
   // todo: expand padding if overallocated ?
 
   mi_assert_internal(mi_page_usable_block_size(page) >= adjust + size);
-  mi_assert_internal(((uintptr_t)aligned_p + offset) % alignment == 0);
+  mi_assert_internal((mi_addr(aligned_p) + offset) % alignment == 0);
   mi_assert_internal(mi_usable_size(aligned_p)>=size);
   mi_assert_internal(mi_usable_size(p) == mi_usable_size(aligned_p)+adjust);
   #if MI_DEBUG > 1
@@ -159,7 +159,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_generic(mi_theap_t
         mi_page_t* page = NULL;
         void* p = _mi_theap_malloc_zero(theap, size, zero, 0,&page);
         if (ppage!=NULL) { *ppage = page; }
-        const bool is_aligned_or_null = (((uintptr_t)p) & (alignment-1))==0;
+        const bool is_aligned_or_null = (mi_addr(p) & (alignment-1))==0;
         if mi_likely(is_aligned_or_null) {
           return p;
         }
@@ -210,17 +210,17 @@ static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, siz
       if mi_likely(!mi_theap_should_sample(theap,size))
       #endif
       {
-        const uintptr_t align_mask = alignment-1;       // for any x, `(x & align_mask) == (x % alignment)`
+        const size_t align_mask = alignment-1;       // for any x, `(x & align_mask) == (x % alignment)`
         const size_t padsize = size + MI_PADDING_SIZE;
         mi_page_t* page = mi_theap_get_free_small_page(theap, padsize, false);
         if mi_likely(page->free != NULL) {
-          const bool is_aligned = (((uintptr_t)page->free + offset) & align_mask)==0;
+          const bool is_aligned = ((mi_addr(page->free) + offset) & align_mask)==0;
           if mi_likely(is_aligned)
           {
             if (ppage!=NULL) { *ppage = page; }
             void* p = _mi_page_malloc_zero(theap, page, padsize, zero); // theap!=NULL
             mi_assert_internal(p != NULL);
-            mi_assert_internal(((uintptr_t)p + offset) % alignment == 0);
+            mi_assert_internal((mi_addr(p) + offset) % alignment == 0);
             mi_track_malloc(p, size, zero);
             return p;
           }
@@ -345,7 +345,7 @@ static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t
   if (alignment <= sizeof(uintptr_t) && offset==0) return _mi_theap_realloc_zero(theap,p,newsize,zero);
   if (p == NULL) return mi_theap_malloc_zero_aligned_at(theap,newsize,alignment,offset,zero,NULL);
   const size_t size = mi_usable_size(p);
-  if (newsize <= size && newsize >= (size - (size / 2)) && (((uintptr_t)p + offset) & (alignment-1)) == 0) {
+  if (newsize <= size && newsize >= (size - (size / 2)) && ((mi_addr(p) + offset) & (alignment-1)) == 0) {
     return p;  // reallocation still fits, is aligned and not more than 50% waste
   }
   else {

@@ -81,31 +81,9 @@ typedef int32_t  mi_ssize_t;
 #define MI_SIZE_SIZE  (1<<MI_SIZE_SHIFT)
 #define MI_SIZE_BITS  (MI_SIZE_SIZE*8)
 
-// ------------------------------------------------------
-// Addresses: the integer value of a pointer.
-// Usually `mi_addr_t == uintptr_t == size_t`, but on CHERI `uintptr_t` is a 128-bit capability
-// while the address (`ptraddr_t`) is 64-bit. Use `mi_addr(p)` to get the address of a pointer
-// (and derive pointers from an existing pointer to keep provenance).
-// ------------------------------------------------------
-
-#if defined(__PTRADDR_TYPE__)
-typedef __PTRADDR_TYPE__  mi_addr_t;
-#else
-typedef uintptr_t         mi_addr_t;
-#endif
-
-#if defined(__CHERI_PURE_CAPABILITY__)
-#define mi_addr(p)        ((mi_addr_t)__builtin_cheri_address_get(p))
-#else
-#define mi_addr(p)        ((mi_addr_t)(uintptr_t)(p))
-#endif
-
-#define MI_AU(x)          ((mi_addr_t)(x))
-
 #define MI_KiB     (MI_ZU(1024))
 #define MI_MiB     (MI_KiB*MI_KiB)
 #define MI_GiB     (MI_MiB*MI_KiB)
-
 
 /* --------------------------------------------------------------------------------
   Architecture
@@ -179,6 +157,42 @@ typedef uintptr_t         mi_addr_t;
 #endif
 #endif
 
+// ------------------------------------------------------
+// Raw addresses: the integer value of a pointer (without provenance).
+// Usually `mi_addr_t == uintptr_t == size_t`, but on CHERI `uintptr_t` is a 128-bit capability
+// while the address (`ptraddr_t`) is 64-bit. Use `mi_addr(p)` to get the address of a pointer
+// (and derive pointers from an existing pointer to keep provenance).
+// ------------------------------------------------------
+
+#if defined(__PTRADDR_TYPE__)
+typedef __PTRADDR_TYPE__  mi_addr_t;
+#else
+typedef uintptr_t         mi_addr_t;
+#endif
+#define MI_AU(x)          ((mi_addr_t)(x))
+
+// Get the address part of a pointer (without provenance)
+static inline mi_addr_t mi_addr(const void* p) {
+  #if defined(__CHERI_PURE_CAPABILITY__)
+  return (mi_addr_t)__builtin_cheri_address_get(p);
+  #else
+  return (mi_addr_t)(uintptr_t)(p);
+  #endif
+}
+
+// Derive a pointer with address `addr` from `p` (keeping the provenance of `p`)
+static inline void* mi_ptr_with_addr(const void* p, mi_addr_t addr) {
+  #if defined(__CHERI_PURE_CAPABILITY__)
+  return (void*)__builtin_cheri_address_set(p, addr);
+  #else
+  return (void*)((uintptr_t)p + (addr - mi_addr(p)));
+  #endif
+}
+
+// A pointer from an address without provenance
+static inline void* mi_ptr_from_addr(mi_addr_t addr) {
+  return (void*)(uintptr_t)addr;
+}
 
 /* --------------------------------------------------------------------------------
   Builtin's

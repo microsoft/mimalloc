@@ -115,7 +115,7 @@ static void* mi_prim_mem_grow(size_t size, size_t try_alignment) {
     return NULL;
   }
   */
-  mi_assert_internal( p == NULL || try_alignment == 0 || (uintptr_t)p % try_alignment == 0 );
+  mi_assert_internal( p == NULL || try_alignment == 0 || mi_addr(p) % try_alignment == 0 );
   return p;
 }
 

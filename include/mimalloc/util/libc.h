@@ -77,8 +77,7 @@ static inline mi_addr_t mi_addr_align_up(mi_addr_t addr, size_t alignment) {
 
 // Align a pointer upwards
 static inline void* mi_align_up_ptr(const void* p, size_t alignment) {
-  const mi_addr_t addr = mi_addr(p);
-  return (void*)((uintptr_t)p + (mi_addr_align_up(addr, alignment) - addr));  // keep provenance
+  return mi_ptr_with_addr(p, mi_addr_align_up(mi_addr(p), alignment));
 }
 
 // Align down
@@ -107,8 +106,7 @@ static inline mi_addr_t mi_addr_align_down(mi_addr_t addr, size_t alignment) {
 
 // Align a pointer downwards
 static inline void* mi_align_down_ptr(const void* p, size_t alignment) {
-  const mi_addr_t addr = mi_addr(p);
-  return (void*)((uintptr_t)p - (addr - mi_addr_align_down(addr, alignment)));  // keep provenance
+  return mi_ptr_with_addr(p, mi_addr_align_down(mi_addr(p), alignment));
 }
 
 // Divide upwards: `s <= mi_divide_up(s,d)*d < s+d`.

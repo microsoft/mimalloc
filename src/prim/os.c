@@ -166,7 +166,7 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
   }
   const mi_addr_t hint_align = mi_addr_align_up(hint,try_alignment);
   mi_assert_internal(hint_align + sze < hint + req_size);
-  return (void*)(uintptr_t)hint_align;
+  return mi_ptr_from_addr(hint_align);
 }
 #else
 void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
@@ -763,7 +763,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
         start = start + (MI_AU(MI_HUGE_OS_PAGE_SIZE) * ((r>>17) & 0x0FFF));  // (randomly 12bits)*1GiB == between 0 to 4TiB
       }
       else {
-        _mi_warning_message("failed to randomize the start address of huge pages allocation (%zu bytes at %p)", size, (void*)(uintptr_t)start);
+        _mi_warning_message("failed to randomize the start address of huge pages allocation (%zu bytes at %p)", size, mi_ptr_from_addr(start));
       }
       #endif
     }
@@ -771,7 +771,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
   } while (!mi_atomic_cas_weak_acq_rel(&mi_huge_start, &huge_start, end));
 
   if (total_size != NULL) *total_size = size;
-  return (uint8_t*)(uintptr_t)start;
+  return (uint8_t*)mi_ptr_from_addr(start);
 }
 #else
 static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {

@@ -49,7 +49,7 @@ static inline mi_page_t* mi_ptr_page_ex(const void* p, bool* valid) {
 
 static inline mi_page_t* mi_checked_ptr_page(const void* p) {
   #if MI_MIN_VABITS < MI_INTPTR_BITS
-  if mi_unlikely(((uintptr_t)p >> MI_MIN_VABITS) != 0) {
+  if mi_unlikely((mi_addr(p) >> MI_MIN_VABITS) != 0) {
     if (p > mi_atomic_load_ptr_relaxed(void, &_mi_page_map_max_address)) return NULL;
   }
   #endif

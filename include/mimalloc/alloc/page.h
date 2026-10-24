@@ -64,12 +64,7 @@ static inline uint8_t* mi_page_start(const mi_page_t* page) {
 
 // Derive a block pointer from an address in the page; on CHERI this gives it the authority of the page start.
 static inline mi_block_t* mi_page_block_from_addr(const mi_page_t* page, mi_addr_t addr) {
-  #if defined(__CHERI_PURE_CAPABILITY__)
-  return (mi_block_t*)__builtin_cheri_address_set(page->page_start, addr);
-  #else
-  MI_UNUSED(page);
-  return (mi_block_t*)(uintptr_t)addr;
-  #endif
+  return (mi_block_t*)mi_ptr_with_addr(mi_page_start(page), addr);
 }
 
 static inline size_t mi_page_size(const mi_page_t* page) {

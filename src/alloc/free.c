@@ -44,9 +44,6 @@ static inline void mi_debug_fill(const mi_page_t* page, void* block, int c, size
 // fast path written carefully to prevent spilling on the stack
 static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool was_guarded, bool check_full)
 {
-  #if defined(__CHERI_PURE_CAPABILITY__)
-  block = mi_page_block_from_addr(page, mi_addr(block));  // don't keep the user's capability
-  #endif
   // checks
   size_t usable_size;
   if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return;
@@ -91,9 +88,6 @@ static inline
 #endif
 void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool allow_reclaim) mi_attr_noexcept
 {
-  #if defined(__CHERI_PURE_CAPABILITY__)
-  block = mi_page_block_from_addr(page, mi_addr(block));  // don't keep the user's capability
-  #endif
   size_t usable_size;
   if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return;    // checking padding is safe for mt
   mi_track_free_size(block, usable_size);
@@ -140,7 +134,7 @@ static inline mi_block_t* mi_page_ptr_unalign_ex(const mi_page_t* page, const vo
     adjust = diff % block_size;
   }
   if (poffset!=NULL) { *poffset = adjust; }
-  return (mi_block_t*)((uintptr_t)p - adjust);
+  return mi_page_block_from_addr(page, mi_addr(p) - adjust);  // don't keep the user's capability
 }
 
 mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
@@ -153,8 +147,7 @@ static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, con
   // in secure mode we always unalign to guard against free-ing interior pointers
   return _mi_page_ptr_unalign(page,p);
   #else
-  MI_UNUSED(page);
-  return (mi_block_t*)p;
+  return mi_page_block_from_addr(page, mi_addr(p));  // don't keep the user's capability
   #endif
 }
 
@@ -232,9 +225,9 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
   mi_page_t* page;
   #if MI_PAGE_META_SMALL_IS_ALIGNED
     if (free_small) {
-      const uintptr_t up = (uintptr_t)p & ~(uintptr_t)(MI_SMALL_PAGE_SIZE-1);  // like this for codegen on gcc (and keep provenance)
+      const mi_addr_t up = mi_addr(p) & ~MI_AU(MI_SMALL_PAGE_SIZE-1);  // like this for codegen on gcc
       if mi_unlikely(up==0 && check_p_for_null) { return false; }
-      page = (mi_page_t*)up;
+      page = (mi_page_t*)mi_ptr_with_addr(p, up);
     }
     else
   #endif
@@ -435,7 +428,7 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
 }
 
 void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept {
-  mi_assert(((uintptr_t)p % alignment) == 0);
+  mi_assert((mi_addr(p) % alignment) == 0);
   // If the alignment is smaller than the `size`, then for `size <= MI_SMALL_SIZE_MAX`
   // the block must be allocated within a small page and can thus be handled safely by `mi_free_size`.
   // (since even with over-allocation the block size will be less than 2*MI_SMALL_SIZE_MAX <= MI_SMALL_OBJ_SIZE_MAX)
@@ -449,7 +442,7 @@ void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexce
 
 void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
   MI_UNUSED_RELEASE(alignment);
-  mi_assert(((uintptr_t)p % alignment) == 0);
+  mi_assert((mi_addr(p) % alignment) == 0);
   mi_free(p);
 }
 

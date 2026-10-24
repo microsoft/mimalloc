@@ -45,7 +45,7 @@ void mi_heap_stats_merge_to_main(mi_heap_t* heap) {
 }
 
 bool _mi_heap_theap_set(mi_heap_t* heap, mi_theap_t* theap) {
-  mi_assert_internal((uintptr_t)theap == 1 || mi_theap_heap(theap)==heap);
+  mi_assert_internal(mi_addr(theap) == 1 || mi_theap_heap(theap)==heap);
   mi_assert_internal(!_mi_is_empty_theap(theap));
   mi_assert_internal(heap->theap != 0);
   return _mi_thread_local_set(heap->theap,theap);
