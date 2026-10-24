@@ -183,9 +183,11 @@ terms of the MIT license. A copy of the license can be found in the file
 // This can be used to have a slightly faster `mi_free_small` function for specialized
 // cases (like language runtime systems).
 #if !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
-#if defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0
+// guarded can put small allocations into big blocks in a medium page (which would make `mi_free_small` fail)
+// on CHERI we cannot derive the page from a (bounded) user pointer
+#if (defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0) || MI_SECURE || MI_GUARDED || defined(__CHERI_PURE_CAPABILITY__)
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0
-#elif (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED) && !MI_SECURE && !MI_GUARDED // guarded can put small allocations into big blocks in a medium page (which would make `mi_free_small` fail)
+#elif (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED)
 #define MI_PAGE_META_SMALL_IS_ALIGNED   1
 #else
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0

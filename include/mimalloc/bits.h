@@ -148,9 +148,14 @@ typedef int32_t  mi_ssize_t;
 #define MI_MIN_VABITS     (43)    /* 8 TiB */
 #endif
 
+// On CHERI, always use the page map in `mi_free` as we cannot derive the page meta-data from a (bounded) user pointer
+#if defined(__CHERI_PURE_CAPABILITY__) && !defined(MI_FREE_USE_PAGEMAP)
+#define MI_FREE_USE_PAGEMAP  1
+#endif
+
 // use a flat page-map or a 2-level one
 #ifndef MI_PAGE_MAP_FLAT
-#if MI_MAX_VABITS <= 40 && !defined(__APPLE__) && !MI_SECURE && !MI_FREE_IS_CHECKED && MI_FREE_USE_PAGEMAP
+#if MI_MAX_VABITS <= 40 && !defined(__APPLE__) && !defined(__CHERI_PURE_CAPABILITY__) && !MI_SECURE && !MI_FREE_IS_CHECKED && MI_FREE_USE_PAGEMAP
 #define MI_PAGE_MAP_FLAT  1
 #else
 #define MI_PAGE_MAP_FLAT  0
