@@ -100,6 +100,8 @@ typedef struct {
   _Atomic(size_t)      inuse_interval_threshold;  // next `inuse_bytes` total that triggers a snapshot; advanced (monotonically increasing) whenever reached in `on_alloc`
   size_t               time_interval_secs;        // if >0, automatically snapshot every `time_interval_secs` seconds (checked from `on_alloc`)
   _Atomic(mi_msecs_t)  time_interval_deadline;    // next `_mi_clock_now()` value that triggers a snapshot; advanced (monotonically increasing) whenever reached in `on_alloc`
+  int64_t              start_time_secs;           // wall-clock time at creation (seconds since the Unix epoch)
+  mi_msecs_t           start_clock;               // `_mi_clock_now()` at creation (monotonic, so snapshot times are `start_time_secs` + elapsed clock)
 } mi_pprof_profiler_t;
 
 static inline mi_pprof_profiler_t* downcast( mi_profiler_t* prof ) {
@@ -108,6 +110,7 @@ static inline mi_pprof_profiler_t* downcast( mi_profiler_t* prof ) {
 
 static void    mi_pprof_profiler_snapshot(mi_pprof_profiler_t* prof);
 static size_t  mi_prim_backtrace(void** buffer, size_t max_depth, size_t* hash);  // `buffer` must have room for `max_depth + MI_PPROF_SKIP_FRAMES + 1` entries (see definition)
+static int64_t mi_prim_time_secs(void);  // wall-clock seconds since the Unix epoch (0 if unavailable)
 
 
 // ---------------------------------------------------------------------------
@@ -382,7 +385,9 @@ mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_
   prof->inuse_interval_size = inuse_interval_size;
   mi_atomic_store_relaxed(&prof->inuse_interval_threshold, prof->inuse_interval_size);  // 0 if disabled (`inuse_interval_size` defaults to 0): `on_alloc` never checks in that case
   prof->time_interval_secs = time_interval_secs;
-  mi_atomic_storei64_relaxed(&prof->time_interval_deadline, _mi_clock_now() + (mi_msecs_t)prof->time_interval_secs * 1000);  // deadline stays unreachable (now, i.e. always due) if disabled, but `on_alloc` never checks in that case
+  prof->start_time_secs = mi_prim_time_secs();
+  prof->start_clock = _mi_clock_now();
+  mi_atomic_storei64_relaxed(&prof->time_interval_deadline, prof->start_clock + (mi_msecs_t)prof->time_interval_secs * 1000);  // deadline stays unreachable (now, i.e. always due) if disabled, but `on_alloc` never checks in that case
   if (!mi_locations_init(heap, &prof->locations)) {
     // `mi_heap_destroy` frees the live blocks of this private heap, i.e. the
     // profiler object and the base file name. (`mi_heap_delete` would instead
@@ -543,6 +548,10 @@ static size_t mi_prim_backtrace(void** buffer, size_t max_depth, size_t* hash) {
   return 0;
 }
 
+static int64_t mi_prim_time_secs(void) {
+  return 0;
+}
+
 void mi_pprof_profiler_snapshot(mi_pprof_profiler_t* profiler) {
   MI_UNUSED(profiler);
 }
@@ -550,6 +559,7 @@ void mi_pprof_profiler_snapshot(mi_pprof_profiler_t* profiler) {
 #else
 
 #include <stdio.h>      // FILE, fopen, fprintf, fclose
+#include <time.h>       // time
 #if defined(_WIN32)
 #include <fcntl.h>      // _O_CREAT, _O_TRUNC, _O_WRONLY, _O_BINARY, _O_TEXT
 #include <io.h>         // _sopen_s, _fdopen, _close
@@ -586,6 +596,12 @@ static bool mi_is_elevated_process(void) {
   return false;  // no portable way to check without `unistd.h`; assume not elevated
 }
 #endif
+
+
+static int64_t mi_prim_time_secs(void) {
+  const time_t t = time(NULL);
+  return (t == (time_t)-1 ? 0 : (int64_t)t);
+}
 
 
 // Open a snapshot file for writing, refusing to follow a symlink at `fname` (to avoid an
@@ -1470,7 +1486,9 @@ static bool mi_pprof_build_proto(mi_pprof_profiler_t* prof, mi_pb_buf_t* profile
     mi_pb_done(&period_type);
   }
   mi_pb_int64_field(profile, 12, (int64_t)prof->sample_threshold);      // period
-  mi_pb_int64_field(profile, 9, (int64_t)_mi_clock_now() * 1000);       // clock_now is in milli-secs
+  const int64_t elapsed_nanos = (int64_t)(_mi_clock_now() - prof->start_clock) * 1000000LL;  // clock is in milli-secs
+  mi_pb_int64_field(profile, 9, prof->start_time_secs * 1000000000LL + elapsed_nanos);  // time_nanos
+  mi_pb_int64_field(profile, 10, elapsed_nanos);                                       // duration_nanos
 
   // the string table (Profile.string_table = 6) can only be finalized now,
   // since strings were interned into it while building the message above.

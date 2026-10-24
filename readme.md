@@ -15,7 +15,7 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.5.3`  (2026-09-16) recommended.\
+Latest release   : `v3.6.0`  (2026-10-23) recommended.\
 Latest v2 release: `v2.5.2`  (2026-09-12) stable, legacy.\
 Latest v1 release: `v1.15.2` (2026-09-12) legacy.
 
@@ -90,6 +90,14 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 
 ### Releases
 
+* 2026-10-23, `v3.6.0`: (v3) add initial [profiling](#profiling) hooks and default profiler, "always on"
+  detailed statistics per size-bin, and always-on profiling. Initial rust bindings. Better support
+  for large OS page sizes, support a quiescent state based reclamation interfacec (for CPython),
+  better cache line aware allocation, fix heap visitor where some pages might be skipped, improve
+  fork support, avoid over-allocation for naturally aligned allocations, fix stderr console output
+  for XBox, fix huge allocation rollback, refactor the source and include files, immediately purge
+  very large allocations, fix bcrypt dependency on windows, fix heap-destroy bug when a fresh heap
+  was allocated at the same address (giving a segfault), page_reclaim_on_free is now on by default.
 * 2026-09-16, `v3.5.3`: (v3) critical bug fix (where the first new on a thread could
   fail on some platforms #1398). Fix bug with `mi_free_size` on overaligned small allocations (#1400).
 * 2026-09-12, `v3.5.2`, `v2.5.2`, `v1.15.2`: (v3) Reduced cache contention, improved `mi_malloc_csize`,

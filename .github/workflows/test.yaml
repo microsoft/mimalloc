@@ -11,6 +11,8 @@ concurrency:
   cancel-in-progress: true # Cancel any in-progress runs of this workflow when a new run is triggered on the same ref (branch or tag)
 
 name: Test
+permissions:
+  contents: read
 jobs:
   build:
     name: Test
