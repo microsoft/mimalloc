@@ -200,7 +200,7 @@ static size_t unix_detect_large_page_size(void) {
     if (nread >= 1 && nread < (ssize_t)sizeof(buf)) {
       buf[nread] = 0;
       long size = 0;
-      if (_mi_strntol(buf, nread, NULL, &size) && size > 0 && size <= SIZE_MAX) {
+      if (_mi_strntol(buf, nread, NULL, &size) && size > 0 && (unsigned long)size <= SIZE_MAX) {
         large_page_size = (size_t)size;
       }
     }
@@ -507,6 +507,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       }
       else
       #endif
+      {  // keep the `else` above well-formed when MI_NO_THP is defined
       #if !defined(MI_NO_THP)
       if (allow_large && mi_option_is_enabled(mi_option_allow_thp) && _mi_os_canuse_large_page(size,try_alignment)) {
         #if defined(MADV_HUGEPAGE)
@@ -531,6 +532,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
         #endif
       }
       #endif
+      }
     }
   }
   return p;
@@ -1062,7 +1064,8 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 
 // use pthread local storage keys to detect thread ending
 // (and used with MI_TLS_PTHREADS for the default theap)
-pthread_key_t _mi_heap_default_key = MI_PTHREAD_KEY_INVALID;
+// atomic as a thread may initialize while the process is exiting and deleting the key
+static _Atomic(pthread_key_t) _mi_heap_default_key = MI_ATOMIC_VAR_INIT(MI_PTHREAD_KEY_INVALID);
 
 static void mi_pthread_done(void* value) {
   if (value!=NULL) {
@@ -1071,21 +1074,24 @@ static void mi_pthread_done(void* value) {
 }
 
 void _mi_prim_thread_init_auto_done(void) {
-  mi_assert_internal(_mi_heap_default_key == MI_PTHREAD_KEY_INVALID);
-  pthread_key_create(&_mi_heap_default_key, &mi_pthread_done);
+  mi_assert_internal(mi_atomic_load_relaxed(&_mi_heap_default_key) == MI_PTHREAD_KEY_INVALID);
+  pthread_key_t key;
+  if (pthread_key_create(&key, &mi_pthread_done) == 0) {
+    mi_atomic_store_release(&_mi_heap_default_key, key);
+  }
 }
 
 void _mi_prim_thread_done_auto_done(void) {
-  pthread_key_t key = _mi_heap_default_key;
+  pthread_key_t key = mi_atomic_exchange_relaxed(&_mi_heap_default_key, MI_PTHREAD_KEY_INVALID);
   if (key != MI_PTHREAD_KEY_INVALID) {  // do not leak the key, see issue #809
-    _mi_heap_default_key = MI_PTHREAD_KEY_INVALID;
     pthread_key_delete(key);
   }
 }
 
 void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
-  if (_mi_heap_default_key != MI_PTHREAD_KEY_INVALID) {  // can happen during recursive invocation on freeBSD
-    pthread_setspecific(_mi_heap_default_key, theap);
+  pthread_key_t key = mi_atomic_load_relaxed(&_mi_heap_default_key);
+  if (key != MI_PTHREAD_KEY_INVALID) {  // can happen during recursive invocation on freeBSD
+    pthread_setspecific(key, theap);
   }
 }
 
