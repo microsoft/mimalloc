@@ -135,8 +135,8 @@ static bool mi_random_is_initialized(mi_random_ctx_t* ctx) {
 void _mi_random_split(mi_random_ctx_t* ctx, mi_random_ctx_t* ctx_new) {
   mi_assert_internal(ctx != ctx_new);
   if mi_unlikely(!mi_random_is_initialized(ctx)) { _mi_random_init(ctx); }
-  const uintptr_t nonce_rnd = _mi_random_next(ctx);
-  chacha_split(ctx, (uintptr_t)ctx_new ^ nonce_rnd /*nonce*/, ctx_new);
+  const size_t nonce_rnd = _mi_random_next(ctx);
+  chacha_split(ctx, mi_addr(ctx_new) ^ nonce_rnd /*nonce*/, ctx_new);
 }
 
 size_t _mi_random_next(mi_random_ctx_t* ctx) {
@@ -161,7 +161,7 @@ If we cannot get good randomness, we fall back to weak randomness based on a tim
 -----------------------------------------------------------------------------*/
 
 size_t _mi_os_random_weak(size_t extra_seed) {
-  size_t x = (size_t)&_mi_os_random_weak ^ extra_seed; // ASLR makes the address random
+  size_t x = (size_t)(uintptr_t)&_mi_os_random_weak ^ extra_seed; // ASLR makes the address random
   x ^= _mi_prim_clock_now();
   // and do a few randomization steps
   size_t max = ((x ^ (x >> 17)) & 0x0F) + 1;
@@ -193,7 +193,7 @@ static void mi_random_init_ex(mi_random_ctx_t* ctx, bool use_weak) {
   else {
     ctx->weak = false;
   }
-  chacha_init(ctx, key, (uintptr_t)ctx /*nonce*/ );
+  chacha_init(ctx, key, mi_addr(ctx) /*nonce*/ );
   mi_memzero(key, sizeof(key));
 }
 

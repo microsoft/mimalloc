@@ -81,6 +81,27 @@ typedef int32_t  mi_ssize_t;
 #define MI_SIZE_SIZE  (1<<MI_SIZE_SHIFT)
 #define MI_SIZE_BITS  (MI_SIZE_SIZE*8)
 
+// ------------------------------------------------------
+// Addresses: the integer value of a pointer.
+// Usually `mi_addr_t == uintptr_t == size_t`, but on CHERI `uintptr_t` is a 128-bit capability
+// while the address (`ptraddr_t`) is 64-bit. Use `mi_addr(p)` to get the address of a pointer
+// (and derive pointers from an existing pointer to keep provenance).
+// ------------------------------------------------------
+
+#if defined(__PTRADDR_TYPE__)
+typedef __PTRADDR_TYPE__  mi_addr_t;
+#else
+typedef uintptr_t         mi_addr_t;
+#endif
+
+#if defined(__CHERI_PURE_CAPABILITY__)
+#define mi_addr(p)        ((mi_addr_t)__builtin_cheri_address_get(p))
+#else
+#define mi_addr(p)        ((mi_addr_t)(uintptr_t)(p))
+#endif
+
+#define MI_AU(x)          ((mi_addr_t)(x))
+
 #define MI_KiB     (MI_ZU(1024))
 #define MI_MiB     (MI_KiB*MI_KiB)
 #define MI_GiB     (MI_MiB*MI_KiB)

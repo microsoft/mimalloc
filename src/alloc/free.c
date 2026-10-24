@@ -45,7 +45,7 @@ static inline void mi_debug_fill(const mi_page_t* page, void* block, int c, size
 static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool was_guarded, bool check_full)
 {
   #if defined(__CHERI_PURE_CAPABILITY__)
-  block = mi_page_block_from_addr(page, (size_t)(uintptr_t)block);  // don't keep the user's capability
+  block = mi_page_block_from_addr(page, mi_addr(block));  // don't keep the user's capability
   #endif
   // checks
   size_t usable_size;
@@ -92,7 +92,7 @@ static inline
 void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool allow_reclaim) mi_attr_noexcept
 {
   #if defined(__CHERI_PURE_CAPABILITY__)
-  block = mi_page_block_from_addr(page, (size_t)(uintptr_t)block);  // don't keep the user's capability
+  block = mi_page_block_from_addr(page, mi_addr(block));  // don't keep the user's capability
   #endif
   size_t usable_size;
   if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return;    // checking padding is safe for mt
@@ -232,7 +232,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
   mi_page_t* page;
   #if MI_PAGE_META_SMALL_IS_ALIGNED
     if (free_small) {
-      const uintptr_t up = mi_align_down((uintptr_t)p,MI_SMALL_PAGE_SIZE);  // like this for codegen on gcc
+      const uintptr_t up = (uintptr_t)p & ~(uintptr_t)(MI_SMALL_PAGE_SIZE-1);  // like this for codegen on gcc (and keep provenance)
       if mi_unlikely(up==0 && check_p_for_null) { return false; }
       page = (mi_page_t*)up;
     }

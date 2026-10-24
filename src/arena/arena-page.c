@@ -303,7 +303,7 @@ static bool mi_page_block_can_cache_offset(size_t block_size, bool os_align) {
 
 static size_t mi_page_cache_offset_index(uint8_t* slice_start, size_t slice_count, size_t noffsets) {
   // Fibonacci hash of the page index: the top bits spread consecutive pages evenly over the offsets
-  const size_t page_index = (size_t)((uintptr_t)slice_start / MI_ARENA_SLICE_SIZE) / slice_count;
+  const size_t page_index = (size_t)(mi_addr(slice_start) / MI_ARENA_SLICE_SIZE) / slice_count;
   #if MI_SIZE_BITS >= 64
   const size_t hash = page_index * MI_ZU(0x9E3779B97F4A7C15);
   #else

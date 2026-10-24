@@ -199,7 +199,7 @@ int _mi_getenv(const char* name, char* result, size_t result_size) {
 // If it returns `true`, the caller should call `_mi_atomic_once_release` after performing the action.
 // Other threads (than the initial thread that entered) will block until `_mi_atomic_once_release` has been called.
 bool _mi_atomic_once_enter(mi_atomic_once_t* once) {
-  const uintptr_t once_tid = mi_atomic_load_acquire(&once->tid);
+  const size_t once_tid = mi_atomic_load_acquire(&once->tid);
   if mi_likely(once_tid == 1) {
     return false; // already executed
   }
@@ -209,7 +209,7 @@ bool _mi_atomic_once_enter(mi_atomic_once_t* once) {
   }
 
   mi_lock_acquire(&once->lock);
-  uintptr_t expected = 0;
+  size_t expected = 0;
   if (mi_atomic_cas_strong_acq_rel(&once->tid, &expected, current_tid)) {  // could use atomic_load/store as well
     return true;  // should execute and release
   }

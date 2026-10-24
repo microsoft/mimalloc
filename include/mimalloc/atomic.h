@@ -411,14 +411,14 @@ static inline mi_ssize_t mi_atomic_loads_relaxed(_Atomic(mi_ssize_t)* p) {
 // Guard
 // ----------------------------------------------------------------------
 
-typedef _Atomic(uintptr_t) mi_atomic_guard_t;
+typedef _Atomic(size_t) mi_atomic_guard_t;
 
 // Allows only one thread to execute at a time (without blocking anyone)
 #define mi_atomic_guard(guard) \
-  uintptr_t _mi_guard_expected = 0; \
+  size_t _mi_guard_expected = 0; \
   for(bool _mi_guard_once = true; \
-      _mi_guard_once && mi_atomic_cas_strong_acq_rel(guard,&_mi_guard_expected,(uintptr_t)1); \
-      (mi_atomic_store_release(guard,(uintptr_t)0), _mi_guard_once = false) )
+      _mi_guard_once && mi_atomic_cas_strong_acq_rel(guard,&_mi_guard_expected,(size_t)1); \
+      (mi_atomic_store_release(guard,(size_t)0), _mi_guard_once = false) )
 
 
 // ----------------------------------------------------------------------
@@ -531,14 +531,14 @@ void _mi_error_message(int err, const char* fmt, ...);
 void _mi_prim_thread_yield(void);
 
 typedef struct mi_lock_s {
-  _Atomic(uintptr_t) mutex;
+  _Atomic(size_t) mutex;
 } mi_lock_t;
 
 #define MI_LOCK_INITIALIZER  { MI_ATOMIC_VAR_INIT(0) }
 
 static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
-  uintptr_t expected = 0;
-  return mi_atomic_cas_strong_acq_rel(&lock->mutex, &expected, (uintptr_t)1);
+  size_t expected = 0;
+  return mi_atomic_cas_strong_acq_rel(&lock->mutex, &expected, (size_t)1);
 }
 static inline void mi_lock_acquire(mi_lock_t* lock) {
   size_t ticks = 0;
@@ -549,7 +549,7 @@ static inline void mi_lock_acquire(mi_lock_t* lock) {
   _mi_error_message(EFAULT, "internal error: lock cannot be acquired (due to lack of native lock primitives)\n");
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
-  mi_atomic_store_release(&lock->mutex, (uintptr_t)0);
+  mi_atomic_store_release(&lock->mutex, (size_t)0);
 }
 static inline void mi_lock_init(mi_lock_t* lock) {
   mi_lock_release(lock);
@@ -562,7 +562,7 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 
 
 typedef struct mi_atomic_once_s {
-  _Atomic(uintptr_t) tid;
+  _Atomic(size_t)    tid;
   mi_lock_t          lock;
 } mi_atomic_once_t;
 

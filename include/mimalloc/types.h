@@ -514,7 +514,7 @@ typedef struct mi_page_s {
   mi_memid_t                memid;             // const: provenance of the page memory
 
   #if (MI_ENCODE_FREELIST || MI_PADDING)
-  uintptr_t                 keys[MI_PAGE_KEY_COUNT]; // const: one or two random keys to encode the free lists (see `_mi_block_next`) or padding canary
+  mi_addr_t                 keys[MI_PAGE_KEY_COUNT]; // const: one or two random keys to encode the free lists (see `_mi_block_next`) or padding canary
   #endif
   #if MI_QSBR
   struct mi_page_s*         qsbr_next;

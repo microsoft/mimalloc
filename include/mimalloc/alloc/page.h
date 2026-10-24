@@ -63,7 +63,7 @@ static inline uint8_t* mi_page_start(const mi_page_t* page) {
 }
 
 // Derive a block pointer from an address in the page; on CHERI this gives it the authority of the page start.
-static inline mi_block_t* mi_page_block_from_addr(const mi_page_t* page, size_t addr) {
+static inline mi_block_t* mi_page_block_from_addr(const mi_page_t* page, mi_addr_t addr) {
   #if defined(__CHERI_PURE_CAPABILITY__)
   return (mi_block_t*)__builtin_cheri_address_set(page->page_start, addr);
   #else
@@ -527,31 +527,32 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
   // return (mi_ptr_page(p) == mi_ptr_page(q));
 }
 
-// Encoding uses just the address (as `size_t`) and the decoded block is derived from the page (with `page` as the `null` value).
-static inline void* mi_ptr_decode(const mi_page_t* page, const mi_encoded_t x, const uintptr_t* keys) {
-  const size_t k1 = (size_t)keys[0];
+// Encoding uses just the address and the decoded block is derived from the page (with `page` as the `null` value).
+// (the rotations assume `sizeof(mi_addr_t)==sizeof(size_t)`)
+static inline void* mi_ptr_decode(const mi_page_t* page, const mi_encoded_t x, const mi_addr_t* keys) {
+  const mi_addr_t k1 = keys[0];
   #if MI_PAGE_KEY_COUNT==2
-  const size_t k2 = (size_t)keys[1];
+  const mi_addr_t k2 = keys[1];
   #else
-  const size_t k2 = mi_rotr(k1,13);
+  const mi_addr_t k2 = mi_rotr(k1,13);
   #endif
-  const size_t addr = (mi_rotr((size_t)x - k1, k1) ^ k2);
-  if (addr == (size_t)(uintptr_t)page) return NULL;
+  const mi_addr_t addr = (mi_rotr((mi_addr_t)x - k1, k1) ^ k2);
+  if (addr == mi_addr(page)) return NULL;
   return mi_page_block_from_addr(page, addr);
 }
 
-static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const uintptr_t* keys) {
-  const size_t k1 = (size_t)keys[0];
+static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const mi_addr_t* keys) {
+  const mi_addr_t k1 = keys[0];
   #if MI_PAGE_KEY_COUNT==2
-  const size_t k2 = (size_t)keys[1];
+  const mi_addr_t k2 = keys[1];
   #else
-  const size_t k2 = mi_rotr(k1,13);
+  const mi_addr_t k2 = mi_rotr(k1,13);
   #endif
-  const size_t x = (size_t)(uintptr_t)(p==NULL ? null : p);
+  const mi_addr_t x = mi_addr(p==NULL ? null : p);
   return (mi_encoded_t)(mi_rotl(x ^ k2, k1) + k1);
 }
 
-static inline uint32_t mi_ptr_encode_canary(const void* null, const void* p, const uintptr_t* keys) {
+static inline uint32_t mi_ptr_encode_canary(const void* null, const void* p, const mi_addr_t* keys) {
   const uint32_t x = (uint32_t)(mi_ptr_encode(null,p,keys));
   // make the lowest byte 0 to prevent spurious read overflows which could be a security issue (issue #951)
   // also clear bit 9 which we set only when a block is freed.
@@ -570,7 +571,7 @@ static inline bool mi_ptr_decode_canary_is_freed(uint32_t canary) {
   return (canary == mi_ptr_encode_canary_freed());
 }
 
-static inline mi_block_t* mi_block_nextx( const mi_page_t* page, const mi_block_t* block, const uintptr_t* keys ) {
+static inline mi_block_t* mi_block_nextx( const mi_page_t* page, const mi_block_t* block, const mi_addr_t* keys ) {
   mi_track_mem_defined(block,sizeof(mi_block_t));
   mi_block_t* next;
   #if MI_ENCODE_FREELIST
@@ -583,7 +584,7 @@ static inline mi_block_t* mi_block_nextx( const mi_page_t* page, const mi_block_
   return next;
 }
 
-static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const mi_block_t* next, const uintptr_t* keys) {
+static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const mi_block_t* next, const mi_addr_t* keys) {
   mi_track_mem_undefined(block,sizeof(mi_block_t));
   #if MI_ENCODE_FREELIST
   block->next = mi_ptr_encode(null, next, keys);
