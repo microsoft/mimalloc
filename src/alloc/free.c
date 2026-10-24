@@ -44,6 +44,9 @@ static inline void mi_debug_fill(const mi_page_t* page, void* block, int c, size
 // fast path written carefully to prevent spilling on the stack
 static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool was_guarded, bool check_full)
 {
+  #if defined(__CHERI_PURE_CAPABILITY__)
+  block = mi_page_block_from_addr(page, (size_t)(uintptr_t)block);  // don't keep the user's capability
+  #endif
   // checks
   size_t usable_size;
   if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return;
@@ -88,6 +91,9 @@ static inline
 #endif
 void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool allow_reclaim) mi_attr_noexcept
 {
+  #if defined(__CHERI_PURE_CAPABILITY__)
+  block = mi_page_block_from_addr(page, (size_t)(uintptr_t)block);  // don't keep the user's capability
+  #endif
   size_t usable_size;
   if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return;    // checking padding is safe for mt
   mi_track_free_size(block, usable_size);

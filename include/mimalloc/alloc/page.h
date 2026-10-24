@@ -54,8 +54,22 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
 
 // Page start
 static inline uint8_t* mi_page_start(const mi_page_t* page) {
+  #if defined(__CHERI_PURE_CAPABILITY__)
+  return page->page_start;
+  #else
   // multiplication must be done in `size_t`
   return (uint8_t*)page + page->page_offset;
+  #endif
+}
+
+// Derive a block pointer from an address in the page; on CHERI this gives it the authority of the page start.
+static inline mi_block_t* mi_page_block_from_addr(const mi_page_t* page, size_t addr) {
+  #if defined(__CHERI_PURE_CAPABILITY__)
+  return (mi_block_t*)__builtin_cheri_address_set(page->page_start, addr);
+  #else
+  MI_UNUSED(page);
+  return (mi_block_t*)(uintptr_t)addr;
+  #endif
 }
 
 static inline size_t mi_page_size(const mi_page_t* page) {
@@ -513,8 +527,8 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
   // return (mi_ptr_page(p) == mi_ptr_page(q));
 }
 
-// Encoding uses just the address (as `size_t`); on CHERI we derive the pointer provenance from `null` (the page).
-static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {
+// Encoding uses just the address (as `size_t`) and the decoded block is derived from the page (with `page` as the `null` value).
+static inline void* mi_ptr_decode(const mi_page_t* page, const mi_encoded_t x, const uintptr_t* keys) {
   const size_t k1 = (size_t)keys[0];
   #if MI_PAGE_KEY_COUNT==2
   const size_t k2 = (size_t)keys[1];
@@ -522,13 +536,8 @@ static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const 
   const size_t k2 = mi_rotr(k1,13);
   #endif
   const size_t addr = (mi_rotr((size_t)x - k1, k1) ^ k2);
-  const size_t null_addr = (size_t)(uintptr_t)null;
-  if (addr == null_addr) return NULL;
-  #if defined(__CHERI_PURE_CAPABILITY__)
-  return ((uint8_t*)null + (addr - null_addr));
-  #else
-  return (void*)(uintptr_t)addr;
-  #endif
+  if (addr == (size_t)(uintptr_t)page) return NULL;
+  return mi_page_block_from_addr(page, addr);
 }
 
 static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const uintptr_t* keys) {
@@ -561,13 +570,13 @@ static inline bool mi_ptr_decode_canary_is_freed(uint32_t canary) {
   return (canary == mi_ptr_encode_canary_freed());
 }
 
-static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, const uintptr_t* keys ) {
+static inline mi_block_t* mi_block_nextx( const mi_page_t* page, const mi_block_t* block, const uintptr_t* keys ) {
   mi_track_mem_defined(block,sizeof(mi_block_t));
   mi_block_t* next;
   #if MI_ENCODE_FREELIST
-  next = (mi_block_t*)mi_ptr_decode(null, block->next, keys);
+  next = (mi_block_t*)mi_ptr_decode(page, block->next, keys);
   #else
-  MI_UNUSED(keys); MI_UNUSED(null);
+  MI_UNUSED(keys); MI_UNUSED(page);
   next = (mi_block_t*)block->next;
   #endif
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
