@@ -48,19 +48,19 @@ terms of the MIT license. A copy of the license can be found in the file
 // i.e. byte size == `wsize*sizeof(size_t)`.
 static size_t mi_bin(size_t size) {
   size_t wsize = mi_wsize_from_size(size);
-#if defined(MI_ALIGN4W)
+  #if defined(MI_ALIGN4W)
   if mi_likely(wsize <= 4) {
-    return (wsize <= MI_MIN_BLOCK_WSIZE ? MI_MIN_BLOCK_WSIZE : (wsize+1)&~1); // round to double word sizes
+      return (wsize <= MI_MIN_BLOCK_WSIZE ? MI_MIN_BLOCK_WSIZE : (wsize+1)&~1); // round to double word sizes
   }
-#elif defined(MI_ALIGN2W)
+  #elif defined(MI_ALIGN2W)
   if mi_likely(wsize <= 8) {
-    return (wsize <= MI_MIN_BLOCK_WSIZE ? MI_MIN_BLOCK_WSIZE : (wsize+1)&~1); // round to double word sizes
+      return (wsize <= MI_MIN_BLOCK_WSIZE ? MI_MIN_BLOCK_WSIZE : (wsize+1)&~1); // round to double word sizes
   }
-#else
+  #else
   if mi_likely(wsize <= 8) {
     return (wsize == 0 ? 1 : wsize);
   }
-#endif
+  #endif
   else if mi_unlikely(wsize > MI_LARGE_MAX_OBJ_WSIZE) {
     return MI_BIN_HUGE;
   }
