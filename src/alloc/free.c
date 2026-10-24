@@ -89,6 +89,7 @@ static inline void mi_free_block_mt_publish(mi_page_t* page, mi_block_t* head, m
   } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new));
 
   // The page may be gone after publication unless this CAS acquired ownership.
+  mi_assert_internal(mi_tf_is_owned(tf_new));
   if (!mi_tf_is_owned(tf_old)) {
     mi_assert_internal(mi_page_is_abandoned(page));
     mi_free_try_collect_mt(page, head, allow_reclaim);
@@ -647,6 +648,7 @@ static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t*
 // ------------------------------------------------------
 
 static void mi_free_batch_publish(mi_theap_t* theap, mi_free_batch_entry_t* batch) {
+  MI_UNUSED_RELEASE(theap);
   mi_page_t* const page = batch->page;
   if (page == NULL) return;
   mi_assert_internal(mi_page_heap(page) == mi_theap_heap(theap));
