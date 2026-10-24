@@ -95,10 +95,8 @@ static inline void** mi_prim_thread_pointer(void) {
 static inline void** mi_prim_thread_pointer(void) {
   return (void**)__builtin_thread_pointer();
 }
-#elif defined(__GNUC__) && !defined(__CYGWIN__)
-  #if defined(__CHERI_PURE_CAPABILITY__)
-  #define MI_NO_THREAD_POINTER (1)    // the asm below reads integer registers which are not valid capabilities
-  #elif defined(__aarch64__)
+#elif defined(__GNUC__) && !defined(__CYGWIN__) && !defined(__CHERI_PURE_CAPABILITY__)
+  #if defined(__aarch64__)
   static inline void** mi_prim_thread_pointer(void) {
     // Use a 64-bit temporary: on arm64_32 (ILP32), pointers are 32 bits but system registers are 64 bits.
     uint64_t tp;
