@@ -733,23 +733,23 @@ static bool test_theap_cleanup(bool os_pages) {
 }
 
 int main(void) {
-  CHECK("theap-cleanup-arena", test_theap_cleanup(false));
-  CHECK("theap-cleanup-os", test_theap_cleanup(true));
+  CHECK_THREADS("theap-cleanup-arena", test_theap_cleanup(false));
+  CHECK_THREADS("theap-cleanup-os", test_theap_cleanup(true));
   CHECK("theap-collect-detached", test_theap_collect_detached());
-  CHECK("theap-collect-detached-thread", mi_run_on_thread(&test_theap_collect_detached));
-  CHECK("thread-id-of-arena", test_thread_id_of(false, 1));
-  CHECK("thread-id-of-os", test_thread_id_of(true, 1));
-  CHECK("reclaim-on-free-snapshot-disabled", test_thread_id_of(false, -1));
-  CHECK("reclaim-on-free-snapshot-origin-only", test_thread_id_of(false, 0));
+  CHECK_THREADS("theap-collect-detached-thread", mi_run_on_thread(&test_theap_collect_detached));
+  CHECK_THREADS("thread-id-of-arena", test_thread_id_of(false, 1));
+  CHECK_THREADS("thread-id-of-os", test_thread_id_of(true, 1));
+  CHECK_THREADS("reclaim-on-free-snapshot-disabled", test_thread_id_of(false, -1));
+  CHECK_THREADS("reclaim-on-free-snapshot-origin-only", test_thread_id_of(false, 0));
   CHECK("arena-order", test_arena_order());
   CHECK("arena-filter", test_arena_filter());
   CHECK("arena-stop", test_arena_stop());
   CHECK("arena-snapshot", test_arena_snapshot());
   CHECK("arena-result", test_arena_result());
-  CHECK("heap-visit-stop", test_heap_visit_stop());
-  CHECK("heap-visit-owned-os", test_heap_visit_owned_os(false));
-  CHECK("heap-visit-owned-os-mixed", test_heap_visit_owned_os(true));
+  CHECK_THREADS("heap-visit-stop", test_heap_visit_stop());
+  CHECK_THREADS("heap-visit-owned-os", test_heap_visit_owned_os(false));
+  CHECK_THREADS("heap-visit-owned-os-mixed", test_heap_visit_owned_os(true));
   CHECK("heap-page-count-os", test_heap_page_count_os());
-  CHECK("heap-visit-thread-exit", test_heap_visit_thread_exit());
+  CHECK_THREADS("heap-visit-thread-exit", test_heap_visit_thread_exit());
   return print_test_summary();
 }

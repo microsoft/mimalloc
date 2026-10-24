@@ -1210,6 +1210,15 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/mimalloc.pc"
 if (MI_BUILD_TESTS)
   enable_testing()
 
+  # run tests through the emulator when cross compiling (e.g. `node` for emscripten)
+  set(mi_test_runner ${CMAKE_CROSSCOMPILING_EMULATOR})
+  if(EMSCRIPTEN)
+    add_link_options(-sALLOW_MEMORY_GROWTH=1)
+    if(CMAKE_C_FLAGS MATCHES "-pthread")
+      add_link_options(-pthread -sPTHREAD_POOL_SIZE=40)  # pre-spawn workers so threads can start while main blocks
+    endif()
+  endif()
+
   # static link tests
   foreach(TEST_NAME api api-fill arena bitmap stress-heaps stress-subprocs stress stress-pprof profile pprof fork)
     if((TEST_NAME STREQUAL "arena" OR TEST_NAME STREQUAL "bitmap") AND (NOT MI_BUILD_STATIC OR MI_DEBUG_TSAN))
@@ -1233,9 +1242,9 @@ if (MI_BUILD_TESTS)
     if(MI_DEBUG_TSAN AND TEST_NAME STREQUAL "fork")
     # don't add as a test
     elseif(MI_GUARDED AND NOT (TEST_NAME STREQUAL "profile" OR TEST_NAME STREQUAL "pprof" OR TEST_NAME STREQUAL "stress-pprof"))
-    add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_GUARDED_SAMPLE_RATE=1024 $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
+    add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_GUARDED_SAMPLE_RATE=1024 ${mi_test_runner} $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
     elseif(TEST_NAME STREQUAL "stress-heaps")
-    add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_ARENA_EAGER_COMMIT=0 MIMALLOC_PAGE_COMMIT_ON_DEMAND=0 $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
+    add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_ARENA_EAGER_COMMIT=0 MIMALLOC_PAGE_COMMIT_ON_DEMAND=0 ${mi_test_runner} $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
     elseif((NOT MI_PROFILE) AND (TEST_NAME STREQUAL "profile" OR TEST_NAME STREQUAL "pprof" OR TEST_NAME STREQUAL "stress-pprof"))
     # don't add as a test
     elseif(NOT APPLE AND TEST_NAME STREQUAL "stress-pprof")
@@ -1256,11 +1265,11 @@ if (MI_BUILD_TESTS)
     target_compile_options(mimalloc-test-stress-static PRIVATE ${mi_cflags})
     target_include_directories(mimalloc-test-stress-static PRIVATE include)
     target_link_libraries(mimalloc-test-stress-static PRIVATE mimalloc-obj  ${mi_libraries})  # override statically with an object file
-    add_test(NAME test-stress-static COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_VERBOSE=1 MIMALLOC_SHOW_STATS=1 $<TARGET_FILE:mimalloc-test-stress-static>)
+    add_test(NAME test-stress-static COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_VERBOSE=1 MIMALLOC_SHOW_STATS=1 ${mi_test_runner} $<TARGET_FILE:mimalloc-test-stress-static>)
   endif()
 
   # dynamic override test
-  if(MI_BUILD_SHARED AND MI_OVERRIDE AND NOT (MI_CYGWIN OR (MI_TRACK STREQUAL "ASAN") OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN)) # AND NOT (APPLE AND MI_USE_CXX))
+  if(MI_BUILD_SHARED AND MI_OVERRIDE AND NOT (EMSCRIPTEN OR MI_CYGWIN OR (MI_TRACK STREQUAL "ASAN") OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN)) # AND NOT (APPLE AND MI_USE_CXX))
     add_executable(mimalloc-test-stress-dynamic test/test-stress.c)
     target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE ${mi_defines} "USE_STD_MALLOC=1")
     target_compile_options(mimalloc-test-stress-dynamic PRIVATE ${mi_cflags})
@@ -1295,7 +1304,7 @@ if (MI_BUILD_TESTS)
 
   # Rust crate tests (only if `cargo` is available)
   find_program(MI_CARGO cargo HINTS "$ENV{CARGO_HOME}/bin" "$ENV{HOME}/.cargo/bin")
-  if(MI_CARGO AND NOT (MI_DEBUG_TSAN OR MI_DEBUG_UBSAN OR (MI_TRACK STREQUAL "ASAN")))
+  if(MI_CARGO AND NOT (CMAKE_CROSSCOMPILING OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN OR (MI_TRACK STREQUAL "ASAN")))
     message(STATUS "Add Rust crate tests (using ${MI_CARGO})")
     set(mi_cargo_args test --manifest-path "${CMAKE_CURRENT_SOURCE_DIR}/contrib/rust/Cargo.toml"
                            --target-dir "${CMAKE_CURRENT_BINARY_DIR}/rust" "$<IF:$<CONFIG:Debug>,--features=debug,--release>")

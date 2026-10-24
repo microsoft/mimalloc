@@ -103,10 +103,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define __has_builtin(x)    0
 #endif
 
-#if defined(__EMSCRIPTEN__) && !defined(__wasi__)
-#define __wasi__
-#endif
-
 #define MI_UNUSED(x)     (void)(x)
 #if (MI_DEBUG>1)
 #define MI_UNUSED_RELEASE(x)

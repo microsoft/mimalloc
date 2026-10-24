@@ -765,7 +765,7 @@ typedef struct {
   bool                failed;  // set if an allocation failed; the mapping list is then incomplete
 } mi_pprof_modules_t;
 
-static void mi_pprof_modules_add(mi_heap_t* heap, mi_pprof_modules_t* mods, uintptr_t start, uintptr_t end, const char* path) {
+mi_decl_maybe_unused static void mi_pprof_modules_add(mi_heap_t* heap, mi_pprof_modules_t* mods, uintptr_t start, uintptr_t end, const char* path) {
   if (mods->failed) return;
   if (mods->count == mods->capacity) {
     const size_t new_capacity = (mods->capacity == 0 ? 16 : mods->capacity * 2);

@@ -62,6 +62,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config) {
 #include <emscripten/heap.h>  // emscripten_builtin_memalign, emscripten_builtin_free
 
 int _mi_prim_free(void* addr, size_t size) {
+  MI_UNUSED(size);
   emscripten_builtin_free(addr);
   return 0;
 }

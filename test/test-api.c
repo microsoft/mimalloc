@@ -108,7 +108,7 @@ int main(void) {
   #endif
   CHECK_BODY("calloc-overflow") {
     // use (size_t)&mi_calloc to get some number without triggering compiler warnings
-    result = (mi_calloc((size_t)&mi_calloc,SIZE_MAX/1000) == NULL);
+    result = (mi_calloc((size_t)&mi_calloc | 1024,SIZE_MAX/1000) == NULL);  // `| 1024` as on wasm function pointers are small indices
   };
   CHECK_BODY("malloc-large") {   // see PR #544.
     void* p = mi_malloc(67108872);
@@ -706,10 +706,10 @@ int main(void) {
     }
   }
 
-  CHECK_BODY("heap-destroy-xthread-free") {   // destroy a heap with live blocks and pending cross-thread frees
+  CHECK_THREADS_BODY("heap-destroy-xthread-free") {   // destroy a heap with live blocks and pending cross-thread frees
     result = test_heap_destroy_xthread_free();
   }
-  CHECK_BODY("heap-destroy-stale-theap") {    // a thread's cached theap must not survive the destroy of its heap
+  CHECK_THREADS_BODY("heap-destroy-stale-theap") {    // a thread's cached theap must not survive the destroy of its heap
     result = test_heap_destroy_stale_theap();
   }
 
@@ -722,12 +722,12 @@ int main(void) {
   // ---------------------------------------------------
   // Threads
   // ---------------------------------------------------
-  CHECK_BODY("thread_zero_aligned_first") {
+  CHECK_THREADS_BODY("thread_zero_aligned_first") {
     result = mi_run_on_thread(&test_zero_aligned_first);
   }
 
   #ifdef __cplusplus
-  CHECK_BODY("thread_new_first") {
+  CHECK_THREADS_BODY("thread_new_first") {
     result = mi_run_on_thread(&test_new_first);
   }
   #endif

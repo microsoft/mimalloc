@@ -177,7 +177,7 @@ static void mi_random_init_ex(mi_random_ctx_t* ctx, bool use_weak) {
   if (use_weak || !_mi_prim_random_buf(key, sizeof(key))) {
     // if we fail to get random data from the OS, we fall back to a
     // weak random source based on the current time
-    #if !defined(__wasi__)
+    #if !defined(__wasi__) && !defined(__EMSCRIPTEN__)
     if (!use_weak) { _mi_warning_message("unable to use secure randomness\n"); }
     #endif
     size_t x = _mi_os_random_weak(0);
