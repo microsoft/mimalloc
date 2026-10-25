@@ -32,7 +32,7 @@ static const mi_page_t mi_page_empty = {
   0,                      // xlast_used
   0,                      // xlast_alloc
   #endif
-  0,                      // page_offset
+  NULL,                   // page_start
   0,                      // capacity
   0,                      // reserved capacity
   0,                      // slice_pcommitted

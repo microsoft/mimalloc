@@ -495,11 +495,7 @@ typedef struct mi_page_s {
   uint16_t                  xlast_alloc;       // for sampling; on 64-bit platforms it is in bits 48..63 of xused.
   #endif
 
-  #if MI_CHERI
-  uint8_t*                  page_start;        // const: start of the blocks; the capability from which all blocks are derived
-  #else
-  size_t                    page_offset;       // const: relative offset from the page to the start of the blocks
-  #endif
+  uint8_t*                  page_start;        // const: start of the blocks (on CHERI, the capability from which all blocks are derived)
   uint16_t                  capacity;          // number of blocks committed
   uint16_t                  reserved;          // number of blocks reserved in memory
   uint16_t                  slice_pcommitted;  // committed size in OS page sizes relative to the first arena slice of the page data (or 0 if the page is fully committed already)

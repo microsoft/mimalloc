@@ -54,12 +54,7 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
 
 // Page start
 static inline uint8_t* mi_page_start(const mi_page_t* page) {
-  #if MI_CHERI
   return page->page_start;
-  #else
-  // multiplication must be done in `size_t`
-  return (uint8_t*)page + page->page_offset;
-  #endif
 }
 
 // Derive a block pointer from an address in the page; On systems with pointer provenance, this keeps the authority of the page start.
