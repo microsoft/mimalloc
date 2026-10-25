@@ -198,13 +198,15 @@ terms of the MIT license. A copy of the license can be found in the file
 #if !MI_PAGE_META_IS_SEPARATED && MI_SECURE
 #error "secure mode should use separated page infos"
 #endif
-#if MI_PAGE_META_SMALL_IS_ALIGNED && MI_SECURE
-#error "secure mode cannot use MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED)"
+#if MI_PAGE_META_SMALL_IS_ALIGNED && (MI_SECURE || MI_GUARDED)
+#error "secure or guarded mode cannot use MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED)"
 #endif
 #if MI_PAGE_META_IS_SEPARATED && MI_PAGE_MAP_FLAT
 #error "cannot have a flat page map with separated page infos"
 #endif
-
+#if (MI_PAGE_META_IS_ALIGNED || MI_PAGE_META_SMALL_IS_ALIGNED) && MI_CHERI
+#error "cannot have aligned page meta with CHERI"
+#endif
 
 // --------------------------------------------------------------
 // Sizes of internal data-structures
