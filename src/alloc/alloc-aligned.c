@@ -165,8 +165,9 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_generic(mi_theap_t
         }
         else {
           // this should never happen if the `mi_malloc_is_naturally_aligned` check is correct..
-          // (but it can happen if this allocation just so happens to be sampled but we checked for that)
-          mi_assert_internal(false); // p==NULL || mi_block_ptr_is_profiled_or_guarded(_mi_page_ptr_unalign(page,p),p));
+          // but it can happen if this allocation just so happens to be sampled anyways
+          // (with MI_SAMPLE==1 the countdown is updated lazily on a page refill, see issue #1457)
+          mi_assert_internal(p!=NULL && mi_block_ptr_is_sampled(_mi_page_ptr_unalign(page,p),p));
           mi_free(p);
         }
       }
