@@ -180,19 +180,19 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   Guard page allocation
 ----------------------------------------------------------- */
 
-// In secure mode, return the size of a guard page, otherwise 0
+// Return the size of a guard page, (or 0 if all security is disabled)
 size_t _mi_os_secure_guard_page_size(void) {
-  #if MI_SECURE > 0
+  #if !MI_NO_SECURE
   return _mi_os_guard_page_size();
   #else
   return 0;
   #endif
 }
 
-// In secure mode, try to decommit an area and output a warning if this fails.
+// Try to decommit an area and output a warning if this fails.
 bool _mi_os_secure_guard_page_set_at(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
   if (addr == NULL) return true;
-  #if MI_SECURE > 0
+  #if !MI_NO_SECURE
   bool ok = false;
   if (!memid.is_pinned) {
     mi_arena_t* const arena = mi_memid_arena(memid);
@@ -213,15 +213,15 @@ bool _mi_os_secure_guard_page_set_at(mi_subproc_t* subproc, void* addr, mi_memid
   #endif
 }
 
-// In secure mode, try to decommit an area and output a warning if this fails.
+// Try to decommit an area and output a warning if this fails.
 bool _mi_os_secure_guard_page_set_before(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
   return _mi_os_secure_guard_page_set_at(subproc, (uint8_t*)addr - _mi_os_secure_guard_page_size(), memid);
 }
 
-// In secure mode, try to recommit an area
+// Try to recommit an area
 bool _mi_os_secure_guard_page_reset_at(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
   if (addr == NULL) return true;
-  #if MI_SECURE > 0
+  #if !MI_NO_SECURE
   if (!memid.is_pinned) {
     mi_arena_t* const arena = mi_memid_arena(memid);
     if (arena != NULL && arena->commit_fun != NULL) {
@@ -237,7 +237,7 @@ bool _mi_os_secure_guard_page_reset_at(mi_subproc_t* subproc, void* addr, mi_mem
   return true;
 }
 
-// In secure mode, try to recommit an area
+// Try to recommit an area
 bool _mi_os_secure_guard_page_reset_before(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
   return _mi_os_secure_guard_page_reset_at(subproc, (uint8_t*)addr - _mi_os_secure_guard_page_size(), memid);
 }

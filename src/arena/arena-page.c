@@ -761,11 +761,12 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_theap_t* theap, size_t block
   #endif
   // room for the cache offset of the block (committed but not touched)
   const size_t cache_offset_size = (mi_page_block_can_cache_offset(block_size, os_align) ? MI_PAGE_CACHE_OFFSET_MAX : 0);
-  #if MI_SECURE < 2
-  const size_t slice_count = _mi_slice_count_of_size(info_size + cache_offset_size + block_size);
+  #if MI_SECURE >= 5
+  const size_t guard_size = _mi_os_secure_guard_page_size();  // see `mi_arenas_page_noguard_size`
   #else
-  const size_t slice_count = _mi_slice_count_of_size(mi_align_up(info_size + cache_offset_size + block_size, _mi_os_secure_guard_page_size()) + _mi_os_secure_guard_page_size());
+  const size_t guard_size = 0;
   #endif
+  const size_t slice_count = _mi_slice_count_of_size(info_size + cache_offset_size + block_size + guard_size);
 
   mi_page_t* page = mi_arenas_page_alloc_fresh(theap, slice_count, block_size, block_alignment, true /* commit singletons always */);
   if (page == NULL) return NULL;

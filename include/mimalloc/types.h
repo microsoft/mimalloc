@@ -63,13 +63,15 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_STATS 1
 
 // Define MI_SECURE to enable security mitigations
-// #define MI_SECURE 1  // check invalid pointer free, guard pages around meta data, randomize arena allocation addresses (like ASLR), abort on detected meta data corruption
-// #define MI_SECURE 2  // randomize relative allocation addresses within mimalloc pages
-// #define MI_SECURE 3  // check buffer overflow, check double free, encode free lists (and detect corrupted free lists)
-// #define MI_SECURE 4  // same as level 3 for now (`-DMI_SECURE=ON`)
-// #define MI_SECURE 5  // guard page at the end of each mimalloc page (expensive!) (`-DMI_SECURE_FULL=ON`), and byte-precise buffer overflow checks.
+// #define MI_NO_SECURE // disable all security mitigations, even guard pages around metadata
+// #define MI_SECURE 0  // guard pages around meta data, minimal security
+// #define MI_SECURE 1  // + check invalid pointer free, randomize arena allocation addresses (like ASLR), abort on detected meta data corruption
+// #define MI_SECURE 2  // + randomize relative allocation addresses within mimalloc pages
+// #define MI_SECURE 3  // + check buffer overflow, check double free, encode free lists (and detect corrupted free lists)
+// #define MI_SECURE 4  // + same as level 3 for now (`-DMI_SECURE=ON`)
+// #define MI_SECURE 5  // + guard page at the end of each mimalloc page (expensive!) (`-DMI_SECURE_FULL=ON`), and byte-precise buffer overflow checks.
 
-#if !defined(MI_SECURE)
+#if !defined(MI_SECURE) && !defined(MI_NO_SECURE)
 #define MI_SECURE 0
 #endif
 
@@ -196,19 +198,22 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Configuration checks
 #if !MI_PAGE_META_IS_SEPARATED && MI_SECURE
-#error "secure mode should use separated page infos"
+#error "Secure mode should use separated page infos"
 #endif
 #if MI_PAGE_META_SMALL_IS_ALIGNED && (MI_SECURE || MI_GUARDED)
-#error "secure or guarded mode cannot use MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED)"
+#error "Secure or guarded mode cannot use MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED)"
 #endif
 #if MI_PAGE_META_IS_SEPARATED && MI_PAGE_MAP_FLAT
-#error "cannot have a flat page map with separated page infos"
+#error "Cannot have a flat page map with separated page infos"
 #endif
 #if (MI_PAGE_META_IS_ALIGNED || MI_PAGE_META_SMALL_IS_ALIGNED) && MI_CHERI
-#error "cannot have aligned page meta with CHERI"
+#error "Cannot have aligned page meta with CHERI"
 #endif
 #if MI_QSBR && MI_CHERI
 #error "QSBR cannot be used with CHERI (as delayed concurrent reads would have the wrong capability)"
+#endif
+#if defined(MI_SECURE) && defined(MI_NO_SECURE)
+#error "Cannot define both MI_SECURE and MI_NO_SECURE at the same time"
 #endif
 
 // --------------------------------------------------------------
