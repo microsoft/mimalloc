@@ -121,6 +121,7 @@ static const mi_page_t mi_page_empty = {
 static mi_decl_cache_align mi_tld_t mi_tld_detached = {
   MI_THREADID_DETACHED,   // thread_id
   0,                      // thread_seq
+  0,                      // fork_epoch
   0,                      // default numa node
   NULL,                   // subproc
   NULL,                   // theaps list
@@ -276,6 +277,7 @@ static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc) 
     tld->thread_id = _mi_prim_thread_id();
     tld->is_in_threadpool = _mi_prim_thread_is_in_threadpool();
     tld->thread_seq = tseq;
+    tld->fork_epoch = _mi_fork_epoch();
     mi_atomic_increment_relaxed(&tld->subproc->thread_count);
   }
   return tld;

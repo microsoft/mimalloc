@@ -17,6 +17,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/alloc/alloc.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/profile/sample-profile.h"
+#include "mimalloc/heap/subproc.h"
 #include "page-queue.h"
 #include "page.h"
 
@@ -334,6 +335,9 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
   if mi_unlikely(theap->generic_count >= 1000) {
     theap->generic_collect_count += theap->generic_count;
     theap->generic_count = 0;
+
+    // after a fork, abandon the pages of threads that do not exist in the child (see `heap/subproc.c`)
+    _mi_fork_child_try_collect();
 
     // check if the profiler is enabled (unless this theap is permanently excluded, see `mi_theap_profile_never`)
     if (!theap->profile_never) {

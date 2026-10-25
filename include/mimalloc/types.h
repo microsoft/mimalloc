@@ -811,6 +811,7 @@ typedef int64_t  mi_msecs_t;
 struct mi_tld_s {
   mi_threadid_t         thread_id;            // thread id of this thread
   size_t                thread_seq;           // thread sequence id (linear count of created threads)
+  size_t                fork_epoch;           // fork epoch at creation; an older epoch means the thread does not exist in a forked child
   int                   numa_node;            // thread preferred numa node
   mi_subproc_t*         subproc;              // sub-process this thread belongs to.
   mi_theap_t*           theaps;               // list of theaps in this thread (so we can abandon all when the thread terminates)

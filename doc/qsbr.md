@@ -285,7 +285,12 @@ orphans awaiting terminal destruction.
 
 ## Fork handling
 
-Forking requires other threads to be outside mimalloc. A host that also performs
-uncoordinated fork-and-exec operations can define `MI_NO_PTHREAD_ATFORK=1` and
-call `_mi_fork_child()` explicitly after a coordinated fork, before resuming
-allocator use. Exec-only children must not use the allocator before exec.
+mimalloc registers a `pthread_atfork` child handler that only marks the threads
+that do not exist in the child; their pages are abandoned lazily during the
+periodic administration on the generic allocation path in the child.
+Uncoordinated fork-and-exec is therefore safe as long as the child does not use
+the allocator before exec. A child that keeps allocating
+requires that other threads were outside mimalloc at the fork (if such a thread
+held an allocator lock, its pages are leaked in the child). With
+`MI_NO_PTHREAD_ATFORK=1`, a host can call `_mi_fork_child()` itself after a
+coordinated fork, before resuming allocator use.
