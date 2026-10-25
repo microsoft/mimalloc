@@ -514,7 +514,7 @@ typedef enum mi_option_e {
   mi_option_profile_inuse_interval,     // number of in-use bytes grown between automatic snapshots of the heap profiler (=0, disabled)
   mi_option_profile_time_interval,      // number of seconds between automatic snapshots of the  heap profiler (=0, disabled)
   mi_option_profile_sample_rate,        // sample rate (in bytes) for heap profiler (=512 KiB)
-  mi_option_stats_merge_threshold,      // on a page stats update, merge theap stats into the parent heap if N bytes were freed/allocated; 0 disables (=512 KiB)
+  mi_option_stats_merge_threshold,      // on a page stats update, merge theap stats into the parent heap if N bytes were freed/allocated; 0 disables (=4 MiB)
   mi_option_arena_purge_immediate_size, // ranges above this size are purged immediately
   _mi_option_last,
   // legacy option names

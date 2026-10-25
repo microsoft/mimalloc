@@ -119,7 +119,7 @@ int mi_version(void) {
 #endif
 
 #ifndef MI_DEFAULT_STATS_MERGE_THRESHOLD
-#define MI_DEFAULT_STATS_MERGE_THRESHOLD   (512*1024)  // 512 KiB
+#define MI_DEFAULT_STATS_MERGE_THRESHOLD   (4*1024*1024)  // 4 MiB
 #endif
 
 #ifndef MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE
@@ -201,7 +201,7 @@ static mi_option_desc_t mi_options[_mi_option_last] =
   { 0,   MI_OPTION_UNINIT, MI_OPTION(profile_time_interval) },    // N seconds between automatic dumps of the `MIMALLOC_PROFILE` heap profiler; 0 disables (default)
   { 512*MI_KiB, MI_OPTION_UNINIT, MI_OPTION(profile_sample_rate) }, // sample rate in bytes for the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`) (=512 KiB)
   { MI_DEFAULT_STATS_MERGE_THRESHOLD,
-         MI_OPTION_UNINIT, MI_OPTION(stats_merge_threshold) },    // on a page stats update, merge theap stats into the heap if N bytes were freed/allocated; 0 disables (=512 KiB)
+         MI_OPTION_UNINIT, MI_OPTION(stats_merge_threshold) },    // on a page stats update, merge theap stats into the heap if N bytes were freed/allocated; 0 disables (=4 MiB)
   { MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE,
          MI_OPTION_UNINIT, MI_OPTION(arena_purge_immediate_size) }, // ranges above this size are purged immediately
 
