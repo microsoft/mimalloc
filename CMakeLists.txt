@@ -464,7 +464,7 @@ elseif(NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 if(MI_GUARDED STREQUAL "DEFAULT")
-  if(MI_DEBUG)
+  if(MI_DEBUG AND NOT (EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "WASI"))   # no memory protection on wasm
     set(MI_GUARDED "FULL")
   else()
     set(MI_GUARDED "OFF")
@@ -552,8 +552,8 @@ else()
   list(APPEND mi_defines MI_PROFILE=0)
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
-  message(STATUS "Enabling MI_FREE_USE_PAGEMAP since the target (WASI) does not support large OS aligned allocations well")
+if(CMAKE_SYSTEM_NAME STREQUAL "WASI" OR EMSCRIPTEN)
+  message(STATUS "Enabling MI_FREE_USE_PAGEMAP since the target (${CMAKE_SYSTEM_NAME}) does not support large OS aligned allocations well")
   set(MI_FREE_USE_PAGEMAP ON)
 endif()
 if(MI_FREE_USE_PAGEMAP)
@@ -898,6 +898,9 @@ else()
     list(APPEND mi_libraries "${MI_LIB_ATOMIC}")
   endif()
 endif()
+if(EMSCRIPTEN)
+  list(APPEND mi_libraries -sALLOW_MEMORY_GROWTH=1)  # mimalloc reserves memory in large chunks
+endif()
 
 # set language for source files now
 if(MI_USE_CXX)
@@ -1064,6 +1067,9 @@ if(MI_BUILD_SHARED)
   target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
   target_compile_options(mimalloc PRIVATE ${mi_cflags} ${mi_cflags_dynamic})
   target_link_libraries(mimalloc PRIVATE ${mi_libraries})
+  if(EMSCRIPTEN)
+    target_link_options(mimalloc PRIVATE -Wno-pthreads-mem-growth)
+  endif()
   target_include_directories(mimalloc PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${mi_install_incdir}>
@@ -1213,7 +1219,7 @@ if (MI_BUILD_TESTS)
   # run tests through the emulator when cross compiling (e.g. `node` for emscripten)
   set(mi_test_runner ${CMAKE_CROSSCOMPILING_EMULATOR})
   if(EMSCRIPTEN)
-    add_link_options(-sALLOW_MEMORY_GROWTH=1)
+    add_link_options(-sNODE_HOST_ENV=1)  # pass environment variables
     if(CMAKE_C_FLAGS MATCHES "-pthread")
       add_link_options(-pthread -sPTHREAD_POOL_SIZE=40 -Wno-pthreads-mem-growth)  # pre-spawn workers so threads can start while main blocks
     endif()

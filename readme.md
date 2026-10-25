@@ -247,6 +247,22 @@ on Windows to build with the `clang-cl` compiler directly:
 > cmake ../.. -G "Visual Studio 17 2022" -T ClangCl
 ```
 
+## Emscripten
+
+You can build for WebAssembly with [Emscripten](https://emscripten.org) using `emcmake`.
+Add `-pthread` to the compiler flags for a multi-threaded build. The tests run under `node`:
+
+```
+> emcmake cmake ../.. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-pthread
+> cmake --build .
+> ctest
+```
+
+When linking with mimalloc, use `-sALLOW_MEMORY_GROWTH` (as mimalloc reserves its arena memory up front; this is
+added automatically when linking with the CMake target or `pkg-config`), and `-pthread` if mimalloc was built with it.
+Mimalloc reads `MIMALLOC_` options from the program environment;
+under `node` you can pass the host environment with `-sNODE_HOST_ENV`, or otherwise set `ENV` in the JavaScript module.
+
 
 ## Single Source
 

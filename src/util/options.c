@@ -603,6 +603,8 @@ void _mi_warning_message(const char* fmt, ...) {
 #if MI_DEBUG
 mi_decl_noreturn mi_decl_cold void _mi_assert_fail(const char* assertion, const char* fname, unsigned line, const char* func ) mi_attr_noexcept {
   _mi_fprintf(NULL, NULL, "mimalloc: assertion failed: at \"%s\":%u, %s\n  assertion: \"%s\"\n", fname, line, (func==NULL?"":func), assertion);
+  // flush delayed output (if not yet initialized) so the message is not lost
+  if (mi_atomic_load_ptr_acquire(void,&mi_out_default) == NULL) { mi_out_buf_flush(&mi_out_stderr, true, NULL); }
   abort();
 }
 #endif
