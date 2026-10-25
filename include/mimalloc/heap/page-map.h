@@ -92,10 +92,10 @@ static inline size_t mi_page_map_index(const void* p, size_t* sub_idx) {
   return (u / MI_PAGE_MAP_SUB_COUNT);
 }
 
-// Index for looking up a (user) pointer; on CHERI untagged (e.g. forged) pointers map to index 0 (and thus a NULL page)
+// Index for looking up a (user) pointer
 static inline size_t mi_page_map_lookup_index(const void* p, size_t* sub_idx) {
   #if MI_CHERI
-  if (!__builtin_cheri_tag_get(p)) { p = NULL; }
+  if (!__builtin_cheri_tag_get(p)) { p = NULL; }  // treat untagged pointers as NULL
   #endif
   return mi_page_map_index(p, sub_idx);
 }

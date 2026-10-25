@@ -170,7 +170,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // This can be used to have a faster `mi_free(_small)` as we can avoid a page_map lookup.
 // This only works if valid pointers are passed to `mi_free` though. However, checked
 // free `mi_cfree` can still use the page map to validate pointers.
-#if !MI_FREE_IS_CHECKED && !MI_FREE_USE_PAGEMAP
+#if !MI_FREE_IS_CHECKED && !MI_FREE_USE_PAGEMAP && !MI_CHERI
 #if MI_PAGE_META_IS_SEPARATED
 #define MI_PAGE_META_IS_ALIGNED         1
 #define MI_PAGE_META_ALIGNED_CHUNKS     MI_SIZE_SIZE

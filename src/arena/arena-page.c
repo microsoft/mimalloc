@@ -1266,11 +1266,7 @@ typedef struct mi_heap_delete_visit_info_s {
 } mi_heap_delete_visit_info_t;
 
 static mi_page_t* mi_heap_area_page(const mi_heap_area_t* area) {
-  #if MI_CHERI
-  return mi_ptr_page(area->blocks);  // `reserved1` is not set to not leak the page meta data
-  #else
-  return (mi_page_t*)area->reserved1;
-  #endif
+  return mi_ptr_page(area->blocks);
 }
 
 static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {

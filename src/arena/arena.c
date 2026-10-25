@@ -111,7 +111,7 @@ mi_arena_id_t _mi_arena_id_none(void) {
 
 mi_arena_t* _mi_arena_from_id(mi_arena_id_t id) {
   #if MI_CHERI
-  // on CHERI, id's are just addresses (without provenance) so we look up the arena in the current subprocess
+  // id's are just addresses (without provenance) so we look up the arena in the current subprocess
   mi_arena_t* arena = NULL;
   if (id != NULL) {
     mi_subproc_t* const subproc = _mi_subproc();
@@ -130,11 +130,7 @@ mi_arena_t* _mi_arena_from_id(mi_arena_id_t id) {
 
 mi_arena_id_t mi_arena_id_from_arena(mi_arena_t* arena) {
   mi_assert_internal(arena==NULL || arena->parent==NULL);
-  #if MI_CHERI
   return (arena==NULL ? _mi_arena_id_none() : (mi_arena_id_t)mi_ptr_from_addr(mi_addr(arena)));  // don't expose the arena capability
-  #else
-  return (arena==NULL ? _mi_arena_id_none() : (mi_arena_id_t)arena);
-  #endif
 }
 
 
@@ -194,11 +190,7 @@ void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
     mi_assert_internal(_mi_size_of_slices(arena->slice_count) <= arena->total_size);
     *size = arena->total_size;
   }
-  #if MI_CHERI
   return mi_ptr_bounded_data(mi_arena_start(arena), 0);  // only expose the address
-  #else
-  return mi_arena_start(arena);
-  #endif
 }
 
 

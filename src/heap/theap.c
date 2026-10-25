@@ -602,11 +602,7 @@ void _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page) {
   area->used = mi_page_used(page);   // number of blocks in use (#553)
   area->block_size = ubsize;
   area->full_block_size = bsize;
-  #if MI_CHERI
-  area->reserved1 = NULL;  // don't leak the page meta data (see `arena-page.c:mi_heap_area_page`)
-  #else
-  area->reserved1 = page;
-  #endif
+  area->reserved1 = NULL;
 }
 
 static void mi_get_fast_divisor(size_t divisor, uint64_t* magic, size_t* shift) {
