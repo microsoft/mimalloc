@@ -362,19 +362,8 @@ extern "C" {
   // Forward Posix/Unix calls as well
   void*  reallocf(void* p, size_t newsize) MI_FORWARD2(mi_reallocf,p,newsize)
   size_t malloc_size(const void* p)        MI_FORWARD1(mi_malloc_size,p)
-  #if !defined(__ANDROID__) && !defined(__FreeBSD__) && !defined(__DragonFly__)
-  #if defined(__clang__) && defined(__has_warning)
-  #if __has_warning("-Wattribute-alias")
-  #pragma clang diagnostic push
-  #pragma clang diagnostic ignored "-Wattribute-alias"  // `void*` vs. `const void*`
-  #endif
-  #endif
+  #if !defined(__ANDROID__) && !defined(__FreeBSD__) && !defined(__DragonFly__) && !defined(__EMSCRIPTEN__)
   size_t malloc_usable_size(void *p)       MI_FORWARD1(mi_malloc_usable_size,p)
-  #if defined(__clang__) && defined(__has_warning)
-  #if __has_warning("-Wattribute-alias")
-  #pragma clang diagnostic pop
-  #endif
-  #endif
   #else
   size_t malloc_usable_size(const void *p) MI_FORWARD1(mi_malloc_usable_size,p)
   #endif
