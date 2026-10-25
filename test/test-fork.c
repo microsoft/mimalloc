@@ -110,7 +110,7 @@ static void* holder(void* arg) {
 }
 
 static bool child_check(void) {
-  mi_theap_quiescent_abandon(live_theap); // dead threads are otherwise only abandoned lazily on a generic allocation
+  mi_theap_quiescent_abandon(live_theap); // dead threads are otherwise only abandoned lazily
   // free blocks of a thread that does not exist in the child
   for (size_t i = 0; i < LIVE; i++) {
     const unsigned char* p = (const unsigned char*)live[i];

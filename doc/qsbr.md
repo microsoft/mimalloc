@@ -286,8 +286,9 @@ orphans awaiting terminal destruction.
 ## Fork handling
 
 mimalloc registers a `pthread_atfork` child handler that only marks the threads
-that do not exist in the child; their pages are abandoned lazily during the
-periodic administration on the generic allocation path in the child.
+that do not exist in the child; their pages are abandoned lazily when a new
+thread starts in the child (as it can reuse the thread id of a dead thread), or
+during the periodic administration on the generic allocation path.
 Uncoordinated fork-and-exec is therefore safe as long as the child does not use
 the allocator before exec. A child that keeps allocating
 requires that other threads were outside mimalloc at the fork (if such a thread

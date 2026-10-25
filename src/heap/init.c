@@ -325,7 +325,7 @@ static mi_theap_t* mi_heap_check_for_existing_theap(mi_heap_t* heap) {
   mi_theap_t* thread_theap = NULL;
   mi_lock(&heap->theaps_lock) {
     for(mi_theap_t* theap = heap->theaps; theap != NULL; theap = theap->hnext ) {
-      if (theap->tld->thread_id == tid) {
+      if (theap->tld->thread_id == tid && theap->tld->fork_epoch == _mi_fork_epoch()) {  // a dead theap in a forked child can have the same id
         thread_theap = theap;
         break;
       }
@@ -389,6 +389,7 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
   mi_assert_internal(heap_main==NULL || heap_theap == theap); MI_UNUSED_RELEASE(heap_theap);
 
   mi_subproc_stat_increase(mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?
+  _mi_fork_child_try_collect();  // in a forked child, abandon dead theaps as they may have the same thread id as this thread
   // _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
   return theap;
 }

@@ -361,8 +361,8 @@ static bool mi_fork_theap_is_dead(const mi_theap_t* theap) {
 
 // Abandon the pages of dead theaps in a heap.
 // The theap and tld memory itself is not freed as the (dead) thread lists may be inconsistent.
-static void mi_fork_heap_abandon_dead(mi_heap_t* heap) {
-  if (!mi_lock_try_acquire(&heap->theaps_lock)) return;
+static bool mi_fork_heap_abandon_dead(mi_heap_t* heap) {
+  if (!mi_lock_try_acquire(&heap->theaps_lock)) return false;
   mi_theap_t* theap = heap->theaps;
   while (theap != NULL) {
     mi_theap_t* const next = theap->hnext;
@@ -380,22 +380,31 @@ static void mi_fork_heap_abandon_dead(mi_heap_t* heap) {
     theap = next;
   }
   mi_lock_release(&heap->theaps_lock);
+  return true;
 }
 
-// Called regularly on the generic allocation path.
+// Called at thread initialization and regularly on the generic allocation path.
+// Retried later if a lock is busy.
 void _mi_fork_child_try_collect(void) {
   if mi_likely(mi_atomic_load_relaxed(&mi_fork_pending) == 0) return;
   if (mi_atomic_exchange_acq_rel(&mi_fork_pending, 0) == 0) return;
-  if (!mi_lock_try_acquire(&mi_subprocs_lock)) return;
-  for (mi_subproc_t* subproc = mi_subprocs; subproc != NULL; subproc = subproc->next) {
-    if (mi_lock_try_acquire(&subproc->heaps_lock)) {
-      for (mi_heap_t* heap = subproc->heaps; heap != NULL; heap = heap->next) {
-        mi_fork_heap_abandon_dead(heap);
+  bool done = false;
+  if (mi_lock_try_acquire(&mi_subprocs_lock)) {
+    done = true;
+    for (mi_subproc_t* subproc = mi_subprocs; subproc != NULL; subproc = subproc->next) {
+      if (mi_lock_try_acquire(&subproc->heaps_lock)) {
+        for (mi_heap_t* heap = subproc->heaps; heap != NULL; heap = heap->next) {
+          if (!mi_fork_heap_abandon_dead(heap)) { done = false; }
+        }
+        mi_lock_release(&subproc->heaps_lock);
       }
-      mi_lock_release(&subproc->heaps_lock);
+      else {
+        done = false;
+      }
     }
+    mi_lock_release(&mi_subprocs_lock);
   }
-  mi_lock_release(&mi_subprocs_lock);
+  if (!done) { mi_atomic_store_release(&mi_fork_pending, 1); }
 }
 
 // Called in the child process right after a fork.
