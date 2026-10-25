@@ -49,6 +49,7 @@ void _mi_theap_guarded_init(mi_theap_t* theap) {
 static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size, size_t* usable_size) {
   // todo: we can still make padding work by moving it out of the guard page area
   mi_page_t* const page = mi_ptr_page(block);
+  if mi_unlikely(page==NULL) return NULL;  // should not happen, but avoids gcc -Wstringop-overflow warnings
   block = (mi_block_t*)mi_ptr_rederive(mi_page_start(page), block);  // `block` is bounded to the requested size
   mi_page_set_has_interior_pointers(page, true);
   block->next = MI_BLOCK_TAG_GUARDED;

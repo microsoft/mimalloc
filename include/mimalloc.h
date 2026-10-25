@@ -497,7 +497,7 @@ typedef enum mi_option_e {
   mi_option_guarded_sample_rate,        // guard an object in the min/max range about every N requested bytes (=0)
   mi_option_guarded_sample_seed,        // can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0)
   mi_option_generic_collect,            // collect theaps every N (=10000) generic allocation calls
-  mi_option_page_reclaim_on_free,       // heap-creation default for reclaim on free: -1 disallow, 0 originating theap only, 1 allow across theaps
+  mi_option_page_reclaim_on_free,       // heap-creation default for reclaim on free: -1 disallow, 0 originating theap only (default), 1 allow across theaps
   mi_option_page_full_retain,           // retain N full (small) pages per size class (=2)
   mi_option_page_max_candidates,        // max candidate pages to consider for allocation (=4)
   mi_option_max_vabits,                 // max user space virtual address bits to consider (=48)
