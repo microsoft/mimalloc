@@ -96,7 +96,9 @@ static inline void** mi_prim_thread_pointer(void) {
   return (void**)__builtin_thread_pointer();
 }
 #elif defined(__GNUC__) && !defined(__CYGWIN__)
-  #if defined(__aarch64__)
+  #if MI_CHERI
+  #define MI_NO_THREAD_POINTER (1)
+  #elif defined(__aarch64__)
   static inline void** mi_prim_thread_pointer(void) {
     // Use a 64-bit temporary: on arm64_32 (ILP32), pointers are 32 bits but system registers are 64 bits.
     uint64_t tp;
@@ -181,16 +183,16 @@ static inline mi_threadid_t __mi_prim_thread_id(void) {
 #elif !MI_NO_THREAD_POINTER
 static inline mi_threadid_t __mi_prim_thread_id(void) {
   #if defined(__BIONIC__)
-  return (mi_threadid_t)mi_prim_tls_slot(1);
+  return (mi_threadid_t)mi_addr(mi_prim_tls_slot(1));
   #else
-  return (mi_threadid_t)mi_prim_thread_pointer();
+  return (mi_threadid_t)mi_addr(mi_prim_thread_pointer());
   #endif
 }
 #else
 // otherwise use portable C, taking the address of a thread local variable (this is still very fast on most platforms).
 extern mi_decl_hidden mi_decl_thread void* __mi_thread_id_helper;
 static inline mi_threadid_t __mi_prim_thread_id(void) {
-  return (uintptr_t)&__mi_thread_id_helper;
+  return (mi_threadid_t)mi_addr(&__mi_thread_id_helper);
 }
 #endif
 

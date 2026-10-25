@@ -33,7 +33,7 @@ extern mi_decl_hidden _Atomic(uint8_t*) _mi_page_map;
 extern mi_decl_hidden _Atomic(void*)    _mi_page_map_max_address;
 
 static inline size_t mi_page_map_index(const void* p) {
-  return (size_t)((uintptr_t)p >> MI_ARENA_SLICE_SHIFT);
+  return (size_t)(mi_addr(p) >> MI_ARENA_SLICE_SHIFT);
 }
 
 static inline uint8_t mi_page_map_at(size_t idx) {
@@ -49,7 +49,7 @@ static inline mi_page_t* mi_ptr_page_ex(const void* p, bool* valid) {
 
 static inline mi_page_t* mi_checked_ptr_page(const void* p) {
   #if MI_MIN_VABITS < MI_INTPTR_BITS
-  if mi_unlikely(((uintptr_t)p >> MI_MIN_VABITS) != 0) {
+  if mi_unlikely((mi_addr(p) >> MI_MIN_VABITS) != 0) {
     if (p > mi_atomic_load_ptr_relaxed(void, &_mi_page_map_max_address)) return NULL;
   }
   #endif
@@ -87,9 +87,17 @@ typedef struct mi_page_map_s {
 extern mi_decl_hidden _Atomic(mi_page_map_t*) __mi_page_map;
 
 static inline size_t mi_page_map_index(const void* p, size_t* sub_idx) {
-  const size_t u = (size_t)((uintptr_t)p / MI_ARENA_SLICE_SIZE);
+  const size_t u = (size_t)(mi_addr(p) / MI_ARENA_SLICE_SIZE);
   if (sub_idx != NULL) { *sub_idx = u % MI_PAGE_MAP_SUB_COUNT; }
   return (u / MI_PAGE_MAP_SUB_COUNT);
+}
+
+// Index for looking up a (user) pointer
+static inline size_t mi_page_map_lookup_index(const void* p, size_t* sub_idx) {
+  #if MI_CHERI
+  if (!__builtin_cheri_tag_get(p)) { p = NULL; }  // treat untagged pointers as NULL
+  #endif
+  return mi_page_map_index(p, sub_idx);
 }
 
 static inline mi_page_map_t* mi_page_map(void) {
@@ -103,14 +111,14 @@ static inline mi_submap_t mi_page_map_at(const mi_page_map_t* pmap, size_t idx) 
 static inline mi_page_t* mi_unchecked_ptr_page(const void* p) {
   const mi_page_map_t* pmap = mi_page_map();
   size_t sub_idx;
-  const size_t idx = mi_page_map_index(p, &sub_idx);
+  const size_t idx = mi_page_map_lookup_index(p, &sub_idx);
   return mi_page_map_at(pmap,idx)[sub_idx];  // NULL if p==NULL
 }
 
 static inline mi_page_t* mi_checked_ptr_page(const void* p) {
   const mi_page_map_t* pmap = mi_page_map();
   size_t sub_idx;
-  const size_t idx = mi_page_map_index(p, &sub_idx);
+  const size_t idx = mi_page_map_lookup_index(p, &sub_idx);
   const size_t committed_count = mi_atomic_load_relaxed(&pmap->committed_count);
   if mi_unlikely(idx >= committed_count) return NULL;
   // #if MI_MIN_VABITS < MI_INTPTR_BITS   // is still invalid if free is called before the pagemap is initialized
@@ -132,7 +140,7 @@ static inline mi_page_t* mi_checked_ptr_page(const void* p) {
 static inline mi_page_t* mi_aligned_ptr_page0(const void* p) {
   mi_page_t* const page_metas = (mi_page_t*)mi_align_down_ptr(p,MI_PAGE_META_ALIGNMENT);
   // const ptrdiff_t page_idx = ((uint8_t*)p - (uint8_t*)page_metas)/MI_ARENA_SLICE_SIZE;
-  const uintptr_t page_idx    = ((uintptr_t)p / MI_ARENA_SLICE_SIZE) % (MI_PAGE_META_ALIGNMENT / MI_ARENA_SLICE_SIZE);
+  const size_t page_idx       = (size_t)((mi_addr(p) / MI_ARENA_SLICE_SIZE) % (MI_PAGE_META_ALIGNMENT / MI_ARENA_SLICE_SIZE));
   mi_assert_internal(page_idx <= MI_PAGE_META_ALIGNED_COUNT);
   #if MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_RISCV // better code on x64/x86/riscv64
   mi_page_t* const page = (mi_page_t*)((uintptr_t)page_metas | (page_idx * sizeof(mi_page_t)));

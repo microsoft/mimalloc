@@ -170,7 +170,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // This can be used to have a faster `mi_free(_small)` as we can avoid a page_map lookup.
 // This only works if valid pointers are passed to `mi_free` though. However, checked
 // free `mi_cfree` can still use the page map to validate pointers.
-#if !MI_FREE_IS_CHECKED && !MI_FREE_USE_PAGEMAP
+#if !MI_FREE_IS_CHECKED && !MI_FREE_USE_PAGEMAP && !MI_CHERI
 #if MI_PAGE_META_IS_SEPARATED
 #define MI_PAGE_META_IS_ALIGNED         1
 #define MI_PAGE_META_ALIGNED_CHUNKS     MI_SIZE_SIZE
@@ -183,9 +183,11 @@ terms of the MIT license. A copy of the license can be found in the file
 // This can be used to have a slightly faster `mi_free_small` function for specialized
 // cases (like language runtime systems).
 #if !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
-#if defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0
+// guarded can put small allocations into big blocks in a medium page (which would make `mi_free_small` fail)
+// on CHERI we cannot derive the page from a (bounded) user pointer
+#if (defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0) || MI_SECURE || MI_GUARDED || MI_CHERI
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0
-#elif (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED) && !MI_SECURE && !MI_GUARDED // guarded can put small allocations into big blocks in a medium page (which would make `mi_free_small` fail)
+#elif (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED)
 #define MI_PAGE_META_SMALL_IS_ALIGNED   1
 #else
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0
@@ -196,13 +198,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #if !MI_PAGE_META_IS_SEPARATED && MI_SECURE
 #error "secure mode should use separated page infos"
 #endif
-#if MI_PAGE_META_SMALL_IS_ALIGNED && MI_SECURE
-#error "secure mode cannot use MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED)"
+#if MI_PAGE_META_SMALL_IS_ALIGNED && (MI_SECURE || MI_GUARDED)
+#error "secure or guarded mode cannot use MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED)"
 #endif
 #if MI_PAGE_META_IS_SEPARATED && MI_PAGE_MAP_FLAT
 #error "cannot have a flat page map with separated page infos"
 #endif
-
+#if (MI_PAGE_META_IS_ALIGNED || MI_PAGE_META_SMALL_IS_ALIGNED) && MI_CHERI
+#error "cannot have aligned page meta with CHERI"
+#endif
+#if MI_QSBR && MI_CHERI
+#error "QSBR cannot be used with CHERI (as delayed concurrent reads would have the wrong capability)"
+#endif
 
 // --------------------------------------------------------------
 // Sizes of internal data-structures
@@ -215,7 +222,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #define MI_ARENA_SLICE_SHIFT              MI_SMALL_PAGE_SHIFT
   #elif MI_SECURE>=5 && __APPLE__ && MI_ARCH_ARM64
   #define MI_ARENA_SLICE_SHIFT              (17)                        // 128 KiB to not waste too much due to 16 KiB guard pages
-  #elif MI_SECURE>=5 && defined(PAGE_SIZE) && !defined(__wasi__)        // see issue #1440
+  #elif MI_SECURE>=5 && defined(PAGE_SIZE) && !defined(__wasi__) && !defined(__EMSCRIPTEN__)        // see issue #1440
     #if PAGE_SIZE >= 16*MI_KiB
     #define MI_ARENA_SLICE_SHIFT            (17)                        // 128 KiB to not waste too much due to 16 KiB guard pages
     #endif
@@ -393,7 +400,7 @@ size_t        _mi_memid_size(mi_memid_t memid);
 // ------------------------------------------------------
 
 // The free lists use encoded next fields
-// (Only actually encodes when MI_ENCODED_FREELIST is defined.)
+// (Only actually encodes when MI_ENCODED_FREELIST is defined; on CHERI it only holds an address.)
 typedef uintptr_t  mi_encoded_t;
 
 // thread id's
@@ -493,7 +500,7 @@ typedef struct mi_page_s {
   uint16_t                  xlast_alloc;       // for sampling; on 64-bit platforms it is in bits 48..63 of xused.
   #endif
 
-  size_t                    page_offset;       // const: relative offset from the page to the start of the blocks
+  uint8_t*                  page_start;        // const: start of the blocks (on CHERI, the capability from which all blocks are derived)
   uint16_t                  capacity;          // number of blocks committed
   uint16_t                  reserved;          // number of blocks reserved in memory
   uint16_t                  slice_pcommitted;  // committed size in OS page sizes relative to the first arena slice of the page data (or 0 if the page is fully committed already)
@@ -510,7 +517,7 @@ typedef struct mi_page_s {
   mi_memid_t                memid;             // const: provenance of the page memory
 
   #if (MI_ENCODE_FREELIST || MI_PADDING)
-  uintptr_t                 keys[MI_PAGE_KEY_COUNT]; // const: one or two random keys to encode the free lists (see `_mi_block_next`) or padding canary
+  mi_addr_t                 keys[MI_PAGE_KEY_COUNT]; // const: one or two random keys to encode the free lists (see `_mi_block_next`) or padding canary
   #endif
   #if MI_QSBR
   struct mi_page_s*         qsbr_next;
@@ -821,6 +828,7 @@ typedef int64_t  mi_msecs_t;
 struct mi_tld_s {
   mi_threadid_t         thread_id;            // thread id of this thread
   size_t                thread_seq;           // thread sequence id (linear count of created threads)
+  size_t                fork_epoch;           // fork epoch at creation; an older epoch means the thread does not exist in a forked child
   int                   numa_node;            // thread preferred numa node
   mi_subproc_t*         subproc;              // sub-process this thread belongs to.
   mi_theap_t*           theaps;               // list of theaps in this thread (so we can abandon all when the thread terminates)

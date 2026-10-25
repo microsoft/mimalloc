@@ -161,6 +161,75 @@ static int run_child(int depth) {
   return 0;
 }
 
+/* -----------------------------------------------------------
+  Fork without quiescing (issue #1456): other threads allocate, free across threads,
+  and start and terminate threads during the fork; a child that only calls `_exit` must not crash.
+----------------------------------------------------------- */
+
+#define U_SLOTS    1024
+#define U_THREADS  4
+#define U_FORKS    250
+
+static void* u_slots[U_SLOTS];  // accessed with atomic builtins (the test does not run on Windows)
+static int   u_stop;
+static int   u_crashed;
+
+static unsigned u_rand(unsigned* s) { *s = *s * 1103515245u + 12345u; return (*s >> 8); }
+
+static void u_churn(unsigned* s, int n) {
+  for (int i = 0; i < n; i++) {
+    const size_t size = 8 + (u_rand(s) % 4) * (u_rand(s) % 2048);
+    char* p = (char*)mi_malloc(size);
+    memset(p, 'x', (size < 64 ? size : 64));
+    mi_free(__atomic_exchange_n(&u_slots[u_rand(s) % U_SLOTS], p, __ATOMIC_ACQ_REL));  // often a block of another thread
+  }
+}
+
+static void* u_job(void* arg) {
+  unsigned s = (unsigned)(uintptr_t)arg;
+  u_churn(&s, 200);
+  return NULL;
+}
+
+static void* u_allocator(void* arg) {
+  unsigned s = (unsigned)(uintptr_t)arg;
+  while (!__atomic_load_n(&u_stop, __ATOMIC_ACQUIRE)) {
+    pthread_t t;
+    if (pthread_create(&t, NULL, &u_job, (void*)(uintptr_t)u_rand(&s)) == 0) { pthread_join(t, NULL); }
+    u_churn(&s, 100);
+  }
+  return NULL;
+}
+
+static void* u_forker(void* arg) {
+  unsigned s = (unsigned)(uintptr_t)arg;
+  for (int i = 0; i < U_FORKS; i++) {
+    u_churn(&s, 20);
+    const pid_t pid = fork();
+    if (pid < 0) { perror("fork"); break; }
+    if (pid == 0) { _exit(0); }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    // only count segfaults as the macOS objc runtime can abort in an unquiesced child (`xpc_atfork_child`)
+    if (WIFSIGNALED(status) && (WTERMSIG(status) == SIGSEGV || WTERMSIG(status) == SIGBUS)) { __atomic_fetch_add(&u_crashed, 1, __ATOMIC_RELAXED); }
+  }
+  return NULL;
+}
+
+static int unquiesced_forks(void) {
+  pthread_t allocators[U_THREADS];
+  pthread_t forkers[U_THREADS];
+  for (int i = 0; i < U_THREADS; i++) { pthread_create(&allocators[i], NULL, &u_allocator, (void*)(uintptr_t)(i+1)); }
+  for (int i = 0; i < U_THREADS; i++) { pthread_create(&forkers[i], NULL, &u_forker, (void*)(uintptr_t)(1000+i)); }
+  for (int i = 0; i < U_THREADS; i++) { pthread_join(forkers[i], NULL); }
+  __atomic_store_n(&u_stop, 1, __ATOMIC_RELEASE);
+  for (int i = 0; i < U_THREADS; i++) { pthread_join(allocators[i], NULL); }
+  for (int i = 0; i < U_SLOTS; i++) { mi_free(u_slots[i]); }
+  const int crashed = u_crashed;
+  if (crashed > 0) { fprintf(stderr, "unquiesced forks: %d children crashed\n", crashed); }
+  return crashed;
+}
+
 int main(void) {
   mi_thread_init(); // retain a different theap for the same heap in the surviving thread
   for (size_t i = 0; i < REMOTE; i++) remote[i] = mi_malloc(64);
@@ -203,6 +272,7 @@ int main(void) {
   pthread_join(hold, NULL);
   for (size_t i = 0; i < LIVE; i++) { mi_free(live[i]); }
 
+  failed += unquiesced_forks();
   printf("forks: %d, failed: %d\n", FORKS, failed);
   return (failed == 0 ? 0 : 1);
 }

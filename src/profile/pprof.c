@@ -765,7 +765,7 @@ typedef struct {
   bool                failed;  // set if an allocation failed; the mapping list is then incomplete
 } mi_pprof_modules_t;
 
-static void mi_pprof_modules_add(mi_heap_t* heap, mi_pprof_modules_t* mods, uintptr_t start, uintptr_t end, const char* path) {
+mi_decl_maybe_unused static void mi_pprof_modules_add(mi_heap_t* heap, mi_pprof_modules_t* mods, uintptr_t start, uintptr_t end, const char* path) {
   if (mods->failed) return;
   if (mods->count == mods->capacity) {
     const size_t new_capacity = (mods->capacity == 0 ? 16 : mods->capacity * 2);
@@ -1101,7 +1101,7 @@ static bool mi_pprof_snapshot_text(mi_pprof_profiler_t* prof, const char* fname)
                  (uint64_t)inuse_count, (uint64_t)inuse_bytes,
                  (uint64_t)loc->alloc_count, (uint64_t)loc->alloc_bytes);
       for (size_t j = 0; j < loc->callstack.count; j++) {
-        mi_fprintf(f, " 0x%tx", (uintptr_t)loc->callstack.frames[j]);
+        mi_fprintf(f, " 0x%tx", (size_t)(uintptr_t)loc->callstack.frames[j]);
       }
       fprintf(f, "\n");
     }

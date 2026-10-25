@@ -362,7 +362,7 @@ extern "C" {
   // Forward Posix/Unix calls as well
   void*  reallocf(void* p, size_t newsize) MI_FORWARD2(mi_reallocf,p,newsize)
   size_t malloc_size(const void* p)        MI_FORWARD1(mi_malloc_size,p)
-  #if !defined(__ANDROID__) && !defined(__FreeBSD__) && !defined(__DragonFly__)
+  #if !defined(__ANDROID__) && !defined(__FreeBSD__) && !defined(__DragonFly__) && !defined(__EMSCRIPTEN__)
   size_t malloc_usable_size(void *p)       MI_FORWARD1(mi_malloc_usable_size,p)
   #else
   size_t malloc_usable_size(const void *p) MI_FORWARD1(mi_malloc_usable_size,p)
@@ -397,7 +397,7 @@ void* reallocarray(void* p, size_t count, size_t size)  { return mi_reallocarray
 // some systems define reallocarr so mark it as a weak symbol (#751)
 mi_decl_weak int reallocarr(void* p, size_t count, size_t size)    { return mi_reallocarr(p, count, size); }
 
-#if defined(__wasi__)
+#if defined(__wasi__) || defined(__EMSCRIPTEN__)
   // forward __libc interface (see PR #667)
   void* __libc_malloc(size_t size)                      MI_FORWARD1(mi_malloc, size)
   void* __libc_calloc(size_t count, size_t size)        MI_FORWARD2(mi_calloc, count, size)

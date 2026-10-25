@@ -264,7 +264,7 @@ static size_t unix_detect_virtual_address_bits(void) {
       #endif
       {
         if (probe.key != -1) { // If a key is unknown to the kernel, its key field will be cleared to -1.
-          return (MI_SIZE_BITS - mi_clz((uintptr_t)probe.value));
+          return (MI_SIZE_BITS - mi_clz((size_t)probe.value));
         }
       }
     #endif
@@ -1015,13 +1015,13 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
     #ifndef GRND_NONBLOCK
     #define GRND_NONBLOCK (1)
     #endif
-    static _Atomic(uintptr_t) no_getrandom; // = 0
+    static _Atomic(size_t) no_getrandom; // = 0
     if (mi_atomic_load_acquire(&no_getrandom)==0) {
       ssize_t ret = syscall(SYS_getrandom, buf, buf_len, GRND_NONBLOCK);
       if (ret > 0) { mi_msan_unpoison(buf, (size_t)ret); }
       if (ret >= 0) return (buf_len == (size_t)ret);
       if (errno != ENOSYS) return false;
-      mi_atomic_store_release(&no_getrandom, (uintptr_t)1); // don't call again, and fall back to /dev/urandom
+      mi_atomic_store_release(&no_getrandom, (size_t)1); // don't call again, and fall back to /dev/urandom
     }
   #endif
   int flags = O_RDONLY;

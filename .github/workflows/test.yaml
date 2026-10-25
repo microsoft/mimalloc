@@ -49,6 +49,10 @@ jobs:
             tests: clang
           - os: windows-11-arm      # clang-cl and clang
             tests: clang
+          - os: ubuntu-latest
+            tests: cheri-sim        # simulated CHERI
+          - os: ubuntu-latest
+            tests: emscripten       # wasm32 on node
           # - os: ubuntu-latest
           #   tests: android-x64
           # - os: ubuntu-latest       # slow, so disable by default
@@ -531,6 +535,55 @@ jobs:
           cmake . -B out/secure-arm32 -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
           cmake --build out/secure-arm32 --parallel 4 --config Release
           ctest --test-dir out/secure-arm32 --verbose --timeout 240 -C Release
+
+      # CHERI simulation (see test/cheri-sim.h)
+      - name: CHERI sim, Release
+        if: matrix.tests == 'cheri-sim'
+        run: |
+          cmake . -B out/release-cheri-sim -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DMI_BUILD_SHARED=OFF -DCMAKE_C_FLAGS="-include $PWD/test/cheri-sim.h -Wno-builtin-macro-redefined -U__SIZEOF_POINTER__ -D__SIZEOF_POINTER__=16"
+          cmake --build out/release-cheri-sim --parallel 4 --config Release
+          ctest --test-dir out/release-cheri-sim --verbose --timeout 240 -C Release
+
+      - name: CHERI sim, Debug
+        if: matrix.tests == 'cheri-sim'
+        run: |
+          cmake . -B out/debug-cheri-sim -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DCMAKE_C_COMPILER=clang -DMI_BUILD_SHARED=OFF -DCMAKE_C_FLAGS="-include $PWD/test/cheri-sim.h -Wno-builtin-macro-redefined -U__SIZEOF_POINTER__ -D__SIZEOF_POINTER__=16"
+          cmake --build out/debug-cheri-sim --parallel 4 --config Debug
+          ctest --test-dir out/debug-cheri-sim --verbose --timeout 240 -C Debug
+
+      - name: CHERI sim, Guarded
+        if: matrix.tests == 'cheri-sim'
+        run: |
+          cmake . -B out/guarded-cheri-sim -DCMAKE_BUILD_TYPE=Release -DMI_GUARDED=ON -DCMAKE_C_COMPILER=clang -DMI_BUILD_SHARED=OFF -DCMAKE_C_FLAGS="-include $PWD/test/cheri-sim.h -Wno-builtin-macro-redefined -U__SIZEOF_POINTER__ -D__SIZEOF_POINTER__=16"
+          cmake --build out/guarded-cheri-sim --parallel 4 --config Release
+          ctest --test-dir out/guarded-cheri-sim --verbose --timeout 240 -C Release
+          MIMALLOC_GUARDED_SAMPLE_RATE=1 out/guarded-cheri-sim/mimalloc-test-api
+
+      # Emscripten (tests run on node)
+      - name: Emscripten, Setup
+        if: matrix.tests == 'emscripten'
+        uses: mymindstorm/setup-emsdk@4528d102f7230f0e7b276855c01ea1159be0e984 # v16
+
+      - name: Emscripten, Release
+        if: matrix.tests == 'emscripten'
+        run: |
+          emcmake cmake . -B out/release-wasm -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-pthread
+          cmake --build out/release-wasm --parallel 4 --config Release
+          ctest --test-dir out/release-wasm --verbose --timeout 240 -C Release
+
+      - name: Emscripten, Debug
+        if: matrix.tests == 'emscripten'
+        run: |
+          emcmake cmake . -B out/debug-wasm -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DCMAKE_C_FLAGS=-pthread
+          cmake --build out/debug-wasm --parallel 4 --config Debug
+          ctest --test-dir out/debug-wasm --verbose --timeout 240 -C Debug
+
+      - name: Emscripten, Single threaded
+        if: matrix.tests == 'emscripten'
+        run: |
+          emcmake cmake . -B out/single-wasm -DCMAKE_BUILD_TYPE=Release
+          cmake --build out/single-wasm --parallel 4 --config Release
+          ctest --test-dir out/single-wasm --verbose --timeout 240 -C Release
 
       # - name: Android, Setup
       #   if: matrix.tests == 'android-x64'

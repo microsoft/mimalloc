@@ -18,6 +18,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/alloc/free.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/profile/sample-profile.h"
+#include "mimalloc/heap/subproc.h"
 #include "page-queue.h"
 #include "page.h"
 
@@ -221,7 +222,12 @@ static inline mi_page_t* mi_page_queue_find_free(mi_theap_t* theap, mi_page_queu
 // so their size is not always `> MI_LARGE_OBJ_SIZE_MAX`.
 static mi_page_t* mi_huge_page_alloc(mi_theap_t* theap, size_t size, size_t page_alignment, mi_page_queue_t* pq) {
   _mi_theap_qsbr_collect_delayed(theap);
-  const size_t block_size = _mi_os_good_alloc_size(size);
+  const size_t block_size = mi_bounds_size(_mi_os_good_alloc_size(size));
+  // on CHERI, very large blocks need a large alignment for exact bounds: use an OS aligned page then (see `mi_page_meta_in_front_block_start`)
+  const size_t bounds_align = mi_bounds_align(block_size);
+  if mi_unlikely(bounds_align >= MI_PAGE_MAX_OVERALLOC_ALIGN) {
+    page_alignment = mi_max(page_alignment, mi_max(bounds_align, 2*MI_PAGE_MAX_OVERALLOC_ALIGN));
+  }
   // mi_assert_internal(mi_bin(block_size) == MI_BIN_HUGE || page_alignment > 0);
   #if MI_HUGE_PAGE_ABANDON
   #error todo.
@@ -330,6 +336,9 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
   if mi_unlikely(theap->generic_count >= 1000) {
     theap->generic_collect_count += theap->generic_count;
     theap->generic_count = 0;
+
+    // after a fork, abandon the pages of threads that do not exist in the child (see `heap/subproc.c`)
+    _mi_fork_child_try_collect();
 
     // check if the profiler is enabled (unless this theap is permanently excluded, see `mi_theap_profile_never`)
     if (!theap->profile_never) {

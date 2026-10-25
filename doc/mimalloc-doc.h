@@ -868,7 +868,7 @@ void mi_debug_show_arenas(void);
 /// @brief  Return the start and size of an arena.
 /// @param arena_id  The arena identifier.
 /// @param size      Returned size in bytes of the (virtual) arena area.
-/// @return base address of the arena.
+/// @return base address of the arena (on CHERI this pointer has zero-length bounds and cannot be dereferenced).
 void* mi_arena_area(mi_arena_id_t arena_id, size_t* size);
 
 

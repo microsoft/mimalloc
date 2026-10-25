@@ -73,8 +73,9 @@ static inline mi_arena_t* mi_arena_from_memid(mi_memid_t memid, size_t* slice_in
 // initialize the bitmap for `slice_count` slices at base (and advance the base pointer)
 static inline mi_bitmap_t* mi_arena_bitmap_init(size_t slice_count, uint8_t** base) {
   mi_bitmap_t* bitmap = (mi_bitmap_t*)(*base);
-  *base = (*base) + mi_bitmap_init(bitmap, slice_count, true /* already zero */);
-  return bitmap;
+  const size_t size = mi_bitmap_init(bitmap, slice_count, true /* already zero */);
+  *base = (*base) + size;
+  return (mi_bitmap_t*)mi_ptr_bounded_data(bitmap, size);
 }
 
 typedef bool (mi_forall_arena_fun_t)(mi_arena_t* arena, const void* arg, void** result);

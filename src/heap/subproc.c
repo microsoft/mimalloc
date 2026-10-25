@@ -337,56 +337,85 @@ void _mi_subproc_main_done(void) {
 /* -----------------------------------------------------------
   Fork support
 
-  `fork()` is only safe if no other thread is executing inside mimalloc
-  at the time of the fork; all other threads must be quiesced at a safe
-  point outside mimalloc (as is done for example by CPython's stop-the-world).
-  The child then inherits consistent data structures with no locks held
-  (as no thread was inside mimalloc) so we only need to abandon the pages
-  of the threads that do not exist in the child.
+  In a forked child only the forking thread exists, so the theaps of all other
+  threads are dead. The fork handler only marks this and the pages of the dead
+  theaps are abandoned later on the generic allocation path. This is required as
+  other threads may have been inside mimalloc at the time of the fork, leaving their
+  data structures inconsistent; a child that only calls `exec` or `_exit` (as POSIX
+  requires for multi-threaded programs) then never touches them.
+  If a child keeps allocating, it should only fork when all other threads are
+  quiesced at a safe point outside mimalloc (as is done for example by CPython's
+  stop-the-world). If a dead thread held a lock at the fork, its pages are leaked.
 ----------------------------------------------------------- */
 
-// Abandon the pages of theaps whose threads do not exist in the child.
-// The theap and tld memory itself is not freed as the (dead) thread lists may be inconsistent.
-// We need to take no locks as at this point only the child process runs in a single thread.
-static void mi_fork_child_abandon_theaps(void) {
-  mi_theap_t* const theap_default = _mi_theap_default();
-  mi_tld_t* const tld_current = (mi_theap_is_initialized(theap_default) ? theap_default->tld : NULL);
-  mi_theap_t* dead = NULL;
-  for (mi_subproc_t* subproc = mi_subprocs; subproc != NULL; subproc = subproc->next) {
-    for (mi_heap_t* heap = subproc->heaps; heap != NULL; heap = heap->next) {
-      mi_theap_t* theap = heap->theaps;
-      while (theap != NULL) {
-        mi_theap_t* const next = theap->hnext;
-        mi_tld_t* const tld = theap->tld;
-        if (tld != NULL && tld != tld_current && tld->thread_id != MI_THREADID_DETACHED) {
-          theap->free_batch.enabled = false;
-          _mi_theap_free_batch_collect(theap);
-          // remove from the heap list and push on the dead list
-          if (theap->hnext != NULL) { theap->hnext->hprev = theap->hprev; }
-          if (theap->hprev != NULL) { theap->hprev->hnext = theap->hnext; }
-                               else { heap->theaps = theap->hnext; }
-          theap->hprev = NULL;
-          theap->hnext = dead;
-          dead = theap;
-        }
-        theap = next;
-      }
-    }
-  }
-  while (dead != NULL) {
-    mi_theap_t* const next = dead->hnext;
-    mi_heap_t* const heap = mi_theap_heap(dead);
-    dead->hnext = NULL;
-    dead->tld = NULL;
-    _mi_theap_abandon_owned_pages(dead);
-    _mi_stats_merge_into(&heap->stats, &dead->stats);
-    mi_atomic_store_ptr_release(mi_heap_t, &dead->heap, NULL);
-    dead = next;
-  }
+static size_t mi_fork_epoch;                        // incremented in the child at every fork
+static _Atomic(size_t) mi_fork_pending;             // set in the child until the dead theaps are abandoned
+
+size_t _mi_fork_epoch(void) {
+  return mi_fork_epoch;
 }
 
+static bool mi_fork_theap_is_dead(const mi_theap_t* theap) {
+  const mi_tld_t* const tld = theap->tld;
+  return (tld != NULL && tld->thread_id != MI_THREADID_DETACHED && tld->fork_epoch != mi_fork_epoch);
+}
+
+// Abandon the pages of dead theaps in a heap.
+// The theap and tld memory itself is not freed as the (dead) thread lists may be inconsistent.
+static bool mi_fork_heap_abandon_dead(mi_heap_t* heap) {
+  if (!mi_lock_try_acquire(&heap->theaps_lock)) return false;
+  mi_theap_t* theap = heap->theaps;
+  while (theap != NULL) {
+    mi_theap_t* const next = theap->hnext;
+    if (mi_fork_theap_is_dead(theap)) {
+      theap->free_batch.enabled = false;
+      _mi_theap_free_batch_collect(theap);
+      if (theap->hnext != NULL) { theap->hnext->hprev = theap->hprev; }
+      if (theap->hprev != NULL) { theap->hprev->hnext = theap->hnext; }
+                           else { heap->theaps = theap->hnext; }
+      theap->hnext = NULL;
+      theap->hprev = NULL;
+      theap->tld = NULL;
+      _mi_theap_abandon_owned_pages(theap);
+      _mi_stats_merge_into(&heap->stats, &theap->stats);
+      mi_atomic_store_ptr_release(mi_heap_t, &theap->heap, NULL);
+    }
+    theap = next;
+  }
+  mi_lock_release(&heap->theaps_lock);
+  return true;
+}
+
+// Called at thread initialization and regularly on the generic allocation path.
+// Retried later if a lock is busy.
+void _mi_fork_child_try_collect(void) {
+  if mi_likely(mi_atomic_load_relaxed(&mi_fork_pending) == 0) return;
+  if (mi_atomic_exchange_acq_rel(&mi_fork_pending, 0) == 0) return;
+  bool done = false;
+  if (mi_lock_try_acquire(&mi_subprocs_lock)) {
+    done = true;
+    for (mi_subproc_t* subproc = mi_subprocs; subproc != NULL; subproc = subproc->next) {
+      if (mi_lock_try_acquire(&subproc->heaps_lock)) {
+        for (mi_heap_t* heap = subproc->heaps; heap != NULL; heap = heap->next) {
+          if (!mi_fork_heap_abandon_dead(heap)) { done = false; }
+        }
+        mi_lock_release(&subproc->heaps_lock);
+      }
+      else {
+        done = false;
+      }
+    }
+    mi_lock_release(&mi_subprocs_lock);
+  }
+  if (!done) { mi_atomic_store_release(&mi_fork_pending, 1); }
+}
+
+// Called in the child process right after a fork.
 void _mi_fork_child(void) {
-  mi_fork_child_abandon_theaps();
+  mi_fork_epoch++;
+  mi_theap_t* const theap = _mi_theap_default();
+  if (mi_theap_is_initialized(theap)) { theap->tld->fork_epoch = mi_fork_epoch; }  // the forking thread survives
+  mi_atomic_store_release(&mi_fork_pending, 1);
 }
 
 // Called at process initialization.

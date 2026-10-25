@@ -54,8 +54,12 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
 
 // Page start
 static inline uint8_t* mi_page_start(const mi_page_t* page) {
-  // multiplication must be done in `size_t`
-  return (uint8_t*)page + page->page_offset;
+  return page->page_start;
+}
+
+// Derive a block pointer from an address in the page; On systems with pointer provenance, this keeps the authority of the page start.
+static inline mi_block_t* mi_page_block_from_addr(const mi_page_t* page, mi_addr_t addr) {
+  return (mi_block_t*)mi_ptr_with_addr(mi_page_start(page), addr);
 }
 
 static inline size_t mi_page_size(const mi_page_t* page) {
@@ -137,6 +141,16 @@ static inline bool mi_page_meta_is_separated(const mi_page_t* page) {
 }
 
 static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
+  #if MI_CHERI
+  // derive from the arena or OS memory as both the page meta data and the page start are bounded
+  if (page->memid.memkind == MI_MEM_ARENA) {
+    const mi_memid_arena_info_t* const ainfo = &page->memid.mem.arena;
+    return (uint8_t*)ainfo->arena->start + ((size_t)ainfo->slice_index * MI_ARENA_SLICE_SIZE);
+  }
+  else {
+    return (uint8_t*)mi_ptr_rederive(page->memid.mem.os.base, (void*)page);  // page meta info is at the start
+  }
+  #else
   if (mi_page_meta_is_separated(page)) {
     // page meta info is at a separate location (at `arena->pages`)
     return (uint8_t*)mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN);
@@ -145,6 +159,17 @@ static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
     // page meta info is at the start of the page slices
     return (uint8_t*)page;
   }
+  #endif
+}
+
+// Re-derive `p` in the page memory with the authority to change its protection
+static inline void* mi_page_vmem_ptr(const mi_page_t* page, void* p) {
+  #if MI_CHERI
+  return mi_ptr_rederive(mi_page_slice_start(page), p);
+  #else
+  MI_UNUSED(page);
+  return p;
+  #endif
 }
 
 // This gives the offset relative to the start slice of a page.
@@ -513,29 +538,32 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
   // return (mi_ptr_page(p) == mi_ptr_page(q));
 }
 
-static inline void* mi_ptr_decode(const void* null, const mi_encoded_t x, const uintptr_t* keys) {
-  const uintptr_t k1 = keys[0];
+// Encoding uses just the address and the decoded block is derived from the page (with `page` as the `null` value).
+// (the rotations assume `sizeof(mi_addr_t)==sizeof(size_t)`)
+static inline void* mi_ptr_decode(const mi_page_t* page, const mi_encoded_t x, const mi_addr_t* keys) {
+  const mi_addr_t k1 = keys[0];
   #if MI_PAGE_KEY_COUNT==2
-  const uintptr_t k2 = keys[1];
+  const mi_addr_t k2 = keys[1];
   #else
-  const uintptr_t k2 = mi_rotr(k1,13);
+  const mi_addr_t k2 = mi_rotr(k1,13);
   #endif
-  void* p = (void*)(mi_rotr(x - k1, k1) ^ k2);
-  return (p==null ? NULL : p);
+  const mi_addr_t addr = (mi_rotr((mi_addr_t)x - k1, k1) ^ k2);
+  if (addr == mi_addr(page)) return NULL;
+  return mi_page_block_from_addr(page, addr);
 }
 
-static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const uintptr_t* keys) {
-  const uintptr_t k1 = keys[0];
+static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const mi_addr_t* keys) {
+  const mi_addr_t k1 = keys[0];
   #if MI_PAGE_KEY_COUNT==2
-  const uintptr_t k2 = keys[1];
+  const mi_addr_t k2 = keys[1];
   #else
-  const uintptr_t k2 = mi_rotr(k1,13);
+  const mi_addr_t k2 = mi_rotr(k1,13);
   #endif
-  const uintptr_t x = (uintptr_t)(p==NULL ? null : p);
-  return mi_rotl(x ^ k2, k1) + k1;
+  const mi_addr_t x = mi_addr(p==NULL ? null : p);
+  return (mi_encoded_t)(mi_rotl(x ^ k2, k1) + k1);
 }
 
-static inline uint32_t mi_ptr_encode_canary(const void* null, const void* p, const uintptr_t* keys) {
+static inline uint32_t mi_ptr_encode_canary(const void* null, const void* p, const mi_addr_t* keys) {
   const uint32_t x = (uint32_t)(mi_ptr_encode(null,p,keys));
   // make the lowest byte 0 to prevent spurious read overflows which could be a security issue (issue #951)
   // also clear bit 9 which we set only when a block is freed.
@@ -554,26 +582,27 @@ static inline bool mi_ptr_decode_canary_is_freed(uint32_t canary) {
   return (canary == mi_ptr_encode_canary_freed());
 }
 
-static inline mi_block_t* mi_block_nextx( const void* null, const mi_block_t* block, const uintptr_t* keys ) {
+static inline mi_block_t* mi_block_nextx( const mi_page_t* page, const mi_block_t* block, const mi_addr_t* keys ) {
   mi_track_mem_defined(block,sizeof(mi_block_t));
   mi_block_t* next;
   #if MI_ENCODE_FREELIST
-  next = (mi_block_t*)mi_ptr_decode(null, block->next, keys);
+  next = (mi_block_t*)mi_ptr_decode(page, block->next, keys);
   #else
-  MI_UNUSED(keys); MI_UNUSED(null);
-  next = (mi_block_t*)block->next;
+  MI_UNUSED(keys);
+  const mi_addr_t addr = (mi_addr_t)block->next;
+  next = (addr==0 ? NULL : mi_page_block_from_addr(page, addr));
   #endif
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
   return next;
 }
 
-static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const mi_block_t* next, const uintptr_t* keys) {
+static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const mi_block_t* next, const mi_addr_t* keys) {
   mi_track_mem_undefined(block,sizeof(mi_block_t));
   #if MI_ENCODE_FREELIST
   block->next = mi_ptr_encode(null, next, keys);
   #else
   MI_UNUSED(keys); MI_UNUSED(null);
-  block->next = (mi_encoded_t)next;
+  block->next = (mi_encoded_t)mi_addr(next);  // never store a capability in a (freed) block
   #endif
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
 }

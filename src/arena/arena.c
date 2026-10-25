@@ -110,14 +110,27 @@ mi_arena_id_t _mi_arena_id_none(void) {
 }
 
 mi_arena_t* _mi_arena_from_id(mi_arena_id_t id) {
+  #if MI_CHERI
+  // id's are just addresses (without provenance) so we look up the arena in the current subprocess
+  mi_arena_t* arena = NULL;
+  if (id != NULL) {
+    mi_subproc_t* const subproc = _mi_subproc();
+    const size_t count = mi_arenas_get_count(subproc);
+    for (size_t i = 0; i < count && arena == NULL; i++) {
+      mi_arena_t* const candidate = mi_arena_from_index(subproc, i);
+      if (candidate != NULL && mi_addr(candidate) == mi_addr(id)) { arena = candidate; }
+    }
+  }
+  #else
   mi_arena_t* const arena = (mi_arena_t*)id;
+  #endif
   mi_assert_internal(arena==NULL || arena->parent==NULL); // id's should never point to sub-arena's
   return arena;
 }
 
 mi_arena_id_t mi_arena_id_from_arena(mi_arena_t* arena) {
   mi_assert_internal(arena==NULL || arena->parent==NULL);
-  return (arena==NULL ? _mi_arena_id_none() : (mi_arena_id_t)arena);
+  return (arena==NULL ? _mi_arena_id_none() : (mi_arena_id_t)mi_ptr_from_addr(mi_addr(arena)));  // don't expose the arena capability
 }
 
 
@@ -177,7 +190,7 @@ void* mi_arena_area(mi_arena_id_t arena_id, size_t* size) {
     mi_assert_internal(_mi_size_of_slices(arena->slice_count) <= arena->total_size);
     *size = arena->total_size;
   }
-  return mi_arena_start(arena);
+  return mi_ptr_bounded_data(mi_arena_start(arena), 0);  // only expose the address
 }
 
 
@@ -482,7 +495,7 @@ static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_
 
 
 static mi_arena_t* mi_arena_info(void* area) {
-  return (mi_arena_t*)((uint8_t*)area + _mi_size_of_slices(mi_arena_page_meta_aligned_slice_count()));
+  return (mi_arena_t*)mi_ptr_bounded_data((uint8_t*)area + _mi_size_of_slices(mi_arena_page_meta_aligned_slice_count()), sizeof(mi_arena_t));
 }
 
 static size_t mi_arena_info_slices_needed(size_t slice_count, size_t* bitmap_base) {
@@ -508,8 +521,9 @@ static size_t mi_arena_info_slices_needed(size_t slice_count, size_t* bitmap_bas
 
 static mi_bbitmap_t* mi_arena_bbitmap_init(mi_subproc_t* subproc, size_t slice_count, uint8_t** base) {
   mi_bbitmap_t* bbitmap = (mi_bbitmap_t*)(*base);
-  *base = (*base) + mi_bbitmap_init(subproc, bbitmap, slice_count, true /* already zero */);
-  return bbitmap;
+  const size_t size = mi_bbitmap_init(subproc, bbitmap, slice_count, true /* already zero */);
+  *base = (*base) + size;
+  return (mi_bbitmap_t*)mi_ptr_bounded_data(bbitmap, size);
 }
 
 
@@ -595,7 +609,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
     arena->pages_main.pages_abandoned[i] = mi_arena_bitmap_init(slice_count, &base);
   }
   #if MI_PAGE_META_IS_SEPARATED && !MI_PAGE_META_IS_ALIGNED
-  arena->pages_meta = (mi_page_t*)base;
+  arena->pages_meta = (mi_page_t*)mi_ptr_bounded_data(base, slice_count * sizeof(mi_page_t));
   base += (slice_count * sizeof(mi_page_t));
   #else
   arena->pages_meta = NULL;

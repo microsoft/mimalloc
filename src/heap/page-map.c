@@ -236,6 +236,11 @@ static size_t mi_page_map_count_of_size(size_t size) {
 //   return (void*)((uintptr_t)idx * MI_PAGE_MAP_SUB_COUNT * MI_ARENA_SLICE_SIZE);
 // }
 
+// The page map with the authority to commit or free it (on CHERI)
+static mi_page_map_t* mi_page_map_vmem(mi_page_map_t* pmap) {
+  return (mi_page_map_t*)mi_ptr_rederive(pmap->memid.mem.os.base, pmap);
+}
+
 mi_decl_nodiscard static mi_decl_noinline bool mi_page_map_commit_entries(mi_page_map_t* pmap, size_t required_idx) {
   const size_t reserved_count = mi_page_map_count_of_size(pmap->reserved_size);
   if mi_unlikely(required_idx >= reserved_count) {
@@ -249,7 +254,7 @@ mi_decl_nodiscard static mi_decl_noinline bool mi_page_map_commit_entries(mi_pag
   mi_assert_internal(commit_count <= reserved_count);
   // note: we rely on uncommitted memory to be zero initialized on the first commit (and further concurrent commits leave the memory as is).
   bool is_zero;
-  if mi_unlikely(!_mi_os_commit(_mi_subproc_main(), pmap, commit_size, &is_zero)) {
+  if mi_unlikely(!_mi_os_commit(_mi_subproc_main(), mi_page_map_vmem(pmap), commit_size, &is_zero)) {
     mi_page_map_cannot_commit();
     return false;
   }
@@ -353,8 +358,8 @@ static bool mi_page_map_init_once(void) {
   mi_lock_init(&pmap->lock);
   mi_atomic_store_release(&pmap->committed_count, commit_count);
   // mi_atomic_store_release(&pmap->committed_addr, mi_page_map_addr_of_index(commit_count));
-  mi_atomic_store_ptr_release(mi_page_t*, &pmap->submaps[0], sub0);
-  mi_atomic_store_ptr_release(mi_page_map_t, &__mi_page_map, pmap);
+  mi_atomic_store_ptr_release(mi_page_t*, &pmap->submaps[0], (mi_submap_t)mi_ptr_bounded_data(sub0, submap_size));
+  mi_atomic_store_ptr_release(mi_page_map_t, &__mi_page_map, (mi_page_map_t*)mi_ptr_bounded_data(pmap, reserve_size));  // see `mi_page_map_vmem`
   mi_assert_internal(mi_ptr_page(NULL)==NULL);
   return true;
 }
@@ -382,7 +387,7 @@ void _mi_page_map_unsafe_destroy(void) {
       mi_atomic_store_ptr_release(mi_page_t*, &pmap->submaps[idx], NULL);
     }
   }
-  _mi_os_free_ex(subproc, pmap, pmap->reserved_size, true, pmap->memid);
+  _mi_os_free_ex(subproc, mi_page_map_vmem(pmap), pmap->reserved_size, true, pmap->memid);
   mi_atomic_store_ptr_release(mi_page_map_t, &__mi_page_map, &mi_page_map_empty);
 }
 
@@ -504,7 +509,7 @@ void _mi_page_map_unregister_range(void* start, size_t size) {
   if mi_unlikely(pmap == NULL) return;
   const size_t slice_count = mi_divide_up(size, MI_ARENA_SLICE_SIZE);
   size_t sub_idx;
-  const uintptr_t idx = mi_page_map_index(start, &sub_idx);
+  const size_t idx = mi_page_map_index(start, &sub_idx);
   mi_page_map_set_range(pmap, NULL, idx, sub_idx, slice_count);  // todo: avoid committing if not already committed?
 }
 

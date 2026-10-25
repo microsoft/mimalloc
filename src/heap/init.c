@@ -33,7 +33,7 @@ static const mi_page_t mi_page_empty = {
   0,                      // xlast_used
   0,                      // xlast_alloc
   #endif
-  0,                      // page_offset
+  NULL,                   // page_start
   0,                      // capacity
   0,                      // reserved capacity
   0,                      // slice_pcommitted
@@ -78,7 +78,7 @@ static const mi_page_t mi_page_empty = {
 
 
 // Empty page queues for every bin
-#define QNULL(sz)  { NULL, NULL, 0, (sz)*sizeof(uintptr_t), 0 }
+#define QNULL(sz)  { NULL, NULL, 0, (sz)*sizeof(size_t), 0 }
 #define MI_PAGE_QUEUES_EMPTY \
   { QNULL(1), \
     QNULL(     1), QNULL(     2), QNULL(     3), QNULL(     4), QNULL(     5), QNULL(     6), QNULL(     7), QNULL(     8), /* 8 */ \
@@ -122,6 +122,7 @@ static const mi_page_t mi_page_empty = {
 static mi_decl_cache_align mi_tld_t mi_tld_detached = {
   MI_THREADID_DETACHED,   // thread_id
   0,                      // thread_seq
+  0,                      // fork_epoch
   0,                      // default numa node
   NULL,                   // subproc
   NULL,                   // theaps list
@@ -280,6 +281,7 @@ static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc) 
     tld->thread_id = _mi_prim_thread_id();
     tld->is_in_threadpool = _mi_prim_thread_is_in_threadpool();
     tld->thread_seq = tseq;
+    tld->fork_epoch = _mi_fork_epoch();
     mi_atomic_increment_relaxed(&tld->subproc->thread_count);
   }
   return tld;
@@ -327,7 +329,7 @@ static mi_theap_t* mi_heap_check_for_existing_theap(mi_heap_t* heap) {
   mi_theap_t* thread_theap = NULL;
   mi_lock(&heap->theaps_lock) {
     for(mi_theap_t* theap = heap->theaps; theap != NULL; theap = theap->hnext ) {
-      if (theap->tld->thread_id == tid) {
+      if (theap->tld->thread_id == tid && theap->tld->fork_epoch == _mi_fork_epoch()) {  // a dead theap in a forked child can have the same id
         thread_theap = theap;
         break;
       }
@@ -391,6 +393,7 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
   mi_assert_internal(heap_main==NULL || heap_theap == theap); MI_UNUSED_RELEASE(heap_theap);
 
   mi_subproc_stat_increase(mi_theap_subproc(theap), threads, 1);  // or theap stats and wait for merge?
+  _mi_fork_child_try_collect();  // in a forked child, abandon dead theaps as they may have the same thread id as this thread
   // _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
   return theap;
 }
