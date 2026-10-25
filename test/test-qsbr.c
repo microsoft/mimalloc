@@ -7,6 +7,16 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
+
+#if defined(__CHERI_PURE_CAPABILITY__)
+
+int main(void) {
+  printf("skip QSBR test as it is not supported on CHERI\n");
+  return 0;
+}
+
+#else
 
 struct qsbr_domain_s;
 struct mi_page_qsbr_s {
@@ -634,3 +644,4 @@ int main(void) {
   CHECK_THREADS("cross-thread terminal destroy unlinks before freeing the owner", test_terminal_destroy(true));
   return print_test_summary();
 }
+#endif
