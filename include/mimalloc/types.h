@@ -207,6 +207,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #if (MI_PAGE_META_IS_ALIGNED || MI_PAGE_META_SMALL_IS_ALIGNED) && MI_CHERI
 #error "cannot have aligned page meta with CHERI"
 #endif
+#if MI_QSBR && MI_CHERI
+#error "QSBR cannot be used with CHERI (as delayed concurrent reads would have the wrong capability)"
+#endif
 
 // --------------------------------------------------------------
 // Sizes of internal data-structures
