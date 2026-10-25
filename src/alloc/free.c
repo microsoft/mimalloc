@@ -119,7 +119,7 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
   }
   #endif
 
-  if (allow_reclaim && !was_guarded) {
+  if (allow_reclaim && !was_guarded && !mi_page_is_abandoned(page)) {
     mi_free_block_mt_batch(page, block);
   }
   else {
