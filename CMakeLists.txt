@@ -1301,7 +1301,7 @@ if (MI_BUILD_TESTS)
   endif()
 
   # These tests embed the allocator to inspect internal state or extend its layout.
-  foreach(TEST_NAME free-batch)
+  foreach(TEST_NAME qsbr free-batch)
     add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
     target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
     target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})
@@ -1315,14 +1315,6 @@ if (MI_BUILD_TESTS)
     endif()
     add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
   endforeach()
-
-  # Check QSBR
-  add_executable(mimalloc-test-qsbr test/test-qsbr.c)
-  target_compile_definitions(mimalloc-test-qsbr PRIVATE ${mi_defines})
-  target_compile_options(mimalloc-test-qsbr PRIVATE ${mi_cflags})
-  target_include_directories(mimalloc-test-qsbr PRIVATE include)
-  target_link_libraries(mimalloc-test-qsbr PRIVATE ${mi_libraries})
-  add_test(NAME test-qsbr COMMAND mimalloc-test-qsbr)
 
   # Rust crate tests (only if `cargo` is available)
   find_program(MI_CARGO cargo HINTS "$ENV{CARGO_HOME}/bin" "$ENV{HOME}/.cargo/bin")
