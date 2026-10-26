@@ -13,6 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/heap/page-map.h"
 #include "mimalloc/profile/sample-profile.h"
 #include "mimalloc/heap/subproc.h"
+#include "mimalloc/alloc/page.h"
 #include "mimalloc/util/threadlocal.h"
 
 // pre-allocate the main subprocess structure.
@@ -345,6 +346,14 @@ void _mi_subproc_main_done(void) {
   If a child keeps allocating, it should only fork when all other threads are
   quiesced at a safe point outside mimalloc (as is done for example by CPython's
   stop-the-world). If a dead thread held a lock at the fork, its pages are leaked.
+
+  On macOS, the child can see a torn snapshot of memory that other threads wrote
+  concurrently with the fork (across separate mappings). In particular, the thread
+  free lists of the pages of the forking thread, and abandoned pages, may be torn.
+  libSystem allocates in the child before the pthread child handlers run, so the malloc
+  zone `reinit_lock` (which runs before that) drops (and leaks) the thread free lists of
+  the forking thread, and suspends reclaiming abandoned pages until the pthread child
+  handler. (So on macOS the zone override is required for fork support.)
 ----------------------------------------------------------- */
 
 static size_t mi_fork_epoch;                        // incremented in the child at every fork
@@ -407,8 +416,52 @@ void _mi_fork_child_try_collect(void) {
   if (!done) { mi_atomic_store_release(&mi_fork_pending, 1); }
 }
 
+#if defined(__APPLE__)
+static mi_heap_t* mi_fork_suspended_heap;                 // heap with suspended abandoned reclaim
+static size_t     mi_fork_suspended_count[MI_BIN_COUNT];  // and its abandoned counts
+
+// Called on macOS in the child from the malloc zone `reinit_lock`.
+void _mi_fork_child_zone(void) {
+  mi_theap_t* const theap_default = _mi_theap_default();
+  if (!mi_theap_is_initialized(theap_default)) return;
+
+  // suspend reclaiming abandoned pages (by allocation) of the default heap
+  mi_heap_t* const heap = mi_theap_heap(theap_default);
+  for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
+    mi_fork_suspended_count[bin] = mi_atomic_exchange_relaxed(&heap->abandoned_count[bin], 0);
+  }
+  mi_fork_suspended_heap = heap;
+
+  // drop the thread free lists of the pages of the forking thread
+  mi_tld_t* const tld = theap_default->tld;
+  if (!mi_lock_try_acquire(&tld->theaps_lock)) return;
+  for (mi_theap_t* theap = tld->theaps; theap != NULL; theap = theap->tnext) {
+    for (size_t bin = 0; bin <= MI_BIN_FULL; bin++) {
+      for (mi_page_t* page = theap->pages[bin].first; page != NULL; page = page->next) {
+        const mi_thread_free_t tf = mi_atomic_load_relaxed(&page->xthread_free);
+        mi_atomic_store_relaxed(&page->xthread_free, mi_tf_create(NULL, mi_tf_is_owned(tf)));
+      }
+    }
+  }
+  mi_lock_release(&tld->theaps_lock);
+}
+
+// Resume reclaiming abandoned pages (adding as the count may have changed in the meantime)
+static void mi_fork_child_resume_reclaim(void) {
+  mi_heap_t* const heap = mi_fork_suspended_heap;
+  if (heap == NULL) return;
+  mi_fork_suspended_heap = NULL;
+  for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
+    mi_atomic_add_relaxed(&heap->abandoned_count[bin], mi_fork_suspended_count[bin]);
+  }
+}
+#endif
+
 // Called in the child process right after a fork.
 void _mi_fork_child(void) {
+  #if defined(__APPLE__)
+  mi_fork_child_resume_reclaim();
+  #endif
   mi_fork_epoch++;
   mi_theap_t* const theap = _mi_theap_default();
   if (mi_theap_is_initialized(theap)) { theap->tld->fork_epoch = mi_fork_epoch; }  // the forking thread survives

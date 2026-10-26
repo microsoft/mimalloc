@@ -19,6 +19,7 @@ mi_subproc_t* _mi_subproc_from_id(mi_subproc_id_t subproc_id);
 void          _mi_subprocs_unsafe_destroy_all(void);
 void          _mi_fork_init(void);
 void          _mi_fork_child(void);
+void          _mi_fork_child_zone(void);
 void          _mi_fork_child_try_collect(void);
 size_t        _mi_fork_epoch(void);
 
