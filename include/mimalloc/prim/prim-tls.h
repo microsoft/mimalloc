@@ -102,7 +102,7 @@ static inline void** mi_prim_thread_pointer(void) {
   static inline void** mi_prim_thread_pointer(void) {
     // Use a 64-bit temporary: on arm64_32 (ILP32), pointers are 32 bits but system registers are 64 bits.
     uint64_t tp;
-    #if defined(__APPLE__) // M1, issue rgb(62, 76, 62)
+    #if defined(__APPLE__) // M1, issue #343
     __asm__ ("mrs %0, tpidrro_el0\n\tbic %0, %0, #7" : "=r" (tp));
     #else
     __asm__ ("mrs %0, tpidr_el0" : "=r" (tp));
@@ -115,7 +115,9 @@ static inline void** mi_prim_thread_pointer(void) {
     __asm__ ("mv %0, tp" : "=r" (tcb));
     return tcb;
   }
-  #elif defined(__arm__)
+  #elif defined(__arm__) /* arm32 with tpidruro */ \
+        && (__ARM_ARCH >= 7 || defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6KZ__) || defined(__ARM_ARCH_6ZK__)) \
+        && !(defined(__ARM_ARCH_PROFILE) && __ARM_ARCH_PROFILE == 'M')
   static inline void** mi_prim_thread_pointer(void) {
     void** tcb;
     __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\n\tbic %0, %0, #3" : "=r" (tcb));
