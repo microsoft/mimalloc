@@ -57,9 +57,9 @@ static inline uint8_t* mi_page_start(const mi_page_t* page) {
   return page->page_start;
 }
 
-// Derive a block pointer from an address in the page; On systems with pointer provenance, this keeps the authority of the page start.
-static inline mi_block_t* mi_page_block_from_addr(const mi_page_t* page, mi_addr_t addr) {
-  return (mi_block_t*)mi_ptr_with_addr(mi_page_start(page), addr);
+// Derive a block pointer from a (tagged) address in the page; On systems with pointer provenance, this keeps the authority of the page start.
+static inline mi_block_t* mi_page_block_from_addr(const mi_page_t* page, mi_addr_t taddr) {
+  return (mi_block_t*)mi_ptr_with_addr_tagged(mi_page_start(page), taddr);
 }
 
 static inline size_t mi_page_size(const mi_page_t* page) {
@@ -104,8 +104,13 @@ static inline size_t mi_natural_alignment_of_size(size_t bsize) {
 
 static inline bool mi_page_contains_address(const mi_page_t* page, const void* p) {
   size_t psize;
-  uint8_t* start = mi_page_area(page, &psize);
-  return (start <= (uint8_t*)p && (uint8_t*)p < start + psize);
+  const mi_addr_t start = mi_addr(mi_page_area(page, &psize));
+  return (start <= mi_addr(p) && mi_addr(p) < start + psize);
+}
+
+// Are the blocks in this page memory tagged?
+static inline bool mi_page_is_memtag(const mi_page_t* page) {
+  return mi_memtag_use_for(page->memid.is_memtag, mi_page_block_size(page));
 }
 
 static inline bool mi_page_is_in_arena(const mi_page_t* page) {
@@ -547,9 +552,9 @@ static inline void* mi_ptr_decode(const mi_page_t* page, const mi_encoded_t x, c
   #else
   const mi_addr_t k2 = mi_rotr(k1,13);
   #endif
-  const mi_addr_t addr = (mi_rotr((mi_addr_t)x - k1, k1) ^ k2);
-  if (addr == mi_addr(page)) return NULL;
-  return mi_page_block_from_addr(page, addr);
+  const mi_addr_t taddr = (mi_rotr((mi_addr_t)x - k1, k1) ^ k2);
+  if (taddr == mi_addr(page)) return NULL;
+  return mi_page_block_from_addr(page, taddr);
 }
 
 static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const mi_addr_t* keys) {
@@ -559,7 +564,7 @@ static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const 
   #else
   const mi_addr_t k2 = mi_rotr(k1,13);
   #endif
-  const mi_addr_t x = mi_addr(p==NULL ? null : p);
+  const mi_addr_t x = (p==NULL ? mi_addr(null) : mi_addr_tagged(p));
   return (mi_encoded_t)(mi_rotl(x ^ k2, k1) + k1);
 }
 
@@ -602,7 +607,7 @@ static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const
   block->next = mi_ptr_encode(null, next, keys);
   #else
   MI_UNUSED(keys); MI_UNUSED(null);
-  block->next = (mi_encoded_t)mi_addr(next);  // never store a capability in a (freed) block
+  block->next = (mi_encoded_t)mi_addr_tagged(next);  // never store a capability in a (freed) block
   #endif
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
 }

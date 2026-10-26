@@ -33,8 +33,12 @@ static mi_os_mem_config_t mi_os_mem_config = {
   true,     // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
   false,    // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
   true,     // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
-  false     // has transparent huge pages? (if true we purge in (aligned) large page size chunks only to not fragment such pages)
+  false,    // has transparent huge pages? (if true we purge in (aligned) large page size chunks only to not fragment such pages)
+  false     // has memory tagging? (if true, all non-large OS memory supports memory tagging)
 };
+
+mi_decl_hidden bool   _mi_memtag_enabled;   // = false
+mi_decl_hidden size_t _mi_memtag_max_size;  // = 0
 
 bool _mi_os_has_overcommit(void) {
   return mi_os_mem_config.has_overcommit;
@@ -46,6 +50,10 @@ bool _mi_os_has_virtual_reserve(void) {
 
 bool _mi_os_has_thp(void) {
   return mi_os_mem_config.has_transparent_huge_pages;
+}
+
+bool _mi_os_has_memtag(void) {
+  return mi_os_mem_config.has_memtag;
 }
 
 // OS (small) page size
@@ -110,6 +118,9 @@ size_t _mi_os_good_alloc_size(size_t size) {
 
 void _mi_os_init(void) {
   _mi_prim_mem_init(&mi_os_mem_config);
+  _mi_memtag_enabled  = mi_os_mem_config.has_memtag;
+  _mi_memtag_max_size = mi_option_get_size(mi_option_memtag_max_size);
+  if (_mi_memtag_enabled) { _mi_verbose_message("memory tagging is enabled (for blocks up to %zu KiB)\n", _mi_memtag_max_size / MI_KiB); }
 }
 
 

@@ -33,6 +33,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "decl.h"     // compiler dependent definitions
 #include "bits.h"     // size defines (MI_SIZE_SIZE etc), bit operations
+#include "memtag.h"   // memory tagging (MTE)
 #include "atomic.h"   // _Atomic primitives
 #include "qsbr.h"     // quiescent state-based reclamation (qsbr) primitives (for runtime systems like CPython)
 
@@ -374,9 +375,10 @@ typedef struct mi_memid_s {
   bool          is_pinned;          // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large (2Mib) or huge (1GiB) OS pages)
   bool          initially_committed;// `true` if the memory was originally allocated as committed
   bool          initially_zero;     // `true` if the memory was originally zero initialized
+  bool          is_memtag;          // `true` if the memory supports memory tagging (MTE)
 } mi_memid_t;
 
-#define MI_MEMID_INIT(kind)   {{{NULL,0}}, kind, true /* pinned */, true /* committed */, false /* zero */ }
+#define MI_MEMID_INIT(kind)   {{{NULL,0}}, kind, true /* pinned */, true /* committed */, false /* zero */, false /* memtag */ }
 #define MI_MEMID_STATIC       MI_MEMID_INIT(MI_MEM_STATIC)
 
 static inline bool mi_memid_is_os(mi_memid_t memid) {

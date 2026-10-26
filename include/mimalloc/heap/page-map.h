@@ -44,7 +44,7 @@ static inline mi_page_t* mi_ptr_page_ex(const void* p, bool* valid) {
   const size_t idx = mi_page_map_index(p);
   const size_t ofs = mi_page_map_at(idx);
   if (valid != NULL) { *valid = (ofs != 0); }
-  return (mi_page_t*)((((uintptr_t)p >> MI_ARENA_SLICE_SHIFT) + 1 - ofs) << MI_ARENA_SLICE_SHIFT);
+  return (mi_page_t*)(((mi_addr(p) >> MI_ARENA_SLICE_SHIFT) + 1 - ofs) << MI_ARENA_SLICE_SHIFT);
 }
 
 static inline mi_page_t* mi_checked_ptr_page(const void* p) {
@@ -138,7 +138,7 @@ static inline mi_page_t* mi_checked_ptr_page(const void* p) {
 // if the page meta data is aligned in front of pages we can find it efficiently
 // without needing to go through the page map (for valid pointers).
 static inline mi_page_t* mi_aligned_ptr_page0(const void* p) {
-  mi_page_t* const page_metas = (mi_page_t*)mi_align_down_ptr(p,MI_PAGE_META_ALIGNMENT);
+  mi_page_t* const page_metas = (mi_page_t*)mi_align_down_ptr(mi_ptr_meta(p),MI_PAGE_META_ALIGNMENT);
   // const ptrdiff_t page_idx = ((uint8_t*)p - (uint8_t*)page_metas)/MI_ARENA_SLICE_SIZE;
   const size_t page_idx       = (size_t)((mi_addr(p) / MI_ARENA_SLICE_SIZE) % (MI_PAGE_META_ALIGNMENT / MI_ARENA_SLICE_SIZE));
   mi_assert_internal(page_idx <= MI_PAGE_META_ALIGNED_COUNT);

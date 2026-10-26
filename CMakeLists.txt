@@ -61,6 +61,7 @@ option(MI_FREE_USE_PAGEMAP  "Always use the page map when free-ing a pointer -- 
 option(MI_PADDING           "Enable padding to detect heap block overflow (always on in DEBUG or SECURE mode, or with Valgrind/ASAN)" OFF)
 option(MI_NO_PADDING        "Force no use of padding even in DEBUG mode etc." OFF)
 option(MI_SKIP_COLLECT_ON_EXIT "Skip collecting memory on program exit" OFF)
+option(MI_MTE               "Use memory tagging (MTE) if available at runtime (arm64 only, experimental)" OFF)
 option(MI_EXTRA_CPPDEFS     "Extra pre-processor definitions (use as `-DMI_EXTRA_CPPDEFS=\"opt1=val1;opt2=val2\"`)" "")
 option(MI_SEE_ASM           "Generate assembly files" OFF)
 
@@ -421,6 +422,15 @@ endif()
 if (MI_SKIP_COLLECT_ON_EXIT)
   message(STATUS "Skip collecting memory on program exit (MI_SKIP_COLLECT_ON_EXIT=ON)")
   list(APPEND mi_defines MI_SKIP_COLLECT_ON_EXIT=1)
+endif()
+
+if(MI_MTE)
+  if(MI_ARCH STREQUAL "arm64")
+    message(STATUS "Use memory tagging if available at runtime (MI_MTE=ON)")
+    list(APPEND mi_defines MI_MTE=1)
+  else()
+    message(WARNING "Memory tagging is only supported on arm64 (MI_MTE=OFF)")
+  endif()
 endif()
 
 if(MI_CHECK_FULL OR MI_DEBUG_FULL)

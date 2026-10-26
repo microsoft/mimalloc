@@ -20,12 +20,19 @@ terms of the MIT license. A copy of the license can be found in the file
   Page invariants
 ----------------------------------------------------------- */
 
-// Index a block in a page
-static inline mi_block_t* mi_page_block_at(const mi_page_t* page, void* page_start, size_t block_size, size_t i) {
+// Index a block in a page (with its memory tag if `memtag` is set)
+static inline mi_block_t* mi_page_block_at(const mi_page_t* page, void* page_start, size_t block_size, size_t i, bool memtag) {
   MI_UNUSED(page);
   mi_assert_internal(page != NULL);
   mi_assert_internal(i <= page->reserved);
-  return (mi_block_t*)((uint8_t*)page_start + (i * block_size));
+  mi_block_t* const block = (mi_block_t*)((uint8_t*)page_start + (i * block_size));
+  return (memtag ? (mi_block_t*)mi_memtag_load(block) : block);
+}
+
+// The block following `block` (with its memory tag if `memtag` is set)
+static inline mi_block_t* mi_block_after(mi_block_t* block, size_t block_size, bool memtag) {
+  mi_block_t* const next = (mi_block_t*)((uint8_t*)block + block_size);
+  return (memtag ? (mi_block_t*)mi_memtag_load(next) : next);
 }
 
 #if (MI_DEBUG>=3)
@@ -735,7 +742,7 @@ void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {
 #define MI_MAX_SLICES       (1UL << MI_MAX_SLICE_SHIFT)
 #define MI_MIN_SLICES       (2)
 
-static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* const page, const size_t bsize, const size_t extend) {
+static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* const page, const size_t bsize, const size_t extend, const bool memtag) {
   #if (MI_SECURE < 2)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
@@ -756,7 +763,7 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
   mi_block_t* blocks[MI_MAX_SLICES];   // current start of the slice
   size_t      counts[MI_MAX_SLICES];   // available objects in the slice
   for (size_t i = 0; i < slice_count; i++) {
-    blocks[i] = mi_page_block_at(page, page_area, bsize, page->capacity + i*slice_extend);
+    blocks[i] = mi_page_block_at(page, page_area, bsize, page->capacity + i*slice_extend, memtag);
     counts[i] = slice_extend;
   }
   counts[slice_count-1] += (extend % slice_count);  // final slice holds the modulus too (todo: distribute evenly?)
@@ -782,7 +789,7 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
     // and link the current block to it
     counts[next]--;
     mi_block_t* const block = blocks[current];
-    blocks[current] = (mi_block_t*)((uint8_t*)block + bsize);  // bump to the following block
+    blocks[current] = mi_block_after(block, bsize, memtag && counts[current] > 0);  // bump to the following block
     mi_block_set_next(page, block, blocks[next]);   // and set next; note: we may have `current == next`
     current = next;
   }
@@ -791,7 +798,7 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
   page->free = free_start;
 }
 
-static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t bsize, const size_t extend)
+static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t bsize, const size_t extend, const bool memtag)
 {
   #if (MI_SECURE < 2)
   mi_assert_internal(page->free == NULL);
@@ -801,18 +808,18 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
   mi_assert_internal(bsize == mi_page_block_size(page));
   void* const page_area = mi_page_start(page);
 
-  mi_block_t* const start = mi_page_block_at(page, page_area, bsize, page->capacity);
+  mi_block_t* const start = mi_page_block_at(page, page_area, bsize, page->capacity, memtag);
 
   // initialize a sequential free list
-  mi_block_t* const last = mi_page_block_at(page, page_area, bsize, page->capacity + extend - 1);
+  mi_block_t* const last = mi_page_block_at(page, page_area, bsize, page->capacity + extend - 1, false);
   mi_block_t* block = start;
-  while(block <= last) {
-    mi_block_t* next = (mi_block_t*)((uint8_t*)block + bsize);
+  while (mi_addr(block) < mi_addr(last)) {
+    mi_block_t* const next = mi_block_after(block, bsize, memtag);
     mi_block_set_next(page,block,next);
     block = next;
   }
-  // prepend to free list (usually `NULL`)
-  mi_block_set_next(page, last, page->free);
+  // prepend to free list (usually `NULL`); here `block` is `last` with its memory tag
+  mi_block_set_next(page, (memtag ? block : last), page->free);
   page->free = start;
 }
 
@@ -892,12 +899,18 @@ bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
     }
   }
 
+  // tag the new blocks
+  const bool memtag = mi_page_is_memtag(page);
+  if (memtag) {
+    mi_memtag_blocks_init(mi_page_start(page) + (page->capacity * bsize), bsize, page->capacity, extend);
+  }
+
   // and append the extend the free list
   if (extend < MI_MIN_SLICES || MI_SECURE<2) { //!mi_option_is_enabled(mi_option_secure)) {
-    mi_page_free_list_extend(page, bsize, extend );
+    mi_page_free_list_extend(page, bsize, extend, memtag);
   }
   else {
-    mi_page_free_list_extend_secure(theap, page, bsize, extend);
+    mi_page_free_list_extend_secure(theap, page, bsize, extend, memtag);
   }
   // enable the new free list
   page->capacity += (uint16_t)extend;

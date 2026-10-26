@@ -56,6 +56,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
   void* p = mi_arena_slice_start(arena, slice_index);
   *memid = mi_memid_create_arena(arena, slice_index, slice_count);
   memid->is_pinned = arena->memid.is_pinned;
+  memid->is_memtag = arena->memid.is_memtag;
 
   // set the dirty bits and track which slices become accessible
   size_t touched_slices = slice_count;

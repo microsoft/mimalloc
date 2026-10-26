@@ -110,6 +110,10 @@ typedef int32_t  mi_ssize_t;
 #define MI_CHERI          1
 #endif
 
+#if MI_MTE && !MI_ARCH_ARM64
+#error "memory tagging (MI_MTE) is only supported on arm64"
+#endif
+
 #if MI_ARCH_X64 && defined(__AVX2__)
 #include <immintrin.h>
 #elif MI_ARCH_ARM64 && MI_OPT_SIMD
@@ -388,21 +392,48 @@ typedef uintptr_t         mi_addr_t;
 #endif
 #define MI_AU(x)          ((mi_addr_t)(x))
 
-// Get the address part of a pointer (without provenance)
+// With memory tagging (MTE), pointers carry a tag in the top bits that is not part of the address (see `memtag.h`)
+#if MI_MTE
+#define MI_PTR_TAG_SHIFT  (56)
+#define MI_PTR_TAG_MASK   (MI_AU(0x0F) << MI_PTR_TAG_SHIFT)
+#else
+#define MI_PTR_TAG_SHIFT  (0)
+#define MI_PTR_TAG_MASK   (MI_AU(0))
+#endif
+
+// Get the address part of a pointer (without provenance or memory tag)
 static inline mi_addr_t mi_addr(const void* p) {
   #if MI_CHERI
   return (mi_addr_t)__builtin_cheri_address_get(p);
+  #else
+  return ((mi_addr_t)(uintptr_t)(p) & ~MI_PTR_TAG_MASK);
+  #endif
+}
+
+// Get the address of a pointer including its memory tag (but without provenance); used to store pointers in free lists
+static inline mi_addr_t mi_addr_tagged(const void* p) {
+  #if MI_CHERI
+  return mi_addr(p);
   #else
   return (mi_addr_t)(uintptr_t)(p);
   #endif
 }
 
-// Derive a pointer with address `addr` from `p` (keeping the provenance of `p`)
+// Derive a pointer with address `addr` from `p` (keeping the provenance and memory tag of `p`)
 static inline void* mi_ptr_with_addr(const void* p, mi_addr_t addr) {
   #if MI_CHERI
   return (void*)__builtin_cheri_address_set(p, addr);
   #else
   return (void*)((uintptr_t)p + (addr - mi_addr(p)));
+  #endif
+}
+
+// Derive a pointer with a tagged address `taddr` (from `mi_addr_tagged`) from `p` (keeping the provenance of `p`)
+static inline void* mi_ptr_with_addr_tagged(const void* p, mi_addr_t taddr) {
+  #if MI_CHERI
+  return (void*)__builtin_cheri_address_set(p, taddr);
+  #else
+  return (void*)((uintptr_t)p + (taddr - mi_addr_tagged(p)));
   #endif
 }
 

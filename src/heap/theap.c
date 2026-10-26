@@ -617,6 +617,11 @@ static size_t mi_fast_divide(size_t n, uint64_t magic, size_t shift) {
   return (size_t)((hi + n) >> shift);
 }
 
+// The user pointer to a block in a page (bounded on CHERI and with its memory tag on MTE)
+static inline void* mi_visit_block_ptr(uint8_t* block, size_t ubsize, bool memtag) {
+  return mi_ptr_bounded_data((memtag ? mi_memtag_load(block) : block), ubsize);
+}
+
 bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg) {
   mi_assert(area != NULL);
   if (area==NULL) return true;
@@ -632,11 +637,12 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
   mi_heap_t* const heap = mi_page_heap(page);
   const size_t bsize    = mi_page_block_size(page);
   const size_t ubsize   = mi_page_usable_block_size(page); // without padding
+  const bool   memtag   = mi_page_is_memtag(page);
 
   // optimize page with one block
   if (page->capacity == 1) {
     mi_assert_internal(mi_page_used(page) == 1 && page->free == NULL);
-    return visitor(heap, area, mi_ptr_bounded_data(pstart, ubsize), ubsize, arg);
+    return visitor(heap, area, mi_visit_block_ptr(pstart, ubsize, memtag), ubsize, arg);
   }
   mi_assert(bsize <= UINT32_MAX);
 
@@ -644,7 +650,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
   if (mi_page_used(page) == page->capacity) {
     uint8_t* block = pstart;
     for (size_t i = 0; i < page->capacity; i++) {
-      if (!visitor(heap, area, mi_ptr_bounded_data(block, ubsize), ubsize, arg)) return false;
+      if (!visitor(heap, area, mi_visit_block_ptr(block, ubsize, memtag), ubsize, arg)) return false;
       block += bsize;
     }
     return true;
@@ -674,8 +680,8 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
     #if MI_DEBUG>1
     free_count++;
     #endif
-    mi_assert_internal((uint8_t*)block >= pstart && (uint8_t*)block < (pstart + psize));
-    size_t offset = (uint8_t*)block - pstart;
+    mi_assert_internal(mi_addr(block) >= mi_addr(pstart) && mi_addr(block) < mi_addr(pstart + psize));
+    size_t offset = mi_addr(block) - mi_addr(pstart);
     mi_assert_internal(offset % bsize == 0);
     mi_assert_internal(offset <= UINT32_MAX);
     size_t blockidx = mi_fast_divide(offset, magic, shift);
@@ -699,7 +705,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
         #if MI_DEBUG>1
         used_count++;
         #endif
-        if (!visitor(heap, area, mi_ptr_bounded_data(block, ubsize), ubsize, arg)) return false;
+        if (!visitor(heap, area, mi_visit_block_ptr(block, ubsize, memtag), ubsize, arg)) return false;
         block += bsize;
       }
     }
@@ -711,7 +717,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
         used_count++;
         #endif
         size_t bitidx = mi_ctz(m);
-        if (!visitor(heap, area, mi_ptr_bounded_data(block + (bitidx * bsize), ubsize), ubsize, arg)) return false;
+        if (!visitor(heap, area, mi_visit_block_ptr(block + (bitidx * bsize), ubsize, memtag), ubsize, arg)) return false;
         m &= m - 1;  // clear least significant bit
       }
       block += bsize * MI_SIZE_BITS;

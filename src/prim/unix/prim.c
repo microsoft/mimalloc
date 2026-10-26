@@ -60,6 +60,12 @@ terms of the MIT license. A copy of the license can be found in the file
   #define MAC_OS_X_VERSION_10_7   1070
   #endif
   #include <sys/sysctl.h>
+  #if MI_MTE && defined(VM_FLAGS_MTE) && __has_include(<os/security_config.h>)
+  #include <os/security_config.h>   // os_security_config_get
+  #include <mach/mach.h>
+  #include <mach/mach_vm.h>         // mach_vm_map
+  #define MI_UNIX_MACH_MTE  1
+  #endif
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
   #include <sys/param.h>
   #if __FreeBSD_version >= 1200000
@@ -286,6 +292,16 @@ static size_t unix_detect_virtual_address_bits(void) {
   return MI_MAX_VABITS;
 }
 
+// Detect if memory tagging (MTE) is enabled for this process
+static bool unix_detect_memtag(void) {
+  #if MI_UNIX_MACH_MTE
+  if (__builtin_available(macOS 26.0, iOS 26.0, *)) {
+    return ((os_security_config_get() & OS_SECURITY_CONFIG_MTE) != 0);   // set through process entitlements
+  }
+  #endif
+  return false;
+}
+
 void _mi_prim_mem_init( mi_os_mem_config_t* config )
 {
   long psize = sysconf(_SC_PAGESIZE);
@@ -300,6 +316,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_transparent_huge_pages = (config->large_page_size <= MI_UNIX_MAX_THP_PAGE_SIZE) && unix_detect_thp();
   config->has_overcommit = unix_detect_overcommit();
   config->virtual_address_bits = unix_detect_virtual_address_bits();
+  config->has_memtag = (unix_detect_memtag() && mi_option_is_enabled(mi_option_memtag));
 
   // disable transparent huge pages for this process?
   #if (defined(__linux__) || defined(__ANDROID__)) && defined(PR_GET_THP_DISABLE)
@@ -419,6 +436,23 @@ static int unix_mmap_fd(void) {
 #define MI_OS_HAS_HUGE_PAGES  1
 #endif
 
+#if MI_UNIX_MACH_MTE
+// Allocate memory that supports memory tagging (as `mmap` has no MTE flag on macOS)
+static void* unix_mmap_memtag(size_t size, size_t try_alignment, int protect_flags, int fd) {
+  const mach_vm_offset_t mask = (mi_is_power_of_two(try_alignment) && try_alignment <= MI_GiB ? try_alignment - 1 : 0);
+  const vm_prot_t prot = ((protect_flags & PROT_WRITE) != 0 ? VM_PROT_READ | VM_PROT_WRITE : VM_PROT_NONE);
+  mach_vm_address_t addr = 0;
+  const kern_return_t err = mach_vm_map(mach_task_self(), &addr, size, mask, VM_FLAGS_ANYWHERE | VM_FLAGS_MTE | (fd != -1 ? fd : 0),
+                                        MEMORY_OBJECT_NULL, 0, FALSE, prot, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_DEFAULT);
+  if (err != KERN_SUCCESS) {
+    _mi_trace_message("unable to allocate memory tagged OS memory (error: %d, size: 0x%zx bytes, alignment: 0x%zx)\n", err, size, try_alignment);
+    errno = ENOMEM;
+    return NULL;
+  }
+  return (void*)addr;
+}
+#endif
+
 static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protect_flags, bool large_only, bool allow_large, bool* is_large) {
   #if !defined(MAP_ANONYMOUS)
   #define MAP_ANONYMOUS  MAP_ANON
@@ -428,6 +462,12 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   #endif
   void* p = NULL;
   const int fd = unix_mmap_fd();
+  #if MI_UNIX_MACH_MTE
+  if (_mi_os_has_memtag()) {   // no large OS pages with memory tagging
+    *is_large = false;
+    return (large_only ? NULL : unix_mmap_memtag(size, try_alignment, protect_flags, fd));
+  }
+  #endif
   int flags = MAP_PRIVATE | MAP_ANONYMOUS;
   if (_mi_os_has_overcommit()) {
     flags |= MAP_NORESERVE;

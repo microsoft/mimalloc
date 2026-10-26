@@ -62,6 +62,7 @@ mi_memid_t _mi_memid_create_os(void* base, size_t size, bool committed, bool is_
   memid.initially_committed = committed;
   memid.initially_zero = is_zero;
   memid.is_pinned = is_large;
+  memid.is_memtag = (!is_large && _mi_os_has_memtag());
   return memid;
 }
 

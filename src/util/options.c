@@ -204,6 +204,9 @@ static mi_option_desc_t mi_options[_mi_option_last] =
          MI_OPTION_UNINIT, MI_OPTION(stats_merge_threshold) },    // on a page stats update, merge theap stats into the heap if N bytes were freed/allocated; 0 disables (=4 MiB)
   { MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE,
          MI_OPTION_UNINIT, MI_OPTION(arena_purge_immediate_size) }, // ranges above this size are purged immediately
+  { 1,   MI_OPTION_UNINIT, MI_OPTION(memtag) },                   // use memory tagging (MTE) if available (and built with `MI_MTE=ON`)
+  { MI_LARGE_MAX_OBJ_SIZE/MI_KiB,
+         MI_OPTION_UNINIT, MI_OPTION(memtag_max_size) },          // maximal block size (in KiB) that is memory tagged
 
 };
 
@@ -214,7 +217,7 @@ static void mi_option_init(mi_option_desc_t* desc);
 static bool mi_option_has_size_in_kib(mi_option_t option) {
   return (option == mi_option_reserve_os_memory || option == mi_option_arena_reserve ||
           option == mi_option_arena_purge_min_size || option == mi_option_arena_purge_immediate_size ||
-          option == mi_option_arena_max_object_size
+          option == mi_option_arena_max_object_size || option == mi_option_memtag_max_size
           // || option == mi_option_profile_alloc_interval || option == mi_option_profile_inuse_interval || option == mi_option_profile_sample_rate
          );
 }

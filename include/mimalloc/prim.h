@@ -32,6 +32,7 @@ typedef struct mi_os_mem_config_s {
   bool    has_partial_free;       // can allocated blocks be freed partially? (true for mmap, false for VirtualAlloc)
   bool    has_virtual_reserve;    // supports virtual address space reservation? (if true we can reserve virtual address space without using commit or physical memory)
   bool    has_transparent_huge_pages;  // true if transparent huge pages are enabled (on Linux)
+  bool    has_memtag;             // true if memory tagging (MTE) is enabled; all non-large OS memory then supports tagging
 } mi_os_mem_config_t;
 
 // Initialize

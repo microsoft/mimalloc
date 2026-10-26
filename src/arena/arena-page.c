@@ -845,6 +845,11 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
   // unregister page
   _mi_page_map_unregister(page);
 
+  // reset the memory tags of the blocks so free memory is untagged again
+  if (mi_page_is_memtag(page)) {
+    mi_memtag_clear(mi_page_start(page), page->capacity * mi_page_block_size(page));
+  }
+
   // reset the guard page at the end?
   // we must do this since we may later allocate large spans over this page and cannot have a guard page in between
   // (for a page committed on demand the guard page stays decommitted and its commit bit is clear)

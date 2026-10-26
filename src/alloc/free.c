@@ -127,18 +127,27 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
 static inline mi_block_t* mi_page_ptr_unalign_ex(const mi_page_t* page, const void* p, size_t* poffset) {
   mi_assert_internal(page!=NULL && p!=NULL);
 
-  const size_t diff = (uint8_t*)p - mi_page_start(page);
+  const size_t diff = mi_addr(p) - mi_addr(mi_page_start(page));
   const size_t block_size = mi_page_block_size(page);
   size_t adjust = diff & (block_size - 1);
   if mi_unlikely(!mi_is_power_of_two(block_size)) {
     adjust = diff % block_size;
   }
   if (poffset!=NULL) { *poffset = adjust; }
-  return mi_page_block_from_addr(page, mi_addr(p) - adjust);  // don't keep the user's capability
+  return mi_page_block_from_addr(page, mi_addr_tagged(p) - adjust);  // don't keep the user's capability (but keep the memory tag)
 }
 
 mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
   return mi_page_ptr_unalign_ex(page,p,NULL);
+}
+
+// Retag the entire block of `p` with the canonical (meta) tag and return `p` with that tag.
+void* _mi_memtag_canonical(void* p) {
+  if (p==NULL || mi_ptr_tag(p)==MI_MEMTAG_META) return p;
+  const mi_page_t* const page = mi_ptr_page(p);
+  mi_block_t* const block = _mi_page_ptr_unalign(page, p);
+  mi_memtag_clear(block, mi_page_block_size(page));
+  return mi_ptr_with_tag(p, MI_MEMTAG_META);
 }
 
 static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, const void* p ) {
@@ -147,7 +156,7 @@ static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, con
   // in secure mode we always unalign to guard against free-ing interior pointers
   return _mi_page_ptr_unalign(page,p);
   #else
-  return mi_page_block_from_addr(page, mi_addr(p));  // don't keep the user's capability
+  return mi_page_block_from_addr(page, mi_addr_tagged(p));  // don't keep the user's capability (but keep the memory tag)
   #endif
 }
 
@@ -227,7 +236,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
     if (free_small) {
       const mi_addr_t up = mi_addr(p) & ~MI_AU(MI_SMALL_PAGE_SIZE-1);  // like this for codegen on gcc
       if mi_unlikely(up==0 && check_p_for_null) { return false; }
-      page = (mi_page_t*)mi_ptr_with_addr(p, up);
+      page = (mi_page_t*)mi_ptr_with_addr(mi_ptr_meta(p), up);
     }
     else
   #endif

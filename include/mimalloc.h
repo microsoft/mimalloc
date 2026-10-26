@@ -516,6 +516,8 @@ typedef enum mi_option_e {
   mi_option_profile_sample_rate,        // sample rate (in bytes) for heap profiler (=512 KiB)
   mi_option_stats_merge_threshold,      // on a page stats update, merge theap stats into the parent heap if N bytes were freed/allocated; 0 disables (=4 MiB)
   mi_option_arena_purge_immediate_size, // ranges above this size are purged immediately
+  mi_option_memtag,                     // use memory tagging (MTE) if available (and mimalloc is built with `MI_MTE=ON`) (=1)
+  mi_option_memtag_max_size,            // maximal block size (in KiB) that is memory tagged (=512 KiB)
   _mi_option_last,
   // legacy option names
   mi_option_large_os_pages = mi_option_allow_large_os_pages,
