@@ -74,6 +74,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SECURE 0
 #endif
 
+// Secure level 2 and higher always check for invalid pointers in `mi_free`
+#if MI_SECURE>=2 && !MI_FREE_IS_CHECKED
+#undef  MI_FREE_IS_CHECKED
+#define MI_FREE_IS_CHECKED 1
+#endif
+
 // Define MI_DEBUG for assertion and invariant checking
 // #define MI_DEBUG 1  // basic assertion checks and statistics, check double free, corrupted free list, and invalid pointer free. (cmake -DMI_DEBUG=ON)
 // #define MI_DEBUG 2  // + internal assertion checks (cmake -DMI_DEBUG_INTERNAL=ON)
