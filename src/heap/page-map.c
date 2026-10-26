@@ -22,7 +22,7 @@ static void mi_page_map_cannot_commit(void) {
 // For an address `a` where `ofs = _mi_page_map[a >> 16]`:
 // 0 = unused
 // 1 = the slice at `a & ~0xFFFF` is a mimalloc page.
-// 1 < ofs <= 127 = the slice is part of a page, starting at `(((a>>16) - ofs - 1) << 16)`.
+// 1 < ofs <= 127 = the slice is part of a page, starting at `(((a>>16) - ofs + 1) << 16)`.
 //
 // 1 byte per slice => 1 TiB address space needs a 2^14 * 2^16 = 16 MiB page map.
 // A full 256 TiB address space (48 bit) needs a 4 GiB page map.
