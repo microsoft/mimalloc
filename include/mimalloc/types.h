@@ -182,7 +182,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #if !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
 // guarded can put small allocations into big blocks in a medium page (which would make `mi_free_small` fail)
 // on CHERI we cannot derive the page from a (bounded) user pointer
-#if (defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0) || MI_SECURE>=1 || MI_GUARDED || MI_CHERI
+#if (defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0) || MI_SECURE || MI_GUARDED || MI_CHERI
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0
 #elif (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED)
 #define MI_PAGE_META_SMALL_IS_ALIGNED   1
@@ -192,10 +192,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // Configuration checks
-#if !MI_PAGE_META_IS_SEPARATED && MI_SECURE>=1
+#if !MI_PAGE_META_IS_SEPARATED && MI_SECURE
 #error "Secure mode should use separated page infos"
 #endif
-#if MI_PAGE_META_SMALL_IS_ALIGNED && (MI_SECURE>=1 || MI_GUARDED)
+#if MI_PAGE_META_SMALL_IS_ALIGNED && (MI_SECURE || MI_GUARDED)
 #error "Secure or guarded mode cannot use MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED)"
 #endif
 #if (MI_PAGE_META_IS_ALIGNED || MI_PAGE_META_SMALL_IS_ALIGNED) && MI_CHERI

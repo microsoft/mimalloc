@@ -113,7 +113,7 @@ extern mi_decl_hidden bool _mi_process_is_initialized;             // has mi_pro
 
 bool _mi_page_is_valid(mi_page_t* page) {
   mi_assert_internal(mi_page_is_valid_init(page));
-  #if MI_SECURE>=1
+  #if MI_SECURE
   mi_assert_internal(page->keys[0] != 0);
   #endif
   if (!mi_page_is_abandoned(page)) {

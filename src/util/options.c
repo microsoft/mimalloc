@@ -622,7 +622,7 @@ static void mi_error_default(int err) {
       abort();
     }
   #endif
-  #if (MI_SECURE>=1)
+  #if MI_SECURE
     if (err==EFAULT) {  // abort on serious errors in secure mode (corrupted meta-data)
       abort();
     }
