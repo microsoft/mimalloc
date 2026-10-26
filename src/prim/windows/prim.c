@@ -444,7 +444,7 @@ int _mi_prim_reuse(void* addr, size_t size) {
   return 0;
 }
 
-int _mi_prim_protect(void* addr, size_t size, bool protect) {
+static int win_protect(void* addr, size_t size, bool protect) {
   #if !MI_WIN_DESKTOP && WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP)
   ULONG oldprotect = 0;
   BOOL ok = VirtualProtectFromApp(addr, size, protect ? PAGE_NOACCESS : PAGE_READWRITE, &oldprotect);
@@ -455,9 +455,21 @@ int _mi_prim_protect(void* addr, size_t size, bool protect) {
   return (ok ? 0 : (int)GetLastError());
 }
 
-
-//---------------------------------------------
-// Huge page allocation
+int _mi_prim_guard(void* addr, size_t size, bool set, bool is_committed) {
+  if (is_committed) {
+    // protecting requires committed memory; on a set we first release the physical memory
+    if (set) { _mi_prim_reset(addr, size); }  // best effort
+    return win_protect(addr, size, set);
+  }
+  else if (set) {
+    // decommitting also works for (partly) reserved memory
+    bool needs_recommit;
+    return _mi_prim_decommit(addr, size, &needs_recommit);
+  }
+  else {
+    return 0;  // stays inaccessible until committed
+  }
+}
 //---------------------------------------------
 
 static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int numa_node)

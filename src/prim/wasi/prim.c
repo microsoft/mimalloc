@@ -155,8 +155,8 @@ int _mi_prim_reuse(void* addr, size_t size) {
   return 0;
 }
 
-int _mi_prim_protect(void* addr, size_t size, bool protect) {
-  MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(protect);
+int _mi_prim_guard(void* addr, size_t size, bool set, bool is_committed) {
+  MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(set); MI_UNUSED(is_committed);
   return 0;
 }
 

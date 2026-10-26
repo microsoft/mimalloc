@@ -189,55 +189,51 @@ size_t _mi_os_secure_guard_page_size(void) {
   #endif
 }
 
-// Try to decommit an area and output a warning if this fails.
-bool _mi_os_secure_guard_page_set_at(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
+// Set or reset a guard page. The memid `initially_committed` is the accounted commit state
+// of the guard page which must not change between a set and reset (see `_mi_prim_guard`).
+static bool mi_os_secure_guard_page(void* addr, mi_memid_t memid, bool set) {
   if (addr == NULL) return true;
   #if !MI_NO_SECURE
-  bool ok = false;
-  if (!memid.is_pinned) {
-    mi_arena_t* const arena = mi_memid_arena(memid);
-    if (arena != NULL && arena->commit_fun != NULL) {
-      ok = (*(arena->commit_fun))(false /* decommit */, addr, _mi_os_secure_guard_page_size(), NULL, arena->commit_fun_arg);
-    }
-    else {
-      ok = _mi_os_decommit(subproc, addr, _mi_os_secure_guard_page_size());
-    }
+  if (memid.is_pinned) return true;
+  const size_t size = _mi_os_secure_guard_page_size();
+  mi_assert_internal(mi_is_aligned(addr, _mi_os_page_size()));
+  bool ok;
+  mi_arena_t* const arena = mi_memid_arena(memid);
+  if (arena != NULL && arena->commit_fun != NULL) {
+    // decommit on a set, and only recommit on a reset if accounted as committed
+    ok = (set || memid.initially_committed ? (*(arena->commit_fun))(!set /* commit */, addr, size, NULL, arena->commit_fun_arg) : true);
+  }
+  else {
+    ok = (set ? _mi_os_guard(addr, size, memid.initially_committed) : _mi_os_unguard(addr, size, memid.initially_committed));
   }
   if (!ok) {
-    _mi_error_message(EINVAL, "secure level %d, but failed to commit guard page (at %p of size %zu)\n", MI_SECURE, addr, _mi_os_secure_guard_page_size());
+    _mi_error_message(EINVAL, "secure level %d, but failed to %s guard page (at %p of size %zu)\n", MI_SECURE, (set ? "set" : "reset"), addr, size);
   }
   return ok;
   #else
-  MI_UNUSED(subproc); MI_UNUSED(memid);
+  MI_UNUSED(addr); MI_UNUSED(memid); MI_UNUSED(set);
   return true;
   #endif
 }
 
-// Try to decommit an area and output a warning if this fails.
+// Make an area inaccessible and output a warning if this fails.
+bool _mi_os_secure_guard_page_set_at(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
+  MI_UNUSED(subproc);
+  return mi_os_secure_guard_page(addr, memid, true);
+}
+
+// Make an area inaccessible and output a warning if this fails.
 bool _mi_os_secure_guard_page_set_before(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
   return _mi_os_secure_guard_page_set_at(subproc, (uint8_t*)addr - _mi_os_secure_guard_page_size(), memid);
 }
 
-// Try to recommit an area
+// Make an area accessible again (if it is accounted as committed)
 bool _mi_os_secure_guard_page_reset_at(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
-  if (addr == NULL) return true;
-  #if !MI_NO_SECURE
-  if (!memid.is_pinned) {
-    mi_arena_t* const arena = mi_memid_arena(memid);
-    if (arena != NULL && arena->commit_fun != NULL) {
-      return (*(arena->commit_fun))(true, addr, _mi_os_secure_guard_page_size(), NULL, arena->commit_fun_arg);
-    }
-    else {
-      return _mi_os_commit(subproc, addr, _mi_os_secure_guard_page_size(), NULL);
-    }
-  }
-  #else
-  MI_UNUSED(subproc); MI_UNUSED(memid);
-  #endif
-  return true;
+  MI_UNUSED(subproc);
+  return mi_os_secure_guard_page(addr, memid, false);
 }
 
-// Try to recommit an area
+// Make an area accessible again (if it is accounted as committed)
 bool _mi_os_secure_guard_page_reset_before(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
   return _mi_os_secure_guard_page_reset_at(subproc, (uint8_t*)addr - _mi_os_secure_guard_page_size(), memid);
 }
@@ -700,30 +696,27 @@ bool _mi_os_purge(mi_subproc_t* subproc, void* p, size_t size) {
 }
 
 
-// Protect a region in memory to be not accessible.
-static  bool mi_os_protectx(void* addr, size_t size, bool protect) {
+// Set (or reset) a guard range (see `_mi_prim_guard` for the meaning of `is_committed`).
+static bool mi_os_guardx(void* addr, size_t size, bool set, bool is_committed) {
   // page align conservatively within the range
   size_t csize = 0;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
   if (csize == 0) return false;
-  /*
-  if (_mi_os_is_huge_reserved(addr)) {
-	  _mi_warning_message("cannot mprotect memory allocated in huge OS pages\n");
-  }
-  */
-  int err = _mi_prim_protect(start,csize,protect);
+  int err = _mi_prim_guard(start, csize, set, is_committed);
   if (err != 0) {
-    _mi_warning_message("cannot %s OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", (protect ? "protect" : "unprotect"), err, err, start, csize);
+    _mi_warning_message("cannot %s guard OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", (set ? "set" : "reset"), err, err, start, csize);
   }
   return (err == 0);
 }
 
-bool _mi_os_protect(void* addr, size_t size) {
-  return mi_os_protectx(addr, size, true);
+// Make a range inaccessible
+bool _mi_os_guard(void* addr, size_t size, bool is_committed) {
+  return mi_os_guardx(addr, size, true, is_committed);
 }
 
-bool _mi_os_unprotect(void* addr, size_t size) {
-  return mi_os_protectx(addr, size, false);
+// Make a range accessible again (if it is accounted as committed)
+bool _mi_os_unguard(void* addr, size_t size, bool is_committed) {
+  return mi_os_guardx(addr, size, false, is_committed);
 }
 
 

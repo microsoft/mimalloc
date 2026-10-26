@@ -562,9 +562,7 @@ static void mi_arenas_page_init_memory(mi_theap_t* theap, mi_page_t* page, uint8
 
   // set the guard page
   #if MI_SECURE>=5
-  if (memid->initially_committed) {
-    _mi_os_secure_guard_page_set_at(mi_theap_subproc(theap), slice_start + page_noguard_size, *memid);
-  }
+  _mi_os_secure_guard_page_set_at(mi_theap_subproc(theap), slice_start + page_noguard_size, *memid);
   #endif
 
   // claimed free slices: initialize the page partly
@@ -847,8 +845,9 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
   // unregister page
   _mi_page_map_unregister(page);
 
-  // recommit guard page at the end?
+  // reset the guard page at the end?
   // we must do this since we may later allocate large spans over this page and cannot have a guard page in between
+  // (for a page committed on demand the guard page stays decommitted and its commit bit is clear)
   #if MI_SECURE >= 5
   if (!page->memid.is_pinned) {
     _mi_os_secure_guard_page_reset_before(mi_page_subproc(page), mi_page_slice_start(page) + mi_page_full_size(page), page->memid);

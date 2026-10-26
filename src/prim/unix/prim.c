@@ -593,17 +593,23 @@ int _mi_prim_reuse(void* start, size_t size) {
   return 0;
 }
 
+// Release the physical memory of a range (while keeping it mapped)
+static int unix_madvise_release(void* start, size_t size) {
+  #if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
+  // use MADV_FREE_REUSABLE as it does immediate rss accounting (issue #1097)
+  int err = unix_madvise(start, size, MADV_FREE_REUSABLE);
+  if (err) { err = unix_madvise(start, size, MADV_DONTNEED); }
+  return err;
+  #else
+  // use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
+  return unix_madvise(start, size, MADV_DONTNEED);
+  #endif
+}
+
 int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   int err = 0;
   #if 1
-    #if defined(__APPLE__) && defined(MADV_FREE_REUSABLE)
-      // decommit on macOS: use MADV_FREE_REUSABLE as it does immediate rss accounting (issue #1097)
-      err = unix_madvise(start, size, MADV_FREE_REUSABLE);
-      if (err) { err = unix_madvise(start, size, MADV_DONTNEED); }
-    #else
-      // decommit: use MADV_DONTNEED as it decreases rss immediately (unlike MADV_FREE)
-      err = unix_madvise(start, size, MADV_DONTNEED);
-    #endif
+    err = unix_madvise_release(start, size);
     #if !MI_DEBUG && MI_SECURE<=2
       *needs_recommit = false;
     #else
@@ -649,11 +655,26 @@ int _mi_prim_reset(void* start, size_t size) {
   return err;
 }
 
-int _mi_prim_protect(void* start, size_t size, bool protect) {
+static int unix_mprotect(void* start, size_t size, bool protect) {
   int err = mprotect(start, size, protect ? PROT_NONE : (PROT_READ | PROT_WRITE));
   if (err != 0) { err = errno; }
   unix_mprotect_hint(err);
   return err;
+}
+
+int _mi_prim_guard(void* start, size_t size, bool set, bool is_committed) {
+  if (set) {
+    // `mprotect` also works on reserved memory, so committed or not, we release the physical memory and protect
+    unix_madvise_release(start, size);  // best effort
+    return unix_mprotect(start, size, true);
+  }
+  else if (is_committed) {
+    const int err = unix_mprotect(start, size, false);
+    return (err != 0 ? err : _mi_prim_reuse(start, size));
+  }
+  else {
+    return 0;  // stays inaccessible until committed
+  }
 }
 
 

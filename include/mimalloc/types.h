@@ -71,7 +71,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_SECURE 4  // + same as level 3 for now (`-DMI_SECURE=ON`)
 // #define MI_SECURE 5  // + guard page at the end of each mimalloc page (expensive!) (`-DMI_SECURE_FULL=ON`), and byte-precise buffer overflow checks.
 
-#if !defined(MI_SECURE) && !defined(MI_NO_SECURE)
+#if !defined(MI_SECURE)
 #define MI_SECURE 0
 #endif
 
@@ -212,8 +212,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #if MI_QSBR && MI_CHERI
 #error "QSBR cannot be used with CHERI (as delayed concurrent reads would have the wrong capability)"
 #endif
-#if defined(MI_SECURE) && defined(MI_NO_SECURE)
-#error "Cannot define both MI_SECURE and MI_NO_SECURE at the same time"
+#if (MI_SECURE > 0) && defined(MI_NO_SECURE)
+#error "Cannot define both MI_SECURE > 0 and MI_NO_SECURE at the same time"
 #endif
 
 // --------------------------------------------------------------

@@ -30,8 +30,8 @@ bool          _mi_os_decommit(mi_subproc_t* subproc, void* addr, size_t size);
 void          _mi_os_reuse(mi_subproc_t* subproc, void* p, size_t size);
 mi_decl_nodiscard bool _mi_os_commit(mi_subproc_t* subproc, void* p, size_t size, bool* is_zero);
 mi_decl_nodiscard bool _mi_os_commit_ex(mi_subproc_t* subproc, void* addr, size_t size, bool* is_zero, size_t stat_already_committed);
-mi_decl_nodiscard bool _mi_os_protect(void* addr, size_t size);
-bool          _mi_os_unprotect(void* addr, size_t size);
+bool          _mi_os_guard(void* addr, size_t size, bool is_committed);
+bool          _mi_os_unguard(void* addr, size_t size, bool is_committed);
 bool          _mi_os_purge(mi_subproc_t* subproc, void* p, size_t size);
 bool          _mi_os_purge_ex(mi_subproc_t* subproc, void* p, size_t size, bool allow_reset, size_t stats_size, mi_commit_fun_t* commit_fun, void* commit_fun_arg);
 
