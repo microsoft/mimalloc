@@ -180,22 +180,20 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   Guard page allocation
 ----------------------------------------------------------- */
 
-// Return the size of a guard page, (or 0 if all security is disabled)
+// Return the size of a guard page, (or 0 if all security is disabled or memory cannot be protected)
 size_t _mi_os_secure_guard_page_size(void) {
-  #if !MI_NO_SECURE
-  return _mi_os_guard_page_size();
-  #else
+  #if defined(MI_NO_SECURE) || defined(__wasi__) || defined(__EMSCRIPTEN__)  // no memory protection on WebAssembly
   return 0;
+  #else
+  return _mi_os_guard_page_size();
   #endif
 }
 
 // Set or reset a guard page. The memid `initially_committed` is the accounted commit state
 // of the guard page which must not change between a set and reset (see `_mi_prim_guard`).
 static bool mi_os_secure_guard_page(void* addr, mi_memid_t memid, bool set) {
-  if (addr == NULL) return true;
-  #if !MI_NO_SECURE
-  if (memid.is_pinned) return true;
   const size_t size = _mi_os_secure_guard_page_size();
+  if (addr == NULL || size == 0 || memid.is_pinned) return true;
   mi_assert_internal(mi_is_aligned(addr, _mi_os_page_size()));
   bool ok;
   mi_arena_t* const arena = mi_memid_arena(memid);
@@ -210,10 +208,6 @@ static bool mi_os_secure_guard_page(void* addr, mi_memid_t memid, bool set) {
     _mi_error_message(EINVAL, "secure level %d, but failed to %s guard page (at %p of size %zu)\n", MI_SECURE, (set ? "set" : "reset"), addr, size);
   }
   return ok;
-  #else
-  MI_UNUSED(addr); MI_UNUSED(memid); MI_UNUSED(set);
-  return true;
-  #endif
 }
 
 // Make an area inaccessible and output a warning if this fails.
