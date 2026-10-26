@@ -39,3 +39,4 @@ opt_arch = []
 
 [build-dependencies]
 cc = "1.2"
+rustversion = "1"
