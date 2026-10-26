@@ -131,6 +131,10 @@ static inline bool mi_page_meta_is_separated(const mi_page_t* page) {
     mi_assert_internal(page != mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));
     return true;
     #endif
+  #elif MI_PAGE_META_OS_IS_SEPARATED && !MI_PAGE_META_SMALL_IS_ALIGNED
+  MI_UNUSED_RELEASE(page);
+  mi_assert_internal(page != mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));
+  return true;
   #elif MI_PAGE_META_IS_SEPARATED
   // usually separated but can still be in front for direct OS allocations (due to size or alignment) or due to MI_PAGE_META_SMALL_IS_ALIGNED
   return (page->memid.memkind == MI_MEM_ARENA && page != mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN));
@@ -148,7 +152,8 @@ static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
     return (uint8_t*)ainfo->arena->start + ((size_t)ainfo->slice_index * MI_ARENA_SLICE_SIZE);
   }
   else {
-    return (uint8_t*)mi_ptr_rederive(page->memid.mem.os.base, (void*)page);  // page meta info is at the start
+    void* const slice_start = (mi_page_meta_is_separated(page) ? mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN) : (void*)page);
+    return (uint8_t*)mi_ptr_rederive(page->memid.mem.os.base, slice_start);
   }
   #else
   if (mi_page_meta_is_separated(page)) {

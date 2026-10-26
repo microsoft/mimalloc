@@ -224,6 +224,13 @@ bool _mi_os_secure_guard_page_set_before(mi_subproc_t* subproc, void* addr, mi_m
   return _mi_os_secure_guard_page_set_at(subproc, (uint8_t*)addr - _mi_os_secure_guard_page_size(), memid);
 }
 
+// Set guard pages right before `addr` and right after `addr + size` (rounded up to the OS page size).
+bool _mi_os_secure_guard_pages_set_around(mi_subproc_t* subproc, void* addr, size_t size, mi_memid_t memid) {
+  const bool ok_before = _mi_os_secure_guard_page_set_before(subproc, addr, memid);
+  const bool ok_after  = _mi_os_secure_guard_page_set_at(subproc, mi_align_up_ptr((uint8_t*)addr + size, _mi_os_page_size()), memid);
+  return (ok_before && ok_after);
+}
+
 // Make an area accessible again (if it is accounted as committed)
 bool _mi_os_secure_guard_page_reset_at(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
   MI_UNUSED(subproc);
@@ -496,6 +503,25 @@ mi_decl_nodiscard static void* mi_os_ensure_zero(mi_subproc_t* subproc, void* p,
 void*  _mi_os_zalloc(mi_subproc_t* subproc, size_t size, mi_memid_t* memid) {
   void* p = _mi_os_alloc(subproc, size,memid);
   return mi_os_ensure_zero(subproc, p, size, memid);
+}
+
+// Allocate OS memory with (in secure mode) a guard page right before and after it.
+// The memory can be freed using `_mi_os_free` with the returned `memid`.
+void* _mi_os_alloc_with_guards(mi_subproc_t* subproc, size_t size, bool commit, bool allow_large, mi_memid_t* memid) {
+  const size_t guard_size = _mi_os_secure_guard_page_size();
+  size = mi_align_up(size, _mi_os_page_size());
+  uint8_t* const base = (uint8_t*)_mi_os_alloc_aligned(subproc, size + 2*guard_size, 1, commit, allow_large, memid);
+  if (base == NULL) return NULL;
+  uint8_t* const p = base + guard_size;
+  if (memid->initially_committed) {  // (if not committed, the guard pages are never committed)
+    _mi_os_secure_guard_pages_set_around(subproc, p, size, *memid);
+  }
+  return p;
+}
+
+// Free memory allocated by `_mi_os_alloc_with_guards` (including the guard pages).
+void _mi_os_free_with_guards(mi_subproc_t* subproc, mi_memid_t memid) {
+  _mi_os_free(subproc, memid.mem.os.base, memid.mem.os.size, memid);
 }
 
 /* -----------------------------------------------------------

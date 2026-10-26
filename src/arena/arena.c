@@ -580,10 +580,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
   else if (!memid.is_pinned) {
     // Set guard pages before and after the arena meta data
     // todo: this does not respect the commit_fun as the memid is of external memory
-    #if MI_ARENA_GUARD_SLICES > 0
-    _mi_os_secure_guard_page_set_before(subproc, meta_start, memid);
-    #endif
-    _mi_os_secure_guard_page_set_at(subproc, meta_start + meta_size, memid);
+    _mi_os_secure_guard_pages_set_around(subproc, meta_start, meta_size, memid);
   }
   if (!memid.initially_zero) {
     mi_memzero(meta_start, meta_size);
@@ -645,8 +642,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
     // guard the page meta data of the other aligned areas (if not committed, the guard slices are never committed)
     if (i > 0 && start_idx <= arena->slice_count && memid.initially_committed && !memid.is_pinned) {
       uint8_t* const page_meta_start = (uint8_t*)start + _mi_size_of_slices(i + MI_ARENA_GUARD_SLICES);
-      _mi_os_secure_guard_page_set_before(subproc, page_meta_start, memid);
-      _mi_os_secure_guard_page_set_at(subproc, page_meta_start + _mi_size_of_slices(mi_arena_page_meta_aligned_array_slices()), memid);
+      _mi_os_secure_guard_pages_set_around(subproc, page_meta_start, _mi_size_of_slices(mi_arena_page_meta_aligned_array_slices()), memid);
     }
     #endif
   }

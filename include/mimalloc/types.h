@@ -278,11 +278,20 @@ terms of the MIT license. A copy of the license can be found in the file
 // Minimal commit for a page on-demand commit
 #define MI_PAGE_MIN_COMMIT_SIZE   (16*MI_KiB) /* MI_ARENA_SLICE_SIZE */
 
-// In secure mode, a guard slice is reserved in front of the arena info and around the aligned page meta data
-#if MI_SECURE
+// In secure mode, a guard slice is reserved in front of the arena info and around the separated page meta data
+// of aligned areas and direct OS allocations (but not on WebAssembly as it cannot protect memory)
+#if MI_SECURE && !defined(__wasi__) && !defined(__EMSCRIPTEN__)
 #define MI_ARENA_GUARD_SLICES         1
 #else
 #define MI_ARENA_GUARD_SLICES         0
+#endif
+
+// Is the page meta data of direct OS allocated pages separated in front of the page area? (between guard slices in secure mode)
+// Otherwise it is placed at the start of the page area itself.
+#if MI_PAGE_META_IS_ALIGNED || (MI_PAGE_META_IS_SEPARATED && MI_ARENA_GUARD_SLICES > 0)
+#define MI_PAGE_META_OS_IS_SEPARATED  1
+#else
+#define MI_PAGE_META_OS_IS_SEPARATED  0
 #endif
 
 #if MI_PAGE_META_IS_ALIGNED

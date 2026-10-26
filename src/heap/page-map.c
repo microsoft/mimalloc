@@ -109,7 +109,7 @@ static bool mi_page_map_init_once(void) {
                       mi_option_is_enabled(mi_option_pagemap_commit) || _mi_os_has_overcommit();
   mi_subproc_t* const subproc = _mi_subproc_main();
   mi_memid_t memid;
-  mi_page_map_t* const pmap = (mi_page_map_t*)_mi_os_alloc_aligned(subproc, extra_reserve_size, 1, commit, true /* allow large */, &memid);
+  mi_page_map_t* const pmap = (mi_page_map_t*)_mi_os_alloc_with_guards(subproc, extra_reserve_size, commit, true /* allow large */, &memid);
   if mi_unlikely(pmap==NULL) {
     _mi_error_message(ENOMEM, "unable to reserve virtual memory for the page map (%zu KiB)\n", extra_reserve_size / MI_KiB);
     return false;
@@ -133,7 +133,7 @@ static bool mi_page_map_init_once(void) {
     bool is_zero;
     if (!_mi_os_commit(subproc,pmap,min_commit_size,&is_zero)) {
       mi_page_map_cannot_commit();
-      _mi_os_free(subproc,pmap,extra_reserve_size,memid);
+      _mi_os_free_with_guards(subproc,memid);
       return false;
     };
     mi_assert_internal(is_zero || memid.initially_zero);
@@ -146,7 +146,7 @@ static bool mi_page_map_init_once(void) {
   if (!memid.initially_committed) {
     if (!_mi_os_commit(subproc, sub0, submap_size, NULL)) {  // commit full submap (issue #1087)
       mi_page_map_cannot_commit();
-      _mi_os_free(subproc,pmap,extra_reserve_size,memid);
+      _mi_os_free_with_guards(subproc,memid);
       return false;
     }
   }
@@ -174,6 +174,21 @@ bool _mi_page_map_init(void) {
   return ok;
 }
 
+// Sub maps are allocated with guard pages around them in secure mode
+static mi_submap_t mi_page_map_alloc_submap(mi_subproc_t* subproc, mi_memid_t* memid) {
+  mi_submap_t sub = (mi_submap_t)_mi_os_alloc_with_guards(subproc, MI_PAGE_MAP_SUB_SIZE, true /* commit */, false /* allow large */, memid);
+  if (sub != NULL && !memid->initially_zero) {
+    mi_memzero_aligned(sub, MI_PAGE_MAP_SUB_SIZE);
+  }
+  return sub;
+}
+
+// We do not store the memid of a sub map but can recreate it (see `_mi_os_alloc_with_guards`)
+static mi_memid_t mi_page_map_submap_memid(mi_submap_t sub) {
+  const size_t guard_size = _mi_os_secure_guard_page_size();
+  return _mi_memid_create_os((uint8_t*)sub - guard_size, _mi_os_good_alloc_size(MI_PAGE_MAP_SUB_SIZE + 2*guard_size), true, false, false);
+}
+
 void _mi_page_map_unsafe_destroy(void) {
   mi_page_map_t* const pmap = mi_page_map();
   mi_assert_internal(pmap != NULL);
@@ -184,12 +199,11 @@ void _mi_page_map_unsafe_destroy(void) {
     // free all sub-maps
     mi_submap_t sub = mi_page_map_at(pmap,idx);
     if (sub != NULL) {
-      mi_memid_t memid = _mi_memid_create_os(sub, MI_PAGE_MAP_SUB_SIZE, true, false, false);
-      _mi_os_free_ex(subproc, memid.mem.os.base, memid.mem.os.size, true, memid);
+      _mi_os_free_with_guards(subproc, mi_page_map_submap_memid(sub));
       mi_atomic_store_ptr_release(mi_page_t*, &pmap->submaps[idx], NULL);
     }
   }
-  _mi_os_free_ex(subproc, mi_page_map_vmem(pmap), pmap->reserved_size, true, pmap->memid);
+  _mi_os_free_with_guards(subproc, pmap->memid);
   mi_atomic_store_ptr_release(mi_page_map_t, &__mi_page_map, &mi_page_map_empty);
 }
 
@@ -203,8 +217,7 @@ mi_decl_nodiscard static mi_decl_noinline mi_submap_t mi_page_map_alloc_submap_a
     {
       mi_subproc_t* const subproc = _mi_subproc_main();
       mi_memid_t memid;
-      const size_t submap_size = MI_PAGE_MAP_SUB_SIZE;
-      sub = (mi_submap_t)_mi_os_zalloc(subproc, submap_size, &memid);
+      sub = mi_page_map_alloc_submap(subproc, &memid);
       if (sub==NULL) {
         _mi_warning_message("internal error: unable to extend the page map\n");
       }
@@ -212,7 +225,7 @@ mi_decl_nodiscard static mi_decl_noinline mi_submap_t mi_page_map_alloc_submap_a
         mi_submap_t expect = NULL;
         if (!mi_atomic_cas_ptr_strong_acq_rel(mi_page_t*, &pmap->submaps[idx], &expect, sub)) {
           // another thread already allocated it.. free and continue
-          _mi_os_free(subproc, sub, submap_size, memid);
+          _mi_os_free_with_guards(subproc, memid);
           sub = expect;
         }
       }
