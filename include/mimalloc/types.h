@@ -63,9 +63,8 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_STATS 1
 
 // Define MI_SECURE to enable security mitigations
-// #define MI_NO_SECURE // disable all security mitigations, even guard pages around metadata
-// #define MI_SECURE 0  // guard pages around meta data, minimal security
-// #define MI_SECURE 1  // + check invalid pointer free, randomize arena allocation addresses (like ASLR), abort on detected meta data corruption
+// #define MI_SECURE 0  // minimal security
+// #define MI_SECURE 1  // + guard pages around meta data, check invalid pointer free, randomize arena allocation addresses (like ASLR), abort on detected meta data corruption
 // #define MI_SECURE 2  // + randomize relative allocation addresses within mimalloc pages
 // #define MI_SECURE 3  // + check buffer overflow, check double free, encode free lists (and detect corrupted free lists)
 // #define MI_SECURE 4  // + same as level 3 for now (`-DMI_SECURE=ON`)
@@ -211,9 +210,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #if MI_QSBR && MI_CHERI
 #error "QSBR cannot be used with CHERI (as delayed concurrent reads would have the wrong capability)"
-#endif
-#if (MI_SECURE > 0) && defined(MI_NO_SECURE)
-#error "Cannot define both MI_SECURE > 0 and MI_NO_SECURE at the same time"
 #endif
 
 // --------------------------------------------------------------
