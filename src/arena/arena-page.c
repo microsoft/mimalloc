@@ -505,7 +505,7 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
   mi_assert_internal(parena_pages!=NULL && ppage!=NULL && pblock_start!=NULL);
   *parena_pages = NULL;
   *memid = _mi_memid_none();
-  const bool allow_large = (MI_SECURE < 5); // 5 = guard page at end of each arena page
+  const bool allow_large = !(MI_SECURE >= 5); // 5 = guard page at end of each arena page
   mi_heap_t* const heap = mi_theap_heap(theap);
 
   // try to allocate from free space in arena's

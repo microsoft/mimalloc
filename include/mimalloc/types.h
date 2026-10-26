@@ -63,12 +63,12 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_STATS 1
 
 // Define MI_SECURE to enable security mitigations
-// #define MI_SECURE 0  // minimal security
-// #define MI_SECURE 1  // + guard pages around meta data, check invalid pointer free, randomize arena allocation addresses (like ASLR), abort on detected meta data corruption
-// #define MI_SECURE 2  // + randomize relative allocation addresses within mimalloc pages
-// #define MI_SECURE 3  // + check buffer overflow, check double free, encode free lists (and detect corrupted free lists)
-// #define MI_SECURE 4  // + same as level 3 for now (`-DMI_SECURE=ON`)
-// #define MI_SECURE 5  // + guard page at the end of each mimalloc page (expensive!) (`-DMI_SECURE_FULL=ON`), and byte-precise buffer overflow checks.
+// #define MI_SECURE 0  // no security mitigations
+// #define MI_SECURE 1  // + guard pages around metadata (and separated metadata), randomized arena/OS allocation addresses, abort on EFAULT (corrupted meta-data) (`-DMI_SECURE=MINIMAL`)
+// #define MI_SECURE 2  // + invalid-pointer check on free (checked lookup in page-map.h), clear free list `next` on allocation.
+// #define MI_SECURE 3  // + randomize relative allocation addresses within mimalloc pages
+// #define MI_SECURE 4  // + check buffer overflow (with padding), check double free, encode free lists (and detect corrupted free lists), decommit with mprotect (`-DMI_SECURE=ON`)
+// #define MI_SECURE 5  // + guard page at the end of each mimalloc page (expensive!), and byte-precise buffer overflow checks (`-DMI_SECURE=FULL`)
 
 #if !defined(MI_SECURE)
 #define MI_SECURE 0
@@ -119,7 +119,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Reserve extra padding at the end of each block to be more resilient against theap block overflows.
 // The padding can detect heap-block overflow on free, and provides byte-precise `mi_usable_size`.
 #if !defined(MI_PADDING)
-#if (MI_SECURE>=3 || MI_DEBUG>=1 || (MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_TRACK_ETW))
+#if (MI_SECURE>=4 || MI_DEBUG>=1 || (MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_TRACK_ETW))
 #define MI_PADDING  1
 #else
 #define MI_PADDING  0
@@ -134,7 +134,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Encoded free lists allow detection of corrupted free lists
 // and can detect buffer overflows, modify after free, and double `free`s.
-#if (MI_SECURE>=3 || MI_DEBUG>=1)
+#if (MI_SECURE>=4 || MI_DEBUG>=1)
 #define MI_ENCODE_FREELIST  1
 #endif
 
@@ -186,7 +186,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #if !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
 // guarded can put small allocations into big blocks in a medium page (which would make `mi_free_small` fail)
 // on CHERI we cannot derive the page from a (bounded) user pointer
-#if (defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0) || MI_SECURE || MI_GUARDED || MI_CHERI
+#if (defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0) || MI_SECURE>=1 || MI_GUARDED || MI_CHERI
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0
 #elif (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED)
 #define MI_PAGE_META_SMALL_IS_ALIGNED   1
@@ -196,10 +196,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // Configuration checks
-#if !MI_PAGE_META_IS_SEPARATED && MI_SECURE
+#if !MI_PAGE_META_IS_SEPARATED && MI_SECURE>=1
 #error "Secure mode should use separated page infos"
 #endif
-#if MI_PAGE_META_SMALL_IS_ALIGNED && (MI_SECURE || MI_GUARDED)
+#if MI_PAGE_META_SMALL_IS_ALIGNED && (MI_SECURE>=1 || MI_GUARDED)
 #error "Secure or guarded mode cannot use MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED)"
 #endif
 #if MI_PAGE_META_IS_SEPARATED && MI_PAGE_MAP_FLAT

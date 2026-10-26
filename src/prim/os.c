@@ -180,12 +180,12 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   Guard page allocation
 ----------------------------------------------------------- */
 
-// Return the size of a guard page, (or 0 if all security is disabled or memory cannot be protected)
+// Return the size of a guard page, (or 0 if security is disabled or memory cannot be protected)
 size_t _mi_os_secure_guard_page_size(void) {
-  #if !MI_SECURE || defined(__wasi__) || defined(__EMSCRIPTEN__)  // no memory protection on WebAssembly
-  return 0;
-  #else
+  #if MI_SECURE>=1 && !defined(__wasi__) && !defined(__EMSCRIPTEN__)  // no memory protection on WebAssembly
   return _mi_os_guard_page_size();
+  #else
+  return 0;
   #endif
 }
 
@@ -632,7 +632,7 @@ bool _mi_os_reset(mi_subproc_t* subproc, void* addr, size_t size) {
   mi_subproc_stat_counter_increase(subproc, reset, csize);
   mi_subproc_stat_counter_increase(subproc, reset_calls, 1);
 
-  #if (MI_DEBUG>1) && !MI_SECURE && !MI_TRACK_ENABLED // && !MI_TSAN
+  #if (MI_DEBUG>1) && MI_SECURE==0 && !MI_TRACK_ENABLED // && !MI_TSAN
   memset(start, 0, csize); // pretend it is eagerly reset
   #endif
 
@@ -743,7 +743,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
     if (start == 0) {
       // Initialize the start address after the 32TiB area
       start = (MI_AU(32) << 40);    // 32TiB virtual start address (after addresses returned by _mi_os_get_aligned_hint)
-      #if (MI_SECURE>0 || MI_DEBUG==0)  // security: randomize start of huge pages unless in debug mode
+      #if (MI_SECURE>=1 || MI_DEBUG==0)  // security: randomize start of huge pages unless in debug mode
       mi_theap_t* const theap = _mi_theap_default();     // don't use `mi_theap_get_default()` as that can cause allocation recursively (issue #1267)
       if (mi_theap_is_initialized(theap)) {              // todo: or no hint at all if we lack randomness?
         const size_t r = _mi_theap_random_next(theap);

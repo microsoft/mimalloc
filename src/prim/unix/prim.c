@@ -610,11 +610,11 @@ int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   int err = 0;
   #if 1
     err = unix_madvise_release(start, size);
-    #if !MI_DEBUG && MI_SECURE<=2
-      *needs_recommit = false;
-    #else
+    #if MI_DEBUG || MI_SECURE>=4
       *needs_recommit = true;
       mprotect(start, size, PROT_NONE);
+    #else
+      *needs_recommit = false;
     #endif
   #else
     // decommit: use mmap with MAP_FIXED and PROT_NONE to discard the existing memory (and reduce rss)

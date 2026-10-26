@@ -113,7 +113,7 @@ extern mi_decl_hidden bool _mi_process_is_initialized;             // has mi_pro
 
 bool _mi_page_is_valid(mi_page_t* page) {
   mi_assert_internal(mi_page_is_valid_init(page));
-  #if MI_SECURE
+  #if MI_SECURE>=1
   mi_assert_internal(page->keys[0] != 0);
   #endif
   if (!mi_page_is_abandoned(page)) {
@@ -736,7 +736,7 @@ void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {
 #define MI_MIN_SLICES       (2)
 
 static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* const page, const size_t bsize, const size_t extend) {
-  #if (MI_SECURE < 2)
+  #if !(MI_SECURE>=3)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
   #endif
@@ -793,7 +793,7 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
 
 static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t bsize, const size_t extend)
 {
-  #if (MI_SECURE < 2)
+  #if !(MI_SECURE>=3)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
   #endif
@@ -821,7 +821,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 ----------------------------------------------------------- */
 
 #define MI_MAX_EXTEND_SIZE    (8*1024)      // heuristic, one or two OS pages seems to work well.
-#if (MI_SECURE>=2)
+#if (MI_SECURE>=3)
 #define MI_MIN_EXTEND         (8*MI_SECURE) // extend at least by this many
 #else
 #define MI_MIN_EXTEND         (1)
@@ -834,7 +834,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 // extra test in malloc? or cache effects?)
 bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_expensive(mi_page_is_valid_init(page));
-  #if (MI_SECURE < 2)
+  #if !(MI_SECURE>=3)
   mi_assert(page->free == NULL);
   mi_assert(page->local_free == NULL);
   if (page->free != NULL) return true;
@@ -893,11 +893,11 @@ bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   }
 
   // and append the extend the free list
-  if (extend < MI_MIN_SLICES || MI_SECURE<2) { //!mi_option_is_enabled(mi_option_secure)) {
-    mi_page_free_list_extend(page, bsize, extend );
+  if (MI_SECURE>=3 && extend >= MI_MIN_SLICES) {
+    mi_page_free_list_extend_secure(theap, page, bsize, extend);
   }
   else {
-    mi_page_free_list_extend_secure(theap, page, bsize, extend);
+    mi_page_free_list_extend(page, bsize, extend );
   }
   // enable the new free list
   page->capacity += (uint16_t)extend;

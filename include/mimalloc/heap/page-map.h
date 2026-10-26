@@ -167,7 +167,7 @@ static inline mi_page_t* mi_aligned_ptr_page(const void* p) {
 
 static inline mi_page_t* mi_ptr_page(const void* p) {
   mi_assert_internal(p==NULL || mi_is_in_heap_region(p));
-  #if MI_SECURE || MI_FREE_IS_CHECKED
+  #if MI_SECURE>=2 || MI_FREE_IS_CHECKED
     return mi_checked_ptr_page(p);
   #elif MI_PAGE_META_IS_ALIGNED
     return mi_aligned_ptr_page(p);
