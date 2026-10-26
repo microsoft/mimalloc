@@ -430,8 +430,12 @@ typedef _Atomic(size_t) mi_atomic_guard_t;
 #pragma warning(disable:26110)  // unlock with holding lock
 #endif
 
-#define mi_lock(lock)                  for(bool _mi_go = (mi_lock_acquire(lock),true); _mi_go; (mi_lock_release(lock), _mi_go=false) )
-#define mi_lock_maybe(lock,acquire)    for(bool _mi_go = (acquire ? (mi_lock_acquire(lock),true) : true); _mi_go; _mi_go = (acquire ? (mi_lock_release(lock),false) : false) )
+// use a unique loop variable per line to avoid shadowing warnings for nested locks
+#define mi_concat_(a,b)                a##b
+#define mi_concat(a,b)                 mi_concat_(a,b)
+#define mi_unique(name)                mi_concat(name,__LINE__)
+#define mi_lock(lock)                  for(bool mi_unique(_mi_go) = (mi_lock_acquire(lock),true); mi_unique(_mi_go); (mi_lock_release(lock), mi_unique(_mi_go)=false) )
+#define mi_lock_maybe(lock,acquire)    for(bool mi_unique(_mi_go) = ((acquire) ? (mi_lock_acquire(lock),true) : true); mi_unique(_mi_go); mi_unique(_mi_go) = ((acquire) ? (mi_lock_release(lock),false) : false) )
 
 
 #if defined(_WIN32) || defined(__CYGWIN__)
