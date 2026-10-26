@@ -27,6 +27,8 @@ the hardware instructions are never executed (as these trap on CPU's without MTE
 
 #define MI_MEMTAG_GRANULE_SIZE    (16)
 #define MI_MEMTAG_META            (0)         // tag used for meta data (and free arena memory)
+#define MI_MEMTAG_LINE_SIZE       (64)        // cache line size tagged by `dc gva` (checked at initialization)
+#define MI_MEMTAG_ZERO_MAX        (1024)      // blocks up to this size are zeroed on free (larger ones are only retagged)
 
 // Tag exclusion masks (bit `i` set excludes tag `i`); blocks never use tag 0 or 15.
 #define MI_MEMTAG_EXCLUDE         (0x8001)
@@ -96,30 +98,58 @@ static inline void* mi_memtag_load(void* p) {
   return q;
 }
 
-// Set the memory tags of `[p,p+size)` to the tag of `p` (`stg`, `st2g`)
-static inline void mi_memtag_store(void* p, size_t size) {
-  mi_assert_internal(((uintptr_t)p % MI_MEMTAG_GRANULE_SIZE) == 0 && (size % MI_MEMTAG_GRANULE_SIZE) == 0);
+// Size of the cache line tagged by `dc gva` (as given by `dczid_el0`), or 0 if not permitted
+static inline size_t mi_memtag_line_size(void) {
+  uint64_t dczid;
+  __asm__ ("mrs %0, dczid_el0" : "=r"(dczid));
+  return ((dczid & 0x10) != 0 ? 0 : (MI_ZU(4) << (dczid & 0x0F)));
+}
+
+// Set the tag of the granule at `p` (or two granules, or the cache line) to the tag of `p`, and zero it if `zero` is set
+static inline void mi_memtag_store_granule(uint8_t* p, bool zero) {
+  if (zero) { __asm__ __volatile__ (MI_MEMTAG_ASM "stzg %0, [%0]" : : "r"(p) : "memory"); }
+       else { __asm__ __volatile__ (MI_MEMTAG_ASM "stg %0, [%0]"  : : "r"(p) : "memory"); }
+}
+static inline void mi_memtag_store_granule2(uint8_t* p, bool zero) {
+  if (zero) { __asm__ __volatile__ (MI_MEMTAG_ASM "stz2g %0, [%0]" : : "r"(p) : "memory"); }
+       else { __asm__ __volatile__ (MI_MEMTAG_ASM "st2g %0, [%0]"  : : "r"(p) : "memory"); }
+}
+static inline void mi_memtag_store_line(uint8_t* p, bool zero) {
+  if (zero) { __asm__ __volatile__ (MI_MEMTAG_ASM "dc gzva, %0" : : "r"(p) : "memory"); }
+       else { __asm__ __volatile__ (MI_MEMTAG_ASM "dc gva, %0"  : : "r"(p) : "memory"); }
+}
+
+// Set the memory tags of `[p,p+size)` to the tag of `p`, and zero it if `zero` is set.
+// Small ranges are tagged per granule; for larger ranges only the (unaligned) edges are tagged per granule
+// while the aligned middle is tagged per cache line (which is much faster).
+static inline void mi_memtag_store_ex(void* p, size_t size, bool zero) {
+  mi_assert_internal(((uintptr_t)p % MI_MEMTAG_GRANULE_SIZE) == 0 && (size % MI_MEMTAG_GRANULE_SIZE) == 0 && size > 0);
   uint8_t* q = (uint8_t*)p;
   uint8_t* const end = q + size;
-  if ((size % (2*MI_MEMTAG_GRANULE_SIZE)) != 0) {
-    __asm__ __volatile__ (MI_MEMTAG_ASM "stg %1, [%0], #16" : "+r"(q) : "r"(p) : "memory");
+  if (size <= 2*MI_MEMTAG_LINE_SIZE) {
+    if ((size % (2*MI_MEMTAG_GRANULE_SIZE)) != 0) { mi_memtag_store_granule(q, zero); q += MI_MEMTAG_GRANULE_SIZE; }
+    for (; q < end; q += 2*MI_MEMTAG_GRANULE_SIZE) { mi_memtag_store_granule2(q, zero); }
   }
-  while (q < end) {
-    __asm__ __volatile__ (MI_MEMTAG_ASM "st2g %1, [%0], #32" : "+r"(q) : "r"(p) : "memory");
+  else {
+    mi_memtag_store_granule(q, zero);
+    mi_memtag_store_granule(end - MI_MEMTAG_GRANULE_SIZE, zero);
+    mi_memtag_store_granule2((uint8_t*)(((uintptr_t)q + 31) & ~(uintptr_t)31), zero);
+    mi_memtag_store_granule2((uint8_t*)((uintptr_t)end & ~(uintptr_t)31) - 32, zero);
+    uint8_t* const line_end = (uint8_t*)((uintptr_t)end & ~(uintptr_t)(MI_MEMTAG_LINE_SIZE-1));
+    for (q = (uint8_t*)(((uintptr_t)q + MI_MEMTAG_LINE_SIZE-1) & ~(uintptr_t)(MI_MEMTAG_LINE_SIZE-1)); q < line_end; q += MI_MEMTAG_LINE_SIZE) {
+      mi_memtag_store_line(q, zero);
+    }
   }
 }
 
-// Zero `[p,p+size)` and set its memory tags to the tag of `p` (`stzg`, `stz2g`)
+// Set the memory tags of `[p,p+size)` to the tag of `p`
+static inline void mi_memtag_store(void* p, size_t size) {
+  mi_memtag_store_ex(p, size, false);
+}
+
+// Zero `[p,p+size)` and set its memory tags to the tag of `p`
 static inline void mi_memtag_store_zero(void* p, size_t size) {
-  mi_assert_internal(((uintptr_t)p % MI_MEMTAG_GRANULE_SIZE) == 0 && (size % MI_MEMTAG_GRANULE_SIZE) == 0);
-  uint8_t* q = (uint8_t*)p;
-  uint8_t* const end = q + size;
-  if ((size % (2*MI_MEMTAG_GRANULE_SIZE)) != 0) {
-    __asm__ __volatile__ (MI_MEMTAG_ASM "stzg %1, [%0], #16" : "+r"(q) : "r"(p) : "memory");
-  }
-  while (q < end) {
-    __asm__ __volatile__ (MI_MEMTAG_ASM "stz2g %1, [%0], #32" : "+r"(q) : "r"(p) : "memory");
-  }
+  mi_memtag_store_ex(p, size, true);
 }
 
 // Return `p` with a fresh random tag of the same class (odd or even) that differs from its current tag (`gmi`, `irg`)
@@ -131,6 +161,7 @@ static inline void* mi_memtag_random_next(void* p) {
 }
 
 #else
+static inline size_t mi_memtag_line_size(void)                 { return 0; }
 static inline void* mi_memtag_random(void* p, size_t exclude)  { MI_UNUSED(exclude); return p; }
 static inline void* mi_memtag_load(void* p)                    { return p; }
 static inline void  mi_memtag_store(void* p, size_t size)      { MI_UNUSED(p); MI_UNUSED(size); }
@@ -152,14 +183,15 @@ static inline void mi_memtag_blocks_init(void* start, size_t bsize, size_t idx, 
   }
 }
 
-// Retag a block on free with a fresh tag (of the same class) and zero it; returns the block with its new tag.
+// Retag a block on free with a fresh tag (of the same class) and zero it if it is small; returns the block with its new tag.
 // The first read uses the current tag of `block` so a stale pointer (e.g. a double free) faults.
 static inline void* mi_memtag_block_free(void* block, size_t bsize) {
   #if MI_MTE
   (void)(*(volatile uint8_t*)block);
   #endif
   void* const tblock = mi_memtag_random_next(block);
-  mi_memtag_store_zero(tblock, bsize);
+  if (bsize <= MI_MEMTAG_ZERO_MAX) { mi_memtag_store_zero(tblock, bsize); }
+                              else { mi_memtag_store(tblock, bsize); }
   return tblock;
 }
 

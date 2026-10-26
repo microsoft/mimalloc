@@ -28,7 +28,7 @@ static inline bool mi_page_free_quick_collect(mi_page_t* page) {
   // move local_free to free
   page->free = page->local_free;
   page->local_free = NULL;
-  page->free_is_zero = false;
+  page->free_is_zero = mi_page_is_zero_on_free(page);
   _mi_page_update_sample_countdown(page);
   return true;
 }

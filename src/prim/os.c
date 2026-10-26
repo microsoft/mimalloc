@@ -118,7 +118,7 @@ size_t _mi_os_good_alloc_size(size_t size) {
 
 void _mi_os_init(void) {
   _mi_prim_mem_init(&mi_os_mem_config);
-  _mi_memtag_enabled  = mi_os_mem_config.has_memtag;
+  _mi_memtag_enabled  = (mi_os_mem_config.has_memtag && mi_memtag_line_size() == MI_MEMTAG_LINE_SIZE);
   _mi_memtag_max_size = mi_option_get_size(mi_option_memtag_max_size);
   if (_mi_memtag_enabled) { _mi_verbose_message("memory tagging is enabled (for blocks up to %zu KiB)\n", _mi_memtag_max_size / MI_KiB); }
 }

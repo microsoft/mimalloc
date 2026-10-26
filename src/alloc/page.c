@@ -398,7 +398,7 @@ bool _mi_page_free_collect(mi_page_t* page, bool force) {
       // usual case
       page->free = page->local_free;
       page->local_free = NULL;
-      page->free_is_zero = false;
+      page->free_is_zero = mi_page_is_zero_on_free(page);
     }
     else if (force) {
       // append -- only on shutdown (force) as this is a linear operation
@@ -435,7 +435,7 @@ mi_block_t* _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
     if (page->local_free != NULL && page->free == NULL) {
       page->free = page->local_free;
       page->local_free = NULL;
-      page->free_is_zero = false;
+      page->free_is_zero = mi_page_is_zero_on_free(page);
       _mi_page_update_sample_countdown(page);
     }
   }
@@ -899,10 +899,11 @@ bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
     }
   }
 
-  // tag the new blocks
+  // tag the new blocks (if not initially zero, the free list of a zero-on-free page is no longer zero)
   const bool memtag = mi_page_is_memtag(page);
   if (memtag) {
     mi_memtag_blocks_init(mi_page_start(page) + (page->capacity * bsize), bsize, page->capacity, extend);
+    if (!page->memid.initially_zero) { page->free_is_zero = false; }
   }
 
   // and append the extend the free list

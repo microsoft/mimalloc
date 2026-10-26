@@ -330,6 +330,17 @@ static inline bool mi_page_is_memtag(const mi_page_t* page) {
   return (MI_PAGE_NO_MEMTAG != 0 && (mi_page_flags(page) & MI_PAGE_NO_MEMTAG) == 0);
 }
 
+// Are freed blocks in this page zeroed (except for the free list link)? This holds for small memory tagged blocks
+// (always false without `MI_MTE` or in debug mode as freed blocks are filled then)
+static inline bool mi_page_is_zero_on_free(const mi_page_t* page) {
+  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
+  MI_UNUSED(page);
+  return false;
+  #else
+  return (mi_page_is_memtag(page) && mi_page_block_size(page) <= MI_MEMTAG_ZERO_MAX);
+  #endif
+}
+
 static inline void mi_page_set_theap(mi_page_t* page, mi_theap_t* theap) {
   // mi_assert_internal(!mi_page_is_in_full(page));  // can happen when destroying pages on theap_destroy
   page->theap = theap;
