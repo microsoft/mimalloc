@@ -4,7 +4,7 @@ project(libmimalloc C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
-set(MI_SECURE "OFF" CACHE STRING "Use security mitigations (like meta data guard pages, allocation randomization, double-free mitigation, and free-list corruption detection): OFF, MINIMAL, ON, FULL. The FULL setting adds guard pages at the end of each mimalloc page (which may be expensive). MINIMAL only uses guard pages around metadata and randomizes OS allocation addresses.")
+set(MI_SECURE "OFF" CACHE STRING "Use security mitigations (like meta data guard pages, allocation randomization, double-free mitigation, and free-list corruption detection): OFF, MINIMAL, ON, FULL. The FULL setting adds guard pages at the end of each mimalloc page (which may be expensive). MINIMAL only uses guard pages around metadata (and randomizes OS allocation addresses).")
 set_property(CACHE MI_SECURE PROPERTY STRINGS "OFF"  "MINIMAL" "ON" "FULL")
 
 option(MI_OVERRIDE          "Override the standard malloc interface (i.e. define entry points for 'malloc', 'free', etc)" ON)

@@ -237,7 +237,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
       #else
         { page = mi_ptr_page(p); }
       #endif
-      if mi_unlikely(page==NULL && check_p_for_null) {
+      if mi_unlikely(mi_ptr_page_is_null(p,page) && check_p_for_null) {
         #if MI_DEBUG || MI_CHERI  // on CHERI also report in release (e.g. untagged pointers)
         if (p!=NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
         #endif

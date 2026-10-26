@@ -110,6 +110,9 @@ size_t _mi_os_good_alloc_size(size_t size) {
 
 void _mi_os_init(void) {
   _mi_prim_mem_init(&mi_os_mem_config);
+  if (_mi_os_page_size() > MI_ARENA_SLICE_SIZE) {
+    _mi_error_message(ENOTSUP, "the OS page size (%zu KiB) is larger than the arena slice size (%zu KiB); increase MI_ARENA_SLICE_SHIFT\n", _mi_os_page_size()/MI_KiB, (size_t)(MI_ARENA_SLICE_SIZE/MI_KiB));
+  }
 }
 
 

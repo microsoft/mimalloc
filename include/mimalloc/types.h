@@ -278,9 +278,17 @@ terms of the MIT license. A copy of the license can be found in the file
 // Minimal commit for a page on-demand commit
 #define MI_PAGE_MIN_COMMIT_SIZE   (16*MI_KiB) /* MI_ARENA_SLICE_SIZE */
 
+// In secure mode, a guard slice is reserved in front of the arena info and around the aligned page meta data
+#if MI_SECURE
+#define MI_ARENA_GUARD_SLICES         1
+#else
+#define MI_ARENA_GUARD_SLICES         0
+#endif
+
 #if MI_PAGE_META_IS_ALIGNED
 #define MI_PAGE_META_ALIGNED_COUNT    (MI_PAGE_META_ALIGNED_CHUNKS * MI_BCHUNK_BITS)
 #define MI_PAGE_META_ALIGNMENT        (MI_PAGE_META_ALIGNED_COUNT * MI_ARENA_SLICE_SIZE)  // 256 MiB (32 MiB on 32-bit)
+#define MI_PAGE_META_ALIGNED_OFFSET   (MI_ARENA_GUARD_SLICES * MI_ARENA_SLICE_SIZE)       // offset of the page meta data in an aligned area
 #define MI_ARENA_ALIGNMENT            MI_PAGE_META_ALIGNMENT
 #else
 #define MI_ARENA_ALIGNMENT            MI_ARENA_SLICE_ALIGN

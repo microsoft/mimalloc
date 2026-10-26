@@ -374,12 +374,12 @@ static mi_page_t* mi_page_meta_select(uint8_t* slice_start, size_t slice_count, 
 #if MI_PAGE_META_IS_ALIGNED
 // Ensure the aligned page meta data for the slices at `slice_start` is committed.
 static bool mi_arena_page_meta_ensure_committed(mi_arena_t* arena, uint8_t* slice_start) {
-  uint8_t* const meta_slices = (uint8_t*)mi_align_down_ptr(slice_start,MI_PAGE_META_ALIGNMENT);
+  uint8_t* const meta_slices = (uint8_t*)mi_align_down_ptr(slice_start,MI_PAGE_META_ALIGNMENT) + MI_PAGE_META_ALIGNED_OFFSET;
   mi_assert_internal(meta_slices >= mi_arena_start(arena));
   const size_t meta_slice_index  = (meta_slices - mi_arena_start(arena)) / MI_ARENA_SLICE_SIZE;
   if mi_unlikely(mi_bitmap_is_clear(arena->slices_committed, meta_slice_index)) {
-    // try to commit all page meta slices now
-    const size_t meta_slice_count = mi_arena_page_meta_aligned_slice_count();
+    // try to commit all page meta slices now (but not the guard slices around it)
+    const size_t meta_slice_count = mi_arena_page_meta_aligned_array_slices();
     // the following assertion does not hold in a concurrent setting..
     // mi_assert_internal(mi_bitmap_is_clearN(arena->slices_committed, meta_slice_index, meta_slice_count));
     const size_t commit_size = meta_slice_count * MI_ARENA_SLICE_SIZE;
@@ -448,29 +448,40 @@ static uint8_t* mi_arenas_page_alloc_from_os(mi_heap_t* heap, size_t slice_count
     // os_start = (uint8_t*)_mi_arena_os_alloc_aligned(heap->subproc, alloc_size + page_offset, block_alignment, MI_PAGE_META_ALIGNMENT /* align offset */, false /* commit */, false /* allow large */, req_arena, memid);
   }
 
-  // offset in the block for the page area
-  const size_t page_offset = (block_alignment < MI_PAGE_ALIGN ? MI_PAGE_ALIGN : block_alignment);
+  // offset in the block for the page area (leaving room for the guard slices around the page meta data in secure mode)
+  size_t page_offset = (block_alignment < MI_PAGE_ALIGN ? MI_PAGE_ALIGN : block_alignment);
+  #if MI_ARENA_GUARD_SLICES > 0
+  page_offset = mi_align_up(_mi_size_of_slices(2*MI_ARENA_GUARD_SLICES + 1), page_offset);
+  #endif
   uint8_t* const os_start = (uint8_t*)_mi_arena_os_alloc_aligned(heap->subproc, alloc_size + page_offset, MI_PAGE_META_ALIGNMENT, 0 /* align offset */, false /* commit */, false /* allow large */, req_arena, memid);
   if (os_start==NULL) return NULL;
 
   // commit page info and page
+  uint8_t* const page_meta_start = os_start + MI_PAGE_META_ALIGNED_OFFSET;
   const size_t min_page_count = mi_divide_up(page_offset + MI_ARENA_SLICE_SIZE,MI_ARENA_SLICE_SIZE) + max_page_meta_count;
   const size_t min_page_meta  = min_page_count * sizeof(mi_page_t);
-  mi_assert_internal(min_page_meta < page_offset);
+  mi_assert_internal(MI_PAGE_META_ALIGNED_OFFSET + mi_align_up(min_page_meta,_mi_os_page_size()) + _mi_os_secure_guard_page_size() <= page_offset);
   bool is_zero;
-  bool ok = _mi_arena_commit(heap->subproc,req_arena,os_start,min_page_meta,&is_zero,min_page_meta /* don't count in stats? */);
+  bool ok = _mi_arena_commit(heap->subproc,req_arena,page_meta_start,min_page_meta,&is_zero,min_page_meta /* don't count in stats? */);
   if (ok && commit) {
     ok = _mi_arena_commit(heap->subproc,req_arena,os_start + page_offset,alloc_size,NULL,0);
   }
   if (!ok) { _mi_os_free(heap->subproc,os_start,alloc_size+page_offset,*memid); return NULL; }
   if (!is_zero && !memid->initially_zero) {
-    mi_memzero_aligned(os_start,min_page_meta);
+    mi_memzero_aligned(page_meta_start,min_page_meta);
   }
+  #if MI_ARENA_GUARD_SLICES > 0
+  // set guard pages around the page meta data (if not initially committed, the guards are never committed)
+  if (memid->initially_committed && !memid->is_pinned) {
+    _mi_os_secure_guard_page_set_before(heap->subproc, page_meta_start, *memid);
+    _mi_os_secure_guard_page_set_at(heap->subproc, mi_align_up_ptr(page_meta_start + min_page_meta, _mi_os_page_size()), *memid);
+  }
+  #endif
   uint8_t* const start = os_start + page_offset;
   mi_assert_internal(mi_is_aligned(start,block_alignment));
   mi_assert_internal(mi_is_aligned(os_start,MI_PAGE_META_ALIGNMENT));
   mi_assert_internal(mi_align_down_ptr(start-1,MI_PAGE_META_ALIGNMENT) == os_start);
-  mi_assert_internal((uint8_t*)mi_aligned_ptr_page0(start) < os_start + min_page_meta);
+  mi_assert_internal((uint8_t*)mi_aligned_ptr_page0(start) < page_meta_start + min_page_meta);
   memid->initially_committed = true; // so we don't commit again
   *ppage = mi_page_meta_select(start, slice_count, mi_aligned_ptr_page0(start), block_size, os_align, pblock_start);
   return start;

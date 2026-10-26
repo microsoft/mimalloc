@@ -41,10 +41,19 @@ static inline size_t mi_arena_info_slices(mi_arena_t* arena) {
   return arena->info_slices;
 }
 
-// slices reserved for page meta info at the start of aligned chunks
-static inline size_t mi_arena_page_meta_aligned_slice_count(void) {
+// slices of the aligned page meta data array at the start of each aligned area
+static inline size_t mi_arena_page_meta_aligned_array_slices(void) {
   #if MI_PAGE_META_IS_ALIGNED
   return mi_divide_up(MI_PAGE_META_ALIGNED_COUNT * sizeof(mi_page_t), MI_ARENA_SLICE_SIZE);
+  #else
+  return 0;
+  #endif
+}
+
+// slices reserved at the start of each aligned area: the page meta data array (with a guard slice in front and after in secure mode)
+static inline size_t mi_arena_page_meta_aligned_slice_count(void) {
+  #if MI_PAGE_META_IS_ALIGNED
+  return (MI_ARENA_GUARD_SLICES + mi_arena_page_meta_aligned_array_slices() + MI_ARENA_GUARD_SLICES);
   #else
   return 0;
   #endif
