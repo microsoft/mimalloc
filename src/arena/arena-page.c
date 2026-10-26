@@ -95,12 +95,16 @@ static size_t mi_arena_pages_size(size_t slice_count, size_t* bitmap_base) {
   return size;
 }
 
-// allocate initial arena_pages from the main heap
+// allocate initial arena_pages from the main heap (or as meta data in secure mode)
 static mi_arena_pages_t* mi_arena_pages_alloc(mi_arena_t* arena) {
   const size_t slice_count = arena->slice_count;
   size_t bitmap_base = 0;
   const size_t size = mi_arena_pages_size(slice_count, &bitmap_base);
+  #if MI_SECURE
+  mi_arena_pages_t* arena_pages = (mi_arena_pages_t*)_mi_meta_zalloc_aligned(arena->subproc, size, MI_BCHUNK_SIZE, NULL);
+  #else
   mi_arena_pages_t* arena_pages = (mi_arena_pages_t*)mi_heap_zalloc_aligned(arena->subproc->heap_main, size, MI_BCHUNK_SIZE);
+  #endif
   if (arena_pages==NULL) return NULL;
   uint8_t* base = (uint8_t*)arena_pages + bitmap_base;
   mi_assert_internal(mi_is_aligned(base, MI_BCHUNK_SIZE));

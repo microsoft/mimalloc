@@ -149,10 +149,14 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
 
 mi_heap_t* _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool is_main_heap, bool use_qsbr) {
   mi_assert_internal(is_main_heap ? (subproc->heap_main == NULL && subproc->parent != NULL) : subproc->heap_main != NULL);
-  // heap data is allocated in the current subproc
-  mi_heap_t* const heap_main = (is_main_heap ? subproc->parent->heap_main : subproc->heap_main);
-  // todo: allocate heap data in the exclusive arena ?
-  mi_heap_t* const heap = (mi_heap_t*)mi_heap_zalloc( heap_main, sizeof(mi_heap_t) );
+  // heap data is allocated in the current subproc (or the parent for a main heap)
+  mi_subproc_t* const owner = (is_main_heap ? subproc->parent : subproc);
+  #if MI_SECURE
+  // in secure mode, keep heap data separate from user data (at the cost of taking a lock)
+  mi_heap_t* const heap = (mi_heap_t*)_mi_meta_zalloc(owner, sizeof(mi_heap_t), NULL);
+  #else
+  mi_heap_t* const heap = (mi_heap_t*)mi_heap_zalloc(owner->heap_main, sizeof(mi_heap_t));
+  #endif
   if (heap==NULL) return NULL;
   // reserve a thread local slot for this heap (see also issue #1230)
   mi_thread_local_t theap_slot = (is_main_heap ? mi_thread_local_key_fast : _mi_thread_local_create());
