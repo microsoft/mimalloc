@@ -152,18 +152,10 @@ typedef int32_t  mi_ssize_t;
 #define MI_MIN_VABITS     (43)    /* 8 TiB */
 #endif
 
-// On CHERI, always use the page map in `mi_free` as we cannot derive the page meta-data from a (bounded) user pointer
-#if MI_CHERI && !defined(MI_FREE_USE_PAGEMAP)
+// Always use the page map in `mi_free` on CHERI as we cannot derive the page meta-data from a (bounded) user pointer,
+// and on WebAssembly as it cannot do large aligned allocations well (needed for aligned page meta-data).
+#if (MI_CHERI || defined(__wasi__) || defined(__EMSCRIPTEN__)) && !defined(MI_FREE_USE_PAGEMAP)
 #define MI_FREE_USE_PAGEMAP  1
-#endif
-
-// use a flat page-map or a 2-level one
-#ifndef MI_PAGE_MAP_FLAT
-#if MI_MAX_VABITS <= 40 && !defined(__APPLE__) && !MI_CHERI && MI_SECURE==0 && !MI_FREE_IS_CHECKED && MI_FREE_USE_PAGEMAP
-#define MI_PAGE_MAP_FLAT  1
-#else
-#define MI_PAGE_MAP_FLAT  0
-#endif
 #endif
 
 

@@ -24,46 +24,6 @@ mi_page_t*    _mi_safe_ptr_page(const void* p);
   The page map maps addresses to `mi_page_t` pointers
 ----------------------------------------------------------- */
 
-#if MI_PAGE_MAP_FLAT
-
-// flat page-map committed on demand, using one byte per slice (64 KiB).
-// single indirection and low commit, but large initial virtual reserve (4 GiB with 48 bit virtual addresses)
-// used by default on <= 40 bit virtual address spaces.
-extern mi_decl_hidden _Atomic(uint8_t*) _mi_page_map;
-extern mi_decl_hidden _Atomic(void*)    _mi_page_map_max_address;
-
-static inline size_t mi_page_map_index(const void* p) {
-  return (size_t)(mi_addr(p) >> MI_ARENA_SLICE_SHIFT);
-}
-
-static inline uint8_t mi_page_map_at(size_t idx) {
-  return mi_atomic_load_ptr_relaxed(uint8_t,&_mi_page_map)[idx];
-}
-
-static inline mi_page_t* mi_ptr_page_ex(const void* p, bool* valid) {
-  const size_t idx = mi_page_map_index(p);
-  const size_t ofs = mi_page_map_at(idx);
-  if (valid != NULL) { *valid = (ofs != 0); }
-  return (mi_page_t*)((((uintptr_t)p >> MI_ARENA_SLICE_SHIFT) + 1 - ofs) << MI_ARENA_SLICE_SHIFT);
-}
-
-static inline mi_page_t* mi_checked_ptr_page(const void* p) {
-  #if MI_MIN_VABITS < MI_INTPTR_BITS
-  if mi_unlikely((mi_addr(p) >> MI_MIN_VABITS) != 0) {
-    if (p > mi_atomic_load_ptr_relaxed(void, &_mi_page_map_max_address)) return NULL;
-  }
-  #endif
-  bool valid;
-  mi_page_t* const page = mi_ptr_page_ex(p, &valid);
-  return (valid ? page : NULL);
-}
-
-static inline mi_page_t* mi_unchecked_ptr_page(const void* p) {
-  return mi_ptr_page_ex(p, NULL);
-}
-
-#else
-
 // 2-level page map:
 // double indirection, but low commit and low virtual reserve.
 //
@@ -132,7 +92,6 @@ static inline mi_page_t* mi_checked_ptr_page(const void* p) {
   return sub[sub_idx];
 }
 
-#endif
 
 #if MI_PAGE_META_IS_ALIGNED
 // if the page meta data is aligned in front of pages we can find it efficiently

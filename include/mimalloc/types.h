@@ -160,11 +160,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Separate keeps the page info at the arena start (default) which is more secure
 // and reduces wasted space due to alignment and block sizes.
 #if !defined(MI_PAGE_META_IS_SEPARATED)
-#if MI_PAGE_MAP_FLAT
-#define MI_PAGE_META_IS_SEPARATED    0
-#else
 #define MI_PAGE_META_IS_SEPARATED    1
-#endif
 #endif
 
 // We can choose to page meta info aligned at the start of every MI_PAGE_META_ALIGNED_CHUNKS
@@ -176,7 +172,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_PAGE_META_IS_ALIGNED         1
 #define MI_PAGE_META_ALIGNED_CHUNKS     MI_SIZE_SIZE
 #else
-#warning "cannot optimize free with alignment since the page meta data is not separated (due to MI_PAGE_MAP_FLAT?)"
+#warning "cannot optimize free with alignment since the page meta data is not separated"
 #endif
 #endif
 
@@ -201,9 +197,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #if MI_PAGE_META_SMALL_IS_ALIGNED && (MI_SECURE>=1 || MI_GUARDED)
 #error "Secure or guarded mode cannot use MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED)"
-#endif
-#if MI_PAGE_META_IS_SEPARATED && MI_PAGE_MAP_FLAT
-#error "Cannot have a flat page map with separated page infos"
 #endif
 #if (MI_PAGE_META_IS_ALIGNED || MI_PAGE_META_SMALL_IS_ALIGNED) && MI_CHERI
 #error "Cannot have aligned page meta with CHERI"
