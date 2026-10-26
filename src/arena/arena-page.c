@@ -603,6 +603,7 @@ static void mi_arenas_page_init_meta(mi_theap_t* theap, mi_page_t* page, uint8_t
   page->slice_pcommitted = (uint16_t)(commit_size / _mi_os_page_size());
 
   page->heap = mi_theap_heap(theap);
+  if (MI_PAGE_NO_MEMTAG != 0 && !mi_memtag_use_for(memid.is_memtag, block_size)) { mi_page_flags_set(page, true, MI_PAGE_NO_MEMTAG); }
   mi_page_set_theap(page,theap);
   // mi_assert_internal(mi_page_theap(page) == _mi_heap_theap_peek(page->heap))
 }

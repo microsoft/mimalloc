@@ -32,6 +32,7 @@ the hardware instructions are never executed (as these trap on CPU's without MTE
 #define MI_MEMTAG_EXCLUDE         (0x8001)
 #define MI_MEMTAG_EXCLUDE_EVEN    (MI_MEMTAG_EXCLUDE | 0x7F00)   // even blocks use tags 1 to 7
 #define MI_MEMTAG_EXCLUDE_ODD     (MI_MEMTAG_EXCLUDE | 0x00FE)   // odd blocks use tags 8 to 14
+#define MI_MEMTAG_ODD_BIT         (MI_AU(8) << MI_PTR_TAG_SHIFT)  // tag bit that is set for odd blocks
 
 // Set once at process initialization (in `prim/os.c`)
 extern mi_decl_hidden bool   _mi_memtag_enabled;    // is memory tagging used?
@@ -108,10 +109,33 @@ static inline void mi_memtag_store(void* p, size_t size) {
   }
 }
 
+// Zero `[p,p+size)` and set its memory tags to the tag of `p` (`stzg`, `stz2g`)
+static inline void mi_memtag_store_zero(void* p, size_t size) {
+  mi_assert_internal(((uintptr_t)p % MI_MEMTAG_GRANULE_SIZE) == 0 && (size % MI_MEMTAG_GRANULE_SIZE) == 0);
+  uint8_t* q = (uint8_t*)p;
+  uint8_t* const end = q + size;
+  if ((size % (2*MI_MEMTAG_GRANULE_SIZE)) != 0) {
+    __asm__ __volatile__ (MI_MEMTAG_ASM "stzg %1, [%0], #16" : "+r"(q) : "r"(p) : "memory");
+  }
+  while (q < end) {
+    __asm__ __volatile__ (MI_MEMTAG_ASM "stz2g %1, [%0], #32" : "+r"(q) : "r"(p) : "memory");
+  }
+}
+
+// Return `p` with a fresh random tag of the same class (odd or even) that differs from its current tag (`gmi`, `irg`)
+static inline void* mi_memtag_random_next(void* p) {
+  const size_t class_exclude = ((mi_addr_tagged(p) & MI_MEMTAG_ODD_BIT) == 0 ? MI_MEMTAG_EXCLUDE_EVEN : MI_MEMTAG_EXCLUDE_ODD);
+  size_t exclude;
+  __asm__ (MI_MEMTAG_ASM "gmi %0, %1, %2" : "=r"(exclude) : "r"(p), "r"(class_exclude));
+  return mi_memtag_random(p, exclude);
+}
+
 #else
-static inline void* mi_memtag_random(void* p, size_t exclude) { MI_UNUSED(exclude); return p; }
-static inline void* mi_memtag_load(void* p)                   { return p; }
-static inline void  mi_memtag_store(void* p, size_t size)     { MI_UNUSED(p); MI_UNUSED(size); }
+static inline void* mi_memtag_random(void* p, size_t exclude)  { MI_UNUSED(exclude); return p; }
+static inline void* mi_memtag_load(void* p)                    { return p; }
+static inline void  mi_memtag_store(void* p, size_t size)      { MI_UNUSED(p); MI_UNUSED(size); }
+static inline void  mi_memtag_store_zero(void* p, size_t size) { MI_UNUSED(p); MI_UNUSED(size); }
+static inline void* mi_memtag_random_next(void* p)             { return p; }
 #endif
 
 
@@ -126,6 +150,17 @@ static inline void mi_memtag_blocks_init(void* start, size_t bsize, size_t idx, 
     void* const tp = mi_memtag_random(p, ((i&1)==0 ? MI_MEMTAG_EXCLUDE_EVEN : MI_MEMTAG_EXCLUDE_ODD));
     mi_memtag_store(tp, bsize);
   }
+}
+
+// Retag a block on free with a fresh tag (of the same class) and zero it; returns the block with its new tag.
+// The first read uses the current tag of `block` so a stale pointer (e.g. a double free) faults.
+static inline void* mi_memtag_block_free(void* block, size_t bsize) {
+  #if MI_MTE
+  (void)(*(volatile uint8_t*)block);
+  #endif
+  void* const tblock = mi_memtag_random_next(block);
+  mi_memtag_store_zero(tblock, bsize);
+  return tblock;
 }
 
 // Reset the tags of `[p,p+size)` to the meta data tag

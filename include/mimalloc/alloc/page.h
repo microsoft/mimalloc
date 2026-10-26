@@ -108,11 +108,6 @@ static inline bool mi_page_contains_address(const mi_page_t* page, const void* p
   return (start <= mi_addr(p) && mi_addr(p) < start + psize);
 }
 
-// Are the blocks in this page memory tagged?
-static inline bool mi_page_is_memtag(const mi_page_t* page) {
-  return mi_memtag_use_for(page->memid.is_memtag, mi_page_block_size(page));
-}
-
 static inline bool mi_page_is_in_arena(const mi_page_t* page) {
   return (page->memid.memkind == MI_MEM_ARENA);
 }
@@ -328,6 +323,11 @@ static inline bool mi_page_has_interior_pointers(const mi_page_t* page) {
 
 static inline void mi_page_set_has_interior_pointers(mi_page_t* page, bool has_aligned) {
   mi_page_flags_set(page, has_aligned, MI_PAGE_HAS_INTERIOR_POINTERS);
+}
+
+// Are the blocks in this page memory tagged? (always false without `MI_MTE`)
+static inline bool mi_page_is_memtag(const mi_page_t* page) {
+  return (MI_PAGE_NO_MEMTAG != 0 && (mi_page_flags(page) & MI_PAGE_NO_MEMTAG) == 0);
 }
 
 static inline void mi_page_set_theap(mi_page_t* page, mi_theap_t* theap) {

@@ -42,7 +42,10 @@ static inline void mi_debug_fill(const mi_page_t* page, void* block, int c, size
 
 // regular free of a (thread local) block pointer
 // fast path written carefully to prevent spilling on the stack
-static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool was_guarded, bool check_full)
+// On the fast path the page flags are zero so blocks are always memory tagged (when built with `MI_MTE`)
+#define MI_FREE_FAST_MEMTAG   (MI_PAGE_NO_MEMTAG != 0)
+
+static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool was_guarded, bool check_full, bool memtag)
 {
   // checks
   size_t usable_size;
@@ -51,6 +54,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
 
   // mi_stat_free(page, block);
   mi_track_free_size(block, usable_size);
+  if (memtag && !was_guarded) { block = (mi_block_t*)mi_memtag_block_free(block, mi_page_block_size(page)); }
 
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
   const size_t dbgsize = (usable_size > MI_MiB ? MI_MiB : usable_size);
@@ -86,11 +90,12 @@ static mi_decl_noinline  /* ensures mi_free has no stack frame */
 #else
 static inline
 #endif
-void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool allow_reclaim) mi_attr_noexcept
+void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool allow_reclaim, bool memtag) mi_attr_noexcept
 {
   size_t usable_size;
   if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return;    // checking padding is safe for mt
   mi_track_free_size(block, usable_size);
+  if (memtag && !was_guarded) { block = (mi_block_t*)mi_memtag_block_free(block, mi_page_block_size(page)); }
 
   // _mi_padding_shrink(page, block, sizeof(mi_block_t));
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
@@ -198,7 +203,7 @@ static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_
   // mi_block_t* const block = (mi_page_has_interior_pointers(page) ? _mi_page_ptr_unalign(page, p) : mi_validate_block_from_ptr(page,p));
   // mi_block_check_profiled(page,block,p);
   // const bool was_guarded = mi_block_check_unguard(page, block, p);
-  mi_free_block_local(page, block, was_guarded, true /* check for a full page */);
+  mi_free_block_local(page, block, was_guarded, true /* check for a full page */, mi_page_is_memtag(page));
 }
 
 // free a pointer owned by another thread (page parameter comes first for better codegen)
@@ -209,7 +214,7 @@ static void mi_decl_noinline mi_free_generic_mt(mi_page_t* page, void* p, bool a
   // mi_block_t* const block = (mi_page_has_interior_pointers(page) ? _mi_page_ptr_unalign(page, p) : mi_validate_block_from_ptr(page,p));
   // mi_block_check_profiled(page,block,p);
   // const bool was_guarded = mi_block_check_unguard(page, block, p);
-  mi_free_block_mt(page, block, was_guarded, allow_reclaim);
+  mi_free_block_mt(page, block, was_guarded, allow_reclaim, mi_page_is_memtag(page));
 }
 
 // generic free (for runtime integration)
@@ -308,7 +313,7 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
   if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // thread-local, aligned, and not a full page
     mi_block_t* const block = mi_validate_block_from_ptr(page,p);
-    mi_free_block_local(page, block, false /* was guarded */, false /* no need to check if the page is full */);
+    mi_free_block_local(page, block, false /* was guarded */, false /* no need to check if the page is full */, MI_FREE_FAST_MEMTAG);
   }
   else if (xtid <= MI_PAGE_FLAG_MASK) {            // `tid == mi_page_thread_id(page) && mi_page_flags(page) != 0`
     // page is local, but is full or contains (inner) aligned blocks; use generic path
@@ -318,7 +323,7 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
   else if ((xtid & MI_PAGE_FLAG_MASK) == 0) {      // `tid != mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // blocks are aligned (and not a full page); push on the thread_free list
     mi_block_t* const block = mi_validate_block_from_ptr(page,p);
-    mi_free_block_mt(page,block,false /* was_guarded */, allow_reclaim);
+    mi_free_block_mt(page,block,false /* was_guarded */, allow_reclaim, MI_FREE_FAST_MEMTAG);
   }
   else {
     // page is full or contains (inner) aligned blocks; use generic multi-thread path
@@ -376,7 +381,7 @@ static mi_decl_forceinline void mi_free_small_local_ex(void* p, bool check_p_for
     if mi_likely(mi_page_flags(page) == 0) {
       // thread-local, aligned, and not a full page
       mi_block_t* const block = mi_validate_block_from_ptr(page,p);
-      mi_free_block_local(page, block, false /* was guarded */, false /* no need to check if the page is full */);
+      mi_free_block_local(page, block, false /* was guarded */, false /* no need to check if the page is full */, MI_FREE_FAST_MEMTAG);
       return;
     }
     else {
