@@ -21,6 +21,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if defined(_MSC_VER)
 #pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)
+#pragma warning(disable:4324)   // structure was padded due to alignment specifier (intended for `mi_decl_cache_align`)
 #pragma warning(disable:26812)  // unscoped enum warning
 #define mi_decl_forceinline     __forceinline
 #define mi_decl_noinline        __declspec(noinline)
