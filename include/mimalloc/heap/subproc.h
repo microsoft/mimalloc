@@ -22,6 +22,7 @@ void          _mi_fork_child(void);
 void          _mi_fork_child_zone(void);
 void          _mi_fork_child_try_collect(void);
 size_t        _mi_fork_epoch(void);
+bool          _mi_fork_is_torn(void);
 
 void*         _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_memid_t* memid );
 void*         _mi_meta_rezalloc( mi_subproc_t* subproc, void* p, size_t newsize, mi_memid_t* memid );

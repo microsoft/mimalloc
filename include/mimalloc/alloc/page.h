@@ -182,6 +182,12 @@ static inline size_t mi_page_slice_offset_of(const mi_page_t* page, size_t offse
   return (mi_page_start(page) - mi_page_slice_start(page)) + offset_relative_to_page_start;
 }
 
+// The end of the blocks relative to the slice start rounded up to the OS page size.
+// This is where the end guard page is if `page->memid.guard_end` is set.
+static inline size_t mi_page_guard_end_offset(const mi_page_t* page) {
+  return mi_align_up(mi_page_slice_offset_of(page, mi_page_size(page)), _mi_os_page_size());
+}
+
 // How much of the page is committed relative to the slice start? (or 0 if fully committed already)
 static inline size_t mi_page_slice_committed(const mi_page_t* page) {
   return ((size_t)page->slice_pcommitted * _mi_os_page_size());

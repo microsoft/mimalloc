@@ -237,11 +237,6 @@ bool _mi_os_secure_guard_page_reset_at(mi_subproc_t* subproc, void* addr, mi_mem
   return mi_os_secure_guard_page(addr, memid, false);
 }
 
-// Make an area accessible again (if it is accounted as committed)
-bool _mi_os_secure_guard_page_reset_before(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
-  return _mi_os_secure_guard_page_reset_at(subproc, (uint8_t*)addr - _mi_os_secure_guard_page_size(), memid);
-}
-
 
 /* -----------------------------------------------------------
   Free memory

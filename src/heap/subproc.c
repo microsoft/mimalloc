@@ -176,7 +176,7 @@ mi_subproc_id_t mi_subproc_new(void) {
     _mi_meta_free(parent, subproc, memid);
     return _mi_subproc_to_id(NULL);
   }
-  theap_meta->memid = memid;
+  theap_meta->memid = theap_memid;
 
   // init subproc
   mi_subproc_init(subproc,parent);
@@ -194,8 +194,7 @@ mi_subproc_id_t mi_subproc_new(void) {
   mi_assert_internal(parent->theap_meta!=NULL);
   mi_assert_internal(parent->theap_meta->tld!=NULL);
   mi_assert_internal(parent->theap_meta->tld->thread_id == MI_THREADID_DETACHED);
-  _mi_theap_init(theap_meta,heap_main,parent->theap_meta->tld /* detached tld */);
-  mi_theap_profile_never(theap_meta);  // permanently exclude from profiling, see `mi_theap_profile_never`
+  _mi_theap_meta_init(theap_meta,heap_main,parent->theap_meta->tld /* detached tld */);
   subproc->theap_meta = theap_meta;
 
   return _mi_subproc_to_id(subproc);
@@ -354,13 +353,20 @@ void _mi_subproc_main_done(void) {
   zone `reinit_lock` (which runs before that) drops (and leaks) the thread free lists of
   the forking thread, and suspends reclaiming abandoned pages until the pthread child
   handler. (So on macOS the zone override is required for fork support.)
+  It also marks the child as torn, since free arena slices may still have a guard
+  page of a page that was allocated concurrently with the fork (see `arena-page.c`).
 ----------------------------------------------------------- */
 
 static size_t mi_fork_epoch;                        // incremented in the child at every fork
 static _Atomic(size_t) mi_fork_pending;             // set in the child until the dead theaps are abandoned
+static bool mi_fork_torn;                           // set in a child that may have a torn snapshot of memory (on macOS)
 
 size_t _mi_fork_epoch(void) {
   return mi_fork_epoch;
+}
+
+bool _mi_fork_is_torn(void) {
+  return mi_fork_torn;
 }
 
 static bool mi_fork_theap_is_dead(const mi_theap_t* theap) {
@@ -422,6 +428,7 @@ static size_t     mi_fork_suspended_count[MI_BIN_COUNT];  // and its abandoned c
 
 // Called on macOS in the child from the malloc zone `reinit_lock`.
 void _mi_fork_child_zone(void) {
+  mi_fork_torn = true;
   mi_theap_t* const theap_default = _mi_theap_default();
   if (!mi_theap_is_initialized(theap_default)) return;
 

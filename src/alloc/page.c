@@ -875,13 +875,10 @@ bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
     const size_t needed_size = (page->capacity + extend)*bsize;
     mi_assert_internal(needed_size <= page_size);
     size_t needed_commit = mi_align_up( mi_page_slice_offset_of(page, needed_size), mi_page_min_commit_size());
-    #if MI_SECURE>=5
-    // the previous alignup could extend the commit into the guard page; re-adjust if needed
-    const size_t page_size_commit = mi_align_up( mi_page_slice_offset_of(page, page_size), _mi_os_page_size() );
-    if (needed_commit > page_size_commit) {
-      needed_commit = page_size_commit;
+    if (page->memid.guard_end && needed_commit > mi_page_guard_end_offset(page)) {
+      // the previous alignup could extend the commit into the guard page; re-adjust if needed
+      needed_commit = mi_page_guard_end_offset(page);
     }
-    #endif
     if (needed_commit > slice_committed) {
       mi_assert_internal(((needed_commit - slice_committed) % _mi_os_page_size()) == 0);
       if (!_mi_os_commit(mi_theap_subproc(theap), mi_page_slice_start(page) + slice_committed, needed_commit - slice_committed, NULL)) {

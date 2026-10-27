@@ -12,6 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 size_t        _mi_theap_random_next(mi_theap_t* theap);
 void          _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld);
+void          _mi_theap_meta_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld);
 mi_theap_t*   _mi_theap_alloc(mi_heap_t* heap, mi_tld_t* tld);
 mi_theap_t*   _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld);
 void          _mi_theap_collect_abandon(mi_theap_t* theap);

@@ -242,8 +242,8 @@ void _mi_thread_locals_done(void) {
 }
 
 // strange signature but allows us to reuse the arena code for claiming free pages
-static bool mi_thread_local_claim_fun(size_t _slice_index, mi_arena_t* _arena, bool* keep_set) {
-  MI_UNUSED(_slice_index); MI_UNUSED(_arena);
+static bool mi_thread_local_claim_fun(size_t _slice_index, void* _arg, bool* keep_set) {
+  MI_UNUSED(_slice_index); MI_UNUSED(_arg);
   *keep_set = false;
   return true;
 }
