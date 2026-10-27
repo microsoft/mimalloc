@@ -175,7 +175,6 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
 
 // pre-allocate the process data
 mi_decl_hidden mi_decl_cache_align mi_process_t _mi_process = mi_init_struct_zero;
-mi_decl_hidden bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
 // In secure mode, surround the process data with guard pages to protect against overflows of adjacent static data
 static void mi_process_guard_init(void) {
@@ -532,11 +531,9 @@ void mi_thread_set_in_threadpool(void) mi_attr_noexcept {
 // Process init and done
 // --------------------------------------------------------
 
-static bool os_preloading = true;    // true until this module is initialized
-
 // Returns true if this module has not been initialized; Don't use C runtime routines until it returns false.
 bool mi_decl_noinline _mi_preloading(void) {
-  return os_preloading;
+  return !_mi_process.libc_is_initialized;
 }
 
 // Returns true if mimalloc was redirected
@@ -546,7 +543,7 @@ mi_decl_nodiscard bool mi_is_redirected(void) mi_attr_noexcept {
 
 // Called once by the process loader from `src/prim/prim.c` before `main` is called.
 void _mi_auto_process_init(void) {
-  os_preloading = false;
+  _mi_process.libc_is_initialized = true;
 
   mi_process_init();
 
@@ -597,7 +594,7 @@ static void mi_process_init_once(void) {
   // the following can potentially allocate (on freeBSD for pthread keys)
   _mi_tls_slots_init();      // pthread key create
   _mi_thread_locals_init();  // pthread key create
-  _mi_process_is_initialized = true;    // before `mi_process_setup_auto_thread_done` so `_mi_theap_default` returns the current theap with `MI_TLS_RECURSE_GUARD`
+  _mi_process.process_is_initialized = true;    // before `mi_process_setup_auto_thread_done` so `_mi_theap_default` returns the current theap with `MI_TLS_RECURSE_GUARD`
   mi_process_setup_auto_thread_done();  // after the above mi_thread_init so it can add the current theap
   _mi_fork_init();                      // register fork handlers (can allocate)
 
@@ -686,7 +683,7 @@ static void mi_process_unwind_once(void)
 // Called when the process is done
 static void mi_process_done_once(void) {
   // only shutdown if we were initialized
-  if (!_mi_process_is_initialized) return;
+  if (!_mi_process.process_is_initialized) return;
   // ensure we are called once
   static bool process_done = false;
   if (process_done) return;
@@ -700,7 +697,7 @@ static void mi_process_done_once(void) {
 
   _mi_subproc_main_done();
   _mi_allocator_done();
-  os_preloading = true; // don't call the C runtime anymore
+  _mi_process.libc_is_initialized = false; // don't call the C runtime anymore
 }
 
 

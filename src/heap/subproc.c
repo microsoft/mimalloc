@@ -17,10 +17,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/util/threadlocal.h"
 
-// list of sub-processes (the main subprocess is statically allocated in `_mi_process`)
-static mi_subproc_t* mi_subprocs = NULL;
-static mi_lock_t     mi_subprocs_lock = MI_LOCK_INITIALIZER;
-
+// the list of sub-processes is in `_mi_process.subprocs` (and the main subprocess is statically allocated in `_mi_process`)
 
 /* -----------------------------------------------------------
   Meta-data allocation
@@ -153,11 +150,11 @@ static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc, mi_subproc_t* parent
   mi_lock_init(&subproc->arena_reserve_lock);
   mi_lock_init(&subproc->heaps_lock);
   mi_lock_init(&subproc->theap_meta_lock);
-  mi_lock(&mi_subprocs_lock) {
+  mi_lock(&_mi_process.subprocs_lock) {
     // push on subproc list
-    subproc->next = mi_subprocs;
-    if (mi_subprocs!=NULL) { mi_subprocs->prev = subproc; }
-    mi_subprocs = subproc;
+    subproc->next = _mi_process.subprocs;
+    if (_mi_process.subprocs!=NULL) { _mi_process.subprocs->prev = subproc; }
+    _mi_process.subprocs = subproc;
   }
   return subproc;
 }
@@ -211,10 +208,10 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
   if (subproc==NULL) return;
 
   // remove from the subproc list
-  mi_lock_maybe(&mi_subprocs_lock, acquire_subprocs_lock) {
+  mi_lock_maybe(&_mi_process.subprocs_lock, acquire_subprocs_lock) {
     if (subproc->next!=NULL) { subproc->next->prev = subproc->prev;  }
     if (subproc->prev!=NULL) { subproc->prev->next = subproc->next;  }
-                        else { mi_assert_internal(mi_subprocs==subproc);  mi_subprocs = subproc->next; }
+                        else { mi_assert_internal(_mi_process.subprocs==subproc);  _mi_process.subprocs = subproc->next; }
   }
 
   // destroy all subproc heaps
@@ -270,17 +267,17 @@ void mi_subproc_destroy(mi_subproc_id_t subproc_id) {
 }
 
 void _mi_subprocs_unsafe_destroy_all(void) {
-  mi_lock(&mi_subprocs_lock) {
-    mi_subproc_t* subproc = mi_subprocs;
+  mi_lock(&_mi_process.subprocs_lock) {
+    mi_subproc_t* subproc = _mi_process.subprocs;
     while (subproc!=NULL) {
       mi_subproc_t* next = subproc->next;
       if (subproc!=&_mi_process.subproc_main) {
-        mi_subproc_unsafe_destroy(subproc, false /* take mi_subprocs lock */);
+        mi_subproc_unsafe_destroy(subproc, false /* take subprocs lock */);
       }
       subproc = next;
     }
   }
-  mi_subproc_unsafe_destroy(&_mi_process.subproc_main, true /* take mi_subprocs lock */);
+  mi_subproc_unsafe_destroy(&_mi_process.subproc_main, true /* take subprocs lock */);
 }
 
 
@@ -321,7 +318,7 @@ bool mi_subproc_visit_heaps(mi_subproc_id_t subproc_id, mi_heap_visit_fun* visit
 
 
 mi_subproc_t* _mi_subproc_main_init(void) {
-  mi_lock_init(&mi_subprocs_lock);
+  mi_lock_init(&_mi_process.subprocs_lock);
   mi_subproc_t* const subproc = &_mi_process.subproc_main;
   subproc->memid = _mi_memid_create_static(subproc,sizeof(mi_subproc_t));
   mi_subproc_init(subproc,NULL);
@@ -329,7 +326,7 @@ mi_subproc_t* _mi_subproc_main_init(void) {
 }
 
 void _mi_subproc_main_done(void) {
-  mi_lock_done(&mi_subprocs_lock);
+  mi_lock_done(&_mi_process.subprocs_lock);
 }
 
 
@@ -357,21 +354,18 @@ void _mi_subproc_main_done(void) {
   page of a page that was allocated concurrently with the fork (see `arena-page.c`).
 ----------------------------------------------------------- */
 
-static size_t mi_fork_epoch;                        // incremented in the child at every fork
-static _Atomic(size_t) mi_fork_pending;             // set in the child until the dead theaps are abandoned
-static bool mi_fork_torn;                           // set in a child that may have a torn snapshot of memory (on macOS)
 
 size_t _mi_fork_epoch(void) {
-  return mi_fork_epoch;
+  return _mi_process.fork.epoch;
 }
 
 bool _mi_fork_is_torn(void) {
-  return mi_fork_torn;
+  return _mi_process.fork.torn;
 }
 
 static bool mi_fork_theap_is_dead(const mi_theap_t* theap) {
   const mi_tld_t* const tld = theap->tld;
-  return (tld != NULL && tld->thread_id != MI_THREADID_DETACHED && tld->fork_epoch != mi_fork_epoch);
+  return (tld != NULL && tld->thread_id != MI_THREADID_DETACHED && tld->fork_epoch != _mi_process.fork.epoch);
 }
 
 // Abandon the pages of dead theaps in a heap.
@@ -401,12 +395,12 @@ static bool mi_fork_heap_abandon_dead(mi_heap_t* heap) {
 // Called at thread initialization and regularly on the generic allocation path.
 // Retried later if a lock is busy.
 void _mi_fork_child_try_collect(void) {
-  if mi_likely(mi_atomic_load_relaxed(&mi_fork_pending) == 0) return;
-  if (mi_atomic_exchange_acq_rel(&mi_fork_pending, 0) == 0) return;
+  if mi_likely(mi_atomic_load_relaxed(&_mi_process.fork.pending) == 0) return;
+  if (mi_atomic_exchange_acq_rel(&_mi_process.fork.pending, 0) == 0) return;
   bool done = false;
-  if (mi_lock_try_acquire(&mi_subprocs_lock)) {
+  if (mi_lock_try_acquire(&_mi_process.subprocs_lock)) {
     done = true;
-    for (mi_subproc_t* subproc = mi_subprocs; subproc != NULL; subproc = subproc->next) {
+    for (mi_subproc_t* subproc = _mi_process.subprocs; subproc != NULL; subproc = subproc->next) {
       if (mi_lock_try_acquire(&subproc->heaps_lock)) {
         for (mi_heap_t* heap = subproc->heaps; heap != NULL; heap = heap->next) {
           if (!mi_fork_heap_abandon_dead(heap)) { done = false; }
@@ -417,27 +411,24 @@ void _mi_fork_child_try_collect(void) {
         done = false;
       }
     }
-    mi_lock_release(&mi_subprocs_lock);
+    mi_lock_release(&_mi_process.subprocs_lock);
   }
-  if (!done) { mi_atomic_store_release(&mi_fork_pending, 1); }
+  if (!done) { mi_atomic_store_release(&_mi_process.fork.pending, 1); }
 }
 
 #if defined(__APPLE__)
-static mi_heap_t* mi_fork_suspended_heap;                 // heap with suspended abandoned reclaim
-static size_t     mi_fork_suspended_count[MI_BIN_COUNT];  // and its abandoned counts
-
 // Called on macOS in the child from the malloc zone `reinit_lock`.
 void _mi_fork_child_zone(void) {
-  mi_fork_torn = true;
+  _mi_process.fork.torn = true;
   mi_theap_t* const theap_default = _mi_theap_default();
   if (!mi_theap_is_initialized(theap_default)) return;
 
   // suspend reclaiming abandoned pages (by allocation) of the default heap
   mi_heap_t* const heap = mi_theap_heap(theap_default);
   for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
-    mi_fork_suspended_count[bin] = mi_atomic_exchange_relaxed(&heap->abandoned_count[bin], 0);
+    _mi_process.fork.suspended_count[bin] = mi_atomic_exchange_relaxed(&heap->abandoned_count[bin], 0);
   }
-  mi_fork_suspended_heap = heap;
+  _mi_process.fork.suspended_heap = heap;
 
   // drop the thread free lists of the pages of the forking thread
   mi_tld_t* const tld = theap_default->tld;
@@ -455,11 +446,11 @@ void _mi_fork_child_zone(void) {
 
 // Resume reclaiming abandoned pages (adding as the count may have changed in the meantime)
 static void mi_fork_child_resume_reclaim(void) {
-  mi_heap_t* const heap = mi_fork_suspended_heap;
+  mi_heap_t* const heap = _mi_process.fork.suspended_heap;
   if (heap == NULL) return;
-  mi_fork_suspended_heap = NULL;
+  _mi_process.fork.suspended_heap = NULL;
   for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
-    mi_atomic_add_relaxed(&heap->abandoned_count[bin], mi_fork_suspended_count[bin]);
+    mi_atomic_add_relaxed(&heap->abandoned_count[bin], _mi_process.fork.suspended_count[bin]);
   }
 }
 #endif
@@ -469,10 +460,10 @@ void _mi_fork_child(void) {
   #if defined(__APPLE__)
   mi_fork_child_resume_reclaim();
   #endif
-  mi_fork_epoch++;
+  _mi_process.fork.epoch++;
   mi_theap_t* const theap = _mi_theap_default();
-  if (mi_theap_is_initialized(theap)) { theap->tld->fork_epoch = mi_fork_epoch; }  // the forking thread survives
-  mi_atomic_store_release(&mi_fork_pending, 1);
+  if (mi_theap_is_initialized(theap)) { theap->tld->fork_epoch = _mi_process.fork.epoch; }  // the forking thread survives
+  mi_atomic_store_release(&_mi_process.fork.pending, 1);
 }
 
 // Called at process initialization.

@@ -9,6 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_INTERNAL_PRIM_TLS_H
 
 #include "../types.h"
+#include "../heap/init.h"
 #include "../heap/heap.h"
 #include "../heap/theap.h"
 #include "../util/threadlocal.h"
@@ -265,12 +266,9 @@ static inline mi_theap_t* __mi_theap_empty(void) {
 extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_default;  // default theap to allocate from
 extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_cached;   // theap from the last used heap
 
-// defined in `heap/init.c`; do not use these directly
-extern mi_decl_hidden bool _mi_process_is_initialized;  // has mi_process_init been called?
-
 static inline mi_theap_t* _mi_theap_default(void) {
   #if defined(MI_TLS_RECURSE_GUARD)
-  if mi_unlikely(!_mi_process_is_initialized) return _mi_theap_empty_get();
+  if mi_unlikely(!_mi_process.process_is_initialized) return _mi_theap_empty_get();
   #endif
   return __mi_theap_default;
 }

@@ -109,15 +109,13 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   return true;
 }
 
-extern mi_decl_hidden bool _mi_process_is_initialized;             // has mi_process_init been called?
-
 bool _mi_page_is_valid(mi_page_t* page) {
   mi_assert_internal(mi_page_is_valid_init(page));
   #if MI_SECURE
   mi_assert_internal(page->keys[0] != 0);
   #endif
   if (!mi_page_is_abandoned(page)) {
-    //mi_assert_internal(!_mi_process_is_initialized);
+    //mi_assert_internal(!_mi_process.process_is_initialized);
     mi_assert_internal(page->heap!=NULL);
     mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
     mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap ||

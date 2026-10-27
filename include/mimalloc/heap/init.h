@@ -23,6 +23,15 @@ bool          _mi_is_empty_theap(const mi_theap_t* theap);
 
 extern mi_decl_hidden const mi_theap_t _mi_theap_empty; // read-only empty theap, initial value of the thread local default theap (in the MI_TLS_MODEL_LOCAL)
 
+// Fork state
+typedef struct mi_fork_state_s {
+  size_t           epoch;            // incremented in the child at every fork
+  _Atomic(size_t)  pending;          // set in the child until the dead theaps are abandoned
+  bool             torn;             // set in a child that may have a torn snapshot of memory (on macOS)
+  mi_heap_t*       suspended_heap;   // heap with suspended abandoned reclaim (on macOS)
+  size_t           suspended_count[MI_BIN_COUNT];  // and its abandoned counts
+} mi_fork_state_t;
+
 // Statically allocated process data. This is zero initialized and padded such that
 // in secure mode it is surrounded by guard pages (see `heap/init.c:mi_process_guard_init`)
 typedef struct mi_process_s {
@@ -30,12 +39,19 @@ typedef struct mi_process_s {
 
   _Atomic(struct mi_page_map_s*)    page_map;           // the page map (`NULL` before initialization) (see `heap/page-map.h`)
   _Atomic(size_t)                   page_map_committed; // committed entries in the page map
+  bool                              process_is_initialized; // set to `true` in `mi_process_init`
+  bool                              libc_is_initialized;    // `true` once the C runtime is initialized (and `false` again after process done)
+
   _Atomic(void*)                    deferred_free;      // is `mi_deferred_free_fun*` (but some platforms don't support atomic function pointers)
   _Atomic(void*)                    deferred_arg;
   _Atomic(void*)                    out_default;        // is `mi_output_fun*`
   _Atomic(void*)                    out_arg;
   _Atomic(void*)                    error_handler;      // is `mi_error_fun*`
   _Atomic(void*)                    error_arg;
+
+  mi_subproc_t*                     subprocs;           // list of all sub-processes
+  mi_lock_t                         subprocs_lock;      // initialized in `_mi_subproc_main_init` (as a zero lock is invalid on some platforms)
+  mi_fork_state_t                   fork;               // fork state (see `heap/subproc.c`)
 
   mi_decl_cache_align mi_subproc_t  subproc_main;
   mi_decl_cache_align mi_heap_t     heap_main;
