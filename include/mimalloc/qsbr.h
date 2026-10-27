@@ -32,7 +32,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // Create a qsbr enabled heap
-mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_qsbr(void);
+mi_decl_externc mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_qsbr(void);
 
 #if MI_QSBR
 // Define these for the host runtime to implement qsbr bookkeeping.
