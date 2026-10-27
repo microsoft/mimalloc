@@ -9,6 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim/prim-tls.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/util/options.h"
+#include "mimalloc/heap/init.h"
 
 #include <stdio.h>      // stdin/stdout
 #include <stdlib.h>     // abort
@@ -459,27 +460,25 @@ static void mi_cdecl mi_out_buf_stderr(const char* msg, void* arg) {
 
 // The program should only install a single output handler from a single thread
 // since otherwise the argument and output function may not match.
-static _Atomic(void*) mi_out_default; // = // is `mi_output_fun*` (but some platforms don't support atomic function pointers)
-static _Atomic(void*) mi_out_arg; // = NULL
-
+// The output function and argument are stored in `_mi_process.out_default/out_arg`.
 static mi_output_fun* mi_out_get_default(void** parg) {
-  mi_output_fun* const out = (mi_output_fun*)mi_atomic_load_ptr_acquire(void,&mi_out_default);
-  if (parg != NULL) { *parg = mi_atomic_load_ptr_acquire(void,&mi_out_arg); }
+  mi_output_fun* const out = (mi_output_fun*)mi_atomic_load_ptr_acquire(void,&_mi_process.out_default);
+  if (parg != NULL) { *parg = mi_atomic_load_ptr_acquire(void,&_mi_process.out_arg); }
   return (out == NULL ? &mi_out_buf : out);
 }
 
 void mi_register_output(mi_output_fun* out, void* arg) mi_attr_noexcept {
-  mi_atomic_store_ptr_release(void,&mi_out_default, (void*)(out == NULL ? &mi_out_stderr : out)); // stop using the delayed output buffer
-  mi_atomic_store_ptr_release(void,&mi_out_arg, arg);
+  mi_atomic_store_ptr_release(void,&_mi_process.out_default, (void*)(out == NULL ? &mi_out_stderr : out)); // stop using the delayed output buffer
+  mi_atomic_store_ptr_release(void,&_mi_process.out_arg, arg);
   if (out!=NULL) { mi_out_buf_flush(out,true,arg); }        // output all the delayed output now
 }
 
 // add stderr to the delayed output after the module is loaded
 static void mi_add_stderr_output(void) {
-  mi_assert_internal(mi_out_default == NULL);
+  mi_assert_internal(_mi_process.out_default == NULL);
   mi_out_buf_flush(&mi_out_stderr, false, NULL); // flush current contents to stderr
-  mi_atomic_store_ptr_release(void,&mi_out_default,(void*)&mi_out_buf_stderr);  // and add stderr to the delayed output
-  mi_atomic_store_ptr_release(void,&mi_out_arg,NULL);
+  mi_atomic_store_ptr_release(void,&_mi_process.out_default,(void*)&mi_out_buf_stderr);  // and add stderr to the delayed output
+  mi_atomic_store_ptr_release(void,&_mi_process.out_arg,NULL);
 }
 
 // --------------------------------------------------------
@@ -600,7 +599,7 @@ void _mi_warning_message(const char* fmt, ...) {
 mi_decl_noreturn mi_decl_cold void _mi_assert_fail(const char* assertion, const char* fname, unsigned line, const char* func ) mi_attr_noexcept {
   _mi_fprintf(NULL, NULL, "mimalloc: assertion failed: at \"%s\":%u, %s\n  assertion: \"%s\"\n", fname, line, (func==NULL?"":func), assertion);
   // flush delayed output (if not yet initialized) so the message is not lost
-  if (mi_atomic_load_ptr_acquire(void,&mi_out_default) == NULL) { mi_out_buf_flush(&mi_out_stderr, true, NULL); }
+  if (mi_atomic_load_ptr_acquire(void,&_mi_process.out_default) == NULL) { mi_out_buf_flush(&mi_out_stderr, true, NULL); }
   abort();
 }
 #endif
@@ -609,9 +608,7 @@ mi_decl_noreturn mi_decl_cold void _mi_assert_fail(const char* assertion, const 
 // Errors
 // --------------------------------------------------------
 
-static mi_error_fun* volatile  mi_error_handler; // = NULL
-static _Atomic(void*) mi_error_arg;     // = NULL
-
+// The error handler and argument are stored in `_mi_process.error_handler/error_arg`.
 static void mi_error_default(int err) {
   MI_UNUSED(err);
   #if (MI_DEBUG>0)
@@ -638,8 +635,8 @@ static void mi_error_default(int err) {
 }
 
 void mi_register_error(mi_error_fun* fun, void* arg) {
-  mi_error_handler = fun;  // can be NULL
-  mi_atomic_store_ptr_release(void,&mi_error_arg, arg);
+  _mi_process.error_handler = fun;  // can be NULL
+  mi_atomic_store_ptr_release(void,&_mi_process.error_arg, arg);
 }
 
 void _mi_error_message(int err, const char* fmt, ...) {
@@ -649,8 +646,8 @@ void _mi_error_message(int err, const char* fmt, ...) {
   mi_show_error_message(fmt, args);
   va_end(args);
   // and call the error handler which may abort (or return normally, potentially setting errno)
-  if (mi_error_handler != NULL) {
-    mi_error_handler(err, mi_atomic_load_ptr_acquire(void,&mi_error_arg));
+  if (_mi_process.error_handler != NULL) {
+    _mi_process.error_handler(err, mi_atomic_load_ptr_acquire(void,&_mi_process.error_arg));
   }
   else {
     mi_error_default(err);

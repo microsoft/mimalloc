@@ -18,6 +18,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/profile/sample-profile.h"
 #include "mimalloc/heap/subproc.h"
+#include "mimalloc/heap/init.h"
 #include "page-queue.h"
 #include "page.h"
 
@@ -289,23 +290,21 @@ static mi_page_t* mi_find_page(mi_theap_t* theap, size_t size, size_t huge_align
 ----------------------------------------------------------- */
 
 // The program should only install a single deferred free handler before doing allocation.
-static _Atomic(void*) deferred_free; // is `mi_deferred_free_fun*` (but some platforms don't support atomic function pointers)
-static _Atomic(void*) deferred_arg;
-
+// The handler and argument are stored in `_mi_process.deferred_free/deferred_arg`.
 void _mi_deferred_free(mi_theap_t* theap, bool force) {
   theap->heartbeat++;
-  mi_deferred_free_fun* const fun = (mi_deferred_free_fun*)mi_atomic_load_ptr_acquire(void,&deferred_free);
+  mi_deferred_free_fun* const fun = (mi_deferred_free_fun*)mi_atomic_load_ptr_acquire(void,&_mi_process.deferred_free);
   if (fun != NULL && !theap->tld->recurse) {
     theap->tld->recurse = true;
-    void* const arg = mi_atomic_load_ptr_acquire(void,&deferred_arg);
+    void* const arg = mi_atomic_load_ptr_acquire(void,&_mi_process.deferred_arg);
     fun(force, theap->heartbeat, arg);
     theap->tld->recurse = false;
   }
 }
 
 void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noexcept {
-  mi_atomic_store_ptr_release(void,&deferred_arg, arg);
-  mi_atomic_store_ptr_release(void,&deferred_free, (void*)fn);
+  mi_atomic_store_ptr_release(void,&_mi_process.deferred_arg, arg);
+  mi_atomic_store_ptr_release(void,&_mi_process.deferred_free, (void*)fn);
 }
 
 
@@ -314,7 +313,7 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
 ----------------------------------------------------------- */
 static mi_theap_t* mi_theap_init(mi_theap_t* theap) {
   if mi_likely(mi_theap_is_initialized(theap)) return theap;
-  if (theap==&_mi_theap_empty_wrong) {
+  if (theap==&_mi_process.theap_empty_wrong) {
     // we were unable to allocate a theap for a first-class heap
     return NULL;
   }

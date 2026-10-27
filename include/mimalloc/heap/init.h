@@ -22,6 +22,29 @@ mi_theap_t*   _mi_thread_init_with_heap(mi_heap_t* heap);
 bool          _mi_is_empty_theap(const mi_theap_t* theap);
 
 extern mi_decl_hidden const mi_theap_t _mi_theap_empty; // read-only empty theap, initial value of the thread local default theap (in the MI_TLS_MODEL_LOCAL)
-extern mi_decl_hidden mi_theap_t _mi_theap_empty_wrong; // read-only empty theap used to signal that a theap for a heap could not be allocated
+
+// Statically allocated process data. This is zero initialized and padded such that
+// in secure mode it is surrounded by guard pages (see `heap/init.c:mi_process_guard_init`)
+typedef struct mi_process_s {
+  uint8_t                 pad_front[MI_SECURE_STATIC_PAD];
+  _Atomic(struct mi_page_map_s*) page_map;    // the page map (`NULL` before initialization) (see `heap/page-map.h`)
+  _Atomic(size_t)         page_map_committed; // committed entries in the page map
+  _Atomic(void*)          deferred_free;      // is `mi_deferred_free_fun*` (but some platforms don't support atomic function pointers)
+  _Atomic(void*)          deferred_arg;
+  _Atomic(void*)          out_default;        // is `mi_output_fun*`
+  _Atomic(void*)          out_arg;
+  mi_error_fun* volatile  error_handler;
+  _Atomic(void*)          error_arg;
+  mi_decl_cache_align mi_subproc_t subproc_main;
+  mi_decl_cache_align mi_heap_t    heap_main;
+  mi_decl_cache_align mi_theap_t   theap_meta;        // detached theap for meta-data allocation
+  mi_decl_cache_align mi_tld_t     tld_meta;          // detached tld for `theap_meta`
+  mi_decl_cache_align mi_tld_t     tld_main;          // initial tld and theap for the main thread
+  mi_decl_cache_align mi_theap_t   theap_main;
+  mi_decl_cache_align mi_theap_t   theap_empty_wrong; // read-only empty theap used to signal that a theap for a heap could not be allocated
+  mi_decl_cache_align uint8_t      pad_end[MI_SECURE_STATIC_PAD];
+} mi_process_t;
+
+extern mi_decl_hidden mi_process_t _mi_process;
 
 #endif

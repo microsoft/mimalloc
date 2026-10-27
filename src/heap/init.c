@@ -118,7 +118,8 @@ static const mi_page_t mi_page_empty = {
 // may lead to allocation itself on some platforms)
 // --------------------------------------------------------
 
-static mi_decl_cache_align mi_tld_t mi_tld_detached = {
+// read-only detached tld of the empty theap
+static mi_decl_cache_align const mi_tld_t mi_tld_empty = {
   MI_THREADID_DETACHED,   // thread_id
   0,                      // thread_seq
   0,                      // fork_epoch
@@ -137,7 +138,7 @@ extern // fix warning in C++ for const variables with internal linkage
 #endif
 mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   MI_SMALL_PAGES_EMPTY,   // direct small pages
-  &mi_tld_detached,       // tld
+  (mi_tld_t*)&mi_tld_empty, // tld
   MI_ATOMIC_VAR_INIT(NULL), // heap
   MI_ATOMIC_VAR_INIT(NULL), // subproc
   MI_ATOMIC_VAR_INIT(1),  // refcount
@@ -172,16 +173,15 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
 #undef MI_STAT_COUNTER
 
 
-// pre-allocate the process heap, and meta-data theap
-static mi_decl_cache_align mi_heap_t    mi_process_heap_main  = mi_init_struct_zero;
-static mi_decl_cache_align mi_theap_t   mi_process_theap_meta = mi_init_struct_zero;
-
-// pre-allocate the initial tld and theap for the main thread (this is not strictly needed but nice for stats)
-static mi_decl_cache_align mi_tld_t     mi_process_tld_main   = mi_init_struct_zero;
-static mi_decl_cache_align mi_theap_t   mi_process_theap_main = mi_init_struct_zero;
-
-mi_decl_hidden mi_decl_cache_align mi_theap_t _mi_theap_empty_wrong = mi_init_struct_zero;  // used for error paths
+// pre-allocate the process data
+mi_decl_hidden mi_decl_cache_align mi_process_t _mi_process = mi_init_struct_zero;
 mi_decl_hidden bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
+
+// In secure mode, surround the process data with guard pages to protect against overflows of adjacent static data
+static void mi_process_guard_init(void) {
+  const size_t offset = offsetof(mi_process_t, page_map);
+  _mi_os_secure_guard_pages_set_within(&_mi_process, sizeof(_mi_process), offset, offsetof(mi_process_t, pad_end) - offset);
+}
 
 
 mi_page_t* _mi_page_empty_get(void) {
@@ -207,26 +207,30 @@ static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc);
 // Initialize main heap
 static void mi_heap_main_init_once(void) {
   mi_memid_t memid_static = _mi_memid_create(MI_MEM_STATIC);
-  mi_memcpy(&_mi_theap_empty_wrong,&_mi_theap_empty,sizeof(_mi_theap_empty_wrong));
+  mi_memcpy(&_mi_process.theap_empty_wrong,&_mi_theap_empty,sizeof(_mi_process.theap_empty_wrong));
 
   // initialize the main subprocess
   mi_subproc_t* subproc_main = _mi_subproc_main_init();
 
-  // detached tld for mi_theap_empty (and theap_meta)
-  mi_tld_detached.memid = memid_static;
-  mi_tld_init(&mi_tld_detached, 0, subproc_main);
+  // detached tld for theap_meta
+  mi_tld_t* const tld_meta = &_mi_process.tld_meta;
+  tld_meta->thread_id = MI_THREADID_DETACHED;
+  tld_meta->memid = memid_static;
+  mi_tld_init(tld_meta, 0, subproc_main);
 
   // main process heap
-  mi_process_heap_main.memid = memid_static;
-  mi_atomic_store_ptr_release(mi_heap_t,&subproc_main->heap_main,&mi_process_heap_main);
-  _mi_heap_init(&mi_process_heap_main,mi_thread_local_key_fast,subproc_main,0,false);
+  mi_heap_t* const heap_main = &_mi_process.heap_main;
+  heap_main->memid = memid_static;
+  mi_atomic_store_ptr_release(mi_heap_t,&subproc_main->heap_main,heap_main);
+  _mi_heap_init(heap_main,mi_thread_local_key_fast,subproc_main,0,false);
 
   // detached theap for allocating meta-data (we can allocate on this without having an initialized thread)
-  mi_process_theap_meta.memid = memid_static;
-  _mi_theap_meta_init(&mi_process_theap_meta,&mi_process_heap_main,&mi_tld_detached);
-  subproc_main->theap_meta = &mi_process_theap_meta;
+  mi_theap_t* const theap_meta = &_mi_process.theap_meta;
+  theap_meta->memid = memid_static;
+  _mi_theap_meta_init(theap_meta,heap_main,tld_meta);
+  subproc_main->theap_meta = theap_meta;
 
-  // mi_heap_theap_set(&mi_process_heap_main,&mi_process_theap_main); // set in `mi_thread_init(_theap_default)`
+  // mi_heap_theap_set(heap_main,&_mi_process.theap_main); // set in `mi_thread_init(_theap_default)`
 }
 
 static void mi_heap_main_init(void) {
@@ -247,7 +251,7 @@ mi_heap_t* _mi_subproc_heap_main(mi_subproc_t* subproc) {
   }
   else {
     mi_assert_internal(false);
-    return &mi_process_heap_main;
+    return &_mi_process.heap_main;
   }
 }
 
@@ -257,7 +261,7 @@ mi_heap_t* _mi_subproc_heap_main(mi_subproc_t* subproc) {
 
 mi_theap_t* _mi_theap_main(void) {
   // All subprocess main heaps share this slot; do not follow a possibly deleted default theap.
-  const mi_thread_local_t key = mi_process_heap_main.theap;
+  const mi_thread_local_t key = _mi_process.heap_main.theap;
   return (key==0 ? NULL : (mi_theap_t*)_mi_thread_local_get(key));
 }
 
@@ -287,7 +291,7 @@ static mi_tld_t* mi_tld_create(mi_subproc_t* subproc) {
   mi_memid_t memid;
   mi_tld_t* tld;
   if (_mi_subproc_is_main(subproc) && tseq==0 /* first tld */) {
-    tld = &mi_process_tld_main;
+    tld = &_mi_process.tld_main;
     memid = _mi_memid_create_static(tld,sizeof(*tld));
   }
   else {
@@ -346,7 +350,7 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
   // (on macOS <= 14 for example where the loader allocates thread-local data on demand).
   if (heap_main==NULL) {
     heap_main = mi_heap_main();
-    mi_assert_internal(heap_main == &mi_process_heap_main);
+    mi_assert_internal(heap_main == &_mi_process.heap_main);
   }
   mi_assert_internal(heap_main!=NULL);
 
@@ -364,8 +368,8 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
     mi_tld_t* tld = mi_tld_create(heap_main->subproc);
     if (tld==NULL) return NULL;    // out-of-memory on tld allocation
     // allocate and initialize the theap for the main heap
-    if (tld==&mi_process_tld_main) {
-      theap = &mi_process_theap_main;          // initial theap is pre-allocated
+    if (tld==&_mi_process.tld_main) {
+      theap = &_mi_process.theap_main;         // initial theap is pre-allocated
       theap->memid = _mi_memid_create_static(theap,sizeof(*theap));
     }
     else {
@@ -584,6 +588,7 @@ static void mi_process_init_once(void) {
   _mi_options_init();        // read environment (if possible)
   _mi_stats_init();          // start timer
   _mi_os_init();             // primitive dependent
+  mi_process_guard_init();   // after os_init so the OS page size is known
 
   mi_heap_main_init();       // before page_map_init so stats are working
   _mi_page_map_init();       // todo: this could fail.. should we abort in that case?
@@ -690,7 +695,7 @@ static void mi_process_done_once(void) {
   const size_t thread_count = mi_atomic_load_acquire(&_mi_subproc_main()->thread_count);
   if (thread_count == 1 || !_mi_prim_process_is_killed()) {  // can we safely take locks?
     mi_process_unwind_once();
-    _mi_verbose_message("process done: 0x%zx\n", mi_process_tld_main.thread_id);
+    _mi_verbose_message("process done: 0x%zx\n", _mi_process.tld_main.thread_id);
   }
 
   _mi_subproc_main_done();

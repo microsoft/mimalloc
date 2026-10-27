@@ -40,6 +40,7 @@ bool          _mi_os_secure_guard_page_set_at(mi_subproc_t* subproc, void* addr,
 bool          _mi_os_secure_guard_page_set_before(mi_subproc_t* subproc, void* addr, mi_memid_t memid);
 bool          _mi_os_secure_guard_pages_set_around(mi_subproc_t* subproc, void* addr, size_t size, mi_memid_t memid);
 bool          _mi_os_secure_guard_page_reset_at(mi_subproc_t* subproc, void* addr, mi_memid_t memid);
+bool          _mi_os_secure_guard_pages_set_within(void* area, size_t area_size, size_t offset, size_t size);
 
 int           _mi_os_numa_node(void);
 int           _mi_os_numa_node_count(void);

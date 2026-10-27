@@ -103,7 +103,7 @@ mi_decl_cold mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
   mi_theap_t* theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
   if mi_unlikely(theap==NULL) {
     theap = mi_heap_init_theap(heap);
-    if (theap==NULL) { return (mi_theap_t*)&_mi_theap_empty_wrong; }  // this will return NULL from alloc/alloc-generic.c:_mi_malloc_generic
+    if (theap==NULL) { return &_mi_process.theap_empty_wrong; }  // this will return NULL from alloc/alloc-generic.c:_mi_malloc_generic
   }
   _mi_theap_cached_set(theap);
   return theap;

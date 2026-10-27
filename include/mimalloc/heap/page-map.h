@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "../types.h"
 #include "../util/libc.h"
 #include "../util/options.h"
+#include "init.h"
 
 bool          _mi_page_map_init(void);
 mi_decl_nodiscard bool _mi_page_map_register(mi_page_t* page);
@@ -35,16 +36,15 @@ mi_page_t*    _mi_safe_ptr_page(const void* p);
 #define MI_PAGE_MAP_SUB_COUNT     (MI_ZU(1) << MI_PAGE_MAP_SUB_SHIFT)
 #define MI_PAGE_MAP_SHIFT         (MI_MAX_VABITS - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT)
 
+// The page map pointer and committed entry count are stored in the (guarded) `_mi_process.page_map(_committed)`.
+// Both are zero before initialization so `mi_checked_ptr_page` returns NULL for any pointer (issue #1341).
 typedef mi_page_t**   mi_submap_t;
 typedef struct mi_page_map_s {
-  _Atomic(size_t)      committed_count;  // currently committed entries
   size_t               reserved_size;    // full reserved size (mi_page_map_t + submaps)
   mi_memid_t           memid;            // provenance
   mi_lock_t            lock;             // used when allocating new submaps
   _Atomic(mi_submap_t) submaps[1];
 } mi_page_map_t;
-
-extern mi_decl_hidden _Atomic(mi_page_map_t*) __mi_page_map;
 
 static inline size_t mi_page_map_index(const void* p, size_t* sub_idx) {
   const size_t u = (size_t)(mi_addr(p) / MI_ARENA_SLICE_SIZE);
@@ -61,7 +61,7 @@ static inline size_t mi_page_map_lookup_index(const void* p, size_t* sub_idx) {
 }
 
 static inline mi_page_map_t* mi_page_map(void) {
-  return mi_atomic_load_ptr_relaxed(mi_page_map_t,&__mi_page_map);
+  return mi_atomic_load_ptr_relaxed(mi_page_map_t,&_mi_process.page_map);
 }
 
 static inline mi_submap_t mi_page_map_at(const mi_page_map_t* pmap, size_t idx) {
@@ -76,17 +76,11 @@ static inline mi_page_t* mi_unchecked_ptr_page(const void* p) {
 }
 
 static inline mi_page_t* mi_checked_ptr_page(const void* p) {
-  const mi_page_map_t* pmap = mi_page_map();
   size_t sub_idx;
   const size_t idx = mi_page_map_lookup_index(p, &sub_idx);
-  const size_t committed_count = mi_atomic_load_relaxed(&pmap->committed_count);
+  const mi_page_map_t* pmap = mi_page_map();  // NULL before initialization (but then the committed count is 0)
+  const size_t committed_count = mi_atomic_load_relaxed(&_mi_process.page_map_committed);
   if mi_unlikely(idx >= committed_count) return NULL;
-  // #if MI_MIN_VABITS < MI_INTPTR_BITS   // is still invalid if free is called before the pagemap is initialized
-  // if mi_unlikely(((uintptr_t)p >> MI_MIN_VABITS) != 0) {
-  //   const size_t committed_count = mi_atomic_load_relaxed(&pmap->committed_count);
-  //   if mi_unlikely(idx >= committed_count) return NULL;
-  // }
-  // #endif
   mi_submap_t const sub = mi_page_map_at(pmap,idx);
   if mi_unlikely(sub == NULL) return NULL;
   return sub[sub_idx];

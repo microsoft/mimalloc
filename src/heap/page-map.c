@@ -19,17 +19,6 @@ static void mi_page_map_cannot_commit(void) {
 // A 2-level page map
 #define MI_PAGE_MAP_SUB_SIZE          (MI_PAGE_MAP_SUB_COUNT * sizeof(mi_page_t*))
 
-// Use an initial empty page map so `free(NULL)` works even if mimalloc is not yet initialized (issue #1341)
-static mi_page_map_t mi_page_map_empty = {
-  MI_ATOMIC_VAR_INIT(1),
-  sizeof(mi_page_map_t),
-  MI_MEMID_STATIC,
-  MI_LOCK_INITIALIZER,
-  { MI_ATOMIC_VAR_INIT(NULL) }
-};
-
-mi_decl_hidden mi_decl_cache_align _Atomic(mi_page_map_t*) __mi_page_map  = MI_ATOMIC_VAR_INIT(&mi_page_map_empty);
-
 static size_t mi_page_map_count_of_size(size_t size) {
   return (size < sizeof(mi_page_map_t) ? 0 : 1 + (size - sizeof(mi_page_map_t))/sizeof(mi_submap_t));
 }
@@ -61,17 +50,16 @@ mi_decl_nodiscard static mi_decl_noinline bool mi_page_map_commit_entries(mi_pag
     return false;
   }
   mi_assert_internal(is_zero || pmap->memid.initially_zero);
-  mi_atomic_store_release(&pmap->committed_count, commit_count);
-  // mi_atomic_store_release(&pmap->committed_addr, mi_page_map_addr_of_index(commit_count));
+  mi_atomic_store_release(&_mi_process.page_map_committed, commit_count);
   return true;
 }
 
 mi_decl_nodiscard static bool mi_page_map_ensure_committed(mi_page_map_t* pmap, size_t idx, mi_submap_t* submap) {
   mi_assert_internal(submap!=NULL && *submap==NULL);
-  if mi_unlikely(idx >= mi_atomic_load_relaxed(&pmap->committed_count)) {
-    if (idx >= mi_atomic_load_acquire(&pmap->committed_count)) {
+  if mi_unlikely(idx >= mi_atomic_load_relaxed(&_mi_process.page_map_committed)) {
+    if (idx >= mi_atomic_load_acquire(&_mi_process.page_map_committed)) {
       if (!mi_page_map_commit_entries(pmap,idx)) return false;
-      mi_assert_internal(idx < mi_atomic_load_relaxed(&pmap->committed_count));
+      mi_assert_internal(idx < mi_atomic_load_relaxed(&_mi_process.page_map_committed));
     }
   }
   *submap = mi_atomic_load_ptr_acquire(mi_page_t*, &pmap->submaps[idx]);
@@ -158,10 +146,10 @@ static bool mi_page_map_init_once(void) {
   pmap->memid = memid;
   pmap->reserved_size  = reserve_size;
   mi_lock_init(&pmap->lock);
-  mi_atomic_store_release(&pmap->committed_count, commit_count);
-  // mi_atomic_store_release(&pmap->committed_addr, mi_page_map_addr_of_index(commit_count));
   mi_atomic_store_ptr_release(mi_page_t*, &pmap->submaps[0], (mi_submap_t)mi_ptr_bounded_data(sub0, submap_size));
-  mi_atomic_store_ptr_release(mi_page_map_t, &__mi_page_map, (mi_page_map_t*)mi_ptr_bounded_data(pmap, reserve_size));  // see `mi_page_map_vmem`
+  // set the page map before the committed count as `mi_checked_ptr_page` only reads the page map if the count is non-zero
+  mi_atomic_store_ptr_release(mi_page_map_t, &_mi_process.page_map, (mi_page_map_t*)mi_ptr_bounded_data(pmap, reserve_size));  // see `mi_page_map_vmem`
+  mi_atomic_store_release(&_mi_process.page_map_committed, commit_count);
   mi_assert_internal(mi_ptr_page(NULL)==NULL);
   return true;
 }
@@ -192,10 +180,12 @@ static mi_memid_t mi_page_map_submap_memid(mi_submap_t sub) {
 void _mi_page_map_unsafe_destroy(void) {
   mi_page_map_t* const pmap = mi_page_map();
   mi_assert_internal(pmap != NULL);
-  if (pmap == NULL || pmap == &mi_page_map_empty) return;
+  if (pmap == NULL) return;
   mi_subproc_t* const subproc = _mi_subproc_main();
   mi_lock_done(&pmap->lock);
-  for (size_t idx = 1; idx < pmap->committed_count; idx++) {  // skip entry 0 (as we allocate that submap at the end of the page_map)
+  const size_t committed_count = mi_atomic_load_relaxed(&_mi_process.page_map_committed);
+  mi_atomic_store_release(&_mi_process.page_map_committed, 0);  // before freeing so `mi_checked_ptr_page` returns NULL
+  for (size_t idx = 1; idx < committed_count; idx++) {  // skip entry 0 (as we allocate that submap at the end of the page_map)
     // free all sub-maps
     mi_submap_t sub = mi_page_map_at(pmap,idx);
     if (sub != NULL) {
@@ -203,8 +193,8 @@ void _mi_page_map_unsafe_destroy(void) {
       mi_atomic_store_ptr_release(mi_page_t*, &pmap->submaps[idx], NULL);
     }
   }
+  mi_atomic_store_ptr_release(mi_page_map_t, &_mi_process.page_map, NULL);
   _mi_os_free_with_guards(subproc, pmap->memid);
-  mi_atomic_store_ptr_release(mi_page_map_t, &__mi_page_map, &mi_page_map_empty);
 }
 
 mi_decl_nodiscard static mi_decl_noinline mi_submap_t mi_page_map_alloc_submap_at(mi_page_map_t* pmap, size_t idx) {
@@ -295,7 +285,7 @@ bool _mi_page_map_register(mi_page_t* page) {
   mi_assert_internal(pmap != NULL);  // should be initialized before multi-thread access!
   if mi_unlikely(pmap == NULL) {
     if (!_mi_page_map_init()) return false;
-    pmap = mi_atomic_load_ptr_acquire(mi_page_map_t,&__mi_page_map);
+    pmap = mi_atomic_load_ptr_acquire(mi_page_map_t,&_mi_process.page_map);
   }
   mi_assert(pmap!=NULL);
   size_t   slice_count;
@@ -305,7 +295,6 @@ bool _mi_page_map_register(mi_page_t* page) {
 }
 
 void _mi_page_map_unregister(mi_page_t* page) {
-  mi_assert_internal(__mi_page_map != NULL);
   mi_assert_internal(page != NULL);
   mi_assert_internal(mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   mi_page_map_t* const pmap = mi_page_map();

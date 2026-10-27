@@ -13,11 +13,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/heap/page-map.h"
 #include "mimalloc/profile/sample-profile.h"
 #include "mimalloc/heap/subproc.h"
+#include "mimalloc/heap/init.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/util/threadlocal.h"
 
-// pre-allocate the main subprocess structure.
-static mi_decl_cache_align mi_subproc_t mi_process_subproc_main = mi_init_struct_zero;
+// list of sub-processes (the main subprocess is statically allocated in `_mi_process`)
 static mi_subproc_t* mi_subprocs = NULL;
 static mi_lock_t     mi_subprocs_lock = MI_LOCK_INITIALIZER;
 
@@ -100,11 +100,11 @@ bool _mi_meta_is_meta_page(const mi_subproc_t* subproc, const mi_page_t* page) {
 ----------------------------------------------------------- */
 
 mi_subproc_t* _mi_subproc_main(void) {
-  return &mi_process_subproc_main;
+  return &_mi_process.subproc_main;
 }
 
 bool _mi_subproc_is_main(mi_subproc_t* subproc) {
-  return (subproc == &mi_process_subproc_main);
+  return (subproc == &_mi_process.subproc_main);
 }
 
 mi_subproc_t* _mi_subproc(void) {
@@ -239,7 +239,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
 
   if (!_mi_subproc_is_main(subproc)) {
     // merge stats back into the main subproc
-    _mi_stats_merge_into(&mi_process_subproc_main.stats, &subproc->stats);
+    _mi_stats_merge_into(&_mi_process.subproc_main.stats, &subproc->stats);
   }
 
   // remove associated arenas
@@ -265,7 +265,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
 
 void mi_subproc_destroy(mi_subproc_id_t subproc_id) {
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
-  if (subproc==NULL || subproc==&mi_process_subproc_main) return;
+  if (subproc==NULL || subproc==&_mi_process.subproc_main) return;
   mi_subproc_unsafe_destroy(subproc, true /* take lock */);
 }
 
@@ -274,13 +274,13 @@ void _mi_subprocs_unsafe_destroy_all(void) {
     mi_subproc_t* subproc = mi_subprocs;
     while (subproc!=NULL) {
       mi_subproc_t* next = subproc->next;
-      if (subproc!=&mi_process_subproc_main) {
+      if (subproc!=&_mi_process.subproc_main) {
         mi_subproc_unsafe_destroy(subproc, false /* take mi_subprocs lock */);
       }
       subproc = next;
     }
   }
-  mi_subproc_unsafe_destroy(&mi_process_subproc_main, true /* take mi_subprocs lock */);
+  mi_subproc_unsafe_destroy(&_mi_process.subproc_main, true /* take mi_subprocs lock */);
 }
 
 
@@ -322,10 +322,10 @@ bool mi_subproc_visit_heaps(mi_subproc_id_t subproc_id, mi_heap_visit_fun* visit
 
 mi_subproc_t* _mi_subproc_main_init(void) {
   mi_lock_init(&mi_subprocs_lock);
-  mi_memid_t memid = _mi_memid_create_static(&mi_process_subproc_main,sizeof(mi_subproc_t));
-  mi_process_subproc_main.memid = memid;
-  mi_subproc_init(&mi_process_subproc_main,NULL);
-  return &mi_process_subproc_main;
+  mi_subproc_t* const subproc = &_mi_process.subproc_main;
+  subproc->memid = _mi_memid_create_static(subproc,sizeof(mi_subproc_t));
+  mi_subproc_init(subproc,NULL);
+  return subproc;
 }
 
 void _mi_subproc_main_done(void) {

@@ -237,6 +237,19 @@ terms of the MIT license. A copy of the license can be found in the file
 #error Arena slices should be at least 8KiB
 #endif
 
+// Padding around static process data such that guard pages fit in secure mode (twice the maximal OS page size)
+#ifndef MI_SECURE_STATIC_PAD
+  #if !MI_SECURE || defined(__wasi__) || defined(__EMSCRIPTEN__)
+  #define MI_SECURE_STATIC_PAD              (64)                        // no guard pages; just a cache line
+  #elif MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_RISCV || defined(_WIN32)
+  #define MI_SECURE_STATIC_PAD              (2*4*MI_KiB)                // 4 KiB OS pages
+  #elif defined(__APPLE__)
+  #define MI_SECURE_STATIC_PAD              (2*16*MI_KiB)               // up to 16 KiB OS pages
+  #else
+  #define MI_SECURE_STATIC_PAD              (2*64*MI_KiB)               // up to 64 KiB OS pages (arm64 Linux, ppc64, ...)
+  #endif
+#endif
+
 #ifndef MI_BCHUNK_BITS_SHIFT
   #if MI_ARENA_SLICE_SHIFT <= 13    // <= 8KiB
   #define MI_BCHUNK_BITS_SHIFT              (7)   // 128 bits

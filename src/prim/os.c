@@ -237,6 +237,25 @@ bool _mi_os_secure_guard_page_reset_at(mi_subproc_t* subproc, void* addr, mi_mem
   return mi_os_secure_guard_page(addr, memid, false);
 }
 
+// Set guard pages right before `area + offset` and right after `area + offset + size` (rounded to OS pages)
+// within a padded static `area`. Outputs a warning if the guard pages do not fit (or cannot be set).
+bool _mi_os_secure_guard_pages_set_within(void* area, size_t area_size, size_t offset, size_t size) {
+  const size_t gsize = _mi_os_secure_guard_page_size();
+  if (gsize == 0) return true;
+  const mi_addr_t start  = mi_addr(area);
+  const mi_addr_t before = mi_addr_align_down(start + offset, _mi_os_page_size()) - gsize;
+  const mi_addr_t after  = mi_addr_align_up(start + offset + size, _mi_os_page_size());
+  if (before < start || after + gsize > start + area_size) {
+    _mi_warning_message("secure level %d, but unable to set guard pages around static data at %p as the OS page size (%zu KiB) is too large\n", MI_SECURE, area, gsize / MI_KiB);
+    return false;
+  }
+  mi_memid_t memid = _mi_memid_create(MI_MEM_STATIC);  // not pinned so it can be protected
+  memid.initially_committed = true;
+  const bool ok_before = mi_os_secure_guard_page(mi_ptr_with_addr(area, before), memid, true);
+  const bool ok_after  = mi_os_secure_guard_page(mi_ptr_with_addr(area, after), memid, true);
+  return (ok_before && ok_after);
+}
+
 
 /* -----------------------------------------------------------
   Free memory
