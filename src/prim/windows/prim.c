@@ -458,7 +458,8 @@ static int win_protect(void* addr, size_t size, bool protect) {
 int _mi_prim_guard(void* addr, size_t size, bool set, bool is_committed) {
   if (is_committed) {
     // protecting requires committed memory; on a set we first release the physical memory
-    if (set) { _mi_prim_reset(addr, size); }  // best effort
+    // (best effort, as `MEM_RESET` fails on image memory, like the guard pages in our static data)
+    if (set) { VirtualAlloc(addr, size, MEM_RESET, PAGE_READWRITE); }
     return win_protect(addr, size, set);
   }
   else if (set) {
