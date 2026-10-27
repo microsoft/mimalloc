@@ -223,6 +223,14 @@ typedef void* mi_nothrow_t;
   void* __cdecl _aligned_recalloc(_Pre_maybenull_ _Post_invalid_ void*  _Block, _In_ _CRT_GUARDOVERFLOW size_t _Count, _In_ _CRT_GUARDOVERFLOW size_t _Size, _In_ size_t _Alignment) {
     return mi_recalloc_aligned(_Block, _Count, _Size, _Alignment);
   }
+  _Check_return_ _ACRTIMP _CRTALLOCATOR
+  char* __cdecl _strdup(_In_z_ const char* _Str) {
+    return mi_strdup(_Str);
+  }
+  _Check_return_ _ACRTIMP _CRTALLOCATOR
+  wchar_t* __cdecl _wcsdup(_In_z_ const wchar_t* _Str) {
+    return mi_wcsdup(_Str);
+  }
 #else
   // On all other systems forward allocation primitives to our API
   mi_decl_export void* malloc(size_t size)              MI_FORWARD1(mi_malloc, size)
