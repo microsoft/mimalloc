@@ -13,7 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdio.h>   // fputs, stderr
 #include <stdlib.h>  // atexit
 
-// xbox has no console IO and cannot use LoadLibrary or GetModuleHandle
+// xbox has no console IO and cannot use GetModuleHandle
 #if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)
 #define MI_WIN_DESKTOP  1
 #endif
@@ -78,15 +78,6 @@ static PGetLargePageMinimum pGetLargePageMinimum = NULL;
 // Available after Windows XP
 typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalMemoryInKilobytes );
 
-// Load a library
-static HMODULE mi_win_loadlibrary(const TCHAR* library) {
-  #if MI_WIN_DESKTOP
-    return LoadLibrary(library);
-  #else
-    return LoadPackagedLibrary(library, 0);
-  #endif
-}
-
 // Get a library handle (and possibly load it)
 static HMODULE mi_win_getlibrary(const TCHAR* library, bool* should_free) {
   #if MI_WIN_DESKTOP
@@ -98,7 +89,7 @@ static HMODULE mi_win_getlibrary(const TCHAR* library, bool* should_free) {
   }
   #endif
   *should_free = true;
-  return mi_win_loadlibrary(library);
+  return LoadLibrary(library);
 }
 
 static void mi_win_freelibrary(HMODULE mod, bool should_free) {
@@ -583,7 +574,7 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
 
   // load psapi on demand
   mi_atomic_do_once{
-    HINSTANCE hDll = mi_win_loadlibrary(TEXT("psapi.dll"));
+    HINSTANCE hDll = LoadLibrary(TEXT("psapi.dll"));
     if (hDll != NULL) {
       pGetProcessMemoryInfo = (PGetProcessMemoryInfo)(void (*)(void))GetProcAddress(hDll, "GetProcessMemoryInfo");
       // mi_win_freelibrary(hDll, true);  // don't free
@@ -697,7 +688,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   mi_assert(buf_len <= ULONG_MAX);
   if (buf_len > ULONG_MAX) return false;
   mi_atomic_do_once {
-    HINSTANCE hDll = mi_win_loadlibrary(TEXT("bcrypt.dll"));
+    HINSTANCE hDll = LoadLibrary(TEXT("bcrypt.dll"));
     if (hDll != NULL) {
       pBCryptGenRandom = (PBCryptGenRandom)(void (*)(void))GetProcAddress(hDll, "BCryptGenRandom");
       // mi_win_freelibrary(hDll);  // don't free
