@@ -9,6 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_INTERNAL_PROCESS_H
 
 #include "../types.h"
+#include "../util/options.h"
 
 mi_heap_t*    _mi_subproc_heap_main(mi_subproc_t* subproc);
 mi_theap_t*   _mi_theap_main(void);  // current thread's backing theap, without initialization
@@ -52,6 +53,7 @@ typedef struct mi_process_s {
   mi_subproc_t*                     subprocs;           // list of all sub-processes
   mi_lock_t                         subprocs_lock;      // initialized in `_mi_subproc_main_init` (as a zero lock is invalid on some platforms)
   mi_fork_state_t                   fork;               // fork state (see `heap/subproc.c`)
+  mi_option_state_t                 options[_mi_option_last]; // current option values (see `util/options.c`)
 
   mi_decl_cache_align mi_subproc_t  subproc_main;
   mi_decl_cache_align mi_heap_t     heap_main;

@@ -123,88 +123,90 @@ int mi_version(void) {
 #define MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE  ((MI_SIZE_SIZE * MI_LARGE_PAGE_SIZE) / MI_KiB)  // 32 MiB (in KiB)
 #endif
 
-// Static options
-static mi_option_desc_t mi_options[_mi_option_last] =
+// Static option descriptions (the current values are in `_mi_process.options`)
+static const mi_option_desc_t mi_option_descs[_mi_option_last] =
 {
   // stable options
 #if MI_DEBUG || defined(MI_SHOW_ERRORS)
-  { 1, MI_OPTION_UNINIT, MI_OPTION(show_errors) },
+  { 1, MI_OPTION(show_errors) },
 #else
-  { 0, MI_OPTION_UNINIT, MI_OPTION(show_errors) },
+  { 0, MI_OPTION(show_errors) },
 #endif
-  { 0, MI_OPTION_UNINIT, MI_OPTION(show_stats) },
-  { MI_DEFAULT_VERBOSE, MI_OPTION_UNINIT, MI_OPTION(verbose) },
+  { 0, MI_OPTION(show_stats) },
+  { MI_DEFAULT_VERBOSE, MI_OPTION(verbose) },
 
   // some of the following options are experimental and not all combinations are allowed.
-  { 1, MI_OPTION_UNINIT, MI_OPTION(deprecated_eager_commit) },
-  { MI_DEFAULT_ARENA_EAGER_COMMIT,
-       MI_OPTION_UNINIT, MI_OPTION_LEGACY(arena_eager_commit,eager_region_commit) }, // eager commit arena's? 2 is used to enable this only on an OS that has overcommit (i.e. linux)
-  { 1, MI_OPTION_UNINIT, MI_OPTION_LEGACY(purge_decommits,reset_decommits) },        // purge decommits memory (instead of reset) (note: on linux this uses MADV_DONTNEED for decommit)
-  { MI_DEFAULT_ALLOW_LARGE_OS_PAGES,
-       MI_OPTION_UNINIT, MI_OPTION_LEGACY(allow_large_os_pages,large_os_pages) },    // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
-  { MI_DEFAULT_RESERVE_HUGE_OS_PAGES,
-       MI_OPTION_UNINIT, MI_OPTION(reserve_huge_os_pages) },      // per 1GiB huge pages
-  {-1, MI_OPTION_UNINIT, MI_OPTION(reserve_huge_os_pages_at) },   // reserve huge pages at node N
-  { MI_DEFAULT_RESERVE_OS_MEMORY,
-       MI_OPTION_UNINIT, MI_OPTION(reserve_os_memory)     },      // reserve N KiB OS memory in advance (use `option_get_size`)
-  { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_segment_cache) },   // cache N segments per thread
-  { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_page_reset) },      // reset page memory on free
-  { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_abandoned_page_purge) },
-  { 0, MI_OPTION_UNINIT, MI_OPTION(deprecated_segment_reset) },   // reset segment memory on free (needs eager commit)
-  { 1, MI_OPTION_UNINIT, MI_OPTION(deprecated_eager_commit_delay) },
-  { 1000,MI_OPTION_UNINIT, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(use_numa_nodes) },           // 0 = use available numa nodes, otherwise use at most N nodes.
-  { 0,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(disallow_os_alloc,limit_os_alloc) },           // 1 = do not use OS memory for allocation (but only reserved arenas)
-  { 100, MI_OPTION_UNINIT, MI_OPTION(os_tag) },                   // only apple specific for now but might serve more or less related purpose
-  { 32,  MI_OPTION_UNINIT, MI_OPTION(max_errors) },               // maximum errors that are output
-  { 32,  MI_OPTION_UNINIT, MI_OPTION(max_warnings) },             // maximum warnings that are output
-  { 10,  MI_OPTION_UNINIT, MI_OPTION(deprecated_max_segment_reclaim)},       // max. percentage of the abandoned segments to be reclaimed per try.
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(destroy_on_exit)},           // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
-  { MI_DEFAULT_ARENA_RESERVE, MI_OPTION_UNINIT, MI_OPTION(arena_reserve) }, // reserve memory N KiB at a time (=1GiB) (use `option_get_size`)
-  { 4,   MI_OPTION_UNINIT, MI_OPTION(arena_purge_mult) },         // purge delay multiplier for arena's
-  { 1,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(deprecated_purge_extend_delay, decommit_extend_delay) },
-  { MI_DEFAULT_DISALLOW_ARENA_ALLOC,   MI_OPTION_UNINIT, MI_OPTION(disallow_arena_alloc) }, // 1 = do not use arena's for allocation (except if using specific arena id's)
-  { 400, MI_OPTION_UNINIT, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.
-  { 1,   MI_OPTION_UNINIT, MI_OPTION(deprecated_visit_abandoned) },
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(guarded_min) },              // only used when building with MI_GUARDED: minimal rounded object size for guarded objects
-  { MI_GiB, MI_OPTION_UNINIT, MI_OPTION(guarded_max) },           // only used when building with MI_GUARDED: maximal rounded object size for guarded objects
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(unsafe_guarded_precise) },          // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
-  { MI_DEFAULT_GUARDED_SAMPLE_RATE,
-         MI_OPTION_UNINIT, MI_OPTION(guarded_sample_rate)},       // guard an object in the min/max range about every N requested bytes (=0)
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(guarded_sample_seed)},
-  { 10000, MI_OPTION_UNINIT, MI_OPTION(generic_collect) },        // collect theaps every N (=10000) generic allocation calls
-  { 0,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(page_reclaim_on_free, abandoned_reclaim_on_free) },// reclaim abandoned (small) pages on a free: -1 = disable completely, 0 (default) = only reclaim into the originating theap, 1 = reclaim on free across theaps
-  { MI_DEFAULT_PAGE_FULL_RETAIN,
-        MI_OPTION_UNINIT, MI_OPTION(page_full_retain) },         // number of (small) pages to retain in the free page queues
-  { 4,   MI_OPTION_UNINIT, MI_OPTION(page_max_candidates) },      // max search to find a best page candidate
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(max_vabits) },               // max virtual address space bits
-  { MI_DEFAULT_PAGEMAP_COMMIT,
-         MI_OPTION_UNINIT, MI_OPTION(pagemap_commit) },           // commit the full pagemap upfront?
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this only on overcommit systems (like Linux))
-  { MI_DEFAULT_PAGE_MAX_RECLAIM,
-         MI_OPTION_UNINIT, MI_OPTION(page_max_reclaim) },         // don't reclaim (small) pages of the same originating theap if we already own N pages in that size class
-  { MI_DEFAULT_PAGE_CROSS_THREAD_MAX_RECLAIM,
-         MI_OPTION_UNINIT, MI_OPTION(page_cross_thread_max_reclaim) }, // don't reclaim (small) pages across threads if we already own N pages in that size class
-  { MI_DEFAULT_ALLOW_THP,
-         MI_OPTION_UNINIT, MI_OPTION(allow_thp) },                // allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
-  { 0,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(arena_purge_min_size, minimal_purge_size) },       // set minimal purge size (in KiB) (=0). Using 0 resolves to either 64 (or 2048 if THP is enabled).
-  { MI_DEFAULT_ARENA_MAX_OBJECT_SIZE,
-         MI_OPTION_UNINIT, MI_OPTION(arena_max_object_size) },    // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit).
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(arena_is_numa_local) },      // associate local numa node with an initial arena allocation
-  { MI_DEFAULT_STATS_MERGE_ON_COLLECT,
-         MI_OPTION_UNINIT, MI_OPTION(stats_merge_on_collect) },   // on each theap collect, stats are merged with the parent heap
-  { MI_GiB, MI_OPTION_UNINIT, MI_OPTION(profile_alloc_interval) },// N bytes (=1 GiB default) between automatic dumps of the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`); 0 disables automatic dumping
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(profile_inuse_interval) },   // N bytes between automatic dumps of the `MIMALLOC_PROFILE` heap profiler whenever in-use bytes grow by that amount (use `option_get_size`); 0 disables (default)
-  { 0,   MI_OPTION_UNINIT, MI_OPTION(profile_time_interval) },    // N seconds between automatic dumps of the `MIMALLOC_PROFILE` heap profiler; 0 disables (default)
-  { 512*MI_KiB, MI_OPTION_UNINIT, MI_OPTION(profile_sample_rate) }, // sample rate in bytes for the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`) (=512 KiB)
-  { MI_DEFAULT_STATS_MERGE_THRESHOLD,
-         MI_OPTION_UNINIT, MI_OPTION(stats_merge_threshold) },    // on a page stats update, merge theap stats into the heap if N bytes were freed/allocated; 0 disables (=4 MiB)
-  { MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE,
-         MI_OPTION_UNINIT, MI_OPTION(arena_purge_immediate_size) }, // ranges above this size are purged immediately
+  { 1, MI_OPTION(deprecated_eager_commit) },
+  { MI_DEFAULT_ARENA_EAGER_COMMIT, MI_OPTION_LEGACY(arena_eager_commit,eager_region_commit) }, // eager commit arena's? 2 is used to enable this only on an OS that has overcommit (i.e. linux)
+  { 1, MI_OPTION_LEGACY(purge_decommits,reset_decommits) },        // purge decommits memory (instead of reset) (note: on linux this uses MADV_DONTNEED for decommit)
+  { MI_DEFAULT_ALLOW_LARGE_OS_PAGES, MI_OPTION_LEGACY(allow_large_os_pages,large_os_pages) },    // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
+  { MI_DEFAULT_RESERVE_HUGE_OS_PAGES, MI_OPTION(reserve_huge_os_pages) },      // per 1GiB huge pages
+  {-1, MI_OPTION(reserve_huge_os_pages_at) },   // reserve huge pages at node N
+  { MI_DEFAULT_RESERVE_OS_MEMORY, MI_OPTION(reserve_os_memory)     },      // reserve N KiB OS memory in advance (use `option_get_size`)
+  { 0, MI_OPTION(deprecated_segment_cache) },   // cache N segments per thread
+  { 0, MI_OPTION(deprecated_page_reset) },      // reset page memory on free
+  { 0, MI_OPTION(deprecated_abandoned_page_purge) },
+  { 0, MI_OPTION(deprecated_segment_reset) },   // reset segment memory on free (needs eager commit)
+  { 1, MI_OPTION(deprecated_eager_commit_delay) },
+  { 1000, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds
+  { 0, MI_OPTION(use_numa_nodes) },           // 0 = use available numa nodes, otherwise use at most N nodes.
+  { 0, MI_OPTION_LEGACY(disallow_os_alloc,limit_os_alloc) },           // 1 = do not use OS memory for allocation (but only reserved arenas)
+  { 100, MI_OPTION(os_tag) },                   // only apple specific for now but might serve more or less related purpose
+  { 32, MI_OPTION(max_errors) },               // maximum errors that are output
+  { 32, MI_OPTION(max_warnings) },             // maximum warnings that are output
+  { 10, MI_OPTION(deprecated_max_segment_reclaim)},       // max. percentage of the abandoned segments to be reclaimed per try.
+  { 0, MI_OPTION(destroy_on_exit)},           // release all OS memory on process exit; careful with dangling pointer or after-exit frees!
+  { MI_DEFAULT_ARENA_RESERVE, MI_OPTION(arena_reserve) }, // reserve memory N KiB at a time (=1GiB) (use `option_get_size`)
+  { 4, MI_OPTION(arena_purge_mult) },         // purge delay multiplier for arena's
+  { 1, MI_OPTION_LEGACY(deprecated_purge_extend_delay, decommit_extend_delay) },
+  { MI_DEFAULT_DISALLOW_ARENA_ALLOC, MI_OPTION(disallow_arena_alloc) }, // 1 = do not use arena's for allocation (except if using specific arena id's)
+  { 400, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.
+  { 1, MI_OPTION(deprecated_visit_abandoned) },
+  { 0, MI_OPTION(guarded_min) },              // only used when building with MI_GUARDED: minimal rounded object size for guarded objects
+  { MI_GiB, MI_OPTION(guarded_max) },           // only used when building with MI_GUARDED: maximal rounded object size for guarded objects
+  { 0, MI_OPTION(unsafe_guarded_precise) },          // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
+  { MI_DEFAULT_GUARDED_SAMPLE_RATE, MI_OPTION(guarded_sample_rate)},       // guard an object in the min/max range about every N requested bytes (=0)
+  { 0, MI_OPTION(guarded_sample_seed)},
+  { 10000, MI_OPTION(generic_collect) },        // collect theaps every N (=10000) generic allocation calls
+  { 0, MI_OPTION_LEGACY(page_reclaim_on_free, abandoned_reclaim_on_free) },// reclaim abandoned (small) pages on a free: -1 = disable completely, 0 (default) = only reclaim into the originating theap, 1 = reclaim on free across theaps
+  { MI_DEFAULT_PAGE_FULL_RETAIN, MI_OPTION(page_full_retain) },         // number of (small) pages to retain in the free page queues
+  { 4, MI_OPTION(page_max_candidates) },      // max search to find a best page candidate
+  { 0, MI_OPTION(max_vabits) },               // max virtual address space bits
+  { MI_DEFAULT_PAGEMAP_COMMIT, MI_OPTION(pagemap_commit) },           // commit the full pagemap upfront?
+  { 0, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this only on overcommit systems (like Linux))
+  { MI_DEFAULT_PAGE_MAX_RECLAIM, MI_OPTION(page_max_reclaim) },         // don't reclaim (small) pages of the same originating theap if we already own N pages in that size class
+  { MI_DEFAULT_PAGE_CROSS_THREAD_MAX_RECLAIM, MI_OPTION(page_cross_thread_max_reclaim) }, // don't reclaim (small) pages across threads if we already own N pages in that size class
+  { MI_DEFAULT_ALLOW_THP, MI_OPTION(allow_thp) },                // allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
+  { 0, MI_OPTION_LEGACY(arena_purge_min_size, minimal_purge_size) },       // set minimal purge size (in KiB) (=0). Using 0 resolves to either 64 (or 2048 if THP is enabled).
+  { MI_DEFAULT_ARENA_MAX_OBJECT_SIZE, MI_OPTION(arena_max_object_size) },    // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit).
+  { 0, MI_OPTION(arena_is_numa_local) },      // associate local numa node with an initial arena allocation
+  { MI_DEFAULT_STATS_MERGE_ON_COLLECT, MI_OPTION(stats_merge_on_collect) },   // on each theap collect, stats are merged with the parent heap
+  { MI_GiB, MI_OPTION(profile_alloc_interval) },// N bytes (=1 GiB default) between automatic dumps of the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`); 0 disables automatic dumping
+  { 0, MI_OPTION(profile_inuse_interval) },   // N bytes between automatic dumps of the `MIMALLOC_PROFILE` heap profiler whenever in-use bytes grow by that amount (use `option_get_size`); 0 disables (default)
+  { 0, MI_OPTION(profile_time_interval) },    // N seconds between automatic dumps of the `MIMALLOC_PROFILE` heap profiler; 0 disables (default)
+  { 512*MI_KiB, MI_OPTION(profile_sample_rate) }, // sample rate in bytes for the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`) (=512 KiB)
+  { MI_DEFAULT_STATS_MERGE_THRESHOLD, MI_OPTION(stats_merge_threshold) },    // on a page stats update, merge theap stats into the heap if N bytes were freed/allocated; 0 disables (=4 MiB)
+  { MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE, MI_OPTION(arena_purge_immediate_size) }, // ranges above this size are purged immediately
 
 };
 
-static void mi_option_init(mi_option_desc_t* desc);
+static void mi_option_init(mi_option_t option, mi_option_state_t* state);
+
+static const mi_option_desc_t* mi_option_desc(mi_option_t option) {
+  const mi_option_desc_t* desc = &mi_option_descs[option];
+  mi_assert(desc->option == option);  // index should match the option
+  return desc;
+}
+
+// Get the option state with the value set (to the default if not yet set) (but not reading from the environment)
+static mi_option_state_t* mi_option_state(mi_option_t option) {
+  mi_option_state_t* state = &_mi_process.options[option];
+  if mi_unlikely(state->init == MI_OPTION_UNINIT) {
+    state->value = mi_option_desc(option)->default_value;
+    state->init = MI_OPTION_PENDING;
+  }
+  return state;
+}
 
 // option value is stored in KiB so it can fit a `long`
 // todo: use mi_ssize_t for options?
@@ -272,9 +274,8 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
   // show options
   for (int i = 0; i < _mi_option_last; i++) {
     mi_option_t option = (mi_option_t)i;
-    long l = mi_option_get(option); MI_UNUSED(l); // possibly initialize
-    mi_option_desc_t* desc = &mi_options[option];
-    _mi_fprintf(out, arg, "option '%s': %ld %s\n", desc->name, desc->value, (mi_option_has_size_in_kib(option) ? "KiB" : (mi_option_has_size_in_bytes(option) ? "B" : "")));
+    long l = mi_option_get(option); // possibly initialize
+    _mi_fprintf(out, arg, "option '%s': %ld %s\n", mi_option_desc(option)->name, l, (mi_option_has_size_in_kib(option) ? "KiB" : (mi_option_has_size_in_bytes(option) ? "B" : "")));
   }
 
   // show build configuration
@@ -313,22 +314,19 @@ mi_decl_export void mi_options_print(void) mi_attr_noexcept {
 
 long _mi_option_get_fast(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
-  mi_option_desc_t* desc = &mi_options[option];
-  mi_assert(desc->option == option);  // index should match the option
-  //mi_assert(desc->init != MI_OPTION_UNINIT);
-  return desc->value;
+  return mi_option_state(option)->value;
 }
 
 
 mi_decl_nodiscard long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
   if (option < 0 || option >= _mi_option_last) return 0;
-  mi_option_desc_t* desc = &mi_options[option];
-  mi_assert(desc->option == option);  // index should match the option
-  if mi_unlikely(desc->init == MI_OPTION_UNINIT) {
-    mi_option_init(desc);
+  mi_option_state_t* state = &_mi_process.options[option];
+  if mi_unlikely(state->init < MI_OPTION_DEFAULTED) {  // uninit or pending
+    state = mi_option_state(option);
+    mi_option_init(option, state);
   }
-  return desc->value;
+  return state->value;
 }
 
 mi_decl_nodiscard long mi_option_get_clamp(mi_option_t option, long min, long max) {
@@ -350,15 +348,14 @@ mi_decl_nodiscard size_t mi_option_get_size(mi_option_t option) {
 void mi_option_set(mi_option_t option, long value) {
   mi_assert(option >= 0 && option < _mi_option_last);
   if (option < 0 || option >= _mi_option_last) return;
-  mi_option_desc_t* desc = &mi_options[option];
-  mi_assert(desc->option == option);  // index should match the option
-  desc->value = value;
-  desc->init = MI_OPTION_INITIALIZED;
+  mi_option_state_t* const state = &_mi_process.options[option];
+  state->value = value;
+  state->init = MI_OPTION_INITIALIZED;
   // ensure min/max range; be careful to not recurse.
-  if (desc->option == mi_option_guarded_min && _mi_option_get_fast(mi_option_guarded_max) < value) {
+  if (option == mi_option_guarded_min && mi_option_state(mi_option_guarded_max)->value < value) {
     mi_option_set(mi_option_guarded_max, value);
   }
-  else if (desc->option == mi_option_guarded_max && _mi_option_get_fast(mi_option_guarded_min) > value) {
+  else if (option == mi_option_guarded_max && mi_option_state(mi_option_guarded_min)->value > value) {
     mi_option_set(mi_option_guarded_min, value);
   }
 }
@@ -366,9 +363,9 @@ void mi_option_set(mi_option_t option, long value) {
 void mi_option_set_default(mi_option_t option, long value) {
   mi_assert(option >= 0 && option < _mi_option_last);
   if (option < 0 || option >= _mi_option_last) return;
-  mi_option_desc_t* desc = &mi_options[option];
-  if (desc->init != MI_OPTION_INITIALIZED) {
-    desc->value = value;
+  mi_option_state_t* const state = mi_option_state(option);
+  if (state->init != MI_OPTION_INITIALIZED) {
+    state->value = value;
   }
 }
 
@@ -664,7 +661,8 @@ mi_decl_noinline mi_block_t* _mi_block_next_is_corrupted(const mi_page_t* page, 
 // Initialize options by checking the environment
 // --------------------------------------------------------
 
-static void mi_option_init(mi_option_desc_t* desc) {
+static void mi_option_init(mi_option_t option, mi_option_state_t* state) {
+  const mi_option_desc_t* const desc = mi_option_desc(option);
   // Read option value from the environment
   char s[64 + 1];
   char buf[64+1];
@@ -687,18 +685,18 @@ static void mi_option_init(mi_option_desc_t* desc) {
     }
     buf[len] = 0;
     if (buf[0] == 0 || _mi_streq(buf,"1") || _mi_streq(buf,"TRUE") || _mi_streq(buf,"YES") || _mi_streq(buf,"ON")) {
-      desc->value = 1;
-      desc->init = MI_OPTION_INITIALIZED;
+      state->value = 1;
+      state->init = MI_OPTION_INITIALIZED;
     }
     else if (_mi_streq(buf,"0") || _mi_streq(buf,"FALSE") || _mi_streq(buf,"NO") || _mi_streq(buf,"OFF")) {
-      desc->value = 0;
-      desc->init = MI_OPTION_INITIALIZED;
+      state->value = 0;
+      state->init = MI_OPTION_INITIALIZED;
     }
     else {
       const char* end = buf;
       long value = 0;
       const bool ok = _mi_strntol(buf, sizeof(buf), &end, &value);
-      if (ok && (mi_option_has_size_in_kib(desc->option) || mi_option_has_size_in_bytes(desc->option))) {
+      if (ok && (mi_option_has_size_in_kib(option) || mi_option_has_size_in_bytes(option))) {
         // the size is interpreted in bytes.
         size_t size = (value < 0 ? 0 : (size_t)value);
         bool overflow = false;
@@ -713,7 +711,7 @@ static void mi_option_init(mi_option_desc_t* desc) {
         if (end[0] == 'I' && end[1] == 'B') { end += 2; } // KiB, MiB, GiB, TiB
         else if (*end == 'B') { end++; }                  // Kb, Mb, Gb, Tb
         if (overflow || size > MI_MAX_ALLOC_SIZE) { size = MI_MAX_ALLOC_SIZE; }
-        if (mi_option_has_size_in_kib(desc->option)) {
+        if (mi_option_has_size_in_kib(option)) {
           // This option is interpreted in KiB to prevent overflow of `long` for large allocations
           // (long is 32-bit on 64-bit windows, which allows for 4TiB max.)
           size = (size + MI_KiB - 1) / MI_KiB;  // no overflow due to check before this
@@ -721,27 +719,27 @@ static void mi_option_init(mi_option_desc_t* desc) {
         value = (size > LONG_MAX ? LONG_MAX : (long)size);
       }
       if (ok && *end == 0) {
-        mi_option_set(desc->option, value);
+        mi_option_set(option, value);
       }
       else {
         // set `init` first to avoid recursion through _mi_warning_message on mimalloc_verbose.
-        desc->init = MI_OPTION_DEFAULTED;
-        if (desc->option == mi_option_verbose && desc->value == 0) {
+        state->init = MI_OPTION_DEFAULTED;
+        if (option == mi_option_verbose && state->value == 0) {
           // if the 'mimalloc_verbose' env var has a bogus value we'd never know
           // (since the value defaults to 'off') so in that case briefly enable verbose
-          desc->value = 1;
+          state->value = 1;
           _mi_warning_message("environment option mimalloc_%s has an invalid value.\n", desc->name);
-          desc->value = 0;
+          state->value = 0;
         }
         else {
           _mi_warning_message("environment option mimalloc_%s has an invalid value.\n", desc->name);
         }
       }
     }
-    mi_assert_internal(desc->init != MI_OPTION_UNINIT);
+    mi_assert_internal(state->init >= MI_OPTION_DEFAULTED);
   }
   else if (err==ENOENT) {
-    desc->init = MI_OPTION_DEFAULTED;
+    state->init = MI_OPTION_DEFAULTED;
   }
-  // and on another error, keep unitialized to try again (can happen during preloading if getenv is not available)
+  // and on another error, keep pending to try again (can happen during preloading if getenv is not available)
 }
