@@ -684,8 +684,8 @@ template<class T> struct _mi_stl_allocator_common {
   using propagate_on_container_copy_assignment = std::true_type;
   using propagate_on_container_move_assignment = std::true_type;
   using propagate_on_container_swap            = std::true_type;
-  template <class U, class ...Args> void construct(U* p, Args&& ...args) { ::new(p) U(std::forward<Args>(args)...); }
-  template <class U> void destroy(U* p) mi_attr_noexcept { p->~U(); }
+  // no construct/destroy: std::allocator_traits provides them, and declaring them
+  // disables the memmove/memset/trivial-destroy fast paths of the STL containers
   #else
   void construct(pointer p, value_type const& val) { ::new(p) value_type(val); }
   void destroy(pointer p) { p->~value_type(); }
