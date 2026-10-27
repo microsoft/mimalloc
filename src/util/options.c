@@ -635,8 +635,8 @@ static void mi_error_default(int err) {
 }
 
 void mi_register_error(mi_error_fun* fun, void* arg) {
-  _mi_process.error_handler = fun;  // can be NULL
   mi_atomic_store_ptr_release(void,&_mi_process.error_arg, arg);
+  mi_atomic_store_ptr_release(void,&_mi_process.error_handler, (void*)fun);  // can be NULL
 }
 
 void _mi_error_message(int err, const char* fmt, ...) {
@@ -646,8 +646,9 @@ void _mi_error_message(int err, const char* fmt, ...) {
   mi_show_error_message(fmt, args);
   va_end(args);
   // and call the error handler which may abort (or return normally, potentially setting errno)
-  if (_mi_process.error_handler != NULL) {
-    _mi_process.error_handler(err, mi_atomic_load_ptr_acquire(void,&_mi_process.error_arg));
+  mi_error_fun* const handler = (mi_error_fun*)mi_atomic_load_ptr_acquire(void,&_mi_process.error_handler);
+  if (handler != NULL) {
+    handler(err, mi_atomic_load_ptr_acquire(void,&_mi_process.error_arg));
   }
   else {
     mi_error_default(err);
