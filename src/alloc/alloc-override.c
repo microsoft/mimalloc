@@ -139,6 +139,10 @@ typedef void* mi_nothrow_t;
   };
 
 #elif defined(_MSC_VER)
+  #if defined(_DEBUG)
+  // the debug CRT heap allocates with `HeapAlloc` directly but frees through `_free_base` (which we override)
+  #error "the static override is not supported with the debug CRT (/MTd); use /MT, the dynamic override (/MD), or build without MI_MALLOC_OVERRIDE (-DMI_OVERRIDE=OFF)"
+  #endif
   _Check_return_ _Ret_maybenull_ _Post_writable_byte_size_(_Size) _ACRTIMP _CRTALLOCATOR _CRT_HYBRIDPATCHABLE
   void* __cdecl _expand(_Pre_notnull_ void* _Block, _In_ _CRT_GUARDOVERFLOW size_t _Size) {
     return mi__expand(_Block, _Size);
