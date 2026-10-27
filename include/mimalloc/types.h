@@ -356,7 +356,7 @@ typedef struct mi_subproc_s mi_subproc_t;
 typedef enum mi_memkind_e {
   MI_MEM_NONE,      // not allocated (or static)
   MI_MEM_EXTERNAL,  // not owned by mimalloc but provided externally (via `mi_manage_os_memory` for example)
-  MI_MEM_STATIC,    // allocated in a static area and should not be freed (the initial main theap data for example (`heap/init.c`))
+  MI_MEM_STATIC,    // allocated in a static area and should not be freed (the initial main theap data for example (`heap/process.c`))
   MI_MEM_OS,        // allocated from the OS
   MI_MEM_OS_HUGE,   // allocated as huge OS pages (usually 1GiB, pinned to physical memory)
   MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
@@ -597,7 +597,7 @@ typedef struct mi_page_s {
 #error "mimalloc internal: define more bins"
 #endif
 
-// static invariant: MI_MAX_SINGLETON_BIN >= _mi_bin(MI_LARGE_MAX_OBJ_SIZE) (See heap/init.c for the size bins)
+// static invariant: MI_MAX_SINGLETON_BIN >= _mi_bin(MI_LARGE_MAX_OBJ_SIZE) (See heap/process.c for the size bins)
 #if (MI_LARGE_MAX_OBJ_WSIZE <= 8192)     // 64 KiB
 #define MI_MAX_SINGLETON_BIN   (48)
 #elif (MI_LARGE_MAX_OBJ_WSIZE <= 32768)  // 256KiB

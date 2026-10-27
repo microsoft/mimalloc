@@ -11,7 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "../types.h"
 #include "../util/libc.h"
 #include "../util/options.h"
-#include "init.h"
+#include "process.h"
 
 bool          _mi_page_map_init(void);
 mi_decl_nodiscard bool _mi_page_map_register(mi_page_t* page);

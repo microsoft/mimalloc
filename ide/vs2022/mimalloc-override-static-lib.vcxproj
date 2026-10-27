@@ -466,7 +466,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|ARM64EC'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\..\src\heap\heap.c" />
-    <ClCompile Include="..\..\src\heap\init.c" />
+    <ClCompile Include="..\..\src\heap\process.c" />
     <ClCompile Include="..\..\src\util\libc.c" />
     <ClCompile Include="..\..\src\heap\page-map.c" />
     <ClCompile Include="..\..\src\prim\prim-tls.c" />
@@ -508,7 +508,7 @@
     <ClInclude Include="..\..\include\mimalloc\util\random.h" />
     <ClInclude Include="..\..\include\mimalloc\prim\prim-tls.h" />
     <ClInclude Include="..\..\include\mimalloc\heap\subproc.h" />
-    <ClInclude Include="..\..\include\mimalloc\heap\init.h" />
+    <ClInclude Include="..\..\include\mimalloc\heap\process.h" />
     <ClInclude Include="..\..\include\mimalloc\prim\os.h" />
     <ClInclude Include="..\..\include\mimalloc\util\threadlocal.h" />
     <ClInclude Include="..\..\include\mimalloc\arena\arena.h" />

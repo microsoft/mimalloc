@@ -26,7 +26,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim/os.h"
 #include "mimalloc/util/libc.h"
 #include "mimalloc/util/options.h"
-#include "mimalloc/heap/init.h"
+#include "mimalloc/heap/process.h"
 
 #include <sys/mman.h>  // mmap
 #include <unistd.h>    // sysconf, sleep

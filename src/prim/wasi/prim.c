@@ -11,7 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim.h"
 #include "mimalloc/prim/os.h"
 #include "mimalloc/util/libc.h"
-#include "mimalloc/heap/init.h"
+#include "mimalloc/heap/process.h"
 
 #include <stdio.h>   // fputs
 #include <stdlib.h>  // getenv

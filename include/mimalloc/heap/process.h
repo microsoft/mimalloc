@@ -5,8 +5,8 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef MI_INTERNAL_INIT_H
-#define MI_INTERNAL_INIT_H
+#ifndef MI_INTERNAL_PROCESS_H
+#define MI_INTERNAL_PROCESS_H
 
 #include "../types.h"
 
@@ -33,7 +33,7 @@ typedef struct mi_fork_state_s {
 } mi_fork_state_t;
 
 // Statically allocated process data. This is zero initialized and padded such that
-// in secure mode it is surrounded by guard pages (see `heap/init.c:mi_process_guard_init`)
+// in secure mode it is surrounded by guard pages (see `heap/process.c:mi_process_guard_init`)
 typedef struct mi_process_s {
   uint8_t                           pad_front[MI_SECURE_STATIC_PAD];
 

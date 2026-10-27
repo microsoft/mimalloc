@@ -9,7 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_INTERNAL_PRIM_TLS_H
 
 #include "../types.h"
-#include "../heap/init.h"
+#include "../heap/process.h"
 #include "../heap/heap.h"
 #include "../heap/theap.h"
 #include "../util/threadlocal.h"

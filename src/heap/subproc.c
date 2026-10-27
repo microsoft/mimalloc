@@ -13,7 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/heap/page-map.h"
 #include "mimalloc/profile/sample-profile.h"
 #include "mimalloc/heap/subproc.h"
-#include "mimalloc/heap/init.h"
+#include "mimalloc/heap/process.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/util/threadlocal.h"
 

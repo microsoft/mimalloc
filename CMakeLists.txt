@@ -127,7 +127,7 @@ set(mi_sources
     src/alloc/page.c
     src/alloc/page-queue.c
     src/heap/heap.c
-    src/heap/init.c
+    src/heap/process.c
     src/heap/page-map.c
     src/heap/subproc.c
     src/heap/theap.c

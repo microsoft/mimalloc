@@ -196,7 +196,7 @@ mi_heap_t* mi_heap_new_qsbr(void) {
 
 // free all theaps belonging to this heap (without deleting their pages as we do this arena wise for efficiency)
 static void mi_heap_free_theaps(mi_heap_t* heap) {
-  // This can run concurrently with a thread that terminates (see `heap/init.c:mi_thread_theaps_done`),
+  // This can run concurrently with a thread that terminates (see `heap/process.c:mi_thread_theaps_done`),
   // and we need to ensure we free theaps atomically.
 
   // We first detach our theaps list from any thread local lists

@@ -130,7 +130,7 @@ static int64_t mi_prim_time_secs(void);  // wall-clock seconds since the Unix ep
 static bool mi_is_elevated_process(void);
 static mi_profiler_t* mi_profile_env_profiler;  // NULL if `MIMALLOC_PROFILE` was not set (or initialization failed)
 
-// Called once at process initialization (see `mi_process_init` in `heap/init.c`).
+// Called once at process initialization (see `mi_process_init` in `heap/process.c`).
 void _mi_pprof_profiler_init(void) {
   #if MI_PROFILE
   if (mi_is_elevated_process()) return;  // don't let an untrusted environment influence a privileged process
@@ -149,7 +149,7 @@ void _mi_pprof_profiler_init(void) {
   #endif
 }
 
-// Called once at process termination (see `mi_process_done` in `heap/init.c`).
+// Called once at process termination (see `mi_process_done` in `heap/process.c`).
 void _mi_pprof_profiler_done(void) {
   #if MI_PROFILE
   mi_profiler_t* profiler = mi_profile_env_profiler;

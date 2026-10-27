@@ -9,7 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim/prim-tls.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/util/options.h"
-#include "mimalloc/heap/init.h"
+#include "mimalloc/heap/process.h"
 
 #include <stdio.h>      // stdin/stdout
 #include <stdlib.h>     // abort

@@ -10,7 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc/prim.h"
 #include "mimalloc/util/libc.h"
-#include "mimalloc/heap/init.h"
+#include "mimalloc/heap/process.h"
 
 #include <sched.h>   // sched_yield
 #include <unistd.h>  // getentropy
