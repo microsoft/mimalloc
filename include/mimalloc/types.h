@@ -438,7 +438,7 @@ size_t        _mi_memid_size(mi_memid_t memid);
 typedef uintptr_t  mi_encoded_t;
 
 // thread id's
-typedef size_t     mi_threadid_t;
+typedef size_t     mi_thread_id_t;
 
 // free lists contain blocks
 typedef struct mi_block_s {
@@ -455,13 +455,13 @@ typedef struct mi_block_s {
 #define MI_PAGE_FLAG_BITS               (2)
 typedef size_t mi_page_flags_t;
 
-// There are two special threadid's: 0 for pages that are abandoned (and not in a theap queue),
+// There are two special thread_id's: 0 for pages that are abandoned (and not in a theap queue),
 // and 4 for abandoned & mapped threads -- abandoned-mapped pages are abandoned but also mapped
 // in an arena (in `mi_heap_t.arena_pages.pages_abandoned`) so these can be quickly found for reuse.
 // Abandoning partially used pages allows for sharing of this memory between threads (in particular if threads are blocked)
-#define MI_THREADID_ABANDONED           MI_ZU(0)
-#define MI_THREADID_ABANDONED_MAPPED    (MI_ZU(1) << MI_PAGE_FLAG_BITS)
-#define MI_THREADID_DETACHED            (MI_ZU(2) << MI_PAGE_FLAG_BITS)
+#define MI_THREAD_ID_ABANDONED           MI_ZU(0)
+#define MI_THREAD_ID_ABANDONED_MAPPED    (MI_ZU(1) << MI_PAGE_FLAG_BITS)
+#define MI_THREAD_ID_DETACHED            (MI_ZU(2) << MI_PAGE_FLAG_BITS)
 
 // Thread free list.
 // Points to a list of blocks that are freed by other threads.
@@ -515,7 +515,7 @@ static inline mi_used_t mi_xused_used_reset(mi_used_t xused) { xused.used_alloc 
 //   Combining the `thread_free` list with an ownership bit allows a concurrent `free` to atomically
 //   free an object and (re)claim ownership if the page was abandoned.
 // - If a page is not part of a theap it is called "abandoned"  (`theap==NULL`) -- in
-//   that case the `xthreadid` is 0 or 4 (4 is for abandoned pages that
+//   that case the `xthread_id` is 0 or 4 (4 is for abandoned pages that
 //   are in the `pages_abandoned` lists of an arena, these are called "mapped" abandoned pages).
 // - page flags are in the bottom 3 bits of `xthread_id` for the fast path in `mi_free`.
 // - The layout below is optimized for `alloc/free.c:mi_free` and `alloc/alloc.c:mi_page_alloc` -- do not change it without careful consideration.
@@ -524,7 +524,7 @@ typedef struct mi_page_s {
   #if (MI_PAGE_META_IS_ALIGNED)
   _Atomic(struct mi_page_s*) self;             // points to the actual page info (for pages that span multiple slices)
   #endif
-  _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= `theap->thread_id (or 0 or 4 if abandoned) | page_flags`)
+  _Atomic(mi_thread_id_t)   xthread_id;        // thread this page belongs to. (= `theap->thread_id (or 0 or 4 if abandoned) | page_flags`)
   mi_block_t*               free;              // list of available free blocks (`malloc` allocates from this list)
   mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   size_t                    block_size;        // const: size available in each block (always `>0`)
@@ -554,7 +554,7 @@ typedef struct mi_page_s {
   mi_addr_t                 keys[MI_PAGE_KEY_COUNT]; // const: one or two random keys to encode the free lists (see `_mi_block_next`) or padding canary
   #endif
   #if MI_QSBR
-  _Atomic(mi_threadid_t)    qsbr_xthread_id;   // thread id of the last owning thread (`theap->tld->thread_id`) | `MI_PAGE_QSBR_IN_QUEUE` (written only by the owning thread)
+  _Atomic(mi_thread_id_t)   qsbr_xthread_id;   // thread id of the last owning thread (`theap->tld->thread_id`) | `MI_PAGE_QSBR_IN_QUEUE` (written only by the owning thread)
   struct mi_page_s*         qsbr_next;
   struct mi_page_s*         qsbr_prev;
   mi_page_qsbr_t            qsbr;
@@ -696,7 +696,7 @@ struct mi_theap_s {
   long                  page_full_retain;                    // how many full pages can be retained per queue (before abandoning them)
   bool                  allow_page_reclaim;                  // `true` if this theap can reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this theap can abandon pages to reduce memory footprint
-  bool                  is_detached;                         // `true` if `tld->thread_id == MI_THREADID_DETACHED`
+  bool                  is_detached;                         // `true` if `tld->thread_id == MI_THREAD_ID_DETACHED`
   bool                  profile_never;                       // if `true`, this theap is never profiled (only the empty and meta theaps)
   bool                  guard_front;                         // `true` if fresh pages get a guard page in front of the blocks (in secure mode, for meta theaps)
   bool                  guard_end;                           // `true` if fresh pages get a guard page after the blocks (in secure mode, for meta theaps or always at level 5)
@@ -845,7 +845,7 @@ typedef int64_t  mi_msecs_t;
 
 // Thread local data
 struct mi_tld_s {
-  mi_threadid_t         thread_id;            // thread id of this thread
+  mi_thread_id_t         thread_id;            // thread id of this thread
   size_t                thread_seq;           // thread sequence id (linear count of created threads)
   size_t                fork_epoch;           // fork epoch at creation; an older epoch means the thread does not exist in a forked child
   int                   numa_node;            // thread preferred numa node

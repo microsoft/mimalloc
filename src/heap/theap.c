@@ -223,7 +223,7 @@ static void mi_theap_options_init(mi_theap_t* theap, mi_heap_t* heap) {
   theap->allow_page_reclaim = (mi_heap_reclaim_on_free(heap) >= 0);
   theap->allow_page_abandon = (mi_option_get(mi_option_page_full_retain) >= 0); // nowadays qsbr pages can be abandoned: && !mi_heap_qsbr_is_enabled(heap));
   theap->page_full_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
-  theap->is_detached = (theap->tld->thread_id == MI_THREADID_DETACHED);
+  theap->is_detached = (theap->tld->thread_id == MI_THREAD_ID_DETACHED);
 }
 
 // todo: make order of parameters consistent (but would that break compat with CPython?)
@@ -320,7 +320,7 @@ void _mi_theap_meta_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld) {
 mi_theap_t* _mi_theap_alloc(mi_heap_t* heap, mi_tld_t* tld) {
   mi_assert_internal(tld!=NULL);
   mi_assert_internal(heap!=NULL);
-  mi_assert_internal(tld->thread_id == MI_THREADID_DETACHED || _mi_thread_id() == tld->thread_id);
+  mi_assert_internal(tld->thread_id == MI_THREAD_ID_DETACHED || _mi_thread_id() == tld->thread_id);
   // mi_assert_internal(_mi_heap_theap_peek(heap)==NULL);  // don't access thread locals as this is called on thread init
 
   // allocate and initialize a theap

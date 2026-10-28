@@ -77,7 +77,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(page->heap!=NULL);
   mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
   mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap ||
-                     mi_page_theap(page)->tld == NULL || mi_page_theap(page)->tld->thread_id == MI_THREADID_DETACHED);
+                     mi_page_theap(page)->tld == NULL || mi_page_theap(page)->tld->thread_id == MI_THREAD_ID_DETACHED);
 
   // const size_t bsize = mi_page_block_size(page);
   // uint8_t* start = mi_page_start(page);
@@ -119,7 +119,7 @@ bool _mi_page_is_valid(mi_page_t* page) {
     mi_assert_internal(page->heap!=NULL);
     mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
     mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap ||
-                       mi_page_theap(page)->tld == NULL || mi_page_theap(page)->tld->thread_id == MI_THREADID_DETACHED);
+                       mi_page_theap(page)->tld == NULL || mi_page_theap(page)->tld->thread_id == MI_THREAD_ID_DETACHED);
     {
       mi_page_queue_t* pq = mi_page_queue_of(page);
       mi_assert_internal(mi_page_queue_contains(pq, page));
@@ -287,7 +287,7 @@ void _mi_page_update_stats(mi_page_t* page) {
 void _mi_page_update_sample_countdown(mi_page_t* page)
 {
   mi_assert_internal(mi_page_is_owned(page));
-  // note: the threadid may not match and even be abandoned if we free multi-threaded (so we can not always use page->theap)
+  // note: the thread_id may not match and even be abandoned if we free multi-threaded (so we can not always use page->theap)
 
   // adjust count down
   const size_t alloc_count = mi_page_alloc_count(page);

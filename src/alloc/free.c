@@ -294,8 +294,8 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
   mi_assert_internal(p!=NULL && page!=NULL);
   if (pblock_size!=NULL) { *pblock_size = mi_page_block_size(page); }
 
-  const mi_threadid_t ptid = mi_page_xthread_id(page);
-  const mi_threadid_t xtid = (_mi_prim_thread_id() ^ ptid);
+  const mi_thread_id_t ptid = mi_page_xthread_id(page);
+  const mi_thread_id_t xtid = (_mi_prim_thread_id() ^ ptid);
   if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // thread-local, aligned, and not a full page
     mi_block_t* const block = mi_validate_block_from_ptr(page,p);
@@ -676,8 +676,8 @@ mi_decl_nodiscard size_t mi_thread_id_of(const void* p) mi_attr_noexcept {
   // (this is needed for cpython where the thread id gets restored this way inside object headers)
   return mi_page_qsbr_thread_id(page);
   #else
-  const mi_threadid_t tid = mi_page_thread_id(page);
-  return (tid <= MI_THREADID_DETACHED ? 0 : tid);
+  const mi_thread_id_t tid = mi_page_thread_id(page);
+  return (tid <= MI_THREAD_ID_DETACHED ? 0 : tid);
   #endif
 }
 

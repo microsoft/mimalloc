@@ -203,7 +203,7 @@ bool _mi_atomic_once_enter(mi_atomic_once_t* once) {
   if mi_likely(once_tid == 1) {
     return false; // already executed
   }
-  const mi_threadid_t current_tid = _mi_thread_id();
+  const mi_thread_id_t current_tid = _mi_thread_id();
   if (once_tid == current_tid) {
     return false; // recursive invocation; don't block on ourselves
   }

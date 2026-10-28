@@ -120,7 +120,7 @@ static const mi_page_t mi_page_empty = {
 
 // read-only detached tld of the empty theap
 static mi_decl_cache_align const mi_tld_t mi_tld_empty = {
-  MI_THREADID_DETACHED,   // thread_id
+  MI_THREAD_ID_DETACHED,   // thread_id
   0,                      // thread_seq
   0,                      // fork_epoch
   0,                      // default numa node
@@ -213,7 +213,7 @@ static void mi_heap_main_init_once(void) {
 
   // detached tld for theap_meta
   mi_tld_t* const tld_meta = &_mi_process.tld_meta;
-  tld_meta->thread_id = MI_THREADID_DETACHED;
+  tld_meta->thread_id = MI_THREAD_ID_DETACHED;
   tld_meta->memid = memid_static;
   mi_tld_init(tld_meta, 0, subproc_main);
 
@@ -268,7 +268,7 @@ static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc) 
   tld->subproc = subproc;
   tld->theaps = NULL;
   mi_lock_init(&tld->theaps_lock);
-  if (tld->thread_id == MI_THREADID_DETACHED) {
+  if (tld->thread_id == MI_THREAD_ID_DETACHED) {
     tld->numa_node = -1;
   }
   else {
@@ -307,7 +307,7 @@ static mi_tld_t* mi_tld_create(mi_subproc_t* subproc) {
 mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
   if (tld==NULL) return;
   mi_atomic_decrement_relaxed(&tld->subproc->thread_count);
-  tld->thread_id = (mi_threadid_t)(~0);          // it is best to set an invalid tid for tld_main as sometimes the same thread-id
+  tld->thread_id = (mi_thread_id_t)(~0);          // it is best to set an invalid tid for tld_main as sometimes the same thread-id
                                                  // is reused by the OS after a thread has terminated. (see issue #1287)
   mi_lock_done(&tld->theaps_lock);
   _mi_meta_free(tld->subproc, tld, tld->memid);  // note: safe for static tld
@@ -320,7 +320,7 @@ mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
 
 #if MI_DEBUG || defined(MI_TLS_RECURSE_GUARD)
 static mi_theap_t* mi_heap_check_for_existing_theap(mi_heap_t* heap) {
-  const mi_threadid_t tid = _mi_thread_id();
+  const mi_thread_id_t tid = _mi_thread_id();
   mi_theap_t* thread_theap = NULL;
   mi_lock(&heap->theaps_lock) {
     for(mi_theap_t* theap = heap->theaps; theap != NULL; theap = theap->hnext ) {

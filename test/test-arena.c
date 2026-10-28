@@ -500,7 +500,7 @@ static bool test_thread_id_of(bool os_pages, long reclaim_mode) {
   if (result) result = mi_run_on_thread(&allocate_thread_id_blocks);
   if (result) {
     const mi_page_t* page = mi_ptr_page(thread_id_blocks[0]);
-    result = (mi_page_thread_id(page) == (os_pages ? MI_THREADID_ABANDONED : MI_THREADID_ABANDONED_MAPPED));
+    result = (mi_page_thread_id(page) == (os_pages ? MI_THREAD_ID_ABANDONED : MI_THREAD_ID_ABANDONED_MAPPED));
     for (size_t i = 0; i < 3; i++) {
       result = (mi_thread_id_of(thread_id_blocks[i]) == 0 &&
                 mi_thread_id_of((const uint8_t*)thread_id_blocks[i] + 2 * sizeof(size_t)) == 0 && result);

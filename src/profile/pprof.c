@@ -39,7 +39,7 @@ typedef struct mi_callstack_s mi_callstack_t;
 
 static bool    mi_locations_init(mi_heap_t* heap, mi_locations_t* locations);
 static void    mi_locations_done(mi_heap_t* heap, mi_locations_t* locations);
-static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_t* locations, mi_threadid_t thread_id, const mi_callstack_t* callstack, size_t callstack_hash);
+static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_t* locations, mi_thread_id_t thread_id, const mi_callstack_t* callstack, size_t callstack_hash);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,7 +66,7 @@ struct mi_callstack_s {
 // `hash`/`thread_id`/`callstack` which allows a lock-free lookup of locations in the hash table.
 struct mi_location_s {
   _Atomic(struct mi_location_s*) next;  // next location in the same hash bucket (for chaining on collision);
-  mi_threadid_t     thread_id;
+  mi_thread_id_t     thread_id;
   mi_callstack_t    callstack;
   size_t            hash;         // hash of the thread_id and callstack
   int64_t           alloc_count;  // only ever written by the single (allocating) owning thread: not atomic
@@ -183,7 +183,7 @@ static mi_decl_noinline mi_location_t* mi_location_get(mi_pprof_profiler_t* prof
   const size_t depth = mi_prim_backtrace(frames, MI_MAX_BACKTRACE_DEPTH, &callstack_hash);
   if (depth==0) return NULL;
   mi_callstack_t callstack = { depth, frames };
-  const mi_threadid_t thread_id = _mi_thread_id();
+  const mi_thread_id_t thread_id = _mi_thread_id();
   mi_location_t* loc = mi_locations_find_or_insert(prof->profile_heap, &prof->locations, thread_id, &callstack, callstack_hash);
   return loc;
 }
@@ -442,7 +442,7 @@ void mi_pprof_profiler_delete(mi_profiler_t* profiler) {
 #define MI_FNV_PRIME         ((size_t)0x01000193UL)           // FNV-1a 32-bit prime
 #endif
 
-static size_t mi_location_hash(mi_threadid_t thread_id, size_t callstack_hash) {
+static size_t mi_location_hash(mi_thread_id_t thread_id, size_t callstack_hash) {
   size_t hash = MI_FNV_OFFSET_BASIS;
   const size_t prime = MI_FNV_PRIME;
   hash = (hash ^ (size_t)thread_id) * prime;
@@ -480,7 +480,7 @@ static void mi_locations_done(mi_heap_t* heap, mi_locations_t* locations) {
 }
 
 // Match a location's identifying fields; these never change after publication.
-static bool mi_location_matches(const mi_location_t* loc, size_t hash, mi_threadid_t thread_id, const mi_callstack_t* callstack) {
+static bool mi_location_matches(const mi_location_t* loc, size_t hash, mi_thread_id_t thread_id, const mi_callstack_t* callstack) {
   return (loc->hash == hash && loc->thread_id == thread_id &&
           loc->callstack.count == callstack->count &&
           (callstack->count == 0 || mi_memcmp(loc->callstack.frames, callstack->frames, callstack->count * sizeof(void*)) == 0));
@@ -493,7 +493,7 @@ static bool mi_location_matches(const mi_location_t* loc, size_t hash, mi_thread
 // is a lock-free, read-only traversal using relaxed loads; only inserting a
 // genuinely new location uses a CAS (and even then, only ever races against
 // other threads inserting *different* locations into the same bucket).
-static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_t* locations, mi_threadid_t thread_id, const mi_callstack_t* callstack, size_t callstack_hash) {
+static mi_location_t* mi_locations_find_or_insert(mi_heap_t* heap, mi_locations_t* locations, mi_thread_id_t thread_id, const mi_callstack_t* callstack, size_t callstack_hash) {
   if (locations->buckets == NULL) return NULL;
   const size_t hash = mi_location_hash(thread_id, callstack_hash);
   const size_t idx = hash % locations->bucket_count;

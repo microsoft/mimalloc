@@ -190,7 +190,7 @@ mi_subproc_id_t mi_subproc_new(void) {
   // init meta theap
   mi_assert_internal(parent->theap_meta!=NULL);
   mi_assert_internal(parent->theap_meta->tld!=NULL);
-  mi_assert_internal(parent->theap_meta->tld->thread_id == MI_THREADID_DETACHED);
+  mi_assert_internal(parent->theap_meta->tld->thread_id == MI_THREAD_ID_DETACHED);
   _mi_theap_meta_init(theap_meta,heap_main,parent->theap_meta->tld /* detached tld */);
   subproc->theap_meta = theap_meta;
 
@@ -365,7 +365,7 @@ bool _mi_fork_is_torn(void) {
 
 static bool mi_fork_theap_is_dead(const mi_theap_t* theap) {
   const mi_tld_t* const tld = theap->tld;
-  return (tld != NULL && tld->thread_id != MI_THREADID_DETACHED && tld->fork_epoch != _mi_process.fork.epoch);
+  return (tld != NULL && tld->thread_id != MI_THREAD_ID_DETACHED && tld->fork_epoch != _mi_process.fork.epoch);
 }
 
 // Abandon the pages of dead theaps in a heap.

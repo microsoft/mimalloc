@@ -289,12 +289,12 @@ static inline size_t mi_page_min_commit_size(void) {
 //-----------------------------------------------------------
 
 // Thread id of thread that owns this page (with flags in the bottom 2 bits)
-static inline mi_threadid_t mi_page_xthread_id(const mi_page_t* page) {
+static inline mi_thread_id_t mi_page_xthread_id(const mi_page_t* page) {
   return mi_atomic_load_relaxed(&((mi_page_t*)page)->xthread_id);
 }
 
 // Plain thread id of the thread that owns this page
-static inline mi_threadid_t mi_page_thread_id(const mi_page_t* page) {
+static inline mi_thread_id_t mi_page_thread_id(const mi_page_t* page) {
   return (mi_page_xthread_id(page) & ~MI_PAGE_FLAG_MASK);
 }
 
@@ -341,17 +341,17 @@ static inline void mi_page_set_has_interior_pointers(mi_page_t* page, bool has_a
 // The lowest bit is set if the page is in the qsbr queue of its theap. It is only written by the owning thread.
 #define MI_PAGE_QSBR_IN_QUEUE  MI_ZU(0x01)
 
-static inline mi_threadid_t mi_page_qsbr_xthread_id(const mi_page_t* page) {
+static inline mi_thread_id_t mi_page_qsbr_xthread_id(const mi_page_t* page) {
   return mi_atomic_load_relaxed(&((mi_page_t*)page)->qsbr_xthread_id);
 }
 
-static inline mi_threadid_t mi_page_qsbr_thread_id(const mi_page_t* page) {
+static inline mi_thread_id_t mi_page_qsbr_thread_id(const mi_page_t* page) {
   return (mi_page_qsbr_xthread_id(page) & ~MI_PAGE_FLAG_MASK);
 }
 
-static inline void mi_page_qsbr_set_thread_id(mi_page_t* page, mi_threadid_t tid) {
+static inline void mi_page_qsbr_set_thread_id(mi_page_t* page, mi_thread_id_t tid) {
   mi_assert_internal((tid & MI_PAGE_FLAG_MASK) == 0);
-  const mi_threadid_t xtid = mi_page_qsbr_xthread_id(page);
+  const mi_thread_id_t xtid = mi_page_qsbr_xthread_id(page);
   mi_atomic_store_relaxed(&page->qsbr_xthread_id, tid | (xtid & MI_PAGE_QSBR_IN_QUEUE));
 }
 
@@ -360,7 +360,7 @@ static inline bool mi_page_qsbr_is_in_queue(const mi_page_t* page) {
 }
 
 static inline void mi_page_qsbr_set_in_queue(mi_page_t* page, bool in_queue) {
-  const mi_threadid_t xtid = mi_page_qsbr_xthread_id(page);
+  const mi_thread_id_t xtid = mi_page_qsbr_xthread_id(page);
   mi_atomic_store_relaxed(&page->qsbr_xthread_id, (in_queue ? (xtid | MI_PAGE_QSBR_IN_QUEUE) : (xtid & ~MI_PAGE_QSBR_IN_QUEUE)));
 }
 #endif
@@ -368,39 +368,39 @@ static inline void mi_page_qsbr_set_in_queue(mi_page_t* page, bool in_queue) {
 static inline void mi_page_set_theap(mi_page_t* page, mi_theap_t* theap) {
   // mi_assert_internal(!mi_page_is_in_full(page));  // can happen when destroying pages on theap_destroy
   page->theap = theap;
-  const mi_threadid_t tid = (theap == NULL ? MI_THREADID_ABANDONED : theap->tld->thread_id);
+  const mi_thread_id_t tid = (theap == NULL ? MI_THREAD_ID_ABANDONED : theap->tld->thread_id);
   mi_assert_internal((tid & MI_PAGE_FLAG_MASK) == 0);
 
   // we need to use an atomic cas since a concurrent thread may still set the MI_PAGE_HAS_INTERIOR_POINTERS flag (see `alloc_aligned.c`).
-  mi_threadid_t xtid_old = mi_page_xthread_id(page);
-  mi_threadid_t xtid;
+  mi_thread_id_t xtid_old = mi_page_xthread_id(page);
+  mi_thread_id_t xtid;
   do {
     xtid = tid | (xtid_old & MI_PAGE_FLAG_MASK);
   } while (!mi_atomic_cas_weak_release(&page->xthread_id, &xtid_old, xtid));
 
   #if MI_QSBR
   // keep the last owning thread id around for `mi_thread_id_of`
-  if (tid > MI_THREADID_DETACHED) { mi_page_qsbr_set_thread_id(page, tid); }
+  if (tid > MI_THREAD_ID_DETACHED) { mi_page_qsbr_set_thread_id(page, tid); }
   #endif
 }
 
 static inline bool mi_page_is_abandoned(const mi_page_t* page) {
   // note: the xtheap field of an abandoned theap is set to the subproc (for fast reclaim-on-free)
-  return (mi_page_thread_id(page) <= MI_THREADID_ABANDONED_MAPPED);
+  return (mi_page_thread_id(page) <= MI_THREAD_ID_ABANDONED_MAPPED);
 }
 
 static inline bool mi_page_is_abandoned_mapped(const mi_page_t* page) {
-  return (mi_page_thread_id(page) == MI_THREADID_ABANDONED_MAPPED);
+  return (mi_page_thread_id(page) == MI_THREAD_ID_ABANDONED_MAPPED);
 }
 
 static inline void mi_page_set_abandoned_mapped(mi_page_t* page) {
   mi_assert_internal(mi_page_is_abandoned(page));
-  mi_atomic_or_relaxed(&page->xthread_id, (mi_threadid_t)MI_THREADID_ABANDONED_MAPPED);
+  mi_atomic_or_relaxed(&page->xthread_id, (mi_thread_id_t)MI_THREAD_ID_ABANDONED_MAPPED);
 }
 
 static inline void mi_page_clear_abandoned_mapped(mi_page_t* page) {
   mi_assert_internal(mi_page_is_abandoned_mapped(page));
-  mi_atomic_and_relaxed(&page->xthread_id, (mi_threadid_t)MI_PAGE_FLAG_MASK);
+  mi_atomic_and_relaxed(&page->xthread_id, (mi_thread_id_t)MI_PAGE_FLAG_MASK);
 }
 
 
