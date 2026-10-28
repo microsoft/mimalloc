@@ -671,8 +671,14 @@ mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
 mi_decl_nodiscard size_t mi_thread_id_of(const void* p) mi_attr_noexcept {
   const mi_page_t* const page = mi_ptr_page_validate(p,"mi_thread_id_of");
   if (page == NULL) return 0;
+  #if MI_QSBR
+  // on qsbr we keep the originating thread id around so we can provide it even when the page is abandoned
+  // (this is needed for cpython where the thread id gets restored this way inside object headers)
+  return mi_page_qsbr_thread_id(page);
+  #else
   const mi_threadid_t tid = mi_page_thread_id(page);
   return (tid <= MI_THREADID_DETACHED ? 0 : tid);
+  #endif
 }
 
 

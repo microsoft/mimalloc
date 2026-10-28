@@ -171,7 +171,7 @@ static bool test_abandon_queued_page(void) {
   const uint64_t goal = pages[1]->qsbr.goal;
   _mi_page_abandon(pages[1], mi_page_queue_of(pages[1]));
   require(mi_page_is_abandoned(pages[1]) && pages[1]->qsbr.goal == goal);
-  require(!pages[1]->qsbr_in_queue && pages[1]->qsbr_prev == NULL && pages[1]->qsbr_next == NULL);
+  require(!mi_page_qsbr_is_in_queue(pages[1]) && pages[1]->qsbr_prev == NULL && pages[1]->qsbr_next == NULL);
   require(qsbr_count(theap) == 2 && pages[0]->qsbr_next == pages[2] && pages[2]->qsbr_prev == pages[0]);
   qsbr_complete();
   _mi_theap_qsbr_collect_delayed(theap);
@@ -238,7 +238,7 @@ static bool remote_free_abandoned(void) {
   mi_theap_t* theap = _mi_page_associated_theap_peek(page);
   require(theap != NULL && !mi_page_is_abandoned(page));
   require(mi_page_theap(page) == theap && mi_page_all_free(page));
-  require(page->qsbr.goal != 0 && page->qsbr_in_queue && qsbr_count(theap) == 1);
+  require(page->qsbr.goal != 0 && mi_page_qsbr_is_in_queue(page) && qsbr_count(theap) == 1);
   return true;
 }
 
@@ -277,7 +277,7 @@ static bool test_page_free(size_t size, bool abandon) {
   require(mi_run_on_thread(&remote_free_full_page));
   if (abandon) {
     require(mi_page_is_abandoned(page) && !mi_page_is_owned(page));
-    require(mi_page_all_free(page) && !page->qsbr_in_queue && qsbr_count(theap) == 0);
+    require(mi_page_all_free(page) && !mi_page_qsbr_is_in_queue(page) && qsbr_count(theap) == 0);
     const uint64_t goal = page->qsbr.goal;
     require(goal != 0);
     require(mi_atomic_load_relaxed(&last_page_bytes) == page->capacity * mi_page_block_size(page));
@@ -360,7 +360,7 @@ static bool allocate_and_exit(void) {
   worker_goal = worker_page->qsbr.goal;
   if (worker_delete) {
     mi_theap_delete(mi_heap_theap(worker_heap));
-    require(!worker_page->qsbr_in_queue && worker_page->qsbr_next == NULL && worker_page->qsbr_prev == NULL);
+    require(!mi_page_qsbr_is_in_queue(worker_page) && worker_page->qsbr_next == NULL && worker_page->qsbr_prev == NULL);
   }
   return true;
 }
@@ -374,7 +374,7 @@ static bool test_reclaim(void) {
   worker_delete = true;
   require(mi_run_on_thread(&allocate_and_exit));
   require(worker_goal != 0 && worker_page->qsbr.goal == worker_goal);
-  require(mi_page_is_abandoned(worker_page) && !worker_page->qsbr_in_queue);
+  require(mi_page_is_abandoned(worker_page) && !mi_page_qsbr_is_in_queue(worker_page));
   // Give the receiving list a newer goal before reclaiming the old page.
   void* newer = mi_heap_malloc(worker_heap, 256);
   require(newer != NULL);
@@ -471,7 +471,7 @@ static bool test_orphan(size_t size, bool os, bool empty) {
   require(mi_run_on_thread(&allocate_and_exit));
   mi_option_set(mi_option_disallow_arena_alloc, 0);
   require((worker_page->memid.memkind != MI_MEM_ARENA) == os);
-  require(mi_page_is_abandoned(worker_page) && !worker_page->qsbr_in_queue);
+  require(mi_page_is_abandoned(worker_page) && !mi_page_qsbr_is_in_queue(worker_page));
   require(worker_page->qsbr_next == NULL && worker_page->qsbr_prev == NULL);
   if (!empty) {
     require(worker_goal == 0);
@@ -483,7 +483,7 @@ static bool test_orphan(size_t size, bool os, bool empty) {
     remote_block = worker_blocks[0];
     require(mi_run_on_thread(&remote_free_abandoned));
     require(worker_page->qsbr.goal != 0 && mi_page_all_free(worker_page));
-    require(mi_page_is_abandoned(worker_page) && !mi_page_is_owned(worker_page) && !worker_page->qsbr_in_queue);
+    require(mi_page_is_abandoned(worker_page) && !mi_page_is_owned(worker_page) && !mi_page_qsbr_is_in_queue(worker_page));
   }
   _mi_heap_collect_abandoned(worker_heap);
   require(page_count(worker_heap) == 1);
@@ -541,11 +541,11 @@ static bool test_free_during_unown(bool from_free) {
   if (from_free) {
     require(!mi_page_is_abandoned(worker_page) && mi_page_is_owned(worker_page));
     require(_mi_page_associated_theap_peek(worker_page) == mi_page_theap(worker_page));
-    require(worker_page->qsbr_in_queue);
+    require(mi_page_qsbr_is_in_queue(worker_page));
   }
   else {
     require(!mi_page_is_owned(worker_page) && mi_page_is_abandoned_mapped(worker_page));
-    require(!worker_page->qsbr_in_queue);
+    require(!mi_page_qsbr_is_in_queue(worker_page));
   }
   qsbr_complete();
   if (from_free) { mi_heap_collect(worker_heap, true); }
@@ -580,11 +580,11 @@ static bool test_full_page_free_during_unown(void) {
   require(!mi_abandoned_page_unown(page, theap));
   require(mi_page_all_free(page) && !mi_page_is_owned(page) && mi_page_is_abandoned_mapped(page));
   const uint64_t goal = page->qsbr.goal;
-  require(goal != 0 && !page->qsbr_in_queue);
+  require(goal != 0 && !mi_page_qsbr_is_in_queue(page));
   const size_t bin = _mi_bin(mi_page_block_size(page));
   require(mi_atomic_load_relaxed(&heap->abandoned_count[bin]) == 1);
   mi_page_t* reclaimed = _mi_page_fresh(theap, mi_page_queue(theap, size + MI_PADDING_SIZE));
-  require(reclaimed == page && page->qsbr.goal == goal && page->qsbr_in_queue);
+  require(reclaimed == page && page->qsbr.goal == goal && mi_page_qsbr_is_in_queue(page));
   require(mi_atomic_load_relaxed(&heap->abandoned_count[bin]) == 0);
   void* p = mi_heap_malloc(heap, size);
   require(p != NULL && mi_ptr_page(p) == page);
@@ -605,7 +605,7 @@ static bool test_destroy_empty_orphan(void) {
   worker_delete = false;
   require(mi_run_on_thread(&allocate_and_exit));
   require(mi_page_all_free(worker_page) && worker_goal != 0 && worker_page->qsbr.goal == worker_goal);
-  require(mi_page_is_abandoned(worker_page) && !mi_page_is_owned(worker_page) && !worker_page->qsbr_in_queue);
+  require(mi_page_is_abandoned(worker_page) && !mi_page_is_owned(worker_page) && !mi_page_qsbr_is_in_queue(worker_page));
   mi_heap_destroy(worker_heap);
   return true;
 }

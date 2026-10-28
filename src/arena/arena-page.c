@@ -1038,7 +1038,7 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(mi_theap_matches_thread(current_theapx));
   // mi_assert_internal(current_theap == _mi_page_associated_theap(page));
   #if MI_QSBR
-  mi_assert_internal(!page->qsbr_in_queue && page->qsbr_next == NULL && page->qsbr_prev == NULL);
+  mi_assert_internal(!mi_page_qsbr_is_in_queue(page) && page->qsbr_next == NULL && page->qsbr_prev == NULL);
   #endif
 
   // note: somewhat expensive to update here, but might be good as then we attribute

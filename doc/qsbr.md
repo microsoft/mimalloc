@@ -147,8 +147,9 @@ A delayed owned page belongs to two independent lists:
 - Its ordinary mimalloc size-class queue, so it remains available for allocation.
 - Its theap's QSBR queue, so ready pages can be drained efficiently.
 
-Mimalloc owns `qsbr_next`, `qsbr_prev`, and `qsbr_in_queue` in each page and
-`qsbr_first`/`qsbr_last` in each theap. The membership bit distinguishes an
+Mimalloc owns `qsbr_next`, `qsbr_prev`, and `qsbr_xthread_id` in each page and
+`qsbr_first`/`qsbr_last` in each theap. The membership bit (the lowest bit of
+`qsbr_xthread_id`) distinguishes an
 unlinked page from a singleton queue without dereferencing an abandoned page's
 old theap. Only owned pages can be queued. A recorded goal alone does not imply
 queue membership: abandoned pages retain their goals after being unlinked.

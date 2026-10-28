@@ -554,9 +554,9 @@ typedef struct mi_page_s {
   mi_addr_t                 keys[MI_PAGE_KEY_COUNT]; // const: one or two random keys to encode the free lists (see `_mi_block_next`) or padding canary
   #endif
   #if MI_QSBR
+  _Atomic(mi_threadid_t)    qsbr_xthread_id;   // thread id of the last owning thread (`theap->tld->thread_id`) | `MI_PAGE_QSBR_IN_QUEUE` (written only by the owning thread)
   struct mi_page_s*         qsbr_next;
   struct mi_page_s*         qsbr_prev;
-  bool                     qsbr_in_queue;
   mi_page_qsbr_t            qsbr;
   #endif
 } mi_page_t;

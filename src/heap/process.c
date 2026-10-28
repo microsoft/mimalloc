@@ -51,8 +51,8 @@ static const mi_page_t mi_page_empty = {
   #endif
   #endif
   #if MI_QSBR
-  NULL, NULL,            // qsbr_next, qsbr_prev
-  false,                 // qsbr_in_queue
+  MI_ATOMIC_VAR_INIT(0),  // qsbr_xthread_id
+  NULL, NULL,             // qsbr_next, qsbr_prev
   mi_init_struct_zero,    // qsbr
   #endif
 };

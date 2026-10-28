@@ -336,6 +336,35 @@ static inline void mi_page_set_has_interior_pointers(mi_page_t* page, bool has_a
   mi_page_flags_set(page, has_aligned, MI_PAGE_HAS_INTERIOR_POINTERS);
 }
 
+#if MI_QSBR
+// For qsbr, `qsbr_xthread_id` keeps the thread id of the last owning thread (so it is still available when the page is abandoned)
+// The lowest bit is set if the page is in the qsbr queue of its theap. It is only written by the owning thread.
+#define MI_PAGE_QSBR_IN_QUEUE  MI_ZU(0x01)
+
+static inline mi_threadid_t mi_page_qsbr_xthread_id(const mi_page_t* page) {
+  return mi_atomic_load_relaxed(&((mi_page_t*)page)->qsbr_xthread_id);
+}
+
+static inline mi_threadid_t mi_page_qsbr_thread_id(const mi_page_t* page) {
+  return (mi_page_qsbr_xthread_id(page) & ~MI_PAGE_FLAG_MASK);
+}
+
+static inline void mi_page_qsbr_set_thread_id(mi_page_t* page, mi_threadid_t tid) {
+  mi_assert_internal((tid & MI_PAGE_FLAG_MASK) == 0);
+  const mi_threadid_t xtid = mi_page_qsbr_xthread_id(page);
+  mi_atomic_store_relaxed(&page->qsbr_xthread_id, tid | (xtid & MI_PAGE_QSBR_IN_QUEUE));
+}
+
+static inline bool mi_page_qsbr_is_in_queue(const mi_page_t* page) {
+  return ((mi_page_qsbr_xthread_id(page) & MI_PAGE_QSBR_IN_QUEUE) != 0);
+}
+
+static inline void mi_page_qsbr_set_in_queue(mi_page_t* page, bool in_queue) {
+  const mi_threadid_t xtid = mi_page_qsbr_xthread_id(page);
+  mi_atomic_store_relaxed(&page->qsbr_xthread_id, (in_queue ? (xtid | MI_PAGE_QSBR_IN_QUEUE) : (xtid & ~MI_PAGE_QSBR_IN_QUEUE)));
+}
+#endif
+
 static inline void mi_page_set_theap(mi_page_t* page, mi_theap_t* theap) {
   // mi_assert_internal(!mi_page_is_in_full(page));  // can happen when destroying pages on theap_destroy
   page->theap = theap;
@@ -348,6 +377,11 @@ static inline void mi_page_set_theap(mi_page_t* page, mi_theap_t* theap) {
   do {
     xtid = tid | (xtid_old & MI_PAGE_FLAG_MASK);
   } while (!mi_atomic_cas_weak_release(&page->xthread_id, &xtid_old, xtid));
+
+  #if MI_QSBR
+  // keep the last owning thread id around for `mi_thread_id_of`
+  if (tid > MI_THREADID_DETACHED) { mi_page_qsbr_set_thread_id(page, tid); }
+  #endif
 }
 
 static inline bool mi_page_is_abandoned(const mi_page_t* page) {
@@ -444,7 +478,7 @@ static inline bool mi_page_claim_ownership(mi_page_t* page) {
 
 static inline void mi_page_qsbr_unlink(mi_page_t* page) {
 #if MI_QSBR
-  if (!page->qsbr_in_queue) {
+  if (!mi_page_qsbr_is_in_queue(page)) {
     mi_assert_internal(page->qsbr_next == NULL && page->qsbr_prev == NULL);
     return;
   }
@@ -460,7 +494,7 @@ static inline void mi_page_qsbr_unlink(mi_page_t* page) {
     theap->qsbr_last = page->qsbr_prev;
   }
   page->qsbr_next = page->qsbr_prev = NULL;
-  page->qsbr_in_queue = false;
+  mi_page_qsbr_set_in_queue(page, false);
 #else
   MI_UNUSED(page);
 #endif
@@ -472,13 +506,13 @@ static inline void mi_page_qsbr_enqueue(mi_page_t* page, mi_theap_t* theap) {
   mi_assert_internal(mi_page_all_free(page));
   mi_assert_internal(mi_heap_qsbr_is_enabled(mi_page_heap(page)));
   mi_assert_internal(!mi_page_qsbr_is_clear(&page->qsbr));
-  if (page->qsbr_in_queue) return;
+  if (mi_page_qsbr_is_in_queue(page)) return;
   mi_assert_internal(page->qsbr_next == NULL && page->qsbr_prev == NULL);
   page->qsbr_prev = theap->qsbr_last;
   if (theap->qsbr_last != NULL) { theap->qsbr_last->qsbr_next = page; }
   else { theap->qsbr_first = page; }
   theap->qsbr_last = page;
-  page->qsbr_in_queue = true;
+  mi_page_qsbr_set_in_queue(page, true);
 #else
   MI_UNUSED(page);
   MI_UNUSED(theap);
@@ -496,7 +530,7 @@ static inline void _mi_page_qsbr_clear(mi_page_t* page) {
 
 static inline bool _mi_page_qsbr_is_clear(const mi_page_t* page) {
 #if MI_QSBR
-  return (!page->qsbr_in_queue && page->qsbr_next == NULL && page->qsbr_prev == NULL &&
+  return (!mi_page_qsbr_is_in_queue(page) && page->qsbr_next == NULL && page->qsbr_prev == NULL &&
           mi_page_qsbr_is_clear(&page->qsbr));
 #else
   MI_UNUSED(page);
