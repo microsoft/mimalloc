@@ -185,7 +185,7 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
 
 // Return the size of a guard page, (or 0 if security is disabled or memory cannot be protected)
 size_t _mi_os_secure_guard_page_size(void) {
-  #if MI_SECURE && !defined(__wasi__) && !defined(__EMSCRIPTEN__)  // no memory protection on WebAssembly
+  #if MI_SECURE && MI_OS_HAS_GUARD_PAGES  // no memory protection on WebAssembly
   return _mi_os_guard_page_size();
   #else
   return 0;

@@ -220,34 +220,16 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MI_ARENA_SLICE_SHIFT
   #ifdef  MI_SMALL_PAGE_SHIFT   // backward compatibility
   #define MI_ARENA_SLICE_SHIFT              MI_SMALL_PAGE_SHIFT
-  #elif MI_SECURE && !defined(__wasi__) && !defined(__EMSCRIPTEN__) && ((defined(__powerpc64__) && defined(__linux__)) || (defined(PAGE_SIZE) && PAGE_SIZE >= 64*MI_KiB))
+  #elif MI_SECURE && MI_OS_PROBABLE_PAGE_SIZE >= 64*MI_KiB
   #define MI_ARENA_SLICE_SHIFT              (18)                        // 256 KiB as 64 KiB guard pages can be at most 1/4 of a slice (issue #1166)
-  #elif MI_SECURE>=5 && __APPLE__ && MI_ARCH_ARM64
+  #elif MI_SECURE>=5 && MI_OS_PROBABLE_PAGE_SIZE >= 16*MI_KiB
   #define MI_ARENA_SLICE_SHIFT              (17)                        // 128 KiB to not waste too much due to 16 KiB guard pages
-  #elif MI_SECURE>=5 && defined(PAGE_SIZE) && !defined(__wasi__) && !defined(__EMSCRIPTEN__)        // see issue #1440
-    #if PAGE_SIZE >= 16*MI_KiB
-    #define MI_ARENA_SLICE_SHIFT            (17)                        // 128 KiB to not waste too much due to 16 KiB guard pages
-    #endif
-  #endif
-  #ifndef MI_ARENA_SLICE_SHIFT
+  #else
   #define MI_ARENA_SLICE_SHIFT              (13 + MI_SIZE_SHIFT)        // 64 KiB (32 KiB on 32-bit)
   #endif
 #endif
 #if MI_ARENA_SLICE_SHIFT < 13
 #error Arena slices should be at least 8KiB
-#endif
-
-// Padding around static process data such that guard pages fit in secure mode (twice the maximal OS page size)
-#ifndef MI_SECURE_STATIC_PAD
-  #if !MI_SECURE || defined(__wasi__) || defined(__EMSCRIPTEN__)
-  #define MI_SECURE_STATIC_PAD              (64)                        // no guard pages; just a cache line
-  #elif MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_RISCV || defined(_WIN32)
-  #define MI_SECURE_STATIC_PAD              (2*4*MI_KiB)                // 4 KiB OS pages
-  #elif defined(__APPLE__)
-  #define MI_SECURE_STATIC_PAD              (2*16*MI_KiB)               // up to 16 KiB OS pages
-  #else
-  #define MI_SECURE_STATIC_PAD              (2*64*MI_KiB)               // up to 64 KiB OS pages (arm64 Linux, ppc64, ...)
-  #endif
 #endif
 
 #ifndef MI_BCHUNK_BITS_SHIFT

@@ -16,8 +16,13 @@ terms of the MIT license. A copy of the license can be found in the file
 // --------------------------------------------------------------------------
 // Compiler defines
 // --------------------------------------------------------------------------
-
-#define mi_decl_cache_align     mi_decl_align(64)
+#if (defined(__APPLE__) && defined(__aarch64__)) || defined(__powerpc64__) || defined(__ppc64__) || defined(__PPC64__)
+#define MI_CACHE_LINE_SIZE      128
+#define mi_decl_cache_align     mi_decl_align(128)          // must use a constant here
+#else
+#define MI_CACHE_LINE_SIZE      64
+#define mi_decl_cache_align     mi_decl_align(64)           // must use a constant here
+#endif
 
 #if defined(_MSC_VER)
 #pragma warning(disable:4127)   // suppress constant conditional warning (due to MI_SECURE paths)

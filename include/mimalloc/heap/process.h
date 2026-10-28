@@ -33,15 +33,20 @@ typedef struct mi_fork_state_s {
   size_t           suspended_count[MI_BIN_COUNT];  // and its abandoned counts
 } mi_fork_state_t;
 
+
+// In secure mode, guard static process data such that guard pages fit in secure mode (twice the maximal OS page size)
+#ifndef MI_SECURE_STATIC_GUARD
+  #if !MI_SECURE || !MI_OS_HAS_GUARD_PAGES
+  #define MI_SECURE_STATIC_GUARD            (MI_CACHE_LINE_SIZE)          // no guard pages; just a cache line
+  #else
+  #define MI_SECURE_STATIC_GUARD            (2*MI_OS_PROBABLE_PAGE_SIZE)  // checked at runtime
+  #endif
+#endif
+
 // Statically allocated process data. This is zero initialized and padded such that
 // in secure mode it is surrounded by guard pages (see `heap/process.c:mi_process_guard_init`)
 typedef struct mi_process_s {
-  uint8_t                           pad_front[MI_SECURE_STATIC_PAD];
-
-  _Atomic(struct mi_page_map_s*)    page_map;           // the page map (`NULL` before initialization) (see `heap/page-map.h`)
-  _Atomic(size_t)                   page_map_committed; // committed entries in the page map
-  bool                              process_is_initialized; // set to `true` in `mi_process_init`
-  bool                              libc_is_initialized;    // `true` once the C runtime is initialized (and `false` again after process done)
+  uint8_t                           guard_front[MI_SECURE_STATIC_GUARD];
 
   _Atomic(void*)                    deferred_free;      // is `mi_deferred_free_fun*` (but some platforms don't support atomic function pointers)
   _Atomic(void*)                    deferred_arg;
@@ -50,10 +55,14 @@ typedef struct mi_process_s {
   _Atomic(void*)                    error_handler;      // is `mi_error_fun*`
   _Atomic(void*)                    error_arg;
 
+  _Atomic(struct mi_page_map_s*)    page_map;           // the page map (`NULL` before initialization) (see `heap/page-map.h`)
+  _Atomic(size_t)                   page_map_committed; // committed entries in the page map
+  bool                              process_is_initialized; // set to `true` in `mi_process_init`
+  bool                              libc_is_initialized;    // `true` once the C runtime is initialized (and `false` again after process done)
+
   mi_subproc_t*                     subprocs;           // list of all sub-processes
   mi_lock_t                         subprocs_lock;      // initialized in `_mi_subproc_main_init` (as a zero lock is invalid on some platforms)
   mi_fork_state_t                   fork;               // fork state (see `heap/subproc.c`)
-  mi_option_state_t                 options[_mi_option_last]; // current option values (see `util/options.c`)
 
   mi_decl_cache_align mi_subproc_t  subproc_main;
   mi_decl_cache_align mi_heap_t     heap_main;
@@ -63,7 +72,11 @@ typedef struct mi_process_s {
   mi_decl_cache_align mi_theap_t    theap_main;
   mi_decl_cache_align mi_theap_t    theap_empty_wrong;  // read-only empty theap used to signal that a theap for a heap could not be allocated
 
-  mi_decl_cache_align uint8_t       pad_end[MI_SECURE_STATIC_PAD];
+  // arrays last
+  mi_option_state_t                 options[_mi_option_last]; // current option values (see `util/options.c`)
+
+  // end guard
+  mi_decl_cache_align uint8_t       guard_end[MI_SECURE_STATIC_GUARD];
 } mi_process_t;
 
 extern mi_decl_hidden mi_process_t _mi_process;

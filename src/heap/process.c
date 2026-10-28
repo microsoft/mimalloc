@@ -178,8 +178,9 @@ mi_decl_hidden mi_decl_cache_align mi_process_t _mi_process = mi_init_struct_zer
 
 // In secure mode, surround the process data with guard pages to protect against overflows of adjacent static data
 static void mi_process_guard_init(void) {
-  const size_t offset = offsetof(mi_process_t, page_map);
-  _mi_os_secure_guard_pages_set_within(&_mi_process, sizeof(_mi_process), offset, offsetof(mi_process_t, pad_end) - offset);
+  const size_t front = sizeof(_mi_process.guard_front);
+  const size_t size  = offsetof(mi_process_t, guard_end) - front;
+  _mi_os_secure_guard_pages_set_within(&_mi_process, sizeof(_mi_process), front, size);
 }
 
 
