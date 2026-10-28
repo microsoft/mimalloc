@@ -1036,13 +1036,20 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
     #ifndef GRND_NONBLOCK
     #define GRND_NONBLOCK (1)
     #endif
+    #ifndef GRND_INSECURE
+    #define GRND_INSECURE (4)
+    #endif
     static _Atomic(size_t) no_getrandom; // = 0
     if (mi_atomic_load_acquire(&no_getrandom)==0) {
       ssize_t ret = syscall(SYS_getrandom, buf, buf_len, GRND_NONBLOCK);
+      if (ret < 0 && errno == EAGAIN) {
+        // early during boot the entropy pool may not be initialized yet; use the best available randomness (Linux 5.6+)
+        ret = syscall(SYS_getrandom, buf, buf_len, GRND_INSECURE);
+      }
       if (ret > 0) { mi_msan_unpoison(buf, (size_t)ret); }
       if (ret >= 0) return (buf_len == (size_t)ret);
-      if (errno != ENOSYS) return false;
-      mi_atomic_store_release(&no_getrandom, (size_t)1); // don't call again, and fall back to /dev/urandom
+      if (errno == ENOSYS) { mi_atomic_store_release(&no_getrandom, (size_t)1); } // don't call again
+      // and fall back to /dev/urandom (which does not block early during boot)
     }
   #endif
   int flags = O_RDONLY;

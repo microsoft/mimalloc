@@ -15,7 +15,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <stdio.h>   // fputs
 #include <stdlib.h>  // getenv
-#include <unistd.h>  // sbrk, sleep
+#include <unistd.h>  // sbrk, sleep, getentropy
 
 //---------------------------------------------
 // Initialize
@@ -270,7 +270,7 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
 //----------------------------------------------------------------
 
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
-  return false;
+  return (getentropy(buf, buf_len) == 0);  // uses `random_get` (and buf_len <= 256)
 }
 
 
