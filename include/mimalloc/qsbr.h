@@ -24,11 +24,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdbool.h>
 
 #ifndef MI_QSBR
-#if defined(MI_CPYTHON)
-#define MI_QSBR 1
-#else
-#define MI_QSBR 0
-#endif
+#define MI_QSBR   0
 #endif
 
 // Create a qsbr enabled heap

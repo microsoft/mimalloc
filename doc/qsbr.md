@@ -17,8 +17,7 @@ is not included here.
 ## Enabling the hooks
 
 Define `MI_QSBR=1` before including mimalloc headers and `src/static.c`.
-Defining `MI_CPYTHON` also enables it by default; other runtimes need not define
-`MI_CPYTHON`. Supply function definitions for the runtime primitives declared in
+Supply function definitions for the runtime primitives declared in
 `include/mimalloc/qsbr.h`, either in the same translation unit or linked from
 another host source file.
 Missing hooks deliberately fail to build rather than silently release pages.

@@ -25,7 +25,7 @@ struct mi_page_qsbr_s {
 struct mi_heap_qsbr_s {
   struct qsbr_domain_s* domain;
 };
-#define MI_CPYTHON 1
+#define MI_QSBR 1
 #undef MI_MALLOC_OVERRIDE
 #include "../src/static.c"
 #include "testhelper.h"
