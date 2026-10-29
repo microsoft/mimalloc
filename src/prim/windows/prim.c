@@ -449,25 +449,26 @@ int _mi_prim_reuse(void* addr, size_t size) {
   return 0;
 }
 
-static int win_protect(void* addr, size_t size, ULONG protect) {
+int _mi_prim_protect(void* addr, size_t size, mi_protect_t protect) {
+  const ULONG prot = (protect == MI_PROTECT_NONE ? PAGE_NOACCESS : (protect == MI_PROTECT_READ ? PAGE_READONLY : PAGE_READWRITE));
   #if !MI_WIN_DESKTOP && WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP)
   ULONG oldprotect = 0;
-  BOOL ok = VirtualProtectFromApp(addr, size, protect, &oldprotect);
+  BOOL ok = VirtualProtectFromApp(addr, size, prot, &oldprotect);
   #else
   DWORD oldprotect = 0;
-  BOOL ok = VirtualProtect(addr, size, protect, &oldprotect);
+  BOOL ok = VirtualProtect(addr, size, prot, &oldprotect);
   #endif
   return (ok ? 0 : (int)GetLastError());
 }
 
-int _mi_prim_guard(void* addr, size_t size, bool set, bool is_committed) {
+int _mi_prim_guard(void* addr, size_t size, bool set_guard, bool is_committed) {
   if (is_committed) {
     // protecting requires committed memory; on a set we first release the physical memory
     // (best effort, as `MEM_RESET` fails on image memory, like the guard pages in our static data)
-    if (set) { VirtualAlloc(addr, size, MEM_RESET, PAGE_READWRITE); }
-    return win_protect(addr, size, (set ? PAGE_NOACCESS : PAGE_READWRITE));
+    if (set_guard) { VirtualAlloc(addr, size, MEM_RESET, PAGE_READWRITE); }
+    return _mi_prim_protect(addr, size, (set_guard ? MI_PROTECT_NONE : MI_PROTECT_READWRITE));
   }
-  else if (set) {
+  else if (set_guard) {
     // decommitting also works for (partly) reserved memory
     bool needs_recommit;
     return _mi_prim_decommit(addr, size, &needs_recommit);
@@ -477,9 +478,6 @@ int _mi_prim_guard(void* addr, size_t size, bool set, bool is_committed) {
   }
 }
 
-int _mi_prim_protect_readonly(void* addr, size_t size, bool readonly) {
-  return win_protect(addr, size, (readonly ? PAGE_READONLY : PAGE_READWRITE));
-}
 //---------------------------------------------
 
 static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int numa_node)

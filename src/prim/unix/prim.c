@@ -652,31 +652,27 @@ int _mi_prim_reset(void* start, size_t size) {
   return err;
 }
 
-static int unix_mprotect(void* start, size_t size, bool protect) {
-  int err = mprotect(start, size, protect ? PROT_NONE : (PROT_READ | PROT_WRITE));
+int _mi_prim_protect(void* addr, size_t size, mi_protect_t protect) {
+  const int prot = (protect == MI_PROTECT_NONE ? PROT_NONE : (protect == MI_PROTECT_READ ? PROT_READ : (PROT_READ | PROT_WRITE)));
+  int err = mprotect(addr, size, prot);
   if (err != 0) { err = errno; }
   unix_mprotect_hint(err);
   return err;
 }
 
-int _mi_prim_guard(void* start, size_t size, bool set, bool is_committed) {
-  if (set) {
+int _mi_prim_guard(void* start, size_t size, bool set_guard, bool is_committed) {
+  if (set_guard) {
     // `mprotect` also works on reserved memory, so committed or not, we release the physical memory and protect
     unix_madvise_release(start, size);  // best effort
-    return unix_mprotect(start, size, true);
+    return _mi_prim_protect(start, size, MI_PROTECT_NONE);
   }
   else if (is_committed) {
-    const int err = unix_mprotect(start, size, false);
+    const int err = _mi_prim_protect(start, size, MI_PROTECT_READWRITE);
     return (err != 0 ? err : _mi_prim_reuse(start, size));
   }
   else {
     return 0;  // stays inaccessible until committed
   }
-}
-
-int _mi_prim_protect_readonly(void* addr, size_t size, bool readonly) {
-  const int err = mprotect(addr, size, readonly ? PROT_READ : (PROT_READ | PROT_WRITE));
-  return (err != 0 ? errno : 0);
 }
 
 

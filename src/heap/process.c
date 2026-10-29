@@ -184,7 +184,7 @@ mi_process_sealed_t* _mi_process_unseal(void) {
   mi_lock_acquire(&mi_sealed_lock);
   mi_process_sealed_t* const sealed = mi_process_get_sealed();
   if (sealed->is_protected) {
-    _mi_prim_protect_readonly(sealed, MI_OS_PROBABLE_PAGE_SIZE, false);  // on failure we fault on the first write
+    _mi_prim_protect(sealed, MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READWRITE);  // on failure we fault on the first write
   }
   return sealed;
 }
@@ -192,7 +192,7 @@ mi_process_sealed_t* _mi_process_unseal(void) {
 // Make the sealed process data read-only again and release the sealed lock.
 void _mi_process_seal(void) {
   mi_process_sealed_t* const sealed = mi_process_get_sealed();
-  const int err = (sealed->is_protected ? _mi_prim_protect_readonly(sealed, MI_OS_PROBABLE_PAGE_SIZE, true) : 0);
+  const int err = (sealed->is_protected ? _mi_prim_protect(sealed, MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READ) : 0);
   mi_lock_release(&mi_sealed_lock);
   if (err != 0) {
     _mi_error_message(EINVAL, "unable to seal the process data (error: %d)\n", err);
