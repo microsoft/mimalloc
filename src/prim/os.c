@@ -24,7 +24,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
-static mi_os_mem_config_t mi_os_mem_config = {
+// Default OS memory configuration (used until `_mi_os_init`)
+static const mi_os_mem_config_t mi_os_mem_config_default = {
   4096,     // page size
   0,        // large page size (usually 2MiB)
   4096,     // allocation granularity
@@ -36,26 +37,33 @@ static mi_os_mem_config_t mi_os_mem_config = {
   false     // has transparent huge pages? (if true we purge in (aligned) large page size chunks only to not fragment such pages)
 };
 
+// The OS memory configuration in the process data (zero until `_mi_os_init`)
+static inline const mi_os_mem_config_t* mi_os_mem_config(void) {
+  const mi_os_mem_config_t* const config = &_mi_process.os_mem_config;
+  return (mi_likely(config->page_size != 0) ? config : &mi_os_mem_config_default);
+}
+
 bool _mi_os_has_overcommit(void) {
-  return mi_os_mem_config.has_overcommit;
+  return mi_os_mem_config()->has_overcommit;
 }
 
 bool _mi_os_has_virtual_reserve(void) {
-  return mi_os_mem_config.has_virtual_reserve;
+  return mi_os_mem_config()->has_virtual_reserve;
 }
 
 bool _mi_os_has_thp(void) {
-  return mi_os_mem_config.has_transparent_huge_pages;
+  return mi_os_mem_config()->has_transparent_huge_pages;
 }
 
 // OS (small) page size
 size_t _mi_os_page_size(void) {
-  return mi_os_mem_config.page_size;
+  return mi_os_mem_config()->page_size;
 }
 
 // if large OS pages are supported (2 or 4MiB), then return the size, otherwise return the small page size (4KiB)
 size_t _mi_os_large_page_size(void) {
-  return (mi_os_mem_config.large_page_size != 0 ? mi_os_mem_config.large_page_size : _mi_os_page_size());
+  const size_t lpsize = mi_os_mem_config()->large_page_size;
+  return (lpsize != 0 ? lpsize : _mi_os_page_size());
 }
 
 // minimal purge size. Can be larger than the page size if transparent huge pages are enabled.
@@ -65,7 +73,7 @@ size_t _mi_os_minimal_purge_size(void) {
     // set by user
     return mi_align_up(minsize, _mi_os_page_size());
   }
-  else if (mi_os_mem_config.has_transparent_huge_pages && mi_option_get(mi_option_allow_thp) == 2) {
+  else if (mi_os_mem_config()->has_transparent_huge_pages && mi_option_get(mi_option_allow_thp) == 2) {
     // don't break up THP pages;
     // we don't do this by default as that can lead to increased memory usage (see issue #1282).
     // on the other hand, breaking up THP pages can lead to performance degradation and perhaps
@@ -85,15 +93,16 @@ size_t _mi_os_guard_page_size(void) {
 }
 
 size_t _mi_os_virtual_address_bits(void) {
-  const size_t vbits = mi_os_mem_config.virtual_address_bits;
+  const size_t vbits = mi_os_mem_config()->virtual_address_bits;
   mi_assert(vbits <= MI_MAX_VABITS);
   return vbits;
 }
 
 bool _mi_os_canuse_large_page(size_t size, size_t alignment) {
   // if we have access, check the size and alignment requirements
-  if (mi_os_mem_config.large_page_size == 0) return false;
-  return ((size % mi_os_mem_config.large_page_size) == 0 && (alignment % mi_os_mem_config.large_page_size) == 0);
+  const size_t lpsize = mi_os_mem_config()->large_page_size;
+  if (lpsize == 0) return false;
+  return ((size % lpsize) == 0 && (alignment % lpsize) == 0);
 }
 
 // round to a good OS allocation size (bounded by max 12.5% waste)
@@ -109,7 +118,10 @@ size_t _mi_os_good_alloc_size(size_t size) {
 }
 
 void _mi_os_init(void) {
-  _mi_prim_mem_init(&mi_os_mem_config);
+  mi_os_mem_config_t config = mi_os_mem_config_default;
+  _mi_prim_mem_init(&config);
+  mi_assert(config.page_size != 0);
+  _mi_process.os_mem_config = config;  // publish at once
   if (_mi_os_page_size() > MI_ARENA_SLICE_SIZE) {
     _mi_error_message(ENOTSUP, "the OS page size (%zu KiB) is larger than the arena slice size (%zu KiB); increase MI_ARENA_SLICE_SHIFT\n", _mi_os_page_size()/MI_KiB, (size_t)(MI_ARENA_SLICE_SIZE/MI_KiB));
   }
@@ -143,8 +155,8 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
   static mi_decl_cache_align _Atomic(mi_addr_t) aligned_base; // = 0
 
   // todo: perhaps only do alignment hints if THP is enabled?
-  if (try_alignment <= mi_os_mem_config.alloc_granularity || try_alignment > 16*MI_GiB) return NULL;
-  if (mi_os_mem_config.virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
+  if (try_alignment <= mi_os_mem_config()->alloc_granularity || try_alignment > 16*MI_GiB) return NULL;
+  if (mi_os_mem_config()->virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
 
   size_t req_size = sze + _mi_os_page_size(); // always reserve a bit more to create virtual gaps between hinted blocks.
   req_size += (try_alignment - 1);      // ensure we can align in the requested size
@@ -335,7 +347,7 @@ static void* mi_os_prim_alloc_at(mi_subproc_t* subproc, void* hint_addr, size_t 
   if (try_alignment == 0) { try_alignment = 1; } // avoid 0 to ensure there will be no divide by zero when aligning
 
   // try to align along large OS page size for larger allocations
-  const size_t large_page_size = mi_os_mem_config.large_page_size;
+  const size_t large_page_size = mi_os_mem_config()->large_page_size;
   if (large_page_size > 0 && hint_addr == NULL && size >= 8*large_page_size && mi_is_power_of_two(try_alignment) && try_alignment < large_page_size) {
     try_alignment = large_page_size;
   }
@@ -382,7 +394,7 @@ static void* mi_os_prim_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t
   const bool try_direct_alloc = true;
   #else
   // try a direct allocation if the alignment is below the default, or less than or equal to 1/4 fraction of the size.
-  const bool try_direct_alloc = (alignment <= mi_os_mem_config.alloc_granularity || alignment <= size/4);
+  const bool try_direct_alloc = (alignment <= mi_os_mem_config()->alloc_granularity || alignment <= size/4);
   #endif
 
   bool os_is_large = false;
@@ -411,7 +423,7 @@ static void* mi_os_prim_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t
     if (size >= (SIZE_MAX - alignment)) return NULL; // overflow
     const size_t over_size = size + alignment;
 
-    if (!mi_os_mem_config.has_partial_free) {  // win32 virtualAlloc cannot free parts of an allocated block
+    if (!mi_os_mem_config()->has_partial_free) {  // win32 virtualAlloc cannot free parts of an allocated block
       // over-allocate uncommitted (virtual) memory
       p = mi_os_prim_alloc(subproc, over_size, 1 /*alignment*/, false /* commit? */, false /* allow_large */, &os_is_large, &os_is_zero);
       if (p == NULL) return NULL;
@@ -947,7 +959,7 @@ int _mi_os_numa_node(void) {
 -----------------------------------------------------------------------------*/
 #if 0
 mi_decl_export void* mi_os_alloc(size_t size, bool commit, size_t* full_size) {
-  return mi_os_alloc_aligned(size, mi_os_mem_config.alloc_granularity, commit, NULL, full_size);
+  return mi_os_alloc_aligned(size, mi_os_mem_config()->alloc_granularity, commit, NULL, full_size);
 }
 
 static void* mi_os_alloc_aligned_ex(size_t size, size_t alignment, bool commit, bool allow_large, bool* is_committed, bool* is_pinned, void** base, size_t* full_size) {

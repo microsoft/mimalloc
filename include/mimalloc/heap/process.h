@@ -9,6 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_INTERNAL_PROCESS_H
 
 #include "../types.h"
+#include "../prim.h"          // mi_os_mem_config_t
 #include "../util/options.h"
 
 mi_heap_t*    _mi_subproc_heap_main(mi_subproc_t* subproc);
@@ -60,6 +61,7 @@ typedef struct mi_process_s {
   bool                              process_is_initialized; // set to `true` in `mi_process_init`
   bool                              libc_is_initialized;    // `true` once the C runtime is initialized (and `false` again after process done)
 
+  mi_os_mem_config_t                os_mem_config;      // OS memory configuration
   mi_subproc_t*                     subprocs;           // list of all sub-processes
   mi_lock_t                         subprocs_lock;      // initialized in `_mi_subproc_main_init` (as a zero lock is invalid on some platforms)
   mi_fork_state_t                   fork;               // fork state (see `heap/subproc.c`)
