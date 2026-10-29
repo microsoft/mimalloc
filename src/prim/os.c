@@ -152,8 +152,6 @@ bool _mi_os_commit(mi_subproc_t* subproc, void* addr, size_t size, bool* is_zero
 
 void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
 {
-  static mi_decl_cache_align _Atomic(mi_addr_t) aligned_base; // = 0
-
   // todo: perhaps only do alignment hints if THP is enabled?
   if (try_alignment <= mi_os_mem_config()->alloc_granularity || try_alignment > 16*MI_GiB) return NULL;
   if (mi_os_mem_config()->virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
@@ -165,7 +163,7 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
   if (req_size > 32*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(MI_HINT_AREA / 1<<34) = 1/256
   #endif
 
-  mi_addr_t hint = mi_atomic_add_acq_rel(&aligned_base, req_size);
+  mi_addr_t hint = mi_atomic_add_acq_rel(&_mi_process.os_aligned_base, req_size);
   if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
     mi_addr_t init = MI_HINT_BASE;
     #if (MI_SECURE || !MI_DEBUG)  // security: randomize start of aligned allocations unless in debug mode
@@ -175,8 +173,8 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
     init = init + ((MI_AU(MI_MiB) * ((r>>17) & 0x3FFFFF)) % MI_HINT_AREA);  // (randomly 22 bits)* 1MiB == 0 to 4TiB
     #endif
     mi_addr_t expected = hint + req_size;
-    mi_atomic_cas_strong_acq_rel(&aligned_base, &expected, init);
-    hint = mi_atomic_add_acq_rel(&aligned_base, req_size); // this may still give 0 or > MI_HINT_MAX but that is ok, it is a hint after all
+    mi_atomic_cas_strong_acq_rel(&_mi_process.os_aligned_base, &expected, init);
+    hint = mi_atomic_add_acq_rel(&_mi_process.os_aligned_base, req_size); // this may still give 0 or > MI_HINT_MAX but that is ok, it is a hint after all
     if (hint==0) return NULL;
   }
   const mi_addr_t hint_align = mi_addr_align_up(hint,try_alignment);
@@ -778,9 +776,6 @@ and possibly associated with a specific NUMA node. (use `numa_node>=0`)
 
 
 #if (MI_SIZE_SIZE >= 8) && !MI_CHERI  // on CHERI the separately mapped huge pages cannot be covered by one capability
-// To ensure proper alignment, use our own area for huge OS pages
-static mi_decl_cache_align _Atomic(mi_addr_t)  mi_huge_start; // = 0
-
 // Claim an aligned address range for huge pages
 static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
   if (total_size != NULL) *total_size = 0;
@@ -792,7 +787,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
 
   mi_addr_t start = 0;
   mi_addr_t end = 0;
-  mi_addr_t huge_start = mi_atomic_load_relaxed(&mi_huge_start);
+  mi_addr_t huge_start = mi_atomic_load_relaxed(&_mi_process.os_huge_start);
   do {
     start = huge_start;
     if (start == 0) {
@@ -810,7 +805,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
       #endif
     }
     end = start + size;
-  } while (!mi_atomic_cas_weak_acq_rel(&mi_huge_start, &huge_start, end));
+  } while (!mi_atomic_cas_weak_acq_rel(&_mi_process.os_huge_start, &huge_start, end));
 
   if (total_size != NULL) *total_size = size;
   return (uint8_t*)mi_ptr_from_addr(start);
@@ -913,10 +908,8 @@ static void mi_os_free_huge_os_pages(mi_subproc_t* subproc, void* p, size_t size
 Support NUMA aware allocation
 -----------------------------------------------------------------------------*/
 
-static _Atomic(size_t) mi_numa_node_count; // = 0   // cache the node count
-
 int _mi_os_numa_node_count(void) {
-  size_t count = mi_atomic_load_acquire(&mi_numa_node_count);
+  size_t count = mi_atomic_load_acquire(&_mi_process.os_numa_node_count);
   if mi_unlikely(count == 0) {
     long ncount = mi_option_get(mi_option_use_numa_nodes); // given explicitly?
     if (ncount > 0 && ncount < INT_MAX) {
@@ -927,7 +920,7 @@ int _mi_os_numa_node_count(void) {
       if (n == 0 || n > INT_MAX) { count = 1; }
                             else { count = n; }
     }
-    mi_atomic_store_release(&mi_numa_node_count, count); // save it
+    mi_atomic_store_release(&_mi_process.os_numa_node_count, count); // save it
     if (count>1) { _mi_verbose_message("using %zd numa regions\n", count); }
   }
   mi_assert_internal(count > 0 && count <= INT_MAX);
@@ -945,7 +938,7 @@ static int mi_os_numa_node_get(void) {
 }
 
 int _mi_os_numa_node(void) {
-  if mi_likely(mi_atomic_load_relaxed(&mi_numa_node_count) == 1) {
+  if mi_likely(mi_atomic_load_relaxed(&_mi_process.os_numa_node_count) == 1) {
     return 0;
   }
   else {

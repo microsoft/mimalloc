@@ -62,16 +62,20 @@ typedef struct mi_process_s {
   bool                              libc_is_initialized;    // `true` once the C runtime is initialized (and `false` again after process done)
 
   mi_os_mem_config_t                os_mem_config;      // OS memory configuration
+  _Atomic(size_t)                   os_numa_node_count; // cached NUMA node count (0 until first use)
+  _Atomic(mi_addr_t)                os_aligned_base;    // next aligned address hint (see `_mi_os_get_aligned_hint`)
+  _Atomic(mi_addr_t)                os_huge_start;      // next address for huge OS pages (see `mi_os_claim_huge_pages`)
+
   mi_subproc_t*                     subprocs;           // list of all sub-processes
   mi_lock_t                         subprocs_lock;      // initialized in `_mi_subproc_main_init` (as a zero lock is invalid on some platforms)
   mi_fork_state_t                   fork;               // fork state (see `heap/subproc.c`)
 
-  mi_decl_cache_align mi_subproc_t  subproc_main;
-  mi_decl_cache_align mi_heap_t     heap_main;
+  mi_decl_cache_align mi_subproc_t  subproc_main;       // initial subprocess
+  mi_decl_cache_align mi_heap_t     heap_main;          // initial heap for the process
+  mi_decl_cache_align mi_theap_t    theap_main;         // initial theap for the main thread
+  mi_decl_cache_align mi_tld_t      tld_main;           // initial tld for the main thread
   mi_decl_cache_align mi_theap_t    theap_meta;         // detached theap for meta-data allocation
   mi_decl_cache_align mi_tld_t      tld_meta;           // detached tld for `theap_meta`
-  mi_decl_cache_align mi_tld_t      tld_main;           // initial tld and theap for the main thread
-  mi_decl_cache_align mi_theap_t    theap_main;
   mi_decl_cache_align mi_theap_t    theap_empty_wrong;  // read-only empty theap used to signal that a theap for a heap could not be allocated
 
   // arrays last
