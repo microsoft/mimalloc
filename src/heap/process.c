@@ -685,10 +685,6 @@ static void mi_process_unwind_once(void)
 static void mi_process_done_once(void) {
   // only shutdown if we were initialized
   if (!_mi_process.process_is_initialized) return;
-  // ensure we are called once
-  static bool process_done = false;
-  if (process_done) return;
-  process_done = true;
 
   const size_t thread_count = mi_atomic_load_acquire(&_mi_subproc_main()->thread_count);
   if (thread_count == 1 || !_mi_prim_process_is_killed()) {  // can we safely take locks?
@@ -705,9 +701,8 @@ static void mi_process_done_once(void) {
 // Call when the process is done (cdecl as it is used with `at_exit` on some platforms)
 void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   // we don't use `mi_atomic_do_once` here to avoid deadlocks if threads are killed due to a forced exit (issue #1377)
-  static _Atomic(size_t) mi_process_is_done;
   size_t expected = 0;
-  if (mi_atomic_cas_strong_acq_rel(&mi_process_is_done, &expected, 1)) {
+  if (mi_atomic_cas_strong_acq_rel(&_mi_process.process_done_called, &expected, 1)) {
     mi_process_done_once();
   }
 }

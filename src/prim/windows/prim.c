@@ -580,15 +580,16 @@ size_t _mi_prim_numa_node_count(void) {
 //----------------------------------------------------------------
 
 static mi_msecs_t mi_to_msecs(LARGE_INTEGER t) {
-  static LARGE_INTEGER mfreq; // = 0
-  if (mfreq.QuadPart == 0LL) {
+  int64_t ticks_per_msec = _mi_process.clock_ticks_per_msec;
+  if (ticks_per_msec == 0) {
     LARGE_INTEGER f;
     if (QueryPerformanceFrequency(&f)) {
-      mfreq.QuadPart = f.QuadPart/1000LL;
+      ticks_per_msec = f.QuadPart/1000LL;
     }
-    if (mfreq.QuadPart == 0) mfreq.QuadPart = 1;
+    if (ticks_per_msec == 0) { ticks_per_msec = 1; }
+    _mi_process.clock_ticks_per_msec = ticks_per_msec;
   }
-  return (mi_msecs_t)(t.QuadPart / mfreq.QuadPart);
+  return (mi_msecs_t)(t.QuadPart / ticks_per_msec);
 }
 
 mi_msecs_t _mi_prim_clock_now(void) {
@@ -1233,10 +1234,8 @@ extern "C" {
 #if defined(MI_SHARED_LIB) && !defined(MI_WIN_NOREDIRECT)
   #define MI_PRIM_HAS_ALLOCATOR_INIT 1
 
-  static bool mi_redirected = false;   // true if malloc redirects to mi_malloc
-
   bool _mi_is_redirected(void) {
-    return mi_redirected;
+    return _mi_process.malloc_is_redirected;
   }
 
   #ifdef __cplusplus
@@ -1245,10 +1244,10 @@ extern "C" {
   mi_decl_export void _mi_redirect_entry(DWORD reason) {
     // called on redirection; careful as this may be called before DllMain
     if (reason == DLL_PROCESS_ATTACH) {
-      mi_redirected = true;
+      _mi_process.malloc_is_redirected = true;
     }
     else if (reason == DLL_PROCESS_DETACH) {
-      mi_redirected = false;
+      _mi_process.malloc_is_redirected = false;
     }
     else if (reason == DLL_THREAD_DETACH) {
       // mi_debug_out("redirect thread detach\n");

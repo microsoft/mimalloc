@@ -28,6 +28,7 @@ format generation).
 #include "mimalloc/util/options.h"
 #include "mimalloc/util/stats.h"
 #include "mimalloc/profile/pprof.h"
+#include "mimalloc/heap/process.h"  // _mi_process.profile_env_profiler
 
 // ---------------------------------------------------------------------------
 // Internal API
@@ -128,7 +129,6 @@ static int64_t mi_prim_time_secs(void);  // wall-clock seconds since the Unix ep
 #if MI_PROFILE_USE_BUILTIN   // todo: also disable profiling in secure mode?
 
 static bool mi_is_elevated_process(void);
-static mi_profiler_t* mi_profile_env_profiler;  // NULL if `MIMALLOC_PROFILE` was not set (or initialization failed)
 
 // Called once at process initialization (see `mi_process_init` in `heap/process.c`).
 void _mi_pprof_profiler_init(void) {
@@ -142,7 +142,7 @@ void _mi_pprof_profiler_init(void) {
   const size_t time_interval_secs = mi_option_get_clamp(mi_option_profile_time_interval,0,24*60*60L);  // 0 by default (no automatic interval snapshots)
   mi_profiler_t* profiler = mi_pprof_profiler_new(sample_rate, fname, alloc_interval_size, inuse_interval_size, time_interval_secs);
   if (profiler == NULL) return;
-  mi_profile_env_profiler = profiler;
+  _mi_process.profile_env_profiler = profiler;
   _mi_verbose_message("pprof profiler initialized with base file name: %s\n", fname);
   mi_profile(profiler);           // attach to the main sub-process (and any current/future heaps in it)
   mi_profiler_start(profiler);
@@ -152,9 +152,9 @@ void _mi_pprof_profiler_init(void) {
 // Called once at process termination (see `mi_process_done` in `heap/process.c`).
 void _mi_pprof_profiler_done(void) {
   #if MI_PROFILE
-  mi_profiler_t* profiler = mi_profile_env_profiler;
+  mi_profiler_t* profiler = _mi_process.profile_env_profiler;
   if (profiler == NULL) return;
-  mi_profile_env_profiler = NULL;
+  _mi_process.profile_env_profiler = NULL;
   mi_profiler_stop(profiler);
   _mi_verbose_message("pprof profiler done\n");
   mi_profiler_snapshot(profiler);    // final snapshot so short-lived processes still get a complete profile
