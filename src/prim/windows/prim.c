@@ -55,8 +55,8 @@ typedef struct MI_MEM_ADDRESS_REQUIREMENTS_S {
 #include <winternl.h>
 typedef PVOID (__stdcall *PVirtualAlloc2)(HANDLE, PVOID, SIZE_T, ULONG, ULONG, MI_MEM_EXTENDED_PARAMETER*, ULONG);
 typedef LONG  (__stdcall *PNtAllocateVirtualMemoryEx)(HANDLE, PVOID*, SIZE_T*, ULONG, ULONG, MI_MEM_EXTENDED_PARAMETER*, ULONG);  // avoid NTSTATUS as it is not defined on xbox (pr #1084)
-static PVirtualAlloc2 pVirtualAlloc2 = NULL;
-static PNtAllocateVirtualMemoryEx pNtAllocateVirtualMemoryEx = NULL;
+static void* pVirtualAlloc2 = NULL;               // encoded PVirtualAlloc2
+static void* pNtAllocateVirtualMemoryEx = NULL;   // encoded PNtAllocateVirtualMemoryEx
 
 // Similarly, GetNumaProcessorNodeEx is only supported since Windows 7  (and GetNumaNodeProcessorMask is not supported on xbox)
 typedef struct MI_PROCESSOR_NUMBER_S { WORD Group; BYTE Number; BYTE Reserved; } MI_PROCESSOR_NUMBER;
@@ -68,17 +68,17 @@ typedef BOOL (__stdcall *PGetNumaProcessorNode)(UCHAR Processor, PUCHAR NodeNumb
 typedef BOOL (__stdcall* PGetNumaNodeProcessorMask)(UCHAR Node, PULONGLONG ProcessorMask);
 typedef BOOL (__stdcall* PGetNumaHighestNodeNumber)(PULONG Node);
 typedef BOOL (__stdcall* PRtlDllShutdownInProgress)(VOID);
-static PGetCurrentProcessorNumberEx pGetCurrentProcessorNumberEx = NULL;
-static PGetNumaProcessorNodeEx      pGetNumaProcessorNodeEx = NULL;
-static PGetNumaNodeProcessorMaskEx  pGetNumaNodeProcessorMaskEx = NULL;
-static PGetNumaProcessorNode        pGetNumaProcessorNode = NULL;
-static PGetNumaNodeProcessorMask    pGetNumaNodeProcessorMask = NULL;
-static PGetNumaHighestNodeNumber    pGetNumaHighestNodeNumber = NULL;
-static PRtlDllShutdownInProgress    pRtlDllShutdownInProgress = NULL;
+static void* pGetCurrentProcessorNumberEx = NULL;  // (all encoded)
+static void* pGetNumaProcessorNodeEx = NULL;
+static void* pGetNumaNodeProcessorMaskEx = NULL;
+static void* pGetNumaProcessorNode = NULL;
+static void* pGetNumaNodeProcessorMask = NULL;
+static void* pGetNumaHighestNodeNumber = NULL;
+static void* pRtlDllShutdownInProgress = NULL;
 
 // Not available on xbox
 typedef SIZE_T(__stdcall* PGetLargePageMinimum)(VOID);
-static PGetLargePageMinimum pGetLargePageMinimum = NULL;
+static void* pGetLargePageMinimum = NULL;  // encoded
 
 // Available after Windows XP
 typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalMemoryInKilobytes );
@@ -112,6 +112,22 @@ static void mi_win_freelibrary(HMODULE mod, bool should_free) {
     FreeLibrary(mod);
   }
 }
+
+// Encode/decode a pointer with the per-process secret (where NULL stays NULL);
+// used to protect the dynamically loaded Windows API function pointers.
+static void* mi_win_encode_pointer(void* p) {
+  return (p == NULL ? NULL : EncodePointer(p));
+}
+
+static void* mi_win_decode_pointer(void* p) {
+  return (p == NULL ? NULL : DecodePointer(p));
+}
+
+static void* mi_win_get_proc_encoded(HMODULE mod, const char* name) {
+  return mi_win_encode_pointer((void*)GetProcAddress(mod, name));
+}
+
+#define mi_win_call_proc_decoded(proc) ((P##proc)mi_win_decode_pointer(p##proc))
 
 //---------------------------------------------
 // Windows version
@@ -203,27 +219,27 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   HINSTANCE hDll = mi_win_getlibrary(L"kernelbase.dll", &hDllFree);
   if (hDll != NULL) {
     // use VirtualAlloc2FromApp if possible as it is available to Windows store apps
-    pVirtualAlloc2 = (PVirtualAlloc2)(void (*)(void))GetProcAddress(hDll, "VirtualAlloc2FromApp");
-    if (pVirtualAlloc2==NULL) pVirtualAlloc2 = (PVirtualAlloc2)(void (*)(void))GetProcAddress(hDll, "VirtualAlloc2");
+    pVirtualAlloc2 = mi_win_get_proc_encoded(hDll, "VirtualAlloc2FromApp");
+    if (pVirtualAlloc2==NULL) pVirtualAlloc2 = mi_win_get_proc_encoded(hDll, "VirtualAlloc2");
     mi_win_freelibrary(hDll, hDllFree);
   }
   // NtAllocateVirtualMemoryEx is used for huge page allocation
   hDll = mi_win_getlibrary(L"ntdll.dll", &hDllFree);
   if (hDll != NULL) {
-    pNtAllocateVirtualMemoryEx = (PNtAllocateVirtualMemoryEx)(void (*)(void))GetProcAddress(hDll, "NtAllocateVirtualMemoryEx");
-    pRtlDllShutdownInProgress = (PRtlDllShutdownInProgress)(void (*)(void))GetProcAddress(hDll, "RtlDllShutdownInProgress");
+    pNtAllocateVirtualMemoryEx = mi_win_get_proc_encoded(hDll, "NtAllocateVirtualMemoryEx");
+    pRtlDllShutdownInProgress = mi_win_get_proc_encoded(hDll, "RtlDllShutdownInProgress");
     mi_win_freelibrary(hDll, hDllFree);
   }
   // Try to use Win7+ numa API
   hDll = mi_win_getlibrary(L"kernel32.dll", &hDllFree);
   if (hDll != NULL) {
-    pGetCurrentProcessorNumberEx = (PGetCurrentProcessorNumberEx)(void (*)(void))GetProcAddress(hDll, "GetCurrentProcessorNumberEx");
-    pGetNumaProcessorNodeEx = (PGetNumaProcessorNodeEx)(void (*)(void))GetProcAddress(hDll, "GetNumaProcessorNodeEx");
-    pGetNumaNodeProcessorMaskEx = (PGetNumaNodeProcessorMaskEx)(void (*)(void))GetProcAddress(hDll, "GetNumaNodeProcessorMaskEx");
-    pGetNumaProcessorNode = (PGetNumaProcessorNode)(void (*)(void))GetProcAddress(hDll, "GetNumaProcessorNode");
-    pGetNumaNodeProcessorMask = (PGetNumaNodeProcessorMask)(void (*)(void))GetProcAddress(hDll, "GetNumaNodeProcessorMask");
-    pGetNumaHighestNodeNumber = (PGetNumaHighestNodeNumber)(void (*)(void))GetProcAddress(hDll, "GetNumaHighestNodeNumber");
-    pGetLargePageMinimum = (PGetLargePageMinimum)(void (*)(void))GetProcAddress(hDll, "GetLargePageMinimum");
+    pGetCurrentProcessorNumberEx = mi_win_get_proc_encoded(hDll, "GetCurrentProcessorNumberEx");
+    pGetNumaProcessorNodeEx = mi_win_get_proc_encoded(hDll, "GetNumaProcessorNodeEx");
+    pGetNumaNodeProcessorMaskEx = mi_win_get_proc_encoded(hDll, "GetNumaNodeProcessorMaskEx");
+    pGetNumaProcessorNode = mi_win_get_proc_encoded(hDll, "GetNumaProcessorNode");
+    pGetNumaNodeProcessorMask = mi_win_get_proc_encoded(hDll, "GetNumaNodeProcessorMask");
+    pGetNumaHighestNodeNumber = mi_win_get_proc_encoded(hDll, "GetNumaHighestNodeNumber");
+    pGetLargePageMinimum = mi_win_get_proc_encoded(hDll, "GetLargePageMinimum");
     // Get physical memory (not available on XP, so check dynamically)
     PGetPhysicallyInstalledSystemMemory pGetPhysicallyInstalledSystemMemory = (PGetPhysicallyInstalledSystemMemory)(void (*)(void))GetProcAddress(hDll,"GetPhysicallyInstalledSystemMemory");
     if (pGetPhysicallyInstalledSystemMemory != NULL) {
@@ -238,7 +254,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   }
   // Enable large/huge OS page support? (only set the large page size if we have access as it influences alignment)
   if (mi_option_is_enabled(mi_option_allow_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
-    if (win_enable_large_os_pages()) { config->large_page_size = (*pGetLargePageMinimum)(); }
+    if (win_enable_large_os_pages()) { config->large_page_size = mi_win_call_proc_decoded(GetLargePageMinimum)(); }
   }
 }
 
@@ -293,7 +309,7 @@ static void* win_virtual_alloc_prim_once(void* addr, size_t size, size_t try_ali
     MI_MEM_EXTENDED_PARAMETER param = { {0, 0}, {0} };
     param.Type.Type = MiMemExtendedParameterAddressRequirements;
     param.Arg.Pointer = &reqs;
-    void* p = (*pVirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, &param, 1);
+    void* p = mi_win_call_proc_decoded(VirtualAlloc2)(GetCurrentProcess(), addr, size, flags, PAGE_READWRITE, &param, 1);
     if (p != NULL) return p;
     _mi_warning_message("unable to allocate aligned OS memory (0x%zx bytes, error code: 0x%x, address: %p, alignment: 0x%zx, flags: 0x%x)\n", size, GetLastError(), addr, try_alignment, flags);
     // fall through on error
@@ -483,7 +499,7 @@ static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int num
     }
     SIZE_T psize = size;
     void* base = hint_addr;
-    LONG err = (*pNtAllocateVirtualMemoryEx)(GetCurrentProcess(), &base, &psize, flags, PAGE_READWRITE, params, param_count);
+    LONG err = mi_win_call_proc_decoded(NtAllocateVirtualMemoryEx)(GetCurrentProcess(), &base, &psize, flags, PAGE_READWRITE, params, param_count);
     if (err == 0 && base != NULL) {
       return base;
     }
@@ -497,7 +513,7 @@ static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int num
   if (pVirtualAlloc2 != NULL && numa_node >= 0) {
     params[0].Type.Type = MiMemExtendedParameterNumaNode;
     params[0].Arg.ULong = (unsigned)numa_node;
-    return (*pVirtualAlloc2)(GetCurrentProcess(), hint_addr, size, flags, PAGE_READWRITE, params, 1);
+    return mi_win_call_proc_decoded(VirtualAlloc2)(GetCurrentProcess(), hint_addr, size, flags, PAGE_READWRITE, params, 1);
   }
 
   // otherwise use regular virtual alloc on older windows
@@ -520,16 +536,16 @@ size_t _mi_prim_numa_node(void) {
   if (pGetCurrentProcessorNumberEx != NULL && pGetNumaProcessorNodeEx != NULL) {
     // Extended API is supported
     MI_PROCESSOR_NUMBER pnum;
-    (*pGetCurrentProcessorNumberEx)(&pnum);
+    mi_win_call_proc_decoded(GetCurrentProcessorNumberEx)(&pnum);
     USHORT nnode = 0;
-    BOOL ok = (*pGetNumaProcessorNodeEx)(&pnum, &nnode);
+    BOOL ok = mi_win_call_proc_decoded(GetNumaProcessorNodeEx)(&pnum, &nnode);
     if (ok) { numa_node = nnode; }
   }
   else if (pGetNumaProcessorNode != NULL) {
     // Vista or earlier, use older API that is limited to 64 processors. Issue #277
     DWORD pnum = GetCurrentProcessorNumber();
     UCHAR nnode = 0;
-    BOOL ok = pGetNumaProcessorNode((UCHAR)pnum, &nnode);
+    BOOL ok = mi_win_call_proc_decoded(GetNumaProcessorNode)((UCHAR)pnum, &nnode);
     if (ok) { numa_node = nnode; }
   }
   return numa_node;
@@ -538,14 +554,14 @@ size_t _mi_prim_numa_node(void) {
 size_t _mi_prim_numa_node_count(void) {
   ULONG numa_max = 0;
   if (pGetNumaHighestNodeNumber!=NULL) {
-    (*pGetNumaHighestNodeNumber)(&numa_max);
+    mi_win_call_proc_decoded(GetNumaHighestNodeNumber)(&numa_max);
   }
   // find the highest node number that has actual processors assigned to it. Issue #282
   while (numa_max > 0) {
     if (pGetNumaNodeProcessorMaskEx != NULL) {
       // Extended API is supported
       GROUP_AFFINITY affinity;
-      if ((*pGetNumaNodeProcessorMaskEx)((USHORT)numa_max, &affinity)) {
+      if (mi_win_call_proc_decoded(GetNumaNodeProcessorMaskEx)((USHORT)numa_max, &affinity)) {
         if (affinity.Mask != 0) break;  // found the maximum non-empty node
       }
     }
@@ -553,7 +569,7 @@ size_t _mi_prim_numa_node_count(void) {
       // Vista or earlier, use older API that is limited to 64 processors.
       ULONGLONG mask;
       if (pGetNumaNodeProcessorMask != NULL) {
-        if ((*pGetNumaNodeProcessorMask)((UCHAR)numa_max, &mask)) {
+        if (mi_win_call_proc_decoded(GetNumaNodeProcessorMask)((UCHAR)numa_max, &mask)) {
           if (mask != 0) break; // found the maximum non-empty node
         }
       };
@@ -608,7 +624,7 @@ static mi_msecs_t filetime_msecs(const FILETIME* ftime) {
 }
 
 typedef BOOL (WINAPI *PGetProcessMemoryInfo)(HANDLE, PPROCESS_MEMORY_COUNTERS, DWORD);
-static PGetProcessMemoryInfo pGetProcessMemoryInfo = NULL;
+static void* pGetProcessMemoryInfo = NULL;  // encoded
 
 void _mi_prim_process_info(mi_process_info_t* pinfo)
 {
@@ -625,7 +641,7 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
   mi_atomic_do_once{
     HINSTANCE hDll = mi_win_loadlibrary(L"psapi.dll");
     if (hDll != NULL) {
-      pGetProcessMemoryInfo = (PGetProcessMemoryInfo)(void (*)(void))GetProcAddress(hDll, "GetProcessMemoryInfo");
+      pGetProcessMemoryInfo = mi_win_get_proc_encoded(hDll, "GetProcessMemoryInfo");
       // mi_win_freelibrary(hDll, true);  // don't free
     }
   }
@@ -633,7 +649,7 @@ void _mi_prim_process_info(mi_process_info_t* pinfo)
   // get process info
   if (pGetProcessMemoryInfo != NULL) {
     PROCESS_MEMORY_COUNTERS info; _mi_memzero_var(info);
-    if (pGetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info))) {
+    if (mi_win_call_proc_decoded(GetProcessMemoryInfo)(GetCurrentProcess(), &info, sizeof(info))) {
       pinfo->current_rss = (size_t)info.WorkingSetSize;
       pinfo->peak_rss = (size_t)info.PeakWorkingSetSize;
       pinfo->current_commit = (size_t)info.PagefileUsage;
@@ -750,7 +766,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 // if it is not available. We avoid BCryptGenRandom as on Windows 7 / Server 2008 R2 it seems it can deadlock
 // when called while the loader lock is held (as during process attach) (issues #1395 and #1426).
 typedef BOOL (WINAPI *PProcessPrng)(PBYTE pbData, SIZE_T cbData);
-static  PProcessPrng pProcessPrng = NULL;
+static void* pProcessPrng = NULL;  // encoded
 
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   mi_atomic_do_once {
@@ -758,13 +774,13 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
       bool should_free = false;
       HMODULE hDll = mi_win_getlibrary(L"bcryptprimitives.dll", &should_free);
       if (hDll != NULL) {
-        pProcessPrng = (PProcessPrng)(void (*)(void))GetProcAddress(hDll, "ProcessPrng");
+        pProcessPrng = mi_win_get_proc_encoded(hDll, "ProcessPrng");
         if (pProcessPrng == NULL) { mi_win_freelibrary(hDll, should_free); }  // otherwise don't free
       }
     }
   }
   if (pProcessPrng != NULL) {
-    return (pProcessPrng((PBYTE)buf, buf_len) != FALSE);
+    return (mi_win_call_proc_decoded(ProcessPrng)((PBYTE)buf, buf_len) != FALSE);
   }
   return mi_win_rtl_gen_random(buf, buf_len);
 }
@@ -795,7 +811,7 @@ void _mi_prim_thread_yield(void) {
 
 bool _mi_prim_process_is_killed(void) {
   if (pRtlDllShutdownInProgress != NULL) {
-    return (*pRtlDllShutdownInProgress)();
+    return mi_win_call_proc_decoded(RtlDllShutdownInProgress)();
   }
   else {
     return false;
