@@ -66,14 +66,19 @@ typedef struct mi_process_s {
   bool                              process_is_initialized; // set to `true` in `mi_process_init`
   bool                              libc_is_initialized;    // `true` once the C runtime is initialized (and `false` again after process done)
 
+  _Atomic(size_t)                   output_buf_len;     // used length of `output_buf`
+  _Atomic(size_t)                   error_count;        // stop emitting errors when >= `mi_option_max_errors`
+  _Atomic(size_t)                   warning_count;      // stop emitting warnings when >= `mi_option_max_warnings`
+
   mi_os_mem_config_t                os_mem_config;      // OS memory configuration
   _Atomic(size_t)                   os_numa_node_count; // cached NUMA node count (0 until first use)
   _Atomic(mi_addr_t)                os_aligned_base;    // next aligned address hint (see `_mi_os_get_aligned_hint`)
   _Atomic(mi_addr_t)                os_huge_start;      // next address for huge OS pages (see `mi_os_claim_huge_pages`)
 
-  _Atomic(size_t)                   output_buf_len;     // used length of `output_buf`
-  _Atomic(size_t)                   error_count;        // stop emitting errors when >= `mi_option_max_errors`
-  _Atomic(size_t)                   warning_count;      // stop emitting warnings when >= `mi_option_max_warnings`
+  mi_lock_t                         thread_locals_lock;    // initialized in `_mi_thread_locals_init` (see `util/threadlocal.c`)
+  mi_bitmap_t*                      thread_locals_free;    // bitmap of free thread local slots (1=free, 0=in-use)
+  mi_memid_t                        thread_locals_memid;   // provenance of `thread_locals_free`
+  size_t                            thread_locals_version; // version to be able to reuse slots safely
 
   mi_subproc_t*                     subprocs;           // list of all sub-processes
   mi_lock_t                         subprocs_lock;      // initialized in `_mi_subproc_main_init` (as a zero lock is invalid on some platforms)
