@@ -60,6 +60,11 @@ size_t _mi_os_page_size(void) {
   return mi_os_mem_config()->page_size;
 }
 
+// OS allocation granularity (usually the page size, but 64KiB on Windows)
+size_t _mi_os_alloc_granularity(void) {
+  return mi_os_mem_config()->alloc_granularity;
+}
+
 // if large OS pages are supported (2 or 4MiB), then return the size, otherwise return the small page size (4KiB)
 size_t _mi_os_large_page_size(void) {
   const size_t lpsize = mi_os_mem_config()->large_page_size;

@@ -83,6 +83,7 @@ typedef struct mi_process_s {
   _Atomic(size_t)                   os_numa_node_count;     // cached NUMA node count (0 until first use)
   _Atomic(mi_addr_t)                os_aligned_base;        // next aligned address hint (see `_mi_os_get_aligned_hint`)
   _Atomic(mi_addr_t)                os_huge_start;          // next address for huge OS pages (see `mi_os_claim_huge_pages`)
+  _Atomic(size_t)                   os_large_page_access;   // 0: unknown, 1: granted, 2: denied (determined on first use, e.g. needs `SeLockMemoryPrivilege` on Windows)
 
   mi_lock_t                         thread_locals_lock;     // initialized in `_mi_thread_locals_init` (see `util/threadlocal.c`)
   mi_bitmap_t*                      thread_locals_free;     // bitmap of free thread local slots (1=free, 0=in-use)

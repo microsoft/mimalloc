@@ -25,13 +25,6 @@ terms of the MIT license. A copy of the license can be found in the file
 // Dynamically bind Windows API points for portability
 //---------------------------------------------
 
-#if defined(_MSC_VER)
-#pragma warning(disable:4996)   // don't use GetVersionExW
-#endif
-
-static DWORD win_major_version = 6;
-static DWORD win_minor_version = 0;
-
 // We use VirtualAlloc2 for aligned allocation, but it is only supported on Windows 10 and Windows Server 2016.
 // So, we need to look it up dynamically to run on older systems. (use __stdcall for 32-bit compatibility)
 // NtAllocateVirtualAllocEx is used for huge OS page allocation (1GiB)
@@ -89,7 +82,6 @@ static PGetLargePageMinimum pGetLargePageMinimum = NULL;
 
 // Available after Windows XP
 typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalMemoryInKilobytes );
-typedef BOOL (__stdcall* PGetVersionExW)(LPOSVERSIONINFOW lpVersionInformation);
 
 
 // Load a library
@@ -122,10 +114,23 @@ static void mi_win_freelibrary(HMODULE mod, bool should_free) {
 }
 
 //---------------------------------------------
-// Enable large page support dynamically (if possible)
+// Windows version
 //---------------------------------------------
 
-static bool win_enable_large_os_pages_once(size_t* large_page_size)
+// Check the actual Windows version from the PEB (`OSMajorVersion` and `OSMinorVersion`; unaffected by compatibility manifests)
+// see <https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/api/pebteb/peb/index.htm>
+mi_decl_maybe_unused static bool win_version_at_least(ULONG major, ULONG minor) {
+  const uint8_t* const peb = (const uint8_t*)NtCurrentTeb()->ProcessEnvironmentBlock;
+  const ULONG* const version = (const ULONG*)(peb + (MI_SIZE_BITS == 32 ? 0xA4 : 0x118));
+  return (version[0] > major || (version[0] == major && version[1] >= minor));
+}
+
+
+//---------------------------------------------
+// Enable large page support (if possible)
+//---------------------------------------------
+
+static bool win_enable_large_os_pages_once(void)
 {
   if (pGetLargePageMinimum==NULL) return false;  // no large page support (xbox etc.)
 
@@ -148,9 +153,6 @@ static bool win_enable_large_os_pages_once(size_t* large_page_size)
       err = GetLastError();
       if (ok) {
         ok = (err == ERROR_SUCCESS);
-        if (ok && large_page_size != NULL && pGetLargePageMinimum != NULL) {
-          *large_page_size = (*pGetLargePageMinimum)();
-        }
       }
     }
     CloseHandle(token);
@@ -162,21 +164,22 @@ static bool win_enable_large_os_pages_once(size_t* large_page_size)
   return (ok!=0);
 }
 
-static bool win_enable_large_os_pages(size_t* large_page_size) {
-  static size_t win_large_page_size = 0;
-  mi_atomic_do_once {
-    win_enable_large_os_pages_once(&win_large_page_size);
+// Enable large OS pages once (as it adjusts the process token privileges).
+// Called at initialization if large OS pages are enabled, or on demand for huge OS pages.
+// (a concurrent first use may try more than once which is fine)
+static bool win_enable_large_os_pages(void) {
+  size_t access = mi_atomic_load_acquire(&_mi_process.os_large_page_access);
+  if mi_unlikely(access == 0) {
+    access = (win_enable_large_os_pages_once() ? 1 : 2);
+    mi_atomic_store_release(&_mi_process.os_large_page_access, access);
   }
-  if (large_page_size != NULL) { *large_page_size = win_large_page_size; }
-  return (win_large_page_size > 0);
+  return (access == 1);
 }
 
 
 //---------------------------------------------
 // Initialize
 //---------------------------------------------
-
-static DWORD win_allocation_granularity = 64*MI_KiB;
 
 void _mi_prim_mem_init( mi_os_mem_config_t* config )
 {
@@ -188,10 +191,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   SYSTEM_INFO si; _mi_memzero_var(si);
   GetSystemInfo(&si);
   if (si.dwPageSize > 0) { config->page_size = si.dwPageSize; }
-  if (si.dwAllocationGranularity > 0) {
-    config->alloc_granularity = si.dwAllocationGranularity;
-    win_allocation_granularity = si.dwAllocationGranularity;
-  }
+  if (si.dwAllocationGranularity > 0) { config->alloc_granularity = si.dwAllocationGranularity; }
   // get virtual address bits
   if ((uintptr_t)si.lpMaximumApplicationAddress > 0) {
     const size_t vbits = MI_SIZE_BITS - mi_clz((uintptr_t)si.lpMaximumApplicationAddress);
@@ -234,21 +234,11 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
         }
       }
     }
-    // Get Windows version
-    PGetVersionExW pGetVersionExW = (PGetVersionExW)(void (*)(void))GetProcAddress(hDll, "GetVersionExW");
-    if (pGetVersionExW != NULL) {
-      OSVERSIONINFOW version; _mi_memzero_var(version);
-      version.dwOSVersionInfoSize = sizeof(version);
-      if ((*pGetVersionExW)(&version)) {
-        win_major_version = version.dwMajorVersion;
-        win_minor_version = version.dwMinorVersion;
-      }
-    }
     mi_win_freelibrary(hDll, hDllFree);
   }
-  // Enable large/huge OS page support?
+  // Enable large/huge OS page support? (only set the large page size if we have access as it influences alignment)
   if (mi_option_is_enabled(mi_option_allow_large_os_pages) || mi_option_is_enabled(mi_option_reserve_huge_os_pages)) {
-    win_enable_large_os_pages(&config->large_page_size);
+    if (win_enable_large_os_pages()) { config->large_page_size = (*pGetLargePageMinimum)(); }
   }
 }
 
@@ -297,7 +287,7 @@ static void* win_virtual_alloc_prim_once(void* addr, size_t size, size_t try_ali
   }
   #endif
   // on modern Windows try use VirtualAlloc2 for aligned allocation
-  if (addr == NULL && try_alignment > win_allocation_granularity && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
+  if (addr == NULL && try_alignment > _mi_os_alloc_granularity() && (try_alignment % _mi_os_page_size()) == 0 && pVirtualAlloc2 != NULL) {
     MI_MEM_ADDRESS_REQUIREMENTS reqs = { 0, 0, 0 };
     reqs.Alignment = try_alignment;
     MI_MEM_EXTENDED_PARAMETER param = { {0, 0}, {0} };
@@ -476,8 +466,10 @@ int _mi_prim_guard(void* addr, size_t size, bool set, bool is_committed) {
 static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int numa_node)
 {
   const DWORD flags = MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE;
-
-  win_enable_large_os_pages(NULL);
+  if (!win_enable_large_os_pages()) {
+    SetLastError(ERROR_PRIVILEGE_NOT_HELD);
+    return NULL;
+  }
 
   MI_MEM_EXTENDED_PARAMETER params[3] = { {{0,0},{0}},{{0,0},{0}},{{0,0},{0}} };
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
@@ -764,7 +756,7 @@ static  PProcessPrng pProcessPrng = NULL;
 
 bool _mi_prim_random_buf(void* buf, size_t buf_len) {
   mi_atomic_do_once {
-    if (win_major_version > 6 || (win_major_version == 6 && win_minor_version >= 2)) {
+    if (win_version_at_least(6,2)) {  // Windows 8+
       bool should_free = false;
       HMODULE hDll = mi_win_getlibrary(L"bcryptprimitives.dll", &should_free);
       if (hDll != NULL) {
@@ -788,7 +780,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 
 bool _mi_prim_thread_is_in_threadpool(void) {
 #if (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64)
-  if (win_major_version >= 6) {
+  if (win_version_at_least(6,0)) {  // Vista+
     // check if this thread belongs to a windows threadpool
     // see: <https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/api/pebteb/teb/index.htm>
     struct _TEB* const teb = NtCurrentTeb();
