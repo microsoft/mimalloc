@@ -34,6 +34,17 @@ typedef struct mi_fork_state_s {
   size_t           suspended_count[MI_BIN_COUNT];  // and its abandoned counts
 } mi_fork_state_t;
 
+// OS state (see `prim/os.c` and the `prim/<os>/prim.c` files)
+typedef struct mi_os_state_s {
+  _Atomic(size_t)    numa_node_count;         // cached NUMA node count (0 until first use)
+  _Atomic(mi_addr_t) aligned_base;            // next aligned address hint (see `_mi_os_get_aligned_hint`)
+  _Atomic(mi_addr_t) huge_start;              // next address for huge OS pages (see `mi_os_claim_huge_pages`)
+  _Atomic(size_t)    large_page_access;       // 0: unknown, 1: granted, 2: denied (e.g. needs `SeLockMemoryPrivilege` on Windows)
+  _Atomic(size_t)    large_page_backoff;      // skip large OS page allocation while > 0 (set after a failed attempt)
+  _Atomic(size_t)    huge_page_unavailable;   // set once a huge (1GiB) OS page allocation failed
+  _Atomic(size_t)    lazy_reset_unavailable;  // set if a lazy reset (`MADV_FREE`) is not supported (and we use `MADV_DONTNEED`)
+} mi_os_state_t;
+
 
 // In secure mode, guard static process data such that guard pages fit in secure mode (twice the maximal OS page size)
 #ifndef MI_SECURE_STATIC_GUARD
@@ -80,10 +91,7 @@ typedef struct mi_process_s {
   _Atomic(size_t)                   warning_count;          // stop emitting warnings when >= `mi_option_max_warnings`
 
   mi_os_mem_config_t                os_mem_config;          // OS memory configuration
-  _Atomic(size_t)                   os_numa_node_count;     // cached NUMA node count (0 until first use)
-  _Atomic(mi_addr_t)                os_aligned_base;        // next aligned address hint (see `_mi_os_get_aligned_hint`)
-  _Atomic(mi_addr_t)                os_huge_start;          // next address for huge OS pages (see `mi_os_claim_huge_pages`)
-  _Atomic(size_t)                   os_large_page_access;   // 0: unknown, 1: granted, 2: denied (determined on first use, e.g. needs `SeLockMemoryPrivilege` on Windows)
+  mi_os_state_t                     os;                     // OS state
 
   mi_lock_t                         thread_locals_lock;     // initialized in `_mi_thread_locals_init` (see `util/threadlocal.c`)
   mi_bitmap_t*                      thread_locals_free;     // bitmap of free thread local slots (1=free, 0=in-use)

@@ -168,10 +168,10 @@ static bool win_enable_large_os_pages_once(void)
 // Called at initialization if large OS pages are enabled, or on demand for huge OS pages.
 // (a concurrent first use may try more than once which is fine)
 static bool win_enable_large_os_pages(void) {
-  size_t access = mi_atomic_load_acquire(&_mi_process.os_large_page_access);
+  size_t access = mi_atomic_load_acquire(&_mi_process.os.large_page_access);
   if mi_unlikely(access == 0) {
     access = (win_enable_large_os_pages_once() ? 1 : 2);
-    mi_atomic_store_release(&_mi_process.os_large_page_access, access);
+    mi_atomic_store_release(&_mi_process.os.large_page_access, access);
   }
   return (access == 1);
 }
@@ -344,17 +344,16 @@ static void* win_virtual_alloc_prim(void* addr, size_t size, size_t try_alignmen
 
 static void* win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DWORD flags, bool large_only, bool allow_large, bool* is_large) {
   mi_assert_internal(!(large_only && !allow_large));
-  static _Atomic(size_t) large_page_try_ok; // = 0;
   void* p = NULL;
   // Try to allocate large OS pages (2MiB) if allowed or required.
   if ((large_only || (_mi_os_canuse_large_page(size, try_alignment) && mi_option_is_enabled(mi_option_allow_large_os_pages)))
       && allow_large && (flags&MEM_COMMIT)!=0 && (flags&MEM_RESERVE)!=0)
   {
-    size_t try_ok = mi_atomic_load_acquire(&large_page_try_ok);
-    if (!large_only && try_ok > 0) {
+    size_t backoff = mi_atomic_load_acquire(&_mi_process.os.large_page_backoff);
+    if (!large_only && backoff > 0) {
       // if a large page allocation fails, it seems the calls to VirtualAlloc get very expensive.
-      // therefore, once a large page allocation failed, we don't try again for `large_page_try_ok` times.
-      mi_atomic_cas_strong_acq_rel(&large_page_try_ok, &try_ok, try_ok - 1);
+      // therefore, once a large page allocation failed, we don't try again for `os_large_page_backoff` times.
+      mi_atomic_cas_strong_acq_rel(&_mi_process.os.large_page_backoff, &backoff, backoff - 1);
     }
     else {
       // large OS pages must always reserve and commit.
@@ -363,7 +362,7 @@ static void* win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DW
       if (large_only) return p;
       // fall back to non-large page allocation on error (`p == NULL`).
       if (p == NULL) {
-        mi_atomic_store_release(&large_page_try_ok,10UL);  // on error, don't try again for the next N allocations
+        mi_atomic_store_release(&_mi_process.os.large_page_backoff, (size_t)10);  // on error, don't try again for the next N allocations
       }
     }
   }
@@ -473,8 +472,7 @@ static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int num
 
   MI_MEM_EXTENDED_PARAMETER params[3] = { {{0,0},{0}},{{0,0},{0}},{{0,0},{0}} };
   // on modern Windows try use NtAllocateVirtualMemoryEx for 1GiB huge pages
-  static _Atomic(size_t) mi_huge_pages_available = MI_ATOMIC_VAR_INIT(1);
-  if (pNtAllocateVirtualMemoryEx != NULL && mi_atomic_load_acquire(&mi_huge_pages_available) != 0) {
+  if (pNtAllocateVirtualMemoryEx != NULL && mi_atomic_load_acquire(&_mi_process.os.huge_page_unavailable) == 0) {
     params[0].Type.Type = MiMemExtendedParameterAttributeFlags;
     params[0].Arg.ULong64 = MI_MEM_EXTENDED_PARAMETER_NONPAGED_HUGE;
     ULONG param_count = 1;
@@ -491,7 +489,7 @@ static void* _mi_prim_alloc_huge_os_pagesx(void* hint_addr, size_t size, int num
     }
     else {
       // fall back to regular large pages
-      mi_atomic_store_release(&mi_huge_pages_available,0); // don't try further huge pages
+      mi_atomic_store_release(&_mi_process.os.huge_page_unavailable, (size_t)1); // don't try further huge pages
       _mi_warning_message("unable to allocate using huge (1GiB) pages, trying large (2MiB) pages instead (status 0x%lx)\n", err);
     }
   }

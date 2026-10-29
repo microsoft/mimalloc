@@ -34,7 +34,7 @@ typedef struct mi_thread_locals_s {
   mi_tls_slot_t slots[1];
 } mi_thread_locals_t;
 
-static mi_thread_locals_t mi_thread_locals_empty = mi_init_struct_zero;
+static const mi_thread_locals_t mi_thread_locals_empty = mi_init_struct_zero;
 
 
 /* -----------------------------------------------------------
@@ -63,7 +63,7 @@ static mi_thread_locals_t mi_thread_locals_empty = mi_init_struct_zero;
   static inline void name##_delete(void)  {  }
 #endif
 
-mi_define_thread_local(mi_thread_locals_t*, mi_thread_locals, &mi_thread_locals_empty)
+mi_define_thread_local(mi_thread_locals_t*, mi_thread_locals, (mi_thread_locals_t*)&mi_thread_locals_empty)
 mi_define_thread_local(void*, mi_slot_fast, NULL)
 
 
