@@ -75,9 +75,13 @@ int _mi_prim_reuse(void* addr, size_t size);
 // - if `is_committed`, the range stays committed but becomes inaccessible (and its physical memory may be released);
 //   a reset makes the range accessible again.
 // - otherwise, the range may be reserved, decommitted, or still partly committed. After a set the range is
-//   inaccessible until it is explicitly committed (`_mi_prim_commit`), and a reset is a no-op.
+//   inaccessible; a reset is a no-op, so the range stays inaccessible (as uncommitted memory) until it is
+//   committed with `_mi_prim_commit`.
 // The caller must ensure the accounted commit state does not change between a set and reset.
 int _mi_prim_guard(void* addr, size_t size, bool set, bool is_committed);
+
+// Make a committed range read-only (or read-write again). Returns error code or 0 on success.
+int _mi_prim_protect_readonly(void* addr, size_t size, bool readonly);
 
 // Allocate huge (1GiB) pages possibly associated with a NUMA node.
 // `is_zero` is set to true if the memory was zero initialized (as on most OS's)

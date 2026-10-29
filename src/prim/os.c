@@ -37,9 +37,9 @@ static const mi_os_mem_config_t mi_os_mem_config_default = {
   false     // has transparent huge pages? (if true we purge in (aligned) large page size chunks only to not fragment such pages)
 };
 
-// The OS memory configuration in the process data (zero until `_mi_os_init`)
+// The OS memory configuration in the sealed process data (zero until `_mi_os_init`)
 static inline const mi_os_mem_config_t* mi_os_mem_config(void) {
-  const mi_os_mem_config_t* const config = &_mi_process.os_mem_config;
+  const mi_os_mem_config_t* const config = &mi_process_get_sealed()->os_mem_config;
   return (mi_likely(config->page_size != 0) ? config : &mi_os_mem_config_default);
 }
 
@@ -126,7 +126,9 @@ void _mi_os_init(void) {
   mi_os_mem_config_t config = mi_os_mem_config_default;
   _mi_prim_mem_init(&config);
   mi_assert(config.page_size != 0);
-  _mi_process.os_mem_config = config;  // publish at once
+  mi_process_sealed_t* const sealed = _mi_process_unseal();
+  sealed->os_mem_config = config;  // publish at once
+  _mi_process_seal();
   if (_mi_os_page_size() > MI_ARENA_SLICE_SIZE) {
     _mi_error_message(ENOTSUP, "the OS page size (%zu KiB) is larger than the arena slice size (%zu KiB); increase MI_ARENA_SLICE_SHIFT\n", _mi_os_page_size()/MI_KiB, (size_t)(MI_ARENA_SLICE_SIZE/MI_KiB));
   }

@@ -290,21 +290,24 @@ static mi_page_t* mi_find_page(mi_theap_t* theap, size_t size, size_t huge_align
 ----------------------------------------------------------- */
 
 // The program should only install a single deferred free handler before doing allocation.
-// The handler and argument are stored in `_mi_process.deferred_free/deferred_arg`.
+// The handler and argument are stored in the sealed process data (see `heap/process.h`).
 void _mi_deferred_free(mi_theap_t* theap, bool force) {
   theap->heartbeat++;
-  mi_deferred_free_fun* const fun = (mi_deferred_free_fun*)mi_atomic_load_ptr_acquire(void,&_mi_process.deferred_free);
+  mi_process_sealed_t* const sealed = mi_process_get_sealed();
+  mi_deferred_free_fun* const fun = (mi_deferred_free_fun*)mi_atomic_load_ptr_acquire(void,&sealed->deferred_free);
   if (fun != NULL && !theap->tld->recurse) {
     theap->tld->recurse = true;
-    void* const arg = mi_atomic_load_ptr_acquire(void,&_mi_process.deferred_arg);
+    void* const arg = mi_atomic_load_ptr_acquire(void,&sealed->deferred_arg);
     fun(force, theap->heartbeat, arg);
     theap->tld->recurse = false;
   }
 }
 
 void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noexcept {
-  mi_atomic_store_ptr_release(void,&_mi_process.deferred_arg, arg);
-  mi_atomic_store_ptr_release(void,&_mi_process.deferred_free, (void*)fn);
+  mi_process_sealed_t* const sealed = _mi_process_unseal();
+  mi_atomic_store_ptr_release(void,&sealed->deferred_arg, arg);
+  mi_atomic_store_ptr_release(void,&sealed->deferred_free, (void*)fn);
+  _mi_process_seal();
 }
 
 

@@ -674,6 +674,11 @@ int _mi_prim_guard(void* start, size_t size, bool set, bool is_committed) {
   }
 }
 
+int _mi_prim_protect_readonly(void* addr, size_t size, bool readonly) {
+  const int err = mprotect(addr, size, readonly ? PROT_READ : (PROT_READ | PROT_WRITE));
+  return (err != 0 ? errno : 0);
+}
+
 
 
 //---------------------------------------------

@@ -160,6 +160,11 @@ int _mi_prim_guard(void* addr, size_t size, bool set, bool is_committed) {
   return 0;
 }
 
+int _mi_prim_protect_readonly(void* addr, size_t size, bool readonly) {
+  MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(readonly);
+  return 0;
+}
+
 
 //---------------------------------------------
 // Huge pages and NUMA nodes

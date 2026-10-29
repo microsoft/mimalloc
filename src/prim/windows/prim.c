@@ -449,13 +449,13 @@ int _mi_prim_reuse(void* addr, size_t size) {
   return 0;
 }
 
-static int win_protect(void* addr, size_t size, bool protect) {
+static int win_protect(void* addr, size_t size, ULONG protect) {
   #if !MI_WIN_DESKTOP && WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP)
   ULONG oldprotect = 0;
-  BOOL ok = VirtualProtectFromApp(addr, size, protect ? PAGE_NOACCESS : PAGE_READWRITE, &oldprotect);
+  BOOL ok = VirtualProtectFromApp(addr, size, protect, &oldprotect);
   #else
   DWORD oldprotect = 0;
-  BOOL ok = VirtualProtect(addr, size, protect ? PAGE_NOACCESS : PAGE_READWRITE, &oldprotect);
+  BOOL ok = VirtualProtect(addr, size, protect, &oldprotect);
   #endif
   return (ok ? 0 : (int)GetLastError());
 }
@@ -465,7 +465,7 @@ int _mi_prim_guard(void* addr, size_t size, bool set, bool is_committed) {
     // protecting requires committed memory; on a set we first release the physical memory
     // (best effort, as `MEM_RESET` fails on image memory, like the guard pages in our static data)
     if (set) { VirtualAlloc(addr, size, MEM_RESET, PAGE_READWRITE); }
-    return win_protect(addr, size, set);
+    return win_protect(addr, size, (set ? PAGE_NOACCESS : PAGE_READWRITE));
   }
   else if (set) {
     // decommitting also works for (partly) reserved memory
@@ -475,6 +475,10 @@ int _mi_prim_guard(void* addr, size_t size, bool set, bool is_committed) {
   else {
     return 0;  // stays inaccessible until committed
   }
+}
+
+int _mi_prim_protect_readonly(void* addr, size_t size, bool readonly) {
+  return win_protect(addr, size, (readonly ? PAGE_READONLY : PAGE_READWRITE));
 }
 //---------------------------------------------
 
