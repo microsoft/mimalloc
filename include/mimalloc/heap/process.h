@@ -38,10 +38,15 @@ typedef struct mi_fork_state_s {
 // In secure mode, guard static process data such that guard pages fit in secure mode (twice the maximal OS page size)
 #ifndef MI_SECURE_STATIC_GUARD
   #if !MI_SECURE || !MI_OS_HAS_GUARD_PAGES
-  #define MI_SECURE_STATIC_GUARD            (MI_CACHE_LINE_SIZE)          // no guard pages; just a cache line
+  #define MI_SECURE_STATIC_GUARD    (MI_CACHE_LINE_SIZE)          // no guard pages; just a cache line
   #else
-  #define MI_SECURE_STATIC_GUARD            (2*MI_OS_PROBABLE_PAGE_SIZE)  // checked at runtime
+  #define MI_SECURE_STATIC_GUARD    (2*MI_OS_PROBABLE_PAGE_SIZE)  // checked at runtime
   #endif
+#endif
+
+// Output before an output function is registered (or the C runtime is initialized) is buffered (see `util/options.c`)
+#ifndef MI_MAX_DELAY_OUTPUT
+#define MI_MAX_DELAY_OUTPUT         (16*MI_KiB)
 #endif
 
 // Statically allocated process data. This is zero initialized and padded such that
@@ -66,6 +71,10 @@ typedef struct mi_process_s {
   _Atomic(mi_addr_t)                os_aligned_base;    // next aligned address hint (see `_mi_os_get_aligned_hint`)
   _Atomic(mi_addr_t)                os_huge_start;      // next address for huge OS pages (see `mi_os_claim_huge_pages`)
 
+  _Atomic(size_t)                   output_buf_len;     // used length of `output_buf`
+  _Atomic(size_t)                   error_count;        // stop emitting errors when >= `mi_option_max_errors`
+  _Atomic(size_t)                   warning_count;      // stop emitting warnings when >= `mi_option_max_warnings`
+
   mi_subproc_t*                     subprocs;           // list of all sub-processes
   mi_lock_t                         subprocs_lock;      // initialized in `_mi_subproc_main_init` (as a zero lock is invalid on some platforms)
   mi_fork_state_t                   fork;               // fork state (see `heap/subproc.c`)
@@ -80,6 +89,7 @@ typedef struct mi_process_s {
 
   // arrays last
   mi_option_state_t                 options[_mi_option_last]; // current option values (see `util/options.c`)
+  char                              output_buf[MI_MAX_DELAY_OUTPUT+1]; // delayed output buffer (see `util/options.c`)
 
   // end guard
   mi_decl_cache_align uint8_t       guard_end[MI_SECURE_STATIC_GUARD];

@@ -14,9 +14,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdio.h>      // stdin/stdout
 #include <stdlib.h>     // abort
 
-static long mi_max_error_count   = 16; // stop outputting errors after this (use < 0 for no limit)
-static long mi_max_warning_count = 16; // stop outputting warnings after this (use < 0 for no limit)
-
 static void mi_add_stderr_output(void);
 
 int mi_version(void) {
@@ -230,8 +227,6 @@ void _mi_options_init(void) {
     mi_option_t option = (mi_option_t)i;
     long l = mi_option_get(option); MI_UNUSED(l); // initialize
   }
-  mi_max_error_count = mi_option_get(mi_option_max_errors);
-  mi_max_warning_count = mi_option_get(mi_option_max_warnings);
   #if MI_GUARDED
   if (mi_option_get(mi_option_guarded_sample_rate) > 0) {
     if (mi_option_is_enabled(mi_option_allow_large_os_pages)) {
@@ -400,28 +395,25 @@ static void mi_cdecl mi_out_stderr(const char* msg, void* arg) {
 // function we also buffer output that happens earlier. When
 // an output function is registered it is called immediately with
 // the output up to that point.
-#ifndef MI_MAX_DELAY_OUTPUT
-#define MI_MAX_DELAY_OUTPUT ((size_t)(16*1024))
-#endif
-static char out_buf[MI_MAX_DELAY_OUTPUT+1];
-static _Atomic(size_t) out_len;
+// The buffer is `_mi_process.output_buf` but the lock is static as it is used before process initialization
+// and a zero lock is invalid on some platforms.
 static mi_lock_t out_buf_lock = MI_LOCK_INITIALIZER;
 
 static void mi_cdecl mi_out_buf(const char* msg, void* arg) {
   MI_UNUSED(arg);
   if (msg==NULL) return;
-  if (mi_atomic_load_acquire(&out_len)>=MI_MAX_DELAY_OUTPUT) return;
+  if (mi_atomic_load_acquire(&_mi_process.output_buf_len)>=MI_MAX_DELAY_OUTPUT) return;
   size_t n = _mi_strlen(msg);
   if (n==0 || n >= MI_MAX_DELAY_OUTPUT) return;
   // copy msg into the buffer
   mi_lock(&out_buf_lock) {
-    const size_t start = mi_atomic_add_acq_rel(&out_len, n);
+    const size_t start = mi_atomic_add_acq_rel(&_mi_process.output_buf_len, n);
     if (start < MI_MAX_DELAY_OUTPUT) {
       // check bound
       if (start+n >= MI_MAX_DELAY_OUTPUT) {
         n = MI_MAX_DELAY_OUTPUT-start-1;
       }
-      mi_memcpy(&out_buf[start], msg, n);
+      mi_memcpy(&_mi_process.output_buf[start], msg, n);
     }
   }
 }
@@ -430,13 +422,13 @@ static void mi_out_buf_flush(mi_output_fun* out, bool no_more_buf, void* arg) {
   if (out==NULL) return;
   // claim (if `no_more_buf == true`, no more output will be added after this point)
   mi_lock(&out_buf_lock) {
-    size_t count = mi_atomic_add_acq_rel(&out_len, (no_more_buf ? MI_MAX_DELAY_OUTPUT : 1));
+    size_t count = mi_atomic_add_acq_rel(&_mi_process.output_buf_len, (no_more_buf ? MI_MAX_DELAY_OUTPUT : 1));
     // and output the current contents
     if (count>MI_MAX_DELAY_OUTPUT) count = MI_MAX_DELAY_OUTPUT;
-    out_buf[count] = 0;
-    out(out_buf,arg);
+    _mi_process.output_buf[count] = 0;
+    out(_mi_process.output_buf,arg);
     if (!no_more_buf) {
-      out_buf[count] = '\n'; // if continue with the buffer, insert a newline
+      _mi_process.output_buf[count] = '\n'; // if continue with the buffer, insert a newline
     }
   }
 }
@@ -481,9 +473,6 @@ static void mi_add_stderr_output(void) {
 // --------------------------------------------------------
 // Messages, all end up calling `_mi_fputs`.
 // --------------------------------------------------------
-static _Atomic(size_t) error_count;   // = 0;  // when >= max_error_count stop emitting errors
-static _Atomic(size_t) warning_count; // = 0;  // when >= max_warning_count stop emitting warnings
-
 static mi_decl_noinline bool mi_recurse_enter_prim(void) {
   return true;
 }
@@ -575,7 +564,8 @@ void _mi_verbose_message(const char* fmt, ...) {
 static void mi_show_error_message(const char* fmt, va_list args) {
   if (!mi_option_is_enabled(mi_option_verbose)) {
     if (!mi_option_is_enabled(mi_option_show_errors)) return;
-    if (mi_max_error_count >= 0 && (long)mi_atomic_increment_acq_rel(&error_count) > mi_max_error_count) return;
+    const long max_errors = mi_option_get(mi_option_max_errors);
+    if (max_errors >= 0 && (long)mi_atomic_increment_acq_rel(&_mi_process.error_count) > max_errors) return;
   }
   mi_vfprintf_thread(NULL, NULL, "mimalloc: error: ", fmt, args);
 }
@@ -583,7 +573,8 @@ static void mi_show_error_message(const char* fmt, va_list args) {
 void _mi_warning_message(const char* fmt, ...) {
   if (!mi_option_is_enabled(mi_option_verbose)) {
     if (!mi_option_is_enabled(mi_option_show_errors)) return;
-    if (mi_max_warning_count >= 0 && (long)mi_atomic_increment_acq_rel(&warning_count) > mi_max_warning_count) return;
+    const long max_warnings = mi_option_get(mi_option_max_warnings);
+    if (max_warnings >= 0 && (long)mi_atomic_increment_acq_rel(&_mi_process.warning_count) > max_warnings) return;
   }
   va_list args;
   va_start(args,fmt);
