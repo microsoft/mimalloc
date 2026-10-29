@@ -385,6 +385,11 @@ extern "C" {
   void   vfree(void* p)                    { mi_free(p); }
   size_t malloc_good_size(size_t size)     { return mi_malloc_good_size(size); }
   int    posix_memalign(void** p, size_t alignment, size_t size) { return mi_posix_memalign(p, alignment, size); }
+  #if !defined(_WIN32)
+  // C23, exported by glibc since 2.43
+  void   free_sized(void* p, size_t size)  { mi_free_size(p, size); }
+  void   free_aligned_sized(void* p, size_t alignment, size_t size) { mi_free_size_aligned(p, size, alignment); }
+  #endif
 
   // `aligned_alloc` is only available when __USE_ISOC11 is defined.
   // Note: it seems __USE_ISOC11 is not defined in musl (and perhaps other libc's) so we only check
