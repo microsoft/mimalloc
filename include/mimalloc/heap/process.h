@@ -71,6 +71,10 @@ typedef struct mi_process_s {
   _Atomic(size_t)                   subprocs_created;       // total number of sub-processes created (used for `subproc_seq`)
   mi_atomic_guard_t                 arena_purge_guard;      // allow only one thread at a time to purge arenas
 
+  mi_msecs_t                        clock_process_start;    // clock at process initialization (see `util/stats.c`)
+  mi_msecs_t                        clock_overhead;         // measured overhead of reading the clock (subtracted in `_mi_clock_end`)
+  int64_t                           clock_ticks_per_msec;   // performance counter ticks per millisecond (on Windows) (0 until first use)
+
   _Atomic(size_t)                   output_buf_len;         // used length of `output_buf`
   _Atomic(size_t)                   error_count;            // stop emitting errors when >= `mi_option_max_errors`
   _Atomic(size_t)                   warning_count;          // stop emitting warnings when >= `mi_option_max_warnings`
@@ -91,10 +95,6 @@ typedef struct mi_process_s {
 
   mi_profiler_t*                    profile_env_profiler;   // the pprof profiler if `MIMALLOC_PROFILE` was set (see `profile/pprof.c`)
   mi_atomic_guard_t                 profile_snapshot_guard; // allow only one thread at a time to take a profile snapshot
-
-  mi_msecs_t                        clock_process_start;    // clock at process initialization (see `util/stats.c`)
-  mi_msecs_t                        clock_overhead;         // measured overhead of reading the clock (subtracted in `_mi_clock_end`)
-  int64_t                           clock_ticks_per_msec;   // performance counter ticks per millisecond (on Windows) (0 until first use)
 
   mi_decl_cache_align mi_subproc_t  subproc_main;           // initial subprocess
   mi_decl_cache_align mi_heap_t     heap_main;              // initial heap for the process
