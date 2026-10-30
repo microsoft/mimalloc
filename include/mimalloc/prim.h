@@ -29,6 +29,7 @@ typedef struct mi_os_mem_config_s {
   size_t  physical_memory_in_kib; // physical memory size in KiB
   size_t  virtual_address_bits;   // usually 48 or 56 bits on 64-bit systems. (used to determine secure randomization)
   size_t  memtag_mode;            // OS specific memory tag check mode (only used in the `prim` layer, see `unix/prim.c`)
+  size_t  memtag_line_size;       // cache line size tagged at once by the CPU (`dc gva`); set in `_mi_os_init`
   bool    has_overcommit;         // can we reserve more memory than can be actually committed?
   bool    has_partial_free;       // can allocated blocks be freed partially? (true for mmap, false for VirtualAlloc)
   bool    has_virtual_reserve;    // supports virtual address space reservation? (if true we can reserve virtual address space without using commit or physical memory)

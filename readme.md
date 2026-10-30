@@ -445,7 +445,7 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
 - The start address of OS allocated memory is randomized
   (if possible), and mimalloc aborts on corrupted meta data detection.
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
-  mitigate against attacks that rely on a predicable allocation order.
+  mitigate against attacks that rely on a predictable allocation order.
 - Large blocks (> 512 KiB) are followed by a guard page.
 
 With `ON`, performance is impacted a bit more (usually less than 25%), but adds:
@@ -470,7 +470,7 @@ As always, evaluate with care as part of an overall security strategy as all of 
 
 ## Memory Tagging (MTE)
 
-On recent arm64 hardware with the memory tagging extensions (MTE), _mimalloc_ can be built with `-DMI_MTE=ON`
+On recent arm64 hardware with the memory tagging extensions ([MTE]), _mimalloc_ can be built with `-DMI_MTE=ON`
 to give every heap block a randomized memory tag that can only be accessed with a matching pointer that has the same
 tag. Adjacent blocks always get different tags, and blocks are retagged when freed, so most buffer overflows and
 use-after-free accesses fault immediately. All blocks up to 512KiB are tagged, but larger blocks get a guard page
@@ -493,7 +493,7 @@ hardware support. MTE enabled builds have the suffix `-mte` (e.g. `mimalloc-mte.
   ```
 - Linux: requires an arm64 kernel with MTE support (check with `grep mte /proc/cpuinfo`). The tag check mode
   can be set with `MIMALLOC_MTE=sync` (default), `async`, or `preferred`. Without MTE hardware you can still
-  test using QEMU emulation (e.g. `QEMU_CPU=neoverse-n2 qemu-aarch64 ./myprogram`).
+  test using QEMU emulation (e.g. `QEMU_CPU=max qemu-aarch64 ./myprogram`).
   ```
   > cmake -DMI_MTE=ON ../..
   > make -j
@@ -505,6 +505,8 @@ hardware support. MTE enabled builds have the suffix `-mte` (e.g. `mimalloc-mte.
           -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 ../..
   > make -j
   ```
+
+[MTE]: https://support.arm.com/documentation/108035/0100/How-does-MTE-work-
 
 ## Debug Mode
 

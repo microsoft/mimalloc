@@ -32,6 +32,7 @@ static const mi_os_mem_config_t mi_os_mem_config_default = {
   MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB,
   MI_MAX_VABITS, // in `arch.h`
   0,        // memory tag check mode
+  0,        // memory tag line size
   true,     // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
   false,    // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
   true,     // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
@@ -59,6 +60,10 @@ bool _mi_os_has_thp(void) {
 
 bool _mi_os_has_memtag(void) {
   return mi_os_mem_config()->has_memtag;
+}
+
+size_t _mi_os_memtag_line_size(void) {
+  return mi_os_mem_config()->memtag_line_size;
 }
 
 // OS (small) page size
@@ -132,9 +137,15 @@ void _mi_os_init(void) {
   mi_os_mem_config_t config = mi_os_mem_config_default;
   _mi_prim_mem_init(&config);
   mi_assert(config.page_size != 0);
-  if (config.has_memtag && !mi_memtag_cpu_is_supported()) {
-    _mi_warning_message("memory tagging is disabled as the CPU tag cache line size is not supported (only 64 bytes is supported)\n");
-    config.has_memtag = false;
+  if (config.has_memtag) {
+    const size_t line_size = mi_memtag_cpu_line_size();
+    if (line_size < MI_MEMTAG_LINE_MIN || line_size > MI_MEMTAG_LINE_MAX || !mi_is_power_of_two(line_size)) {
+      _mi_warning_message("memory tagging is disabled as the CPU tag cache line size (%zu bytes) is not supported\n", line_size);
+      config.has_memtag = false;
+    }
+    else {
+      config.memtag_line_size = line_size;
+    }
   }
   mi_process_sealed_t* const sealed = _mi_process_unseal();
   sealed->os_mem_config = config;  // publish at once

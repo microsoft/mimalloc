@@ -473,9 +473,8 @@ jobs:
       - name: Alpine riscv64, Debug
         if: matrix.tests == 'alpine-riscv64'
         shell: alpine-riscv64.sh {0}
-        env:
-          MI_TEST_LIGHT: 1
         run: |
+          export MI_TEST_LIGHT=1
           uname -m
           cmake . -B out/debug-riscv64 -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL
           cmake --build out/debug-riscv64 --parallel 4 --config Debug
@@ -485,6 +484,7 @@ jobs:
         if: matrix.tests == 'alpine-riscv64'
         shell: alpine-riscv64.sh {0}
         run: |
+          export MI_TEST_LIGHT=1
           cmake . -B out/secure-riscv64 -G Ninja -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON
           cmake --build out/secure-riscv64 --parallel 4 --config Release
           ctest --test-dir out/secure-riscv64 --verbose --timeout 240 -C Release
@@ -590,8 +590,8 @@ jobs:
           ctest --test-dir out/guarded-cheri-sim --verbose --timeout 240 -C Release
           MIMALLOC_GUARDED_SAMPLE_RATE=1 out/guarded-cheri-sim/mimalloc-test-api
 
-      # Linux arm64 with memory tagging (MTE) emulated by QEMU (`-cpu neoverse-n2` as `max` has a 512 byte tag cache line)
-      - name: Linux arm64 MTE, Setup
+      # Linux arm64 with memory tagging (MTE) emulated by QEMU (`-cpu max` as QEMU user mode faults on `dc zva` with tagged pointers, which glibc and bionic use in `memset` on `neoverse-n2`)
+      - name: Linux arm64, Setup, MTE
         if: matrix.tests == 'linux-arm64-mte'
         run: |
           sudo apt-get update -q
@@ -599,12 +599,12 @@ jobs:
           qemu-aarch64-static --version
           ls /proc/sys/fs/binfmt_misc/ | grep aarch64 || echo "no binfmt registration for aarch64"
           echo "QEMU_LD_PREFIX=/usr/aarch64-linux-gnu" >> $GITHUB_ENV
-          echo "QEMU_CPU=neoverse-n2" >> $GITHUB_ENV
+          echo "QEMU_CPU=max" >> $GITHUB_ENV
           echo "MI_TEST_LIGHT=1" >> $GITHUB_ENV
           echo "MI_TEST_REQUIRE_MTE=1" >> $GITHUB_ENV
           echo "MI_CMAKE_ARM64_MTE=-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64-static -DMI_MTE=ON" >> $GITHUB_ENV
 
-      - name: Linux arm64 MTE, Release
+      - name: Linux arm64, Release, MTE
         if: matrix.tests == 'linux-arm64-mte'
         run: |
           cmake . -B out/release-arm64-mte -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON $MI_CMAKE_ARM64_MTE
@@ -612,14 +612,14 @@ jobs:
           MIMALLOC_VERBOSE=1 qemu-aarch64-static out/release-arm64-mte/mimalloc-test-mte
           ctest --test-dir out/release-arm64-mte --verbose --timeout 600 -C Release
 
-      - name: Linux arm64 MTE, Release, Async
+      - name: Linux arm64, Release, Async, MTE
         if: matrix.tests == 'linux-arm64-mte'
         env:
           MIMALLOC_MTE: async
         run: |
           ctest --test-dir out/release-arm64-mte --verbose --timeout 600 -C Release
 
-      - name: Linux arm64 MTE, Debug
+      - name: Linux arm64, Debug, MTE
         if: matrix.tests == 'linux-arm64-mte'
         run: |
           cmake . -B out/debug-arm64-mte -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL $MI_CMAKE_ARM64_MTE
@@ -661,7 +661,7 @@ jobs:
           cmake --build out/single-wasm --parallel 4 --config Release
           ctest --test-dir out/single-wasm --verbose --timeout 240 -C Release
 
-      # Android arm64: cross-built with the preinstalled NDK as static executables (bionic) and run with QEMU (`-cpu neoverse-n2` emulates MTE).
+      # Android arm64: cross-built with the preinstalled NDK as static executables (bionic) and run with QEMU (`-cpu max` emulates MTE).
       # No malloc override: since NDK r30 the static bionic startup code always links in bionic's own `malloc`.
       - name: Android arm64, Setup
         if: matrix.tests == 'android-arm64'
@@ -672,7 +672,7 @@ jobs:
           NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
           test -f "$NDK/build/cmake/android.toolchain.cmake" || { echo "::error::Android NDK not found"; exit 1; }
           echo "NDK: $NDK"
-          echo "QEMU_CPU=neoverse-n2" >> $GITHUB_ENV
+          echo "QEMU_CPU=max" >> $GITHUB_ENV
           echo "MI_TEST_LIGHT=1" >> $GITHUB_ENV
           echo "MI_CMAKE_ANDROID=-DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 -DANDROID_STL=c++_static -DMI_BUILD_SHARED=OFF -DMI_OVERRIDE=OFF -DCMAKE_EXE_LINKER_FLAGS=-static -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64-static" >> $GITHUB_ENV
 

@@ -30,7 +30,9 @@ the hardware instructions are never executed (as these trap on CPU's without MTE
 
 #define MI_MEMTAG_GRANULE_SIZE    (16)
 #define MI_MEMTAG_META            (0)         // tag used for meta data (and free arena memory)
-#define MI_MEMTAG_LINE_SIZE       (64)        // cache line size tagged by `dc gva` (checked at initialization)
+#define MI_MEMTAG_LINE_MIN        (32)        // supported range of the cache line size tagged by `dc gva` (checked at initialization)
+#define MI_MEMTAG_LINE_MAX        (2048)
+#define MI_MEMTAG_GRANULE_MAX     (128)       // ranges up to this size are always tagged per granule
 #define MI_MEMTAG_ZERO_MAX        (1024)      // blocks up to this size are zeroed on free (larger ones are only retagged)
 
 // Tag exclusion masks (bit `i` set excludes tag `i`); blocks never use tag 0 or 15.
@@ -41,6 +43,7 @@ the hardware instructions are never executed (as these trap on CPU's without MTE
 
 // Set once at process initialization in the sealed process data (see `prim/os.c:_mi_os_init`)
 bool   _mi_os_has_memtag(void);         // is memory tagging used?
+size_t _mi_os_memtag_line_size(void);   // cache line size tagged by `dc gva`
 
 // Values of the `mte` option (`MIMALLOC_MTE=off|on|sync|async|preferred`). The tag check mode can only be selected on Linux
 // (on macOS it is determined by the OS). With `preferred` the kernel selects the preferred mode of the CPU which can
@@ -93,7 +96,7 @@ static inline void* mi_ptr_memtag_meta(const void* p) {
 }
 
 // Primitive memory tag operations
-static inline bool  mi_memtag_cpu_is_supported(void);
+static inline size_t mi_memtag_cpu_line_size(void);
 static inline void  mi_memtag_check(const void* p);
 static inline void* mi_memtag_random(void* p, size_t exclude);
 static inline void* mi_memtag_load(void* p);
@@ -135,15 +138,11 @@ static inline void* mi_memtag_load(void* p) {
 }
 
 // Size of the cache line tagged by `dc gva` (as given by `dczid_el0`), or 0 if not permitted
-static inline size_t __mi_memtag_line_size(void) {
+// (called once at initialization if the OS supports tagging, see `_mi_os_memtag_line_size`)
+static inline size_t mi_memtag_cpu_line_size(void) {
   uint64_t dczid;
   __asm__ ("mrs %0, dczid_el0" : "=r"(dczid));
   return ((dczid & 0x10) != 0 ? 0 : (MI_ZU(4) << (dczid & 0x0F)));
-}
-
-// Does the CPU support the memory tag operations as we use them? (called once at initialization if the OS supports tagging)
-static inline bool mi_memtag_cpu_is_supported(void) {
-  return (__mi_memtag_line_size() == MI_MEMTAG_LINE_SIZE);
 }
 
 // Read from `p` such that it faults if the tag of `p` does not match the memory tag
@@ -165,25 +164,33 @@ static inline void __mi_memtag_store_line(uint8_t* p, bool zero) {
        else { __asm__ __volatile__ (MI_MEMTAG_ASM "dc gva, %0"  : : "r"(p) : "memory"); }
 }
 
+// Tag the granules in `[p,end)` (using pairs of granules where possible)
+static inline void __mi_memtag_store_granules(uint8_t* p, uint8_t* end, bool zero) {
+  if (((end - p) % (2*MI_MEMTAG_GRANULE_SIZE)) != 0) { __mi_memtag_store_granule(p, zero); p += MI_MEMTAG_GRANULE_SIZE; }
+  for (; p < end; p += 2*MI_MEMTAG_GRANULE_SIZE) { __mi_memtag_store_granule2(p, zero); }
+}
+
 // Set the memory tags of `[p,p+size)` to the tag of `p`, and zero it if `zero` is set.
 // Small ranges are tagged per granule; for larger ranges only the (unaligned) edges are tagged per granule
 // while the aligned middle is tagged per cache line (which is much faster).
 static inline void __mi_memtag_store_ex(void* p, size_t size, bool zero) {
   mi_assert_internal(((uintptr_t)p % MI_MEMTAG_GRANULE_SIZE) == 0 && (size % MI_MEMTAG_GRANULE_SIZE) == 0 && size > 0);
-  uint8_t* q = (uint8_t*)p;
-  uint8_t* const end = q + size;
-  if (size <= 2*MI_MEMTAG_LINE_SIZE) {
-    if ((size % (2*MI_MEMTAG_GRANULE_SIZE)) != 0) { __mi_memtag_store_granule(q, zero); q += MI_MEMTAG_GRANULE_SIZE; }
-    for (; q < end; q += 2*MI_MEMTAG_GRANULE_SIZE) { __mi_memtag_store_granule2(q, zero); }
+  uint8_t* const start = (uint8_t*)p;
+  uint8_t* const end = start + size;
+  if (size <= MI_MEMTAG_GRANULE_MAX) {
+    __mi_memtag_store_granules(start, end, zero);
   }
   else {
-    __mi_memtag_store_granule(q, zero);
-    __mi_memtag_store_granule(end - MI_MEMTAG_GRANULE_SIZE, zero);
-    __mi_memtag_store_granule2((uint8_t*)(((uintptr_t)q + 31) & ~(uintptr_t)31), zero);
-    __mi_memtag_store_granule2((uint8_t*)((uintptr_t)end & ~(uintptr_t)31) - 32, zero);
-    uint8_t* const line_end = (uint8_t*)((uintptr_t)end & ~(uintptr_t)(MI_MEMTAG_LINE_SIZE-1));
-    for (q = (uint8_t*)(((uintptr_t)q + MI_MEMTAG_LINE_SIZE-1) & ~(uintptr_t)(MI_MEMTAG_LINE_SIZE-1)); q < line_end; q += MI_MEMTAG_LINE_SIZE) {
-      __mi_memtag_store_line(q, zero);
+    const uintptr_t line_size = _mi_os_memtag_line_size();
+    uint8_t* const line_start = (uint8_t*)(((uintptr_t)start + line_size - 1) & ~(line_size - 1));
+    uint8_t* const line_end   = (uint8_t*)((uintptr_t)end & ~(line_size - 1));
+    if (line_start >= line_end) {
+      __mi_memtag_store_granules(start, end, zero);
+    }
+    else {
+      __mi_memtag_store_granules(start, line_start, zero);
+      for (uint8_t* q = line_start; q < line_end; q += line_size) { __mi_memtag_store_line(q, zero); }
+      __mi_memtag_store_granules(line_end, end, zero);
     }
   }
 }
@@ -249,7 +256,7 @@ static inline void mi_memtag_clear(void* p, size_t size) {
 }
 
 #else
-static inline bool  mi_memtag_cpu_is_supported(void)           { return false; }
+static inline size_t mi_memtag_cpu_line_size(void)             { return 0; }
 static inline void  mi_memtag_check(const void* p)             { MI_UNUSED(p); }
 static inline void* mi_memtag_random(void* p, size_t exclude)  { MI_UNUSED(exclude); return p; }
 static inline void* mi_memtag_load(void* p)                    { return p; }
