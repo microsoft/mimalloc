@@ -642,10 +642,11 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
   #if MI_RETIRE_CYCLES > 0
   const size_t bsize = mi_page_block_size(page);
   if mi_likely( pq->count <= MI_RETIRE_MAX_PAGES && !mi_page_queue_is_special(pq)) {  // not full or huge queue?
-    if (pq->count==1 || bsize < MI_SMALL_SIZE_MAX) {
+    // memory tagged pages retire up to larger sizes to reuse them with their current tags (instead of fresh random ones)
+    if (pq->count==1 || bsize < MI_SMALL_SIZE_MAX || (mi_page_is_memtag(page) && bsize <= MI_SMALL_MAX_OBJ_SIZE)) {
       mi_theap_t* theap = mi_page_theap(page);
       mi_theap_stat_counter_increase(theap, pages_retire, 1);
-      page->retire_expire = (bsize <= MI_SMALL_MAX_OBJ_SIZE ? MI_RETIRE_CYCLES : MI_RETIRE_CYCLES/4);
+      page->retire_expire = (bsize <= MI_SMALL_MAX_OBJ_SIZE || mi_page_is_memtag(page) ? MI_RETIRE_CYCLES : MI_RETIRE_CYCLES/4);
       mi_assert_internal(pq >= theap->pages);
       const size_t index = pq - theap->pages;
       mi_assert_internal(index < MI_BIN_FULL && index < MI_BIN_HUGE);
