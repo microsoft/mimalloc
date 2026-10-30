@@ -444,6 +444,8 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
   However, free lists are not encoded at this level, and a heap block overflow can still corrupt a free list.
 - The start address of OS allocated memory is randomized
   (if possible), and mimalloc aborts on corrupted meta data detection.
+- The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
+  mitigate against attacks that rely on a predicable allocation order.
 
 With `ON`, performance is impacted a bit more (usually less than 25%), but adds:
 
@@ -454,9 +456,6 @@ With `ON`, performance is impacted a bit more (usually less than 25%), but adds:
 - Double free's are detected (and ignored).
 - Padding is added at the end of each heap block to detect heap block overflows (once the block is freed).
 - Some use-after-free accesses are detected (if these modify the first word in the block).
-- The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
-  mitigate against attacks that rely on a predicable allocation order. Similarly, the larger heap blocks allocated by mimalloc
-  from the OS are also address randomized.
 - (v3) All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
   are ignored.
 
@@ -474,7 +473,8 @@ As always, evaluate with care as part of an overall security strategy as all of 
 On recent arm64 hardware with the memory tagging extensions (MTE), _mimalloc_ can be built with `-DMI_MTE=ON`
 to give every heap block a randomized memory tag that can only be accessed with a matching pointer that has the same
 tag. Adjacent blocks always get different tags, and blocks are retagged when freed, so most buffer overflows and
-use-after-free accesses fault immediately.
+use-after-free accesses fault immediately. All blocks up to 512KiB are tagged, but larger blocks get a guard page
+at the end so overflows will still fault (this is done as tagging memory is linear in the size of the block).
 
 Tagging is only enabled at runtime if both the hardware and OS support it -- and otherwise _mimalloc_ runs untagged.
 An MTE build running untagged is very close in performance to a regular release build. When using tagging, it depends

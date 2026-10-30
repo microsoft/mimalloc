@@ -736,7 +736,7 @@ void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {
 #define MI_MIN_SLICES       (2)
 
 static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* const page, const size_t bsize, const size_t extend, const bool memtag) {
-  #if !(MI_SECURE>=3)
+  #if !(MI_SECURE>=1)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
   #endif
@@ -793,7 +793,7 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
 
 static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t bsize, const size_t extend, const bool memtag)
 {
-  #if !(MI_SECURE>=3)
+  #if !(MI_SECURE>=1)
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
   #endif
@@ -821,10 +821,10 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 ----------------------------------------------------------- */
 
 #define MI_MAX_EXTEND_SIZE    (8*1024)      // heuristic, one or two OS pages seems to work well.
-#if (MI_SECURE>=3)
-#define MI_MIN_EXTEND         (8*MI_SECURE) // extend at least by this many
+#if (MI_SECURE>=1)
+#define MI_MIN_EXTEND(bsize)  ((bsize) <= MI_SMALL_MAX_OBJ_SIZE ? 32 : 8)  // extend at least by this many (for free list randomization)
 #else
-#define MI_MIN_EXTEND         (1)
+#define MI_MIN_EXTEND(bsize)  (1)
 #endif
 
 // Extend the capacity (up to reserved) by initializing a free list
@@ -834,7 +834,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 // extra test in malloc? or cache effects?)
 bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_expensive(mi_page_is_valid_init(page));
-  #if !(MI_SECURE>=3)
+  #if !(MI_SECURE>=1)
   mi_assert(page->free == NULL);
   mi_assert(page->local_free == NULL);
   if (page->free != NULL) return true;
@@ -851,8 +851,9 @@ bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   size_t extend = (size_t)page->reserved - page->capacity;
   mi_assert_internal(extend > 0);
 
-  size_t max_extend = (bsize >= MI_MAX_EXTEND_SIZE ? MI_MIN_EXTEND : MI_MAX_EXTEND_SIZE/bsize);
-  if (max_extend < MI_MIN_EXTEND) { max_extend = MI_MIN_EXTEND; }
+  const size_t min_extend = MI_MIN_EXTEND(bsize);
+  size_t max_extend = (bsize >= MI_MAX_EXTEND_SIZE ? min_extend : MI_MAX_EXTEND_SIZE/bsize);
+  if (max_extend < min_extend) { max_extend = min_extend; }
   mi_assert_internal(max_extend > 0);
 
   if (extend > max_extend) {
@@ -897,7 +898,7 @@ bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   }
 
   // and append the extend the free list
-  if (MI_SECURE>=3 && extend >= MI_MIN_SLICES) {
+  if (MI_SECURE>=1 && extend >= MI_MIN_SLICES) {
     mi_page_free_list_extend_secure(theap, page, bsize, extend, memtag);
   }
   else {
