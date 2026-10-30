@@ -132,7 +132,10 @@ void _mi_os_init(void) {
   mi_os_mem_config_t config = mi_os_mem_config_default;
   _mi_prim_mem_init(&config);
   mi_assert(config.page_size != 0);
-  config.has_memtag = (config.has_memtag && mi_memtag_cpu_is_supported());
+  if (config.has_memtag && !mi_memtag_cpu_is_supported()) {
+    _mi_warning_message("memory tagging is disabled as the CPU tag cache line size is not supported (only 64 bytes is supported)\n");
+    config.has_memtag = false;
+  }
   mi_process_sealed_t* const sealed = _mi_process_unseal();
   sealed->os_mem_config = config;  // publish at once
   _mi_process_seal();

@@ -84,6 +84,7 @@ static bool mem_is_zero(const void* p, size_t size) {
 // Main testing
 // ---------------------------------------------------------------------------
 int main(void) {
+  mi_options_print();
   mi_option_disable(mi_option_verbose);
 
   CHECK_BODY("pointer-address-and-memtag") {

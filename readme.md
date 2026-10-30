@@ -480,8 +480,8 @@ Tagging is only enabled at runtime if both the hardware and OS support it -- and
 An MTE build running untagged is very close in performance to a regular release build. When using tagging, it depends
 on the hardware, but on an M5 it is usually within about 10% of a release build.
 
-Building with MTE also enables `-DMI_SECURE=MINIMAL` by default. Since MTE catches use-after-free, double-free,
-and heap block overflows (probalistically), `-DMI_MTE=ON` gives similar guarantees as `-DMI_SECURE=ON` but now with
+Building with MTE also enables `-DMI_SECURE=MINIMAL` by default. Since MTE catches (most) use-after-free, double-free,
+and heap block overflows, `-DMI_MTE=ON` gives similar guarantees as `-DMI_SECURE=ON` but now with
 hardware support. MTE enabled builds have the suffix `-mte` (e.g. `mimalloc-mte.o`).
 
 - macOS: requires an Apple M5 (or later) with macOS 26. MTE is only enabled for executables signed with
@@ -493,7 +493,7 @@ hardware support. MTE enabled builds have the suffix `-mte` (e.g. `mimalloc-mte.
   ```
 - Linux: requires an arm64 kernel with MTE support (check with `grep mte /proc/cpuinfo`). The tag check mode
   can be set with `MIMALLOC_MTE=sync` (default), `async`, or `preferred`. Without MTE hardware you can still
-  test using QEMU emulation (e.g. `QEMU_CPU=max qemu-aarch64 ./myprogram`).
+  test using QEMU emulation (e.g. `QEMU_CPU=neoverse-n2 qemu-aarch64 ./myprogram`).
   ```
   > cmake -DMI_MTE=ON ../..
   > make -j

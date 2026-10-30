@@ -112,7 +112,13 @@ static inline void  mi_memtag_clear(void* p, size_t size);
   this way the code is not changed otherwise and still runs on CPU's without MTE.
 -----------------------------------------------------------------------------*/
 #if MI_MTE
+#if defined(__clang__)
 #define MI_MEMTAG_ASM   ".arch_extension memtag\n\t"
+#else
+// older GNU assemblers (like binutils 2.38) only accept memtag instructions for armv8.5-a or later. Note that
+// this stays in effect for the rest of the assembly file which is fine as armv8.5-a is a superset of armv8.1-a.
+#define MI_MEMTAG_ASM   ".arch armv8.5-a+memtag\n\t"
+#endif
 
 // Return `p` with a random tag that is not in the `exclude` mask (`irg`)
 static inline void* mi_memtag_random(void* p, size_t exclude) {
