@@ -37,9 +37,9 @@ static const mi_os_mem_config_t mi_os_mem_config_default = {
   false     // has transparent huge pages? (if true we purge in (aligned) large page size chunks only to not fragment such pages)
 };
 
-// The OS memory configuration in the process data (zero until `_mi_os_init`)
+// The OS memory configuration in the sealed process data (zero until `_mi_os_init`)
 static inline const mi_os_mem_config_t* mi_os_mem_config(void) {
-  const mi_os_mem_config_t* const config = &_mi_process.os_mem_config;
+  const mi_os_mem_config_t* const config = &mi_process_get_sealed()->os_mem_config;
   return (mi_likely(config->page_size != 0) ? config : &mi_os_mem_config_default);
 }
 
@@ -58,6 +58,11 @@ bool _mi_os_has_thp(void) {
 // OS (small) page size
 size_t _mi_os_page_size(void) {
   return mi_os_mem_config()->page_size;
+}
+
+// OS allocation granularity (usually the page size, but 64KiB on Windows)
+size_t _mi_os_alloc_granularity(void) {
+  return mi_os_mem_config()->alloc_granularity;
 }
 
 // if large OS pages are supported (2 or 4MiB), then return the size, otherwise return the small page size (4KiB)
@@ -121,7 +126,9 @@ void _mi_os_init(void) {
   mi_os_mem_config_t config = mi_os_mem_config_default;
   _mi_prim_mem_init(&config);
   mi_assert(config.page_size != 0);
-  _mi_process.os_mem_config = config;  // publish at once
+  mi_process_sealed_t* const sealed = _mi_process_unseal();
+  sealed->os_mem_config = config;  // publish at once
+  _mi_process_seal();
   if (_mi_os_page_size() > MI_ARENA_SLICE_SIZE) {
     _mi_error_message(ENOTSUP, "the OS page size (%zu KiB) is larger than the arena slice size (%zu KiB); increase MI_ARENA_SLICE_SHIFT\n", _mi_os_page_size()/MI_KiB, (size_t)(MI_ARENA_SLICE_SIZE/MI_KiB));
   }
@@ -163,7 +170,7 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
   if (req_size > 32*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(MI_HINT_AREA / 1<<34) = 1/256
   #endif
 
-  mi_addr_t hint = mi_atomic_add_acq_rel(&_mi_process.os_aligned_base, req_size);
+  mi_addr_t hint = mi_atomic_add_relaxed(&_mi_process.os.aligned_base, req_size);
   if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
     mi_addr_t init = MI_HINT_BASE;
     #if (MI_SECURE || !MI_DEBUG)  // security: randomize start of aligned allocations unless in debug mode
@@ -173,8 +180,8 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
     init = init + ((MI_AU(MI_MiB) * ((r>>17) & 0x3FFFFF)) % MI_HINT_AREA);  // (randomly 22 bits)* 1MiB == 0 to 4TiB
     #endif
     mi_addr_t expected = hint + req_size;
-    mi_atomic_cas_strong_acq_rel(&_mi_process.os_aligned_base, &expected, init);
-    hint = mi_atomic_add_acq_rel(&_mi_process.os_aligned_base, req_size); // this may still give 0 or > MI_HINT_MAX but that is ok, it is a hint after all
+    mi_atomic_cas_strong_relaxed(&_mi_process.os.aligned_base, &expected, init);
+    hint = mi_atomic_add_relaxed(&_mi_process.os.aligned_base, req_size); // this may still give 0 or > MI_HINT_MAX but that is ok, it is a hint after all
     if (hint==0) return NULL;
   }
   const mi_addr_t hint_align = mi_addr_align_up(hint,try_alignment);
@@ -787,7 +794,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
 
   mi_addr_t start = 0;
   mi_addr_t end = 0;
-  mi_addr_t huge_start = mi_atomic_load_relaxed(&_mi_process.os_huge_start);
+  mi_addr_t huge_start = mi_atomic_load_relaxed(&_mi_process.os.huge_start);
   do {
     start = huge_start;
     if (start == 0) {
@@ -805,7 +812,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
       #endif
     }
     end = start + size;
-  } while (!mi_atomic_cas_weak_acq_rel(&_mi_process.os_huge_start, &huge_start, end));
+  } while (!mi_atomic_cas_weak_relaxed(&_mi_process.os.huge_start, &huge_start, end));
 
   if (total_size != NULL) *total_size = size;
   return (uint8_t*)mi_ptr_from_addr(start);
@@ -909,7 +916,7 @@ Support NUMA aware allocation
 -----------------------------------------------------------------------------*/
 
 int _mi_os_numa_node_count(void) {
-  size_t count = mi_atomic_load_acquire(&_mi_process.os_numa_node_count);
+  size_t count = mi_atomic_load_acquire(&_mi_process.os.numa_node_count);
   if mi_unlikely(count == 0) {
     long ncount = mi_option_get(mi_option_use_numa_nodes); // given explicitly?
     if (ncount > 0 && ncount < INT_MAX) {
@@ -920,7 +927,7 @@ int _mi_os_numa_node_count(void) {
       if (n == 0 || n > INT_MAX) { count = 1; }
                             else { count = n; }
     }
-    mi_atomic_store_release(&_mi_process.os_numa_node_count, count); // save it
+    mi_atomic_store_release(&_mi_process.os.numa_node_count, count); // save it
     if (count>1) { _mi_verbose_message("using %zd numa regions\n", count); }
   }
   mi_assert_internal(count > 0 && count <= INT_MAX);
@@ -938,7 +945,7 @@ static int mi_os_numa_node_get(void) {
 }
 
 int _mi_os_numa_node(void) {
-  if mi_likely(mi_atomic_load_relaxed(&_mi_process.os_numa_node_count) == 1) {
+  if mi_likely(mi_atomic_load_relaxed(&_mi_process.os.numa_node_count) == 1) {
     return 0;
   }
   else {

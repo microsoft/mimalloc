@@ -209,8 +209,8 @@ bool _mi_atomic_once_enter(mi_atomic_once_t* once) {
   }
 
   mi_lock_acquire(&once->lock);
-  size_t expected = 0;
-  if (mi_atomic_cas_strong_acq_rel(&once->tid, &expected, current_tid)) {  // could use atomic_load/store as well
+  if (mi_atomic_load_relaxed(&once->tid) == 0) {
+    mi_atomic_store_relaxed(&once->tid, current_tid);
     return true;  // should execute and release
   }
   else {

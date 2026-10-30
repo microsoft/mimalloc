@@ -70,14 +70,23 @@ int _mi_prim_reset(void* addr, size_t size);
 // Returns error code or 0 on success. On most platforms this is a no-op.
 int _mi_prim_reuse(void* addr, size_t size);
 
-// Set (or reset) a guard range. Returns error code or 0 on success.
-// `is_committed` is the accounted commit state of the range which is never changed by the guard:
-// - if `is_committed`, the range stays committed but becomes inaccessible (and its physical memory may be released);
-//   a reset makes the range accessible again.
-// - otherwise, the range may be reserved, decommitted, or still partly committed. After a set the range is
-//   inaccessible until it is explicitly committed (`_mi_prim_commit`), and a reset is a no-op.
-// The caller must ensure the accounted commit state does not change between a set and reset.
-int _mi_prim_guard(void* addr, size_t size, bool set, bool is_committed);
+// Set a guard on a range making it inaccessible (`set_guard`), or remove it. Returns error code or 0 on success.
+// The guard should not change the accounted commit state `is_committed` of the range:
+// - if committed, a set keeps it committed (but the contents may be discarded), and a remove makes it accessible again.
+// - otherwise (the range may be partly committed), a set makes it inaccessible (e.g. by decommitting on Windows)
+//   and a remove is a no-op (it stays inaccessible until `_mi_prim_commit`).
+int _mi_prim_guard(void* addr, size_t size, bool set_guard, bool is_committed);
+
+// Memory access protection
+typedef enum mi_protect_e {
+  MI_PROTECT_NONE,       // inaccessible
+  MI_PROTECT_READ,       // read-only
+  MI_PROTECT_READWRITE   // readable and writable
+} mi_protect_t;
+
+// Set the access protection of a committed range. Returns error code or 0 on success
+// (and on platforms that have no memory protection, return 0 as well)
+int _mi_prim_protect(void* addr, size_t size, mi_protect_t protect);
 
 // Allocate huge (1GiB) pages possibly associated with a NUMA node.
 // `is_zero` is set to true if the memory was zero initialized (as on most OS's)

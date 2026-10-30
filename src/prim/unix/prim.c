@@ -438,14 +438,13 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   // huge page allocation
   #if MI_OS_HAS_HUGE_PAGES
   if (allow_large && (large_only || (_mi_os_canuse_large_page(size, try_alignment) && mi_option_is_enabled(mi_option_allow_large_os_pages)))) {
-    static _Atomic(size_t) large_page_try_ok; // = 0;
-    size_t try_ok = mi_atomic_load_acquire(&large_page_try_ok);
-    if (!large_only && try_ok > 0) {
+    size_t backoff = mi_atomic_load_relaxed(&_mi_process.os.large_page_backoff);
+    if (!large_only && backoff > 0) {
       // If the OS is not configured for large OS pages, or the user does not have
       // enough permission, the `mmap` will always fail (but it might also fail for other reasons).
-      // Therefore, once a large page allocation failed, we don't try again for `large_page_try_ok` times
+      // Therefore, once a large page allocation failed, we don't try again for `os_large_page_backoff` times
       // to avoid too many failing calls to mmap.
-      mi_atomic_cas_strong_acq_rel(&large_page_try_ok, &try_ok, try_ok - 1);
+      mi_atomic_cas_strong_relaxed(&_mi_process.os.large_page_backoff, &backoff, backoff - 1);
     }
     else {
       int lflags = flags & ~MAP_NORESERVE;  // using NORESERVE on huge pages seems to fail on Linux
@@ -457,8 +456,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       lflags |= MAP_HUGETLB;
       #endif
       #ifdef MAP_HUGE_1GB
-      static _Atomic(size_t) mi_huge_1gib_pages_unavailable;
-      if (large_only && (size % MI_GiB) == 0 && (mi_atomic_load_relaxed(&mi_huge_1gib_pages_unavailable)==0)) {
+      if (large_only && (size % MI_GiB) == 0 && (mi_atomic_load_relaxed(&_mi_process.os.huge_page_unavailable)==0)) {
         lflags |= MAP_HUGE_1GB;
       }
       else
@@ -477,7 +475,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
         p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, lflags, lfd);
         #ifdef MAP_HUGE_1GB
         if (p == NULL && (lflags & MAP_HUGE_1GB) == MAP_HUGE_1GB) {
-          mi_atomic_store_relaxed(&mi_huge_1gib_pages_unavailable,1); // don't try huge 1GiB pages again
+          mi_atomic_store_relaxed(&_mi_process.os.huge_page_unavailable,1); // don't try huge 1GiB pages again
           if (large_only) {
             _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (errno: %i)\n", errno);
           }
@@ -487,7 +485,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
         #endif
         if (large_only) return p;
         if (p == NULL) {
-          mi_atomic_store_release(&large_page_try_ok, (size_t)8);  // on error, don't try again for the next N allocations
+          mi_atomic_store_relaxed(&_mi_process.os.large_page_backoff, (size_t)8);  // on error, don't try again for the next N allocations
         }
       }
     }
@@ -641,12 +639,11 @@ int _mi_prim_reset(void* start, size_t size) {
   // will not reduce the `rss` stats in tools like `top` even though the memory is available
   // to other processes. With the default `MIMALLOC_PURGE_DECOMMITS=1` we ensure that by
   // default `MADV_DONTNEED` is used though.
-  static _Atomic(size_t) advice = MI_ATOMIC_VAR_INIT(MADV_FREE);
-  int oadvice = (int)mi_atomic_load_relaxed(&advice);
-  while ((err = unix_madvise(start, size, oadvice)) != 0 && err == EAGAIN) { /* try again */ };
-  if (err == EINVAL && oadvice == MADV_FREE) {
+  const bool lazy = (mi_atomic_load_relaxed(&_mi_process.os.lazy_reset_unavailable) == 0);
+  while ((err = unix_madvise(start, size, (lazy ? MADV_FREE : MADV_DONTNEED))) != 0 && err == EAGAIN) { /* try again */ };
+  if (err == EINVAL && lazy) {
     // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
-    mi_atomic_store_release(&advice, (size_t)MADV_DONTNEED);
+    mi_atomic_store_release(&_mi_process.os.lazy_reset_unavailable, (size_t)1);
     err = unix_madvise(start, size, MADV_DONTNEED);
   }
   #else
@@ -655,21 +652,22 @@ int _mi_prim_reset(void* start, size_t size) {
   return err;
 }
 
-static int unix_mprotect(void* start, size_t size, bool protect) {
-  int err = mprotect(start, size, protect ? PROT_NONE : (PROT_READ | PROT_WRITE));
+int _mi_prim_protect(void* addr, size_t size, mi_protect_t protect) {
+  const int prot = (protect == MI_PROTECT_NONE ? PROT_NONE : (protect == MI_PROTECT_READ ? PROT_READ : (PROT_READ | PROT_WRITE)));
+  int err = mprotect(addr, size, prot);
   if (err != 0) { err = errno; }
   unix_mprotect_hint(err);
   return err;
 }
 
-int _mi_prim_guard(void* start, size_t size, bool set, bool is_committed) {
-  if (set) {
+int _mi_prim_guard(void* start, size_t size, bool set_guard, bool is_committed) {
+  if (set_guard) {
     // `mprotect` also works on reserved memory, so committed or not, we release the physical memory and protect
     unix_madvise_release(start, size);  // best effort
-    return unix_mprotect(start, size, true);
+    return _mi_prim_protect(start, size, MI_PROTECT_NONE);
   }
   else if (is_committed) {
-    const int err = unix_mprotect(start, size, false);
+    const int err = _mi_prim_protect(start, size, MI_PROTECT_READWRITE);
     return (err != 0 ? err : _mi_prim_reuse(start, size));
   }
   else {

@@ -17,6 +17,7 @@ void          _mi_os_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_
 void          _mi_os_free_ex(mi_subproc_t* subproc, void* p, size_t size, bool still_committed, mi_memid_t memid );
 
 size_t        _mi_os_page_size(void);
+size_t        _mi_os_alloc_granularity(void);
 size_t        _mi_os_guard_page_size(void);
 size_t        _mi_os_good_alloc_size(size_t size);
 bool          _mi_os_has_overcommit(void);

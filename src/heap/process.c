@@ -176,9 +176,53 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
 // pre-allocate the process data
 mi_decl_hidden mi_decl_cache_align mi_process_t _mi_process = mi_init_struct_zero;
 
-// In secure mode, surround the process data with guard pages to protect against overflows of adjacent static data
+// The sealed lock is static as it can be used before process initialization (and a zero lock is invalid on some platforms)
+static mi_lock_t mi_sealed_lock = MI_LOCK_INITIALIZER;
+
+// Make the sealed process data writable; this takes the sealed lock until `_mi_process_seal`.
+mi_process_sealed_t* _mi_process_unseal(void) {
+  mi_lock_acquire(&mi_sealed_lock);
+  mi_process_sealed_t* const sealed = mi_process_get_sealed();
+  if (sealed->is_protected) {
+    _mi_prim_protect(sealed, MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READWRITE);  // on failure we fault on the first write
+  }
+  return sealed;
+}
+
+// Make the sealed process data read-only again and release the sealed lock.
+void _mi_process_seal(void) {
+  mi_process_sealed_t* const sealed = mi_process_get_sealed();
+  const int err = (sealed->is_protected ? _mi_prim_protect(sealed, MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READ) : 0);
+  mi_lock_release(&mi_sealed_lock);
+  if (err != 0) {
+    _mi_error_message(EINVAL, "unable to seal the process data (error: %d)\n", err);
+  }
+}
+
+// Initialize the sealed process data and, in secure mode, make it read-only.
+static void mi_process_sealed_init(void) {
+  bool protect = false;
+  #if MI_SECURE_SEALED_PAGE
+  mi_assert_internal(sizeof(mi_process_sealed_t) <= MI_OS_PROBABLE_PAGE_SIZE);
+  if ((MI_OS_PROBABLE_PAGE_SIZE % _mi_os_page_size()) == 0) {
+    protect = true;
+  }
+  else if (MI_SECURE > 1) {
+    _mi_error_message(EFAULT, "secure level %d, but unable to seal the process data as the OS page size (%zu KiB) is too large (rebuild with `-DMI_OS_PROBABLE_PAGE_SIZE=%zu`?)\n", MI_SECURE, _mi_os_page_size() / MI_KiB, _mi_os_page_size());
+  }
+  else {
+    _mi_warning_message("unable to seal the process data as the OS page size (%zu KiB) is too large (rebuild with `-DMI_OS_PROBABLE_PAGE_SIZE=%zu`?)\n", _mi_os_page_size() / MI_KiB, _mi_os_page_size());
+  }
+  #endif
+  mi_process_sealed_t* const sealed = _mi_process_unseal();
+  sealed->is_protected = protect;
+  _mi_process_seal();
+}
+
+// In secure mode, surround the process data with guard pages to protect against overflows of adjacent static data.
+// The front guard page is placed just before the sealed page.
 static void mi_process_guard_init(void) {
-  const size_t front = sizeof(_mi_process.guard_front);
+  const size_t front = (size_t)((uint8_t*)mi_process_get_sealed() - (uint8_t*)&_mi_process);
   const size_t size  = offsetof(mi_process_t, guard_end) - front;
   _mi_os_secure_guard_pages_set_within(&_mi_process, sizeof(_mi_process), front, size);
 }
@@ -587,9 +631,9 @@ static void mi_process_init_once(void) {
   _mi_stats_init();          // start timer
   _mi_os_init();             // primitive dependent
   mi_process_guard_init();   // after os_init so the OS page size is known
-
   mi_heap_main_init();       // before page_map_init so stats are working
   _mi_page_map_init();       // todo: this could fail.. should we abort in that case?
+  mi_process_sealed_init();  // after page_map_init so the page map is stored before sealing
   mi_thread_init();
 
   // the following can potentially allocate (on freeBSD for pthread keys)
@@ -702,7 +746,7 @@ static void mi_process_done_once(void) {
 void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   // we don't use `mi_atomic_do_once` here to avoid deadlocks if threads are killed due to a forced exit (issue #1377)
   size_t expected = 0;
-  if (mi_atomic_cas_strong_acq_rel(&_mi_process.process_done_called, &expected, 1)) {
+  if (mi_atomic_cas_strong_relaxed(&_mi_process.process_done_called, &expected, 1)) {
     mi_process_done_once();
   }
 }

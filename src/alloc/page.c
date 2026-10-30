@@ -356,20 +356,14 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
   if (mi_page_all_free(page)) { _mi_page_qsbr_clear(page); }
 }
 
-// Collect the local `thread_free` list using an atomic exchange.
+// Collect the thread free list while preserving ownership.
 // Returns `true` if a non-empty thread free list was collected.
 static bool mi_page_thread_free_collect(mi_page_t* page)
 {
-  // atomically capture the thread free list
-  mi_block_t* head;
-  mi_thread_free_t tfreex;
-  mi_thread_free_t tfree = mi_atomic_load_relaxed(&page->xthread_free);
-  do {
-    head = mi_tf_block(tfree);
-    if mi_likely(head == NULL) return false; // return if the list is empty
-    tfreex = mi_tf_create(NULL,mi_tf_is_owned(tfree));  // set the thread free list to NULL
-  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tfree, tfreex));  // release is enough?
-  mi_assert_internal(head != NULL);
+  if mi_likely(mi_page_thread_free(page) == NULL) return false;
+  const mi_thread_free_t tfree = mi_atomic_and_acquire(&page->xthread_free, mi_tf_create(NULL, true));
+  mi_block_t* const head = mi_tf_block(tfree);
+  if (head == NULL) return false;
 
   // and move it to the local list
   mi_page_thread_collect_to_local(page, head);

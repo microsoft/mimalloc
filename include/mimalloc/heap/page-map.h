@@ -36,7 +36,7 @@ mi_page_t*    _mi_safe_ptr_page(const void* p);
 #define MI_PAGE_MAP_SUB_COUNT     (MI_ZU(1) << MI_PAGE_MAP_SUB_SHIFT)
 #define MI_PAGE_MAP_SHIFT         (MI_MAX_VABITS - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT)
 
-// The page map pointer and committed entry count are stored in the (guarded) `_mi_process.page_map(_committed)`.
+// The page map pointer and committed entry count are stored in the sealed process data (see `mi_process_get_sealed`).
 // Both are zero before initialization so `mi_checked_ptr_page` returns NULL for any pointer (issue #1341).
 typedef mi_page_t**   mi_submap_t;
 typedef struct mi_page_map_s {
@@ -61,7 +61,11 @@ static inline size_t mi_page_map_lookup_index(const void* p, size_t* sub_idx) {
 }
 
 static inline mi_page_map_t* mi_page_map(void) {
-  return mi_atomic_load_ptr_relaxed(mi_page_map_t,&_mi_process.page_map);
+  return mi_atomic_load_ptr_relaxed(mi_page_map_t,&mi_process_get_sealed()->page_map);
+}
+
+static inline size_t mi_page_map_committed(void) {
+  return mi_atomic_load_relaxed(&mi_process_get_sealed()->page_map_committed);
 }
 
 static inline mi_submap_t mi_page_map_at(const mi_page_map_t* pmap, size_t idx) {
@@ -79,7 +83,7 @@ static inline mi_page_t* mi_checked_ptr_page(const void* p) {
   size_t sub_idx;
   const size_t idx = mi_page_map_lookup_index(p, &sub_idx);
   const mi_page_map_t* pmap = mi_page_map();  // NULL before initialization (but then the committed count is 0)
-  const size_t committed_count = mi_atomic_load_relaxed(&_mi_process.page_map_committed);
+  const size_t committed_count = mi_page_map_committed();
   if mi_unlikely(idx >= committed_count) return NULL;
   mi_submap_t const sub = mi_page_map_at(pmap,idx);
   if mi_unlikely(sub == NULL) return NULL;
