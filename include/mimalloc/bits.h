@@ -419,9 +419,10 @@ typedef uintptr_t         mi_addr_t;
 #define MI_AU(x)          ((mi_addr_t)(x))
 
 // With memory tagging (MTE), pointers carry a tag in the top bits that is not part of the address (see `memtag.h`)
+// The mask covers the full top byte (ignored by the hardware) as this gives better codegen (e.g. `p & 0x00FFFFFFF0000000`)
 #if MI_MTE
 #define MI_PTR_TAG_SHIFT  (56)
-#define MI_PTR_TAG_MASK   (MI_AU(0x0F) << MI_PTR_TAG_SHIFT)
+#define MI_PTR_TAG_MASK   (MI_AU(0xFF) << MI_PTR_TAG_SHIFT)
 #else
 #define MI_PTR_TAG_SHIFT  (0)
 #define MI_PTR_TAG_MASK   (MI_AU(0))

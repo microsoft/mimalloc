@@ -433,14 +433,14 @@ typedef struct mi_block_s {
 // The page flags are put in the bottom 2 (or 3) bits of the thread_id (for a fast test in `mi_free`)
 // If `has_interior_pointers` is true if the page has pointers at an offset in a block (so we have to unalign to the block start before free-ing)
 // `in_full_queue` is true if the page is full and resides in the full queue (so we move it to a regular queue on free-ing)
-// `no_memtag` is true if the blocks are not memory tagged (only with `MI_MTE`, so the `mi_free` fast path can always retag)
+// `is_memtag` is true if the blocks are memory tagged (only with `MI_MTE`)
 #define MI_PAGE_IN_FULL_QUEUE           MI_ZU(0x01)
 #define MI_PAGE_HAS_INTERIOR_POINTERS   MI_ZU(0x02)
 #if MI_MTE
-#define MI_PAGE_NO_MEMTAG               MI_ZU(0x04)
+#define MI_PAGE_IS_MEMTAG               MI_ZU(0x04)
 #define MI_PAGE_FLAG_BITS               (3)
 #else
-#define MI_PAGE_NO_MEMTAG               MI_ZU(0)
+#define MI_PAGE_IS_MEMTAG               MI_ZU(0)
 #define MI_PAGE_FLAG_BITS               (2)
 #endif
 #define MI_PAGE_FLAG_MASK               ((MI_ZU(1) << MI_PAGE_FLAG_BITS) - 1)
