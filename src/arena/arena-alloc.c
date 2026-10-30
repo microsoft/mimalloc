@@ -413,11 +413,11 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_
     // schedule purge
     const mi_msecs_t expire = _mi_clock_now() + delay;
     mi_msecs_t expire0 = 0;
-    if (mi_atomic_casi64_strong_acq_rel(&arena->purge_expire, &expire0, expire)) {
+    if (mi_atomic_casi64_strong_release(&arena->purge_expire, &expire0, expire)) {
       // expiration was not yet set
       // maybe set the global arenas expire as well (if it wasn't set already)
       mi_assert_internal(expire0==0);
-      mi_atomic_casi64_strong_acq_rel(&arena->subproc->purge_expire, &expire0, expire);
+      mi_atomic_casi64_strong_release(&arena->subproc->purge_expire, &expire0, expire);
     }
     else {
       // already an expiration was set

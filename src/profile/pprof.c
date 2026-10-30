@@ -267,7 +267,7 @@ static bool mi_time_threshold_update(mi_msecs_t now, size_t time_interval_secs, 
   while (now >= deadline) {
     mi_msecs_t next_deadline = deadline + interval_msecs;
     while (next_deadline <= now) { next_deadline += interval_msecs; }  // skip ahead if more than one interval has passed
-    if (mi_atomic_casi64_strong_acq_rel(time_interval_deadline, &deadline, next_deadline)) {
+    if (mi_atomic_casi64_strong_relaxed(time_interval_deadline, &deadline, next_deadline)) {
       return true;
     }
     // CAS failed: `deadline` now holds the current value; retry (another thread may have already advanced it far enough)

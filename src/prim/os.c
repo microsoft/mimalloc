@@ -170,7 +170,7 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
   if (req_size > 32*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(MI_HINT_AREA / 1<<34) = 1/256
   #endif
 
-  mi_addr_t hint = mi_atomic_add_acq_rel(&_mi_process.os.aligned_base, req_size);
+  mi_addr_t hint = mi_atomic_add_relaxed(&_mi_process.os.aligned_base, req_size);
   if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
     mi_addr_t init = MI_HINT_BASE;
     #if (MI_SECURE || !MI_DEBUG)  // security: randomize start of aligned allocations unless in debug mode
@@ -180,8 +180,8 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
     init = init + ((MI_AU(MI_MiB) * ((r>>17) & 0x3FFFFF)) % MI_HINT_AREA);  // (randomly 22 bits)* 1MiB == 0 to 4TiB
     #endif
     mi_addr_t expected = hint + req_size;
-    mi_atomic_cas_strong_acq_rel(&_mi_process.os.aligned_base, &expected, init);
-    hint = mi_atomic_add_acq_rel(&_mi_process.os.aligned_base, req_size); // this may still give 0 or > MI_HINT_MAX but that is ok, it is a hint after all
+    mi_atomic_cas_strong_relaxed(&_mi_process.os.aligned_base, &expected, init);
+    hint = mi_atomic_add_relaxed(&_mi_process.os.aligned_base, req_size); // this may still give 0 or > MI_HINT_MAX but that is ok, it is a hint after all
     if (hint==0) return NULL;
   }
   const mi_addr_t hint_align = mi_addr_align_up(hint,try_alignment);
@@ -812,7 +812,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
       #endif
     }
     end = start + size;
-  } while (!mi_atomic_cas_weak_acq_rel(&_mi_process.os.huge_start, &huge_start, end));
+  } while (!mi_atomic_cas_weak_relaxed(&_mi_process.os.huge_start, &huge_start, end));
 
   if (total_size != NULL) *total_size = size;
   return (uint8_t*)mi_ptr_from_addr(start);

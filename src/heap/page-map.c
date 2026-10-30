@@ -219,12 +219,7 @@ mi_decl_nodiscard static mi_decl_noinline mi_submap_t mi_page_map_alloc_submap_a
         _mi_warning_message("internal error: unable to extend the page map\n");
       }
       else {
-        mi_submap_t expect = NULL;
-        if (!mi_atomic_cas_ptr_strong_acq_rel(mi_page_t*, &pmap->submaps[idx], &expect, sub)) {
-          // another thread already allocated it.. free and continue
-          _mi_os_free_with_guards(subproc, memid);
-          sub = expect;
-        }
+        mi_atomic_store_ptr_release(mi_page_t*, &pmap->submaps[idx], sub);  // ok, since we hold the lock
       }
     }
   }

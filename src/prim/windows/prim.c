@@ -365,11 +365,11 @@ static void* win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DW
   if ((large_only || (_mi_os_canuse_large_page(size, try_alignment) && mi_option_is_enabled(mi_option_allow_large_os_pages)))
       && allow_large && (flags&MEM_COMMIT)!=0 && (flags&MEM_RESERVE)!=0)
   {
-    size_t backoff = mi_atomic_load_acquire(&_mi_process.os.large_page_backoff);
+    size_t backoff = mi_atomic_load_relaxed(&_mi_process.os.large_page_backoff);
     if (!large_only && backoff > 0) {
       // if a large page allocation fails, it seems the calls to VirtualAlloc get very expensive.
       // therefore, once a large page allocation failed, we don't try again for `os_large_page_backoff` times.
-      mi_atomic_cas_strong_acq_rel(&_mi_process.os.large_page_backoff, &backoff, backoff - 1);
+      mi_atomic_cas_strong_relaxed(&_mi_process.os.large_page_backoff, &backoff, backoff - 1);
     }
     else {
       // large OS pages must always reserve and commit.
@@ -378,7 +378,7 @@ static void* win_virtual_alloc(void* addr, size_t size, size_t try_alignment, DW
       if (large_only) return p;
       // fall back to non-large page allocation on error (`p == NULL`).
       if (p == NULL) {
-        mi_atomic_store_release(&_mi_process.os.large_page_backoff, (size_t)10);  // on error, don't try again for the next N allocations
+        mi_atomic_store_relaxed(&_mi_process.os.large_page_backoff, (size_t)10);  // on error, don't try again for the next N allocations
       }
     }
   }

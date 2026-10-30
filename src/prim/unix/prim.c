@@ -438,13 +438,13 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   // huge page allocation
   #if MI_OS_HAS_HUGE_PAGES
   if (allow_large && (large_only || (_mi_os_canuse_large_page(size, try_alignment) && mi_option_is_enabled(mi_option_allow_large_os_pages)))) {
-    size_t backoff = mi_atomic_load_acquire(&_mi_process.os.large_page_backoff);
+    size_t backoff = mi_atomic_load_relaxed(&_mi_process.os.large_page_backoff);
     if (!large_only && backoff > 0) {
       // If the OS is not configured for large OS pages, or the user does not have
       // enough permission, the `mmap` will always fail (but it might also fail for other reasons).
       // Therefore, once a large page allocation failed, we don't try again for `os_large_page_backoff` times
       // to avoid too many failing calls to mmap.
-      mi_atomic_cas_strong_acq_rel(&_mi_process.os.large_page_backoff, &backoff, backoff - 1);
+      mi_atomic_cas_strong_relaxed(&_mi_process.os.large_page_backoff, &backoff, backoff - 1);
     }
     else {
       int lflags = flags & ~MAP_NORESERVE;  // using NORESERVE on huge pages seems to fail on Linux
@@ -485,7 +485,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
         #endif
         if (large_only) return p;
         if (p == NULL) {
-          mi_atomic_store_release(&_mi_process.os.large_page_backoff, (size_t)8);  // on error, don't try again for the next N allocations
+          mi_atomic_store_relaxed(&_mi_process.os.large_page_backoff, (size_t)8);  // on error, don't try again for the next N allocations
         }
       }
     }

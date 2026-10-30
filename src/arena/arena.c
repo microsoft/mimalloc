@@ -476,7 +476,7 @@ static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_
 
   // otherwise, try to allocate a fresh slot
   while(count<MI_MAX_ARENAS) {
-    if (mi_atomic_cas_strong_release(&subproc->arena_count, &count, count+1)) {
+    if (mi_atomic_cas_strong_relaxed(&subproc->arena_count, &count, count+1)) {
       arena->arena_idx = count;
       expected = NULL;
       if (mi_atomic_cas_ptr_strong_release(mi_arena_t, &subproc->arenas[count], &expected, arena)) {

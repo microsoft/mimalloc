@@ -515,7 +515,7 @@ static void mi_abandoned_page_unown_from_free(mi_page_t* page, mi_block_t* page_
   // try to cas atomically the original free list (`mt_free`) back with the ownership cleared.
   mi_thread_free_t tf_expect = mi_tf_create(page_thread_free,true);
   mi_thread_free_t tf_new    = mi_tf_set_owned(tf_expect,false);
-  while mi_unlikely(!mi_atomic_cas_strong_acq_rel(&page->xthread_free, &tf_expect, tf_new)) {
+  while mi_unlikely(!mi_atomic_cas_strong_release(&page->xthread_free, &tf_expect, tf_new)) {
     mi_assert_internal(mi_tf_is_owned(tf_expect));
     // while the xthread_free list is not empty..
     while (mi_tf_block(tf_expect) != NULL) {

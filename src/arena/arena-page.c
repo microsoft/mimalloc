@@ -1023,7 +1023,7 @@ static bool mi_abandoned_page_unown(mi_page_t* page, mi_theap_t* current_theapx)
     }
     mi_assert_internal(mi_tf_block(tf_old)==NULL);
     tf_new = mi_tf_create(NULL, false);
-  } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new));
+  } while (!mi_atomic_cas_weak_release(&page->xthread_free, &tf_old, tf_new));
   return false;
 }
 
