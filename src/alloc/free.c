@@ -157,7 +157,7 @@ void* _mi_memtag_canonical(void* p) {
 
 static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, const void* p ) {
   mi_assert(_mi_page_ptr_unalign(page,p) == (mi_block_t*)p); // should never be an interior pointer
-  #if MI_SECURE > 0
+  #if MI_SECURE>=2
   // in secure mode we always unalign to guard against free-ing interior pointers
   return _mi_page_ptr_unalign(page,p);
   #else
@@ -251,7 +251,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
       #else
         { page = mi_ptr_page(p); }
       #endif
-      if mi_unlikely(page==NULL && check_p_for_null) {
+      if mi_unlikely(mi_ptr_page_is_null(p,page) && check_p_for_null) {
         #if MI_DEBUG || MI_CHERI  // on CHERI also report in release (e.g. untagged pointers)
         if (p!=NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
         #endif
@@ -308,8 +308,8 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
   mi_assert_internal(p!=NULL && page!=NULL);
   if (pblock_size!=NULL) { *pblock_size = mi_page_block_size(page); }
 
-  const mi_threadid_t ptid = mi_page_xthread_id(page);
-  const mi_threadid_t xtid = (_mi_prim_thread_id() ^ ptid);
+  const mi_thread_id_t ptid = mi_page_xthread_id(page);
+  const mi_thread_id_t xtid = (_mi_prim_thread_id() ^ ptid);
   if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // thread-local, aligned, and not a full page
     mi_block_t* const block = mi_validate_block_from_ptr(page,p);
@@ -529,7 +529,7 @@ static void mi_abandoned_page_unown_from_free(mi_page_t* page, mi_block_t* page_
   // try to cas atomically the original free list (`mt_free`) back with the ownership cleared.
   mi_thread_free_t tf_expect = mi_tf_create(page_thread_free,true);
   mi_thread_free_t tf_new    = mi_tf_set_owned(tf_expect,false);
-  while mi_unlikely(!mi_atomic_cas_strong_acq_rel(&page->xthread_free, &tf_expect, tf_new)) {
+  while mi_unlikely(!mi_atomic_cas_strong_release(&page->xthread_free, &tf_expect, tf_new)) {
     mi_assert_internal(mi_tf_is_owned(tf_expect));
     // while the xthread_free list is not empty..
     while (mi_tf_block(tf_expect) != NULL) {
@@ -685,8 +685,14 @@ mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
 mi_decl_nodiscard size_t mi_thread_id_of(const void* p) mi_attr_noexcept {
   const mi_page_t* const page = mi_ptr_page_validate(p,"mi_thread_id_of");
   if (page == NULL) return 0;
-  const mi_threadid_t tid = mi_page_thread_id(page);
-  return (tid <= MI_THREADID_DETACHED ? 0 : tid);
+  #if MI_QSBR
+  // on qsbr we keep the last owning thread id around so we can provide it even when the page is abandoned
+  // (this is needed for cpython where the thread id gets restored this way inside object headers)
+  return mi_page_qsbr_thread_id(page);
+  #else
+  const mi_thread_id_t tid = mi_page_thread_id(page);
+  return (tid <= MI_THREAD_ID_DETACHED ? 0 : tid);
+  #endif
 }
 
 
@@ -697,7 +703,7 @@ mi_decl_nodiscard size_t mi_thread_id_of(const void* p) mi_attr_noexcept {
 // This is somewhat expensive so only enabled for secure mode 4
 // ------------------------------------------------------
 
-#if MI_SECURE>=3 && !MI_PADDING
+#if MI_SECURE>=4 && !MI_PADDING
 // linear check if the free list contains a specific element
 static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, const mi_block_t* elem, const char* list_kind) {
   const size_t max_count = page->capacity;      // can never hold more blocks than the capacity

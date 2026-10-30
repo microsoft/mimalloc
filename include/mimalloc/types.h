@@ -64,16 +64,21 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_STATS 1
 
 // Define MI_SECURE to enable security mitigations
-// #define MI_NO_SECURE // disable all security mitigations, even guard pages around metadata
-// #define MI_SECURE 0  // guard pages around meta data, minimal security
-// #define MI_SECURE 1  // + check invalid pointer free, randomize arena allocation addresses (like ASLR), abort on detected meta data corruption
-// #define MI_SECURE 2  // + randomize relative allocation addresses within mimalloc pages
-// #define MI_SECURE 3  // + check buffer overflow, check double free, encode free lists (and detect corrupted free lists)
-// #define MI_SECURE 4  // + same as level 3 for now (`-DMI_SECURE=ON`)
-// #define MI_SECURE 5  // + guard page at the end of each mimalloc page (expensive!) (`-DMI_SECURE_FULL=ON`), and byte-precise buffer overflow checks.
+// #define MI_SECURE 0  // no security mitigations
+// #define MI_SECURE 1  // + guard pages around metadata (and separated metadata), randomized arena/OS allocation addresses, abort on EFAULT (corrupted meta-data) (`-DMI_SECURE=MINIMAL`)
+// #define MI_SECURE 2  // + invalid-pointer check on free (checked lookup in page-map.h), clear free list `next` on allocation.
+// #define MI_SECURE 3  // + randomize relative allocation addresses within mimalloc pages
+// #define MI_SECURE 4  // + check buffer overflow (with padding), check double free, encode free lists (and detect corrupted free lists), decommit with mprotect (`-DMI_SECURE=ON`)
+// #define MI_SECURE 5  // + guard page at the end of each mimalloc page (expensive!), and byte-precise buffer overflow checks (`-DMI_SECURE=FULL`)
 
 #if !defined(MI_SECURE)
 #define MI_SECURE 0
+#endif
+
+// Secure level 2 and higher always check for invalid pointers in `mi_free`
+#if MI_SECURE>=2 && !MI_FREE_IS_CHECKED
+#undef  MI_FREE_IS_CHECKED
+#define MI_FREE_IS_CHECKED 1
 #endif
 
 // Define MI_DEBUG for assertion and invariant checking
@@ -121,7 +126,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Reserve extra padding at the end of each block to be more resilient against theap block overflows.
 // The padding can detect heap-block overflow on free, and provides byte-precise `mi_usable_size`.
 #if !defined(MI_PADDING)
-#if (MI_SECURE>=3 || MI_DEBUG>=1 || (MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_TRACK_ETW))
+#if (MI_SECURE>=4 || MI_DEBUG>=1 || (MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_TRACK_ETW))
 #define MI_PADDING  1
 #else
 #define MI_PADDING  0
@@ -136,7 +141,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Encoded free lists allow detection of corrupted free lists
 // and can detect buffer overflows, modify after free, and double `free`s.
-#if (MI_SECURE>=3 || MI_DEBUG>=1)
+#if (MI_SECURE>=4 || MI_DEBUG>=1)
 #define MI_ENCODE_FREELIST  1
 #endif
 
@@ -162,11 +167,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // Separate keeps the page info at the arena start (default) which is more secure
 // and reduces wasted space due to alignment and block sizes.
 #if !defined(MI_PAGE_META_IS_SEPARATED)
-#if MI_PAGE_MAP_FLAT
-#define MI_PAGE_META_IS_SEPARATED    0
-#else
 #define MI_PAGE_META_IS_SEPARATED    1
-#endif
 #endif
 
 // We can choose to page meta info aligned at the start of every MI_PAGE_META_ALIGNED_CHUNKS
@@ -178,7 +179,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_PAGE_META_IS_ALIGNED         1
 #define MI_PAGE_META_ALIGNED_CHUNKS     MI_SIZE_SIZE
 #else
-#warning "cannot optimize free with alignment since the page meta data is not separated (due to MI_PAGE_MAP_FLAT?)"
+#warning "cannot optimize free with alignment since the page meta data is not separated"
 #endif
 #endif
 
@@ -204,17 +205,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #if MI_PAGE_META_SMALL_IS_ALIGNED && (MI_SECURE || MI_GUARDED)
 #error "Secure or guarded mode cannot use MI_OPT_FREE_SMALL (MI_PAGE_META_SMALL_IS_ALIGNED)"
 #endif
-#if MI_PAGE_META_IS_SEPARATED && MI_PAGE_MAP_FLAT
-#error "Cannot have a flat page map with separated page infos"
-#endif
 #if (MI_PAGE_META_IS_ALIGNED || MI_PAGE_META_SMALL_IS_ALIGNED) && MI_CHERI
 #error "Cannot have aligned page meta with CHERI"
 #endif
 #if MI_QSBR && MI_CHERI
 #error "QSBR cannot be used with CHERI (as delayed concurrent reads would have the wrong capability)"
-#endif
-#if (MI_SECURE > 0) && defined(MI_NO_SECURE)
-#error "Cannot define both MI_SECURE > 0 and MI_NO_SECURE at the same time"
 #endif
 
 // --------------------------------------------------------------
@@ -226,14 +221,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MI_ARENA_SLICE_SHIFT
   #ifdef  MI_SMALL_PAGE_SHIFT   // backward compatibility
   #define MI_ARENA_SLICE_SHIFT              MI_SMALL_PAGE_SHIFT
-  #elif MI_SECURE>=5 && __APPLE__ && MI_ARCH_ARM64
+  #elif MI_SECURE && MI_OS_PROBABLE_PAGE_SIZE >= 64*MI_KiB
+  #define MI_ARENA_SLICE_SHIFT              (18)                        // 256 KiB as 64 KiB guard pages can be at most 1/4 of a slice (issue #1166)
+  #elif MI_SECURE>=5 && MI_OS_PROBABLE_PAGE_SIZE >= 16*MI_KiB
   #define MI_ARENA_SLICE_SHIFT              (17)                        // 128 KiB to not waste too much due to 16 KiB guard pages
-  #elif MI_SECURE>=5 && defined(PAGE_SIZE) && !defined(__wasi__) && !defined(__EMSCRIPTEN__)        // see issue #1440
-    #if PAGE_SIZE >= 16*MI_KiB
-    #define MI_ARENA_SLICE_SHIFT            (17)                        // 128 KiB to not waste too much due to 16 KiB guard pages
-    #endif
-  #endif
-  #ifndef MI_ARENA_SLICE_SHIFT
+  #else
   #define MI_ARENA_SLICE_SHIFT              (13 + MI_SIZE_SHIFT)        // 64 KiB (32 KiB on 32-bit)
   #endif
 #endif
@@ -284,9 +276,26 @@ terms of the MIT license. A copy of the license can be found in the file
 // Minimal commit for a page on-demand commit
 #define MI_PAGE_MIN_COMMIT_SIZE   (16*MI_KiB) /* MI_ARENA_SLICE_SIZE */
 
+// In secure mode, a guard slice is reserved in front of the arena info and around the separated page meta data
+// of aligned areas and direct OS allocations (but not on WebAssembly as it cannot protect memory)
+#if MI_SECURE && !defined(__wasi__) && !defined(__EMSCRIPTEN__)
+#define MI_ARENA_GUARD_SLICES         1
+#else
+#define MI_ARENA_GUARD_SLICES         0
+#endif
+
+// Is the page meta data of direct OS allocated pages separated in front of the page area? (between guard slices in secure mode)
+// Otherwise it is placed at the start of the page area itself.
+#if MI_PAGE_META_IS_ALIGNED || (MI_PAGE_META_IS_SEPARATED && MI_ARENA_GUARD_SLICES > 0)
+#define MI_PAGE_META_OS_IS_SEPARATED  1
+#else
+#define MI_PAGE_META_OS_IS_SEPARATED  0
+#endif
+
 #if MI_PAGE_META_IS_ALIGNED
 #define MI_PAGE_META_ALIGNED_COUNT    (MI_PAGE_META_ALIGNED_CHUNKS * MI_BCHUNK_BITS)
 #define MI_PAGE_META_ALIGNMENT        (MI_PAGE_META_ALIGNED_COUNT * MI_ARENA_SLICE_SIZE)  // 256 MiB (32 MiB on 32-bit)
+#define MI_PAGE_META_ALIGNED_OFFSET   (MI_ARENA_GUARD_SLICES * MI_ARENA_SLICE_SIZE)       // offset of the page meta data in an aligned area
 #define MI_ARENA_ALIGNMENT            MI_PAGE_META_ALIGNMENT
 #else
 #define MI_ARENA_ALIGNMENT            MI_ARENA_SLICE_ALIGN
@@ -330,7 +339,7 @@ typedef struct mi_subproc_s mi_subproc_t;
 typedef enum mi_memkind_e {
   MI_MEM_NONE,      // not allocated (or static)
   MI_MEM_EXTERNAL,  // not owned by mimalloc but provided externally (via `mi_manage_os_memory` for example)
-  MI_MEM_STATIC,    // allocated in a static area and should not be freed (the initial main theap data for example (`heap/init.c`))
+  MI_MEM_STATIC,    // allocated in a static area and should not be freed (the initial main theap data for example (`heap/process.c`))
   MI_MEM_OS,        // allocated from the OS
   MI_MEM_OS_HUGE,   // allocated as huge OS pages (usually 1GiB, pinned to physical memory)
   MI_MEM_OS_REMAP,  // allocated in a remapable area (i.e. using `mremap`)
@@ -375,10 +384,12 @@ typedef struct mi_memid_s {
   bool          is_pinned;          // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large (2Mib) or huge (1GiB) OS pages)
   bool          initially_committed;// `true` if the memory was originally allocated as committed
   bool          initially_zero;     // `true` if the memory was originally zero initialized
-  bool          is_memtag;          // `true` if the memory supports memory tagging (MTE)
+  bool          is_memtag : 1;      // `true` if the memory supports memory tagging (MTE)
+  bool          guard_front : 1;    // `true` if a page has a guard page in front of its blocks (see `arena-page.c:mi_theap_page_guards`)
+  bool          guard_end : 1;      // `true` if a page has a guard page right after its blocks
 } mi_memid_t;
 
-#define MI_MEMID_INIT(kind)   {{{NULL,0}}, kind, true /* pinned */, true /* committed */, false /* zero */, false /* memtag */ }
+#define MI_MEMID_INIT(kind)   {{{NULL,0}}, kind, true /* pinned */, true /* committed */, false /* zero */, false /* memtag */, false, false /* guard front and end */ }
 #define MI_MEMID_STATIC       MI_MEMID_INIT(MI_MEM_STATIC)
 
 static inline bool mi_memid_is_os(mi_memid_t memid) {
@@ -411,7 +422,7 @@ size_t        _mi_memid_size(mi_memid_t memid);
 typedef uintptr_t  mi_encoded_t;
 
 // thread id's
-typedef size_t     mi_threadid_t;
+typedef size_t     mi_thread_id_t;
 
 // free lists contain blocks
 typedef struct mi_block_s {
@@ -435,13 +446,13 @@ typedef struct mi_block_s {
 #define MI_PAGE_FLAG_MASK               ((MI_ZU(1) << MI_PAGE_FLAG_BITS) - 1)
 typedef size_t mi_page_flags_t;
 
-// There are two special threadid's: 0 for pages that are abandoned (and not in a theap queue),
+// There are two special thread_id's: 0 for pages that are abandoned (and not in a theap queue),
 // and 4 (or 8) for abandoned & mapped threads -- abandoned-mapped pages are abandoned but also mapped
 // in an arena (in `mi_heap_t.arena_pages.pages_abandoned`) so these can be quickly found for reuse.
 // Abandoning partially used pages allows for sharing of this memory between threads (in particular if threads are blocked)
-#define MI_THREADID_ABANDONED           MI_ZU(0)
-#define MI_THREADID_ABANDONED_MAPPED    (MI_ZU(1) << MI_PAGE_FLAG_BITS)
-#define MI_THREADID_DETACHED            (MI_ZU(2) << MI_PAGE_FLAG_BITS)
+#define MI_THREAD_ID_ABANDONED           MI_ZU(0)
+#define MI_THREAD_ID_ABANDONED_MAPPED    (MI_ZU(1) << MI_PAGE_FLAG_BITS)
+#define MI_THREAD_ID_DETACHED            (MI_ZU(2) << MI_PAGE_FLAG_BITS)
 
 // Thread free list.
 // Points to a list of blocks that are freed by other threads.
@@ -495,7 +506,7 @@ static inline mi_used_t mi_xused_used_reset(mi_used_t xused) { xused.used_alloc 
 //   Combining the `thread_free` list with an ownership bit allows a concurrent `free` to atomically
 //   free an object and (re)claim ownership if the page was abandoned.
 // - If a page is not part of a theap it is called "abandoned"  (`theap==NULL`) -- in
-//   that case the `xthreadid` is 0 or 4 (4 is for abandoned pages that
+//   that case the `xthread_id` is 0 or 4 (4 is for abandoned pages that
 //   are in the `pages_abandoned` lists of an arena, these are called "mapped" abandoned pages).
 // - page flags are in the bottom 3 bits of `xthread_id` for the fast path in `mi_free`.
 // - The layout below is optimized for `alloc/free.c:mi_free` and `alloc/alloc.c:mi_page_alloc` -- do not change it without careful consideration.
@@ -504,7 +515,7 @@ typedef struct mi_page_s {
   #if (MI_PAGE_META_IS_ALIGNED)
   _Atomic(struct mi_page_s*) self;             // points to the actual page info (for pages that span multiple slices)
   #endif
-  _Atomic(mi_threadid_t)    xthread_id;        // thread this page belongs to. (= `theap->thread_id (or 0 or 4 if abandoned) | page_flags`)
+  _Atomic(mi_thread_id_t)   xthread_id;        // thread this page belongs to. (= `theap->thread_id (or 0 or 4 if abandoned) | page_flags`)
   mi_block_t*               free;              // list of available free blocks (`malloc` allocates from this list)
   mi_block_t*               local_free;        // list of deferred free blocks by this thread (migrates to `free`)
   size_t                    block_size;        // const: size available in each block (always `>0`)
@@ -534,9 +545,9 @@ typedef struct mi_page_s {
   mi_addr_t                 keys[MI_PAGE_KEY_COUNT]; // const: one or two random keys to encode the free lists (see `_mi_block_next`) or padding canary
   #endif
   #if MI_QSBR
+  _Atomic(mi_thread_id_t)   qsbr_xthread_id;   // thread id of the last owning thread (`theap->tld->thread_id`) | `MI_PAGE_QSBR_IN_QUEUE` (written only by the owning thread)
   struct mi_page_s*         qsbr_next;
   struct mi_page_s*         qsbr_prev;
-  bool                     qsbr_in_queue;
   mi_page_qsbr_t            qsbr;
   #endif
 } mi_page_t;
@@ -577,7 +588,7 @@ typedef struct mi_page_s {
 #error "mimalloc internal: define more bins"
 #endif
 
-// static invariant: MI_MAX_SINGLETON_BIN >= _mi_bin(MI_LARGE_MAX_OBJ_SIZE) (See heap/init.c for the size bins)
+// static invariant: MI_MAX_SINGLETON_BIN >= _mi_bin(MI_LARGE_MAX_OBJ_SIZE) (See heap/process.c for the size bins)
 #if (MI_LARGE_MAX_OBJ_WSIZE <= 8192)     // 64 KiB
 #define MI_MAX_SINGLETON_BIN   (48)
 #elif (MI_LARGE_MAX_OBJ_WSIZE <= 32768)  // 256KiB
@@ -676,8 +687,10 @@ struct mi_theap_s {
   long                  page_full_retain;                    // how many full pages can be retained per queue (before abandoning them)
   bool                  allow_page_reclaim;                  // `true` if this theap can reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this theap can abandon pages to reduce memory footprint
-  bool                  is_detached;                         // `true` if `tld->thread_id == MI_THREADID_DETACHED`
+  bool                  is_detached;                         // `true` if `tld->thread_id == MI_THREAD_ID_DETACHED`
   bool                  profile_never;                       // if `true`, this theap is never profiled (only the empty and meta theaps)
+  bool                  guard_front;                         // `true` if fresh pages get a guard page in front of the blocks (in secure mode, for meta theaps)
+  bool                  guard_end;                           // `true` if fresh pages get a guard page after the blocks (in secure mode, for meta theaps or always at level 5)
 
   // sampling
   size_t                sample_countdown;                    // sample countdown in requested bytes (don't change the field order; see `internal.h:mi_theap_get_free_small_page`)
@@ -823,7 +836,7 @@ typedef int64_t  mi_msecs_t;
 
 // Thread local data
 struct mi_tld_s {
-  mi_threadid_t         thread_id;            // thread id of this thread
+  mi_thread_id_t         thread_id;            // thread id of this thread
   size_t                thread_seq;           // thread sequence id (linear count of created threads)
   size_t                fork_epoch;           // fork epoch at creation; an older epoch means the thread does not exist in a forked child
   int                   numa_node;            // thread preferred numa node

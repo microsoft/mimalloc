@@ -17,8 +17,7 @@ is not included here.
 ## Enabling the hooks
 
 Define `MI_QSBR=1` before including mimalloc headers and `src/static.c`.
-Defining `MI_CPYTHON` also enables it by default; other runtimes need not define
-`MI_CPYTHON`. Supply function definitions for the runtime primitives declared in
+Supply function definitions for the runtime primitives declared in
 `include/mimalloc/qsbr.h`, either in the same translation unit or linked from
 another host source file.
 Missing hooks deliberately fail to build rather than silently release pages.
@@ -148,8 +147,9 @@ A delayed owned page belongs to two independent lists:
 - Its ordinary mimalloc size-class queue, so it remains available for allocation.
 - Its theap's QSBR queue, so ready pages can be drained efficiently.
 
-Mimalloc owns `qsbr_next`, `qsbr_prev`, and `qsbr_in_queue` in each page and
-`qsbr_first`/`qsbr_last` in each theap. The membership bit distinguishes an
+Mimalloc owns `qsbr_next`, `qsbr_prev`, and `qsbr_xthread_id` in each page and
+`qsbr_first`/`qsbr_last` in each theap. The membership bit (the lowest bit of
+`qsbr_xthread_id`) distinguishes an
 unlinked page from a singleton queue without dereferencing an abandoned page's
 old theap. Only owned pages can be queued. A recorded goal alone does not imply
 queue membership: abandoned pages retain their goals after being unlinked.

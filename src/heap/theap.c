@@ -13,6 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/arena/arena-alloc.h"
 #include "mimalloc/profile/sample-guarded.h"
+#include "mimalloc/profile/sample-profile.h"
 #include "mimalloc/heap/heap.h"
 #include "mimalloc/heap/theap.h"
 
@@ -222,7 +223,7 @@ static void mi_theap_options_init(mi_theap_t* theap, mi_heap_t* heap) {
   theap->allow_page_reclaim = (mi_heap_reclaim_on_free(heap) >= 0);
   theap->allow_page_abandon = (mi_option_get(mi_option_page_full_retain) >= 0); // nowadays qsbr pages can be abandoned: && !mi_heap_qsbr_is_enabled(heap));
   theap->page_full_retain = mi_option_get_clamp(mi_option_page_full_retain, -1, 32);
-  theap->is_detached = (theap->tld->thread_id == MI_THREADID_DETACHED);
+  theap->is_detached = (theap->tld->thread_id == MI_THREAD_ID_DETACHED);
 }
 
 // todo: make order of parameters consistent (but would that break compat with CPython?)
@@ -240,6 +241,8 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   mi_atomic_store_ptr_release(mi_subproc_t,&theap->subproc,heap->subproc);
   mi_assert_internal(theap->stats.size == sizeof(mi_stats_t));
   mi_theap_options_init(theap, heap);
+  theap->guard_front = false;
+  theap->guard_end = (MI_SECURE >= 5);  // 5 = guard page at the end of each page
 
   if (theap->tld->is_in_threadpool) {
     // if we run as part of a thread pool it is better to not arbitrarily reclaim abandoned pages into our theap.
@@ -302,10 +305,22 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   }
 }
 
+// Initialize a detached theap for meta data allocation
+void _mi_theap_meta_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld) {
+  _mi_theap_init(theap, heap, tld);
+  theap->allow_page_abandon = false;  // for security, don't share with other threads
+  theap->page_full_retain = 2;
+  theap->sample_rate = 0;             // no sampling for meta data
+  theap->sample_countdown = 0;
+  theap->guard_front = (MI_SECURE > 0);
+  theap->guard_end = (MI_SECURE > 0);
+  mi_theap_profile_never(theap);      // permanently exclude from profiling, see `mi_theap_profile_never`
+}
+
 mi_theap_t* _mi_theap_alloc(mi_heap_t* heap, mi_tld_t* tld) {
   mi_assert_internal(tld!=NULL);
   mi_assert_internal(heap!=NULL);
-  mi_assert_internal(tld->thread_id == MI_THREADID_DETACHED || _mi_thread_id() == tld->thread_id);
+  mi_assert_internal(tld->thread_id == MI_THREAD_ID_DETACHED || _mi_thread_id() == tld->thread_id);
   // mi_assert_internal(_mi_heap_theap_peek(heap)==NULL);  // don't access thread locals as this is called on thread init
 
   // allocate and initialize a theap

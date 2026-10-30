@@ -4,8 +4,8 @@ project(libmimalloc C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
-set(MI_SECURE "OFF" CACHE STRING "Use security mitigations (like meta data guard pages, allocation randomization, double-free mitigation, and free-list corruption detection): NONE, OFF, ON, FULL. The FULL setting adds guard pages at the end of each mimalloc page (which may be expensive). NONE disables all guard pages even around metadata.")
-set_property(CACHE MI_SECURE PROPERTY STRINGS "OFF" "ON" "FULL" "NONE")
+set(MI_SECURE "OFF" CACHE STRING "Use security mitigations (like meta data guard pages, allocation randomization, double-free mitigation, and free-list corruption detection): OFF, MINIMAL, ON, FULL. The FULL setting adds guard pages at the end of each mimalloc page (which may be expensive). MINIMAL only uses guard pages around metadata (and randomizes OS allocation addresses).")
+set_property(CACHE MI_SECURE PROPERTY STRINGS "OFF"  "MINIMAL" "ON" "FULL")
 
 option(MI_OVERRIDE          "Override the standard malloc interface (i.e. define entry points for 'malloc', 'free', etc)" ON)
 option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
@@ -128,7 +128,7 @@ set(mi_sources
     src/alloc/page.c
     src/alloc/page-queue.c
     src/heap/heap.c
-    src/heap/init.c
+    src/heap/process.c
     src/heap/page-map.c
     src/heap/subproc.c
     src/heap/theap.c
@@ -343,9 +343,9 @@ endif()
 if(MI_SECURE STREQUAL "FULL")
   message(STATUS "Use full secure build (MI_SECURE=FULL, may be expensive)")
   list(APPEND mi_defines MI_SECURE=5)
-elseif(MI_SECURE STREQUAL "NONE")
-  message(STATUS "Disable all security mitigations (MI_SECURE=NONE)")
-  list(APPEND mi_defines MI_NO_SECURE)
+elseif(MI_SECURE STREQUAL "MINIMAL")
+  message(STATUS "Use minimal security mitigations (guard pages around metadata and randomized OS allocation addresses) (MI_SECURE=MINIMAL)")
+  list(APPEND mi_defines MI_SECURE=1)
   set(MI_SECURE "OFF")  # so if(MI_SECURE) is false in subsequent checks
 elseif(MI_SECURE)
   message(STATUS "Use secure build (MI_SECURE=${MI_SECURE})")
@@ -566,10 +566,6 @@ else()
   list(APPEND mi_defines MI_PROFILE=0)
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "WASI" OR EMSCRIPTEN)
-  message(STATUS "Enabling MI_FREE_USE_PAGEMAP since the target (${CMAKE_SYSTEM_NAME}) does not support large OS aligned allocations well")
-  set(MI_FREE_USE_PAGEMAP ON)
-endif()
 if(MI_FREE_USE_PAGEMAP)
   message(STATUS "Always use the pagemap in mi_free (MI_FREE_USE_PAGEMAP=ON)")
   list(APPEND mi_defines MI_FREE_USE_PAGEMAP=1)

@@ -414,11 +414,11 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_
     // schedule purge
     const mi_msecs_t expire = _mi_clock_now() + delay;
     mi_msecs_t expire0 = 0;
-    if (mi_atomic_casi64_strong_acq_rel(&arena->purge_expire, &expire0, expire)) {
+    if (mi_atomic_casi64_strong_release(&arena->purge_expire, &expire0, expire)) {
       // expiration was not yet set
       // maybe set the global arenas expire as well (if it wasn't set already)
       mi_assert_internal(expire0==0);
-      mi_atomic_casi64_strong_acq_rel(&arena->subproc->purge_expire, &expire0, expire);
+      mi_atomic_casi64_strong_release(&arena->subproc->purge_expire, &expire0, expire);
     }
     else {
       // already an expiration was set
@@ -517,8 +517,7 @@ static void mi_arenas_try_purge(bool force, bool visit_all, mi_subproc_t* subpro
   if (max_arena == 0) return;
 
   // allow only one thread to purge at a time (todo: allow concurrent purging?)
-  static mi_atomic_guard_t purge_guard;
-  mi_atomic_guard(&purge_guard)
+  mi_atomic_guard(&_mi_process.arena_purge_guard)
   {
     // increase global expire: at most one purge per delay cycle
     if (arenas_expire > now) { mi_atomic_storei64_release(&subproc->purge_expire, now + (delay/10)); }

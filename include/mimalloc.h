@@ -144,8 +144,11 @@ mi_decl_export void mi_free_small(void* p) mi_attr_noexcept;
 // As `mi_free_small` but `p` should not be a NULL pointer.
 mi_decl_export void mi_free_small_nonnull(void* p) mi_attr_noexcept;
 
-// For runtime's: return the current owner thread-id of the page containing an allocation.
-mi_decl_nodiscard mi_decl_export size_t mi_thread_id_of(const void* p) mi_attr_noexcept;
+mi_decl_export void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept;
+mi_decl_export void mi_free_aligned(void* p, size_t alignment)                   mi_attr_noexcept;
+
+// Checked free: always checks the pointer is valid before free-ing (and otherwise ignores the pointer)
+mi_decl_export bool mi_cfree(void* p) mi_attr_noexcept;
 
 
 // -------------------------------------------------------------------------------------
@@ -434,6 +437,9 @@ mi_decl_export void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept;
 // Abandon all theap pages, preserving live blocks and the theap for reuse. The owner must be the current thread or quiescent outside mimalloc (excluding concurrent heap/theap deletion).
 mi_decl_export void mi_theap_quiescent_abandon(mi_theap_t* theap) mi_attr_noexcept;
 
+// For runtime's: return the current owner thread-id of the page containing an allocation.
+mi_decl_nodiscard mi_decl_export size_t mi_thread_id_of(const void* p) mi_attr_noexcept;
+
 
 // ------------------------------------------------------
 // Deprecated
@@ -548,8 +554,6 @@ mi_decl_export void mi_option_set_default(mi_option_t option, long value);
 // note: we use `mi_cfree` as "checked free" and it checks if the pointer is in our theap before free-ing.
 // -------------------------------------------------------------------------------------------------------
 
-mi_decl_export bool  mi_cfree(void* p) mi_attr_noexcept;
-mi_decl_export void* mi__expand(void* p, size_t newsize) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export size_t mi_malloc_size(const void* p)        mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export size_t mi_malloc_good_size(size_t size)     mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept;
@@ -558,21 +562,25 @@ mi_decl_export int mi_posix_memalign(void** p, size_t alignment, size_t size); /
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_memalign(size_t alignment, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2) mi_attr_alloc_align(1);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_valloc(size_t size)  mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_pvalloc(size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2) mi_attr_alloc_align(1);
 
 mi_decl_nodiscard mi_decl_export void* mi_reallocarray(void* p, size_t count, size_t size) mi_attr_noexcept mi_attr_alloc_size2(2,3);
 mi_decl_nodiscard mi_decl_export int   mi_reallocarr(void* ptrp, size_t count, size_t size) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export void* mi_aligned_recalloc(void* p, size_t newcount, size_t size, size_t alignment) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export void* mi_aligned_offset_recalloc(void* p, size_t newcount, size_t size, size_t alignment, size_t offset) mi_attr_noexcept;
 
-mi_decl_export void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept;
-mi_decl_export void mi_free_aligned(void* p, size_t alignment)                   mi_attr_noexcept;
-mi_decl_export int  mi_dupenv_s(char** buf, size_t* size, const char* name)      mi_attr_noexcept;
+// C11
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_aligned_alloc(size_t alignment, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2) mi_attr_alloc_align(1);
 
-// wide characters
-mi_decl_export int mi_wdupenv_s(wchar_t** buf, size_t* size, const wchar_t* name)       mi_attr_noexcept;
-mi_decl_nodiscard mi_decl_export mi_decl_restrict wchar_t* mi_wcsdup(const wchar_t* s)  mi_attr_noexcept mi_attr_malloc;
-mi_decl_nodiscard mi_decl_export mi_decl_restrict unsigned char* mi_mbsdup(const unsigned char* s)  mi_attr_noexcept mi_attr_malloc;
+// C23
+mi_decl_export void  mi_free_aligned_sized( void* p, size_t alignment, size_t size ) mi_attr_noexcept;
+mi_decl_export void  mi_free_sized( void* p, size_t size ) mi_attr_noexcept;
+
+// MSVC
+mi_decl_export void* mi__expand(void* p, size_t newsize) mi_attr_noexcept;
+mi_decl_export int   mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept;
+mi_decl_export int   mi_wdupenv_s(wchar_t** buf, size_t* size, const wchar_t* name) mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export mi_decl_restrict wchar_t*       mi_wcsdup(const wchar_t* s) mi_attr_noexcept mi_attr_malloc;
+mi_decl_nodiscard mi_decl_export mi_decl_restrict unsigned char* mi_mbsdup(const unsigned char* s) mi_attr_noexcept mi_attr_malloc;
 
 // --------------------------------------------------------
 // C++ wrappers
@@ -686,8 +694,8 @@ template<class T> struct _mi_stl_allocator_common {
   using propagate_on_container_copy_assignment = std::true_type;
   using propagate_on_container_move_assignment = std::true_type;
   using propagate_on_container_swap            = std::true_type;
-  template <class U, class ...Args> void construct(U* p, Args&& ...args) { ::new(p) U(std::forward<Args>(args)...); }
-  template <class U> void destroy(U* p) mi_attr_noexcept { p->~U(); }
+  // no construct/destroy: std::allocator_traits provides them, and declaring them
+  // disables the memmove/memset/trivial-destroy fast paths of the STL containers
   #else
   void construct(pointer p, value_type const& val) { ::new(p) value_type(val); }
   void destroy(pointer p) { p->~value_type(); }

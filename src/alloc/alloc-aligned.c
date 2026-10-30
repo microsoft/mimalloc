@@ -64,7 +64,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
   if mi_unlikely(alignment > MI_PAGE_MAX_OVERALLOC_ALIGN) {
     // use OS allocation for large alignments and allocate inside a singleton page (not in an arena)
     // This can support alignments >= MI_PAGE_ALIGN by ensuring the object can be aligned
-    // in the first (and single) page such that the page info is `MI_PAGE_ALIGN` bytes before it (and can be found in the _mi_page_map).
+    // in the first (and single) page such that the page info is `MI_PAGE_ALIGN` bytes before it (and can be found in the page map).
     if mi_unlikely(offset != 0) {
       // todo: cannot support offset alignment for very large alignments yet
       _mi_error_message(EOVERFLOW, "aligned allocation with a large alignment cannot be used with an alignment offset (size %zu, alignment %zu, offset %zu)\n", size, alignment, offset);

@@ -156,20 +156,46 @@ typedef int32_t  mi_ssize_t;
 #define MI_MIN_VABITS     (43)    /* 8 TiB */
 #endif
 
-// On CHERI, always use the page map in `mi_free` as we cannot derive the page meta-data from a (bounded) user pointer
-#if MI_CHERI && !defined(MI_FREE_USE_PAGEMAP)
+// Always use the page map in `mi_free` on CHERI as we cannot derive the page meta-data from a (bounded) user pointer,
+// and on WebAssembly as it cannot do large aligned allocations well (needed for aligned page meta-data).
+#if (MI_CHERI || defined(__wasi__) || defined(__EMSCRIPTEN__)) && !defined(MI_FREE_USE_PAGEMAP)
 #define MI_FREE_USE_PAGEMAP  1
 #endif
 
-// use a flat page-map or a 2-level one
-#ifndef MI_PAGE_MAP_FLAT
-#if MI_MAX_VABITS <= 40 && !defined(__APPLE__) && !MI_CHERI && !MI_SECURE && !MI_FREE_IS_CHECKED && MI_FREE_USE_PAGEMAP
-#define MI_PAGE_MAP_FLAT  1
+// Probable OS page size (as statically known; the actual page size is determined at runtime).
+// Can be set explicitly, e.g. `-DMI_OS_PROBABLE_PAGE_SIZE=65536` for arm64 Linux kernels with 64 KiB pages.
+#if !defined(MI_OS_PROBABLE_PAGE_SIZE)
+#if defined(__APPLE__)                     // check first as `PAGE_SIZE` may be the runtime `vm_page_size` here
+#if MI_ARCH_ARM64
+#define MI_OS_PROBABLE_PAGE_SIZE  (16*MI_KiB) // macOS, iOS, etc. on Apple silicon
 #else
-#define MI_PAGE_MAP_FLAT  0
+#define MI_OS_PROBABLE_PAGE_SIZE  (4*MI_KiB)
+#endif
+#elif defined(__wasm__) || defined(__EMSCRIPTEN__) || defined(__wasi__)
+#define MI_OS_PROBABLE_PAGE_SIZE  (64*MI_KiB) // fixed WebAssembly page size
+#elif defined(PAGE_SIZE)                   // only defined if constant (FreeBSD, musl on x86, bionic without flexible page sizes, ...)
+#define MI_OS_PROBABLE_PAGE_SIZE  PAGE_SIZE
+#elif defined(__linux__) && (defined(__powerpc64__) || defined(__ppc64__) || defined(__PPC64__))
+#define MI_OS_PROBABLE_PAGE_SIZE  (64*MI_KiB) // default for ppc64(le) distributions
+#elif defined(__linux__) && defined(__loongarch__)
+#define MI_OS_PROBABLE_PAGE_SIZE  (16*MI_KiB) // default for LoongArch kernels
+#elif defined(__ANDROID__) && defined(__BIONIC_NO_PAGE_SIZE_MACRO)
+#define MI_OS_PROBABLE_PAGE_SIZE  (16*MI_KiB) // built with flexible page size support (NDK r27+), so it can run with 16 KiB pages
+#else
+#define MI_OS_PROBABLE_PAGE_SIZE  (4*MI_KiB)
 #endif
 #endif
 
+// Does the OS have guard pages?
+#if !defined(MI_OS_HAS_GUARD_PAGES)
+#if defined(__wasm__) || defined(__EMSCRIPTEN__) || defined(__wasi__)
+#define MI_OS_HAS_GUARD_PAGES  0
+#elif defined(__uClinux__)                 // no MMU
+#define MI_OS_HAS_GUARD_PAGES  0
+#else
+#define MI_OS_HAS_GUARD_PAGES  1
+#endif
+#endif
 
 /* --------------------------------------------------------------------------------
   Builtin's

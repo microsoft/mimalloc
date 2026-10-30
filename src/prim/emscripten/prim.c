@@ -10,7 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc/prim.h"
 #include "mimalloc/util/libc.h"
-#include "mimalloc/heap/init.h"
+#include "mimalloc/heap/process.h"
 
 #include <sched.h>   // sched_yield
 #include <unistd.h>  // getentropy
@@ -136,8 +136,13 @@ int _mi_prim_reuse(void* addr, size_t size) {
   return 0;
 }
 
-int _mi_prim_guard(void* addr, size_t size, bool set, bool is_committed) {
-  MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(set); MI_UNUSED(is_committed);
+int _mi_prim_guard(void* addr, size_t size, bool set_guard, bool is_committed) {
+  MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(set_guard); MI_UNUSED(is_committed);
+  return 0;
+}
+
+int _mi_prim_protect(void* addr, size_t size, mi_protect_t protect) {
+  MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(protect);
   return 0;
 }
 

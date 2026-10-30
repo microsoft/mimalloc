@@ -510,6 +510,11 @@ under your control or otherwise mixing of pointers from different heaps may occu
 Note: recently we also enabled static overloading on Windows. In that case you need
 to link with the static CRT _release_ runtime (`/MT`) and link with the static
 `mimalloc(-debug).obj` (to take precendence over the definitions in the CRT library).
+The debug CRT (`/MTd`) is not supported. The static override covers the `malloc` family,
+`_aligned_*`, `_expand`, `_msize`, `_strdup`, and `_wcsdup`, but other CRT functions that return
+allocated memory (like `_dupenv_s`, `_getcwd(NULL,..)`, `_fullpath(NULL,..)`, or `_tempnam`)
+still allocate from the CRT heap and cannot be freed with `free`. Use the dynamic override
+in that case (or the `mi_` equivalents like `mi_dupenv_s` where available).
 
 
 ## Dynamic override

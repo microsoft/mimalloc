@@ -105,7 +105,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
   mi_block_t* next = mi_block_next(page,block);
   mi_track_mem_undefined(block,sizeof(*block));
 
-  #if MI_SECURE
+  #if MI_SECURE>=2
   if (!zero) block->next = 0;  // don't leak internal data
   #endif
 
@@ -736,7 +736,7 @@ mi_decl_nodiscard static mi_decl_restrict char* mi_theap_realpath(mi_theap_t* xt
 
 static size_t mi_path_max(void) {
   static _Atomic(size_t) path_max; // = 0
-  size_t pmax = mi_atomic_load_acquire(&path_max);
+  size_t pmax = mi_atomic_load_relaxed(&path_max);
   if (pmax == 0) {
     long m = 0;
     #ifdef _PC_PATH_MAX
@@ -747,7 +747,7 @@ static size_t mi_path_max(void) {
     else if (m > 64*1024) pmax = 64*1024;  // at most 64 KiB
     else pmax = m;
     size_t expected = 0;
-    mi_atomic_cas_strong_acq_rel(&path_max, &expected, pmax);
+    mi_atomic_cas_strong_relaxed(&path_max, &expected, pmax);
   }
   return pmax;
 }

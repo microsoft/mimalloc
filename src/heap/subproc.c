@@ -13,14 +13,11 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/heap/page-map.h"
 #include "mimalloc/profile/sample-profile.h"
 #include "mimalloc/heap/subproc.h"
+#include "mimalloc/heap/process.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/util/threadlocal.h"
 
-// pre-allocate the main subprocess structure.
-static mi_decl_cache_align mi_subproc_t mi_process_subproc_main = mi_init_struct_zero;
-static mi_subproc_t* mi_subprocs = NULL;
-static mi_lock_t     mi_subprocs_lock = MI_LOCK_INITIALIZER;
-
+// the list of sub-processes is in `_mi_process.subprocs` (and the main subprocess is statically allocated in `_mi_process`)
 
 /* -----------------------------------------------------------
   Meta-data allocation
@@ -100,11 +97,11 @@ bool _mi_meta_is_meta_page(const mi_subproc_t* subproc, const mi_page_t* page) {
 ----------------------------------------------------------- */
 
 mi_subproc_t* _mi_subproc_main(void) {
-  return &mi_process_subproc_main;
+  return &_mi_process.subproc_main;
 }
 
 bool _mi_subproc_is_main(mi_subproc_t* subproc) {
-  return (subproc == &mi_process_subproc_main);
+  return (subproc == &_mi_process.subproc_main);
 }
 
 mi_subproc_t* _mi_subproc(void) {
@@ -146,18 +143,17 @@ mi_subproc_id_t mi_subproc_current(void) {
 
 
 static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc, mi_subproc_t* parent) {
-  static _Atomic(size_t) subproc_total_count;
   subproc->parent = parent;
-  subproc->subproc_seq = mi_atomic_increment_relaxed(&subproc_total_count);
+  subproc->subproc_seq = mi_atomic_increment_relaxed(&_mi_process.subprocs_created);
   mi_stats_header_init(&subproc->stats);
   mi_lock_init(&subproc->arena_reserve_lock);
   mi_lock_init(&subproc->heaps_lock);
   mi_lock_init(&subproc->theap_meta_lock);
-  mi_lock(&mi_subprocs_lock) {
+  mi_lock(&_mi_process.subprocs_lock) {
     // push on subproc list
-    subproc->next = mi_subprocs;
-    if (mi_subprocs!=NULL) { mi_subprocs->prev = subproc; }
-    mi_subprocs = subproc;
+    subproc->next = _mi_process.subprocs;
+    if (_mi_process.subprocs!=NULL) { _mi_process.subprocs->prev = subproc; }
+    _mi_process.subprocs = subproc;
   }
   return subproc;
 }
@@ -176,7 +172,7 @@ mi_subproc_id_t mi_subproc_new(void) {
     _mi_meta_free(parent, subproc, memid);
     return _mi_subproc_to_id(NULL);
   }
-  theap_meta->memid = memid;
+  theap_meta->memid = theap_memid;
 
   // init subproc
   mi_subproc_init(subproc,parent);
@@ -193,9 +189,8 @@ mi_subproc_id_t mi_subproc_new(void) {
   // init meta theap
   mi_assert_internal(parent->theap_meta!=NULL);
   mi_assert_internal(parent->theap_meta->tld!=NULL);
-  mi_assert_internal(parent->theap_meta->tld->thread_id == MI_THREADID_DETACHED);
-  _mi_theap_init(theap_meta,heap_main,parent->theap_meta->tld /* detached tld */);
-  mi_theap_profile_never(theap_meta);  // permanently exclude from profiling, see `mi_theap_profile_never`
+  mi_assert_internal(parent->theap_meta->tld->thread_id == MI_THREAD_ID_DETACHED);
+  _mi_theap_meta_init(theap_meta,heap_main,parent->theap_meta->tld /* detached tld */);
   subproc->theap_meta = theap_meta;
 
   return _mi_subproc_to_id(subproc);
@@ -212,10 +207,10 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
   if (subproc==NULL) return;
 
   // remove from the subproc list
-  mi_lock_maybe(&mi_subprocs_lock, acquire_subprocs_lock) {
+  mi_lock_maybe(&_mi_process.subprocs_lock, acquire_subprocs_lock) {
     if (subproc->next!=NULL) { subproc->next->prev = subproc->prev;  }
     if (subproc->prev!=NULL) { subproc->prev->next = subproc->next;  }
-                        else { mi_assert_internal(mi_subprocs==subproc);  mi_subprocs = subproc->next; }
+                        else { mi_assert_internal(_mi_process.subprocs==subproc);  _mi_process.subprocs = subproc->next; }
   }
 
   // destroy all subproc heaps
@@ -240,7 +235,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
 
   if (!_mi_subproc_is_main(subproc)) {
     // merge stats back into the main subproc
-    _mi_stats_merge_into(&mi_process_subproc_main.stats, &subproc->stats);
+    _mi_stats_merge_into(&_mi_process.subproc_main.stats, &subproc->stats);
   }
 
   // remove associated arenas
@@ -266,22 +261,22 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
 
 void mi_subproc_destroy(mi_subproc_id_t subproc_id) {
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
-  if (subproc==NULL || subproc==&mi_process_subproc_main) return;
+  if (subproc==NULL || subproc==&_mi_process.subproc_main) return;
   mi_subproc_unsafe_destroy(subproc, true /* take lock */);
 }
 
 void _mi_subprocs_unsafe_destroy_all(void) {
-  mi_lock(&mi_subprocs_lock) {
-    mi_subproc_t* subproc = mi_subprocs;
+  mi_lock(&_mi_process.subprocs_lock) {
+    mi_subproc_t* subproc = _mi_process.subprocs;
     while (subproc!=NULL) {
       mi_subproc_t* next = subproc->next;
-      if (subproc!=&mi_process_subproc_main) {
-        mi_subproc_unsafe_destroy(subproc, false /* take mi_subprocs lock */);
+      if (subproc!=&_mi_process.subproc_main) {
+        mi_subproc_unsafe_destroy(subproc, false /* take subprocs lock */);
       }
       subproc = next;
     }
   }
-  mi_subproc_unsafe_destroy(&mi_process_subproc_main, true /* take mi_subprocs lock */);
+  mi_subproc_unsafe_destroy(&_mi_process.subproc_main, true /* take subprocs lock */);
 }
 
 
@@ -322,15 +317,15 @@ bool mi_subproc_visit_heaps(mi_subproc_id_t subproc_id, mi_heap_visit_fun* visit
 
 
 mi_subproc_t* _mi_subproc_main_init(void) {
-  mi_lock_init(&mi_subprocs_lock);
-  mi_memid_t memid = _mi_memid_create_static(&mi_process_subproc_main,sizeof(mi_subproc_t));
-  mi_process_subproc_main.memid = memid;
-  mi_subproc_init(&mi_process_subproc_main,NULL);
-  return &mi_process_subproc_main;
+  mi_lock_init(&_mi_process.subprocs_lock);
+  mi_subproc_t* const subproc = &_mi_process.subproc_main;
+  subproc->memid = _mi_memid_create_static(subproc,sizeof(mi_subproc_t));
+  mi_subproc_init(subproc,NULL);
+  return subproc;
 }
 
 void _mi_subproc_main_done(void) {
-  mi_lock_done(&mi_subprocs_lock);
+  mi_lock_done(&_mi_process.subprocs_lock);
 }
 
 
@@ -354,18 +349,22 @@ void _mi_subproc_main_done(void) {
   zone `reinit_lock` (which runs before that) drops (and leaks) the thread free lists of
   the forking thread, and suspends reclaiming abandoned pages until the pthread child
   handler. (So on macOS the zone override is required for fork support.)
+  It also marks the child as torn, since free arena slices may still have a guard
+  page of a page that was allocated concurrently with the fork (see `arena-page.c`).
 ----------------------------------------------------------- */
 
-static size_t mi_fork_epoch;                        // incremented in the child at every fork
-static _Atomic(size_t) mi_fork_pending;             // set in the child until the dead theaps are abandoned
 
 size_t _mi_fork_epoch(void) {
-  return mi_fork_epoch;
+  return _mi_process.fork.epoch;
+}
+
+bool _mi_fork_is_torn(void) {
+  return _mi_process.fork.torn;
 }
 
 static bool mi_fork_theap_is_dead(const mi_theap_t* theap) {
   const mi_tld_t* const tld = theap->tld;
-  return (tld != NULL && tld->thread_id != MI_THREADID_DETACHED && tld->fork_epoch != mi_fork_epoch);
+  return (tld != NULL && tld->thread_id != MI_THREAD_ID_DETACHED && tld->fork_epoch != _mi_process.fork.epoch);
 }
 
 // Abandon the pages of dead theaps in a heap.
@@ -395,12 +394,12 @@ static bool mi_fork_heap_abandon_dead(mi_heap_t* heap) {
 // Called at thread initialization and regularly on the generic allocation path.
 // Retried later if a lock is busy.
 void _mi_fork_child_try_collect(void) {
-  if mi_likely(mi_atomic_load_relaxed(&mi_fork_pending) == 0) return;
-  if (mi_atomic_exchange_acq_rel(&mi_fork_pending, 0) == 0) return;
+  if mi_likely(mi_atomic_load_relaxed(&_mi_process.fork.pending) == 0) return;
+  if (mi_atomic_exchange_acq_rel(&_mi_process.fork.pending, 0) == 0) return;
   bool done = false;
-  if (mi_lock_try_acquire(&mi_subprocs_lock)) {
+  if (mi_lock_try_acquire(&_mi_process.subprocs_lock)) {
     done = true;
-    for (mi_subproc_t* subproc = mi_subprocs; subproc != NULL; subproc = subproc->next) {
+    for (mi_subproc_t* subproc = _mi_process.subprocs; subproc != NULL; subproc = subproc->next) {
       if (mi_lock_try_acquire(&subproc->heaps_lock)) {
         for (mi_heap_t* heap = subproc->heaps; heap != NULL; heap = heap->next) {
           if (!mi_fork_heap_abandon_dead(heap)) { done = false; }
@@ -411,26 +410,24 @@ void _mi_fork_child_try_collect(void) {
         done = false;
       }
     }
-    mi_lock_release(&mi_subprocs_lock);
+    mi_lock_release(&_mi_process.subprocs_lock);
   }
-  if (!done) { mi_atomic_store_release(&mi_fork_pending, 1); }
+  if (!done) { mi_atomic_store_release(&_mi_process.fork.pending, 1); }
 }
 
 #if defined(__APPLE__)
-static mi_heap_t* mi_fork_suspended_heap;                 // heap with suspended abandoned reclaim
-static size_t     mi_fork_suspended_count[MI_BIN_COUNT];  // and its abandoned counts
-
 // Called on macOS in the child from the malloc zone `reinit_lock`.
 void _mi_fork_child_zone(void) {
+  _mi_process.fork.torn = true;
   mi_theap_t* const theap_default = _mi_theap_default();
   if (!mi_theap_is_initialized(theap_default)) return;
 
   // suspend reclaiming abandoned pages (by allocation) of the default heap
   mi_heap_t* const heap = mi_theap_heap(theap_default);
   for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
-    mi_fork_suspended_count[bin] = mi_atomic_exchange_relaxed(&heap->abandoned_count[bin], 0);
+    _mi_process.fork.suspended_count[bin] = mi_atomic_exchange_relaxed(&heap->abandoned_count[bin], 0);
   }
-  mi_fork_suspended_heap = heap;
+  _mi_process.fork.suspended_heap = heap;
 
   // drop the thread free lists of the pages of the forking thread
   mi_tld_t* const tld = theap_default->tld;
@@ -448,11 +445,11 @@ void _mi_fork_child_zone(void) {
 
 // Resume reclaiming abandoned pages (adding as the count may have changed in the meantime)
 static void mi_fork_child_resume_reclaim(void) {
-  mi_heap_t* const heap = mi_fork_suspended_heap;
+  mi_heap_t* const heap = _mi_process.fork.suspended_heap;
   if (heap == NULL) return;
-  mi_fork_suspended_heap = NULL;
+  _mi_process.fork.suspended_heap = NULL;
   for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
-    mi_atomic_add_relaxed(&heap->abandoned_count[bin], mi_fork_suspended_count[bin]);
+    mi_atomic_add_relaxed(&heap->abandoned_count[bin], _mi_process.fork.suspended_count[bin]);
   }
 }
 #endif
@@ -462,10 +459,10 @@ void _mi_fork_child(void) {
   #if defined(__APPLE__)
   mi_fork_child_resume_reclaim();
   #endif
-  mi_fork_epoch++;
+  _mi_process.fork.epoch++;
   mi_theap_t* const theap = _mi_theap_default();
-  if (mi_theap_is_initialized(theap)) { theap->tld->fork_epoch = mi_fork_epoch; }  // the forking thread survives
-  mi_atomic_store_release(&mi_fork_pending, 1);
+  if (mi_theap_is_initialized(theap)) { theap->tld->fork_epoch = _mi_process.fork.epoch; }  // the forking thread survives
+  mi_atomic_store_release(&_mi_process.fork.pending, 1);
 }
 
 // Called at process initialization.

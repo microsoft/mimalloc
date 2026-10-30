@@ -24,7 +24,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
-static mi_os_mem_config_t mi_os_mem_config = {
+// Default OS memory configuration (used until `_mi_os_init`)
+static const mi_os_mem_config_t mi_os_mem_config_default = {
   4096,     // page size
   0,        // large page size (usually 2MiB)
   4096,     // allocation granularity
@@ -40,30 +41,42 @@ static mi_os_mem_config_t mi_os_mem_config = {
 mi_decl_hidden bool   _mi_memtag_enabled;   // = false
 mi_decl_hidden size_t _mi_memtag_max_size;  // = 0
 
+// The OS memory configuration in the sealed process data (zero until `_mi_os_init`)
+static inline const mi_os_mem_config_t* mi_os_mem_config(void) {
+  const mi_os_mem_config_t* const config = &mi_process_get_sealed()->os_mem_config;
+  return (mi_likely(config->page_size != 0) ? config : &mi_os_mem_config_default);
+}
+
 bool _mi_os_has_overcommit(void) {
-  return mi_os_mem_config.has_overcommit;
+  return mi_os_mem_config()->has_overcommit;
 }
 
 bool _mi_os_has_virtual_reserve(void) {
-  return mi_os_mem_config.has_virtual_reserve;
+  return mi_os_mem_config()->has_virtual_reserve;
 }
 
 bool _mi_os_has_thp(void) {
-  return mi_os_mem_config.has_transparent_huge_pages;
+  return mi_os_mem_config()->has_transparent_huge_pages;
 }
 
 bool _mi_os_has_memtag(void) {
-  return mi_os_mem_config.has_memtag;
+  return mi_os_mem_config()->has_memtag;
 }
 
 // OS (small) page size
 size_t _mi_os_page_size(void) {
-  return mi_os_mem_config.page_size;
+  return mi_os_mem_config()->page_size;
+}
+
+// OS allocation granularity (usually the page size, but 64KiB on Windows)
+size_t _mi_os_alloc_granularity(void) {
+  return mi_os_mem_config()->alloc_granularity;
 }
 
 // if large OS pages are supported (2 or 4MiB), then return the size, otherwise return the small page size (4KiB)
 size_t _mi_os_large_page_size(void) {
-  return (mi_os_mem_config.large_page_size != 0 ? mi_os_mem_config.large_page_size : _mi_os_page_size());
+  const size_t lpsize = mi_os_mem_config()->large_page_size;
+  return (lpsize != 0 ? lpsize : _mi_os_page_size());
 }
 
 // minimal purge size. Can be larger than the page size if transparent huge pages are enabled.
@@ -73,7 +86,7 @@ size_t _mi_os_minimal_purge_size(void) {
     // set by user
     return mi_align_up(minsize, _mi_os_page_size());
   }
-  else if (mi_os_mem_config.has_transparent_huge_pages && mi_option_get(mi_option_allow_thp) == 2) {
+  else if (mi_os_mem_config()->has_transparent_huge_pages && mi_option_get(mi_option_allow_thp) == 2) {
     // don't break up THP pages;
     // we don't do this by default as that can lead to increased memory usage (see issue #1282).
     // on the other hand, breaking up THP pages can lead to performance degradation and perhaps
@@ -93,15 +106,16 @@ size_t _mi_os_guard_page_size(void) {
 }
 
 size_t _mi_os_virtual_address_bits(void) {
-  const size_t vbits = mi_os_mem_config.virtual_address_bits;
+  const size_t vbits = mi_os_mem_config()->virtual_address_bits;
   mi_assert(vbits <= MI_MAX_VABITS);
   return vbits;
 }
 
 bool _mi_os_canuse_large_page(size_t size, size_t alignment) {
   // if we have access, check the size and alignment requirements
-  if (mi_os_mem_config.large_page_size == 0) return false;
-  return ((size % mi_os_mem_config.large_page_size) == 0 && (alignment % mi_os_mem_config.large_page_size) == 0);
+  const size_t lpsize = mi_os_mem_config()->large_page_size;
+  if (lpsize == 0) return false;
+  return ((size % lpsize) == 0 && (alignment % lpsize) == 0);
 }
 
 // round to a good OS allocation size (bounded by max 12.5% waste)
@@ -117,8 +131,16 @@ size_t _mi_os_good_alloc_size(size_t size) {
 }
 
 void _mi_os_init(void) {
-  _mi_prim_mem_init(&mi_os_mem_config);
-  _mi_memtag_enabled  = (mi_os_mem_config.has_memtag && mi_memtag_line_size() == MI_MEMTAG_LINE_SIZE);
+  mi_os_mem_config_t config = mi_os_mem_config_default;
+  _mi_prim_mem_init(&config);
+  mi_assert(config.page_size != 0);
+  mi_process_sealed_t* const sealed = _mi_process_unseal();
+  sealed->os_mem_config = config;  // publish at once
+  _mi_process_seal();
+  if (_mi_os_page_size() > MI_ARENA_SLICE_SIZE) {
+    _mi_error_message(ENOTSUP, "the OS page size (%zu KiB) is larger than the arena slice size (%zu KiB); increase MI_ARENA_SLICE_SHIFT\n", _mi_os_page_size()/MI_KiB, (size_t)(MI_ARENA_SLICE_SIZE/MI_KiB));
+  }
+  _mi_memtag_enabled  = (config.has_memtag && mi_memtag_line_size() == MI_MEMTAG_LINE_SIZE);
   _mi_memtag_max_size = mi_option_get_size(mi_option_memtag_max_size);
   if (_mi_memtag_enabled) { _mi_verbose_message("memory tagging is enabled (for blocks up to %zu KiB)\n", _mi_memtag_max_size / MI_KiB); }
 }
@@ -148,31 +170,29 @@ bool _mi_os_commit(mi_subproc_t* subproc, void* addr, size_t size, bool* is_zero
 
 void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
 {
-  static mi_decl_cache_align _Atomic(mi_addr_t) aligned_base; // = 0
-
   // todo: perhaps only do alignment hints if THP is enabled?
-  if (try_alignment <= mi_os_mem_config.alloc_granularity || try_alignment > 16*MI_GiB) return NULL;
-  if (mi_os_mem_config.virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
+  if (try_alignment <= mi_os_mem_config()->alloc_granularity || try_alignment > 16*MI_GiB) return NULL;
+  if (mi_os_mem_config()->virtual_address_bits < 46) return NULL;  // < 64TiB virtual address space
 
   size_t req_size = sze + _mi_os_page_size(); // always reserve a bit more to create virtual gaps between hinted blocks.
   req_size += (try_alignment - 1);      // ensure we can align in the requested size
   req_size = mi_align_up(req_size, _mi_os_large_page_size());
-  #if (MI_SECURE>=1)
+  #if MI_SECURE
   if (req_size > 32*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(MI_HINT_AREA / 1<<34) = 1/256
   #endif
 
-  mi_addr_t hint = mi_atomic_add_acq_rel(&aligned_base, req_size);
+  mi_addr_t hint = mi_atomic_add_relaxed(&_mi_process.os.aligned_base, req_size);
   if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
     mi_addr_t init = MI_HINT_BASE;
-    #if (MI_SECURE>=1 || !MI_DEBUG)  // security: randomize start of aligned allocations unless in debug mode
+    #if (MI_SECURE || !MI_DEBUG)  // security: randomize start of aligned allocations unless in debug mode
     mi_theap_t* const theap = _mi_theap_default();     // don't use `mi_theap_get_default()` as that can cause allocation recursively (issue #1267)
     if (!mi_theap_is_initialized(theap)) return NULL;  // no hint as we lack randomness at this point
     const size_t r = _mi_theap_random_next(theap);
     init = init + ((MI_AU(MI_MiB) * ((r>>17) & 0x3FFFFF)) % MI_HINT_AREA);  // (randomly 22 bits)* 1MiB == 0 to 4TiB
     #endif
     mi_addr_t expected = hint + req_size;
-    mi_atomic_cas_strong_acq_rel(&aligned_base, &expected, init);
-    hint = mi_atomic_add_acq_rel(&aligned_base, req_size); // this may still give 0 or > MI_HINT_MAX but that is ok, it is a hint after all
+    mi_atomic_cas_strong_relaxed(&_mi_process.os.aligned_base, &expected, init);
+    hint = mi_atomic_add_relaxed(&_mi_process.os.aligned_base, req_size); // this may still give 0 or > MI_HINT_MAX but that is ok, it is a hint after all
     if (hint==0) return NULL;
   }
   const mi_addr_t hint_align = mi_addr_align_up(hint,try_alignment);
@@ -191,12 +211,12 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   Guard page allocation
 ----------------------------------------------------------- */
 
-// Return the size of a guard page, (or 0 if all security is disabled or memory cannot be protected)
+// Return the size of a guard page, (or 0 if security is disabled or memory cannot be protected)
 size_t _mi_os_secure_guard_page_size(void) {
-  #if defined(MI_NO_SECURE) || defined(__wasi__) || defined(__EMSCRIPTEN__)  // no memory protection on WebAssembly
-  return 0;
-  #else
+  #if MI_SECURE && MI_OS_HAS_GUARD_PAGES  // no memory protection on WebAssembly
   return _mi_os_guard_page_size();
+  #else
+  return 0;
   #endif
 }
 
@@ -232,15 +252,36 @@ bool _mi_os_secure_guard_page_set_before(mi_subproc_t* subproc, void* addr, mi_m
   return _mi_os_secure_guard_page_set_at(subproc, (uint8_t*)addr - _mi_os_secure_guard_page_size(), memid);
 }
 
+// Set guard pages right before `addr` and right after `addr + size` (rounded up to the OS page size).
+bool _mi_os_secure_guard_pages_set_around(mi_subproc_t* subproc, void* addr, size_t size, mi_memid_t memid) {
+  const bool ok_before = _mi_os_secure_guard_page_set_before(subproc, addr, memid);
+  const bool ok_after  = _mi_os_secure_guard_page_set_at(subproc, mi_align_up_ptr((uint8_t*)addr + size, _mi_os_page_size()), memid);
+  return (ok_before && ok_after);
+}
+
 // Make an area accessible again (if it is accounted as committed)
 bool _mi_os_secure_guard_page_reset_at(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
   MI_UNUSED(subproc);
   return mi_os_secure_guard_page(addr, memid, false);
 }
 
-// Make an area accessible again (if it is accounted as committed)
-bool _mi_os_secure_guard_page_reset_before(mi_subproc_t* subproc, void* addr, mi_memid_t memid) {
-  return _mi_os_secure_guard_page_reset_at(subproc, (uint8_t*)addr - _mi_os_secure_guard_page_size(), memid);
+// Set guard pages right before `area + offset` and right after `area + offset + size` (rounded to OS pages)
+// within a padded static `area`. Outputs a warning if the guard pages do not fit (or cannot be set).
+bool _mi_os_secure_guard_pages_set_within(void* area, size_t area_size, size_t offset, size_t size) {
+  const size_t gsize = _mi_os_secure_guard_page_size();
+  if (gsize == 0) return true;
+  const mi_addr_t start  = mi_addr(area);
+  const mi_addr_t before = mi_addr_align_down(start + offset, _mi_os_page_size()) - gsize;
+  const mi_addr_t after  = mi_addr_align_up(start + offset + size, _mi_os_page_size());
+  if (before < start || after + gsize > start + area_size) {
+    _mi_warning_message("secure level %d, but unable to set guard pages around static data at %p as the OS page size (%zu KiB) is too large\n", MI_SECURE, area, gsize / MI_KiB);
+    return false;
+  }
+  mi_memid_t memid = _mi_memid_create(MI_MEM_STATIC);  // not pinned so it can be protected
+  memid.initially_committed = true;
+  const bool ok_before = mi_os_secure_guard_page(mi_ptr_with_addr(area, before), memid, true);
+  const bool ok_after  = mi_os_secure_guard_page(mi_ptr_with_addr(area, after), memid, true);
+  return (ok_before && ok_after);
 }
 
 
@@ -322,7 +363,7 @@ static void* mi_os_prim_alloc_at(mi_subproc_t* subproc, void* hint_addr, size_t 
   if (try_alignment == 0) { try_alignment = 1; } // avoid 0 to ensure there will be no divide by zero when aligning
 
   // try to align along large OS page size for larger allocations
-  const size_t large_page_size = mi_os_mem_config.large_page_size;
+  const size_t large_page_size = mi_os_mem_config()->large_page_size;
   if (large_page_size > 0 && hint_addr == NULL && size >= 8*large_page_size && mi_is_power_of_two(try_alignment) && try_alignment < large_page_size) {
     try_alignment = large_page_size;
   }
@@ -369,7 +410,7 @@ static void* mi_os_prim_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t
   const bool try_direct_alloc = true;
   #else
   // try a direct allocation if the alignment is below the default, or less than or equal to 1/4 fraction of the size.
-  const bool try_direct_alloc = (alignment <= mi_os_mem_config.alloc_granularity || alignment <= size/4);
+  const bool try_direct_alloc = (alignment <= mi_os_mem_config()->alloc_granularity || alignment <= size/4);
   #endif
 
   bool os_is_large = false;
@@ -398,7 +439,7 @@ static void* mi_os_prim_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t
     if (size >= (SIZE_MAX - alignment)) return NULL; // overflow
     const size_t over_size = size + alignment;
 
-    if (!mi_os_mem_config.has_partial_free) {  // win32 virtualAlloc cannot free parts of an allocated block
+    if (!mi_os_mem_config()->has_partial_free) {  // win32 virtualAlloc cannot free parts of an allocated block
       // over-allocate uncommitted (virtual) memory
       p = mi_os_prim_alloc(subproc, over_size, 1 /*alignment*/, false /* commit? */, false /* allow_large */, &os_is_large, &os_is_zero);
       if (p == NULL) return NULL;
@@ -504,6 +545,25 @@ mi_decl_nodiscard static void* mi_os_ensure_zero(mi_subproc_t* subproc, void* p,
 void*  _mi_os_zalloc(mi_subproc_t* subproc, size_t size, mi_memid_t* memid) {
   void* p = _mi_os_alloc(subproc, size,memid);
   return mi_os_ensure_zero(subproc, p, size, memid);
+}
+
+// Allocate OS memory with (in secure mode) a guard page right before and after it.
+// The memory can be freed using `_mi_os_free` with the returned `memid`.
+void* _mi_os_alloc_with_guards(mi_subproc_t* subproc, size_t size, bool commit, bool allow_large, mi_memid_t* memid) {
+  const size_t guard_size = _mi_os_secure_guard_page_size();
+  size = mi_align_up(size, _mi_os_page_size());
+  uint8_t* const base = (uint8_t*)_mi_os_alloc_aligned(subproc, size + 2*guard_size, 1, commit, allow_large, memid);
+  if (base == NULL) return NULL;
+  uint8_t* const p = base + guard_size;
+  if (memid->initially_committed) {  // (if not committed, the guard pages are never committed)
+    _mi_os_secure_guard_pages_set_around(subproc, p, size, *memid);
+  }
+  return p;
+}
+
+// Free memory allocated by `_mi_os_alloc_with_guards` (including the guard pages).
+void _mi_os_free_with_guards(mi_subproc_t* subproc, mi_memid_t memid) {
+  _mi_os_free(subproc, memid.mem.os.base, memid.mem.os.size, memid);
 }
 
 /* -----------------------------------------------------------
@@ -734,9 +794,6 @@ and possibly associated with a specific NUMA node. (use `numa_node>=0`)
 
 
 #if (MI_SIZE_SIZE >= 8) && !MI_CHERI  // on CHERI the separately mapped huge pages cannot be covered by one capability
-// To ensure proper alignment, use our own area for huge OS pages
-static mi_decl_cache_align _Atomic(mi_addr_t)  mi_huge_start; // = 0
-
 // Claim an aligned address range for huge pages
 static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
   if (total_size != NULL) *total_size = 0;
@@ -748,13 +805,13 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
 
   mi_addr_t start = 0;
   mi_addr_t end = 0;
-  mi_addr_t huge_start = mi_atomic_load_relaxed(&mi_huge_start);
+  mi_addr_t huge_start = mi_atomic_load_relaxed(&_mi_process.os.huge_start);
   do {
     start = huge_start;
     if (start == 0) {
       // Initialize the start address after the 32TiB area
       start = (MI_AU(32) << 40);    // 32TiB virtual start address (after addresses returned by _mi_os_get_aligned_hint)
-      #if (MI_SECURE>0 || MI_DEBUG==0)  // security: randomize start of huge pages unless in debug mode
+      #if (MI_SECURE || MI_DEBUG==0)  // security: randomize start of huge pages unless in debug mode
       mi_theap_t* const theap = _mi_theap_default();     // don't use `mi_theap_get_default()` as that can cause allocation recursively (issue #1267)
       if (mi_theap_is_initialized(theap)) {              // todo: or no hint at all if we lack randomness?
         const size_t r = _mi_theap_random_next(theap);
@@ -766,7 +823,7 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
       #endif
     }
     end = start + size;
-  } while (!mi_atomic_cas_weak_acq_rel(&mi_huge_start, &huge_start, end));
+  } while (!mi_atomic_cas_weak_relaxed(&_mi_process.os.huge_start, &huge_start, end));
 
   if (total_size != NULL) *total_size = size;
   return (uint8_t*)mi_ptr_from_addr(start);
@@ -869,10 +926,8 @@ static void mi_os_free_huge_os_pages(mi_subproc_t* subproc, void* p, size_t size
 Support NUMA aware allocation
 -----------------------------------------------------------------------------*/
 
-static _Atomic(size_t) mi_numa_node_count; // = 0   // cache the node count
-
 int _mi_os_numa_node_count(void) {
-  size_t count = mi_atomic_load_acquire(&mi_numa_node_count);
+  size_t count = mi_atomic_load_acquire(&_mi_process.os.numa_node_count);
   if mi_unlikely(count == 0) {
     long ncount = mi_option_get(mi_option_use_numa_nodes); // given explicitly?
     if (ncount > 0 && ncount < INT_MAX) {
@@ -883,7 +938,7 @@ int _mi_os_numa_node_count(void) {
       if (n == 0 || n > INT_MAX) { count = 1; }
                             else { count = n; }
     }
-    mi_atomic_store_release(&mi_numa_node_count, count); // save it
+    mi_atomic_store_release(&_mi_process.os.numa_node_count, count); // save it
     if (count>1) { _mi_verbose_message("using %zd numa regions\n", count); }
   }
   mi_assert_internal(count > 0 && count <= INT_MAX);
@@ -901,7 +956,7 @@ static int mi_os_numa_node_get(void) {
 }
 
 int _mi_os_numa_node(void) {
-  if mi_likely(mi_atomic_load_relaxed(&mi_numa_node_count) == 1) {
+  if mi_likely(mi_atomic_load_relaxed(&_mi_process.os.numa_node_count) == 1) {
     return 0;
   }
   else {
@@ -915,7 +970,7 @@ int _mi_os_numa_node(void) {
 -----------------------------------------------------------------------------*/
 #if 0
 mi_decl_export void* mi_os_alloc(size_t size, bool commit, size_t* full_size) {
-  return mi_os_alloc_aligned(size, mi_os_mem_config.alloc_granularity, commit, NULL, full_size);
+  return mi_os_alloc_aligned(size, mi_os_mem_config()->alloc_granularity, commit, NULL, full_size);
 }
 
 static void* mi_os_alloc_aligned_ex(size_t size, size_t alignment, bool commit, bool allow_large, bool* is_committed, bool* is_pinned, void** base, size_t* full_size) {

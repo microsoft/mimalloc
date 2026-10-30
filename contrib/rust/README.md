@@ -42,8 +42,8 @@ let heap = Heap::new_in_arena(arena);
 - An `exclusive` arena keeps all other heaps out; otherwise any heap can use it as well.
 - Arenas cannot be removed, so they live until the process exits.
 - Arenas need at least `Arena::min_size()` bytes (32 MiB on 64-bit), and their start is
-  aligned to `Arena::min_alignment()` (256 MiB on 64-bit), so memory at an unaligned address
-  needs `2 * Arena::min_alignment()` bytes.
+  aligned to `Arena::min_alignment()` (256 MiB on 64-bit, or 64 KiB with the `secure` feature),
+  so memory at an unaligned address needs `max(min_size, min_alignment) + min_alignment` bytes.
 
 ## Features
 
