@@ -110,8 +110,14 @@ fn main() {
         define("MI_DEBUG", "0");
         define("NDEBUG", "1");
     }
+    let mte = feature("mte") && target_arch == "aarch64";
+    if mte {
+        define("MI_MTE", "1");
+    }
     if feature("secure") {
         define("MI_SECURE", "4");
+    } else if mte {
+        define("MI_SECURE", "1"); // guard pages after huge blocks (which are not tagged)
     }
     let is_override = feature("override") && !is_windows;
     if is_override {

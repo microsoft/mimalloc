@@ -57,6 +57,7 @@ let heap = Heap::new_in_arena(arena);
 | `win_direct_tls`    | Use direct TLS slots on Windows |
 | `no_thp`            | Disable transparent huge pages by default on Linux |
 | `opt_arch`          | Architecture specific optimizations (as `-DMI_OPT_ARCH=ON`) |
+| `mte`               | Memory tagging if available at runtime (aarch64 only, experimental; as `-DMI_MTE=ON`) |
 | `nightly`           | `Allocator` support on nightly compilers before Rust 1.100 (`mimalloc` only) |
 
 All features except `nightly` are build options of the C library in `mimalloc-sys`

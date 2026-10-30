@@ -381,9 +381,9 @@ bool _mi_arena_reserve(mi_subproc_t* subproc, size_t req_size, bool allow_large,
 
 // Is a pointer contained in the given arena area?
 static bool mi_arena_strictly_contains(mi_arena_t* arena, const void* p) {
-  return (arena != NULL &&
-          mi_arena_start(arena) <= (const uint8_t*)p &&
-          mi_arena_start(arena) + _mi_size_of_slices(arena->slice_count) >(const uint8_t*)p);
+  if (arena == NULL) return false;
+  const mi_addr_t start = mi_addr(mi_arena_start(arena));
+  return (start <= mi_addr(p) && mi_addr(p) < start + _mi_size_of_slices(arena->slice_count));
 }
 
 // Is a pointer inside any of our arenas?

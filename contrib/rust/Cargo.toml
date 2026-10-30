@@ -30,6 +30,7 @@ local_dynamic_tls = ["mimalloc-sys/local_dynamic_tls"]
 win_direct_tls = ["mimalloc-sys/win_direct_tls"]
 no_thp = ["mimalloc-sys/no_thp"]
 opt_arch = ["mimalloc-sys/opt_arch"]
+mte = ["mimalloc-sys/mte"]
 # implement `core::alloc::Allocator` on nightly compilers before Rust 1.100 (where it is stable)
 nightly = []
 # for compatibility with the `mimalloc` crate of mimalloc_rust (the full API is always available)

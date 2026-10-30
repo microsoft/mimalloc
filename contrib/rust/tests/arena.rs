@@ -13,7 +13,12 @@ const EXCLUSIVE: ReserveOptions = ReserveOptions {
 fn area_contains(arena: Arena, p: *const u8, size: usize) -> bool {
     let area = arena.area();
     let start = area.cast::<u8>().as_ptr() as usize;
-    let p = p as usize;
+    // ignore a memory tag in the top byte (with the `mte` feature)
+    let p = if cfg!(target_arch = "aarch64") {
+        p as usize & ((1 << 56) - 1)
+    } else {
+        p as usize
+    };
     p >= start && p + size <= start + area.len()
 }
 
