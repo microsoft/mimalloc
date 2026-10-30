@@ -160,7 +160,7 @@ static mi_arena_pages_t* mi_heap_ensure_arena_pages(mi_heap_t* heap, mi_arena_t*
 /* -----------------------------------------------------------
   Guard pages in front of and right after the blocks of a page.
   These are used in secure mode for the pages of meta theaps,
-  and at the end of all pages at secure level 5.
+  at the end of singleton pages (huge blocks), and at the end of all pages at secure level 5.
   The `memid.guard_front/end` flags record the guard pages of a page.
 ----------------------------------------------------------- */
 
@@ -171,11 +171,15 @@ typedef struct mi_page_guards_s {
 
 // The guard pages a theap uses for a fresh page of `size` bytes. To limit the overhead, we only use guard pages
 // if together they take at most 1/4 of the page. OS aligned pages have no front guard page.
-static mi_page_guards_t mi_theap_page_guards(const mi_theap_t* theap, size_t size, bool os_align) {
+// There are no guard pages if the theap allocates from an exclusive pinned arena (as pinned memory cannot be protected).
+static mi_page_guards_t mi_theap_page_guards(const mi_theap_t* theap, size_t size, bool singleton, bool os_align) {
   const size_t gsize = _mi_os_secure_guard_page_size();
+  const bool guard_end = (theap->guard_end || (singleton && MI_SECURE > 0));  // in secure mode, huge blocks are always followed by a guard page
   mi_page_guards_t guards = { 0, 0 };
+  const mi_arena_t* const req_arena = mi_theap_heap(theap)->exclusive_arena;
+  if (req_arena != NULL && req_arena->memid.is_pinned) return guards;
   if (theap->guard_front && !os_align && gsize <= size/4) { guards.front = gsize; }
-  if (theap->guard_end && guards.front + gsize <= size/4) { guards.end = gsize; }
+  if (guard_end && guards.front + gsize <= size/4) { guards.end = gsize; }
   return guards;
 }
 
@@ -803,7 +807,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
 static mi_page_t* mi_arenas_page_regular_alloc(mi_theap_t* theap, size_t slice_count, size_t block_size)
 {
   // 1. look for an abandoned page
-  const mi_page_guards_t guards = mi_theap_page_guards(theap, _mi_size_of_slices(slice_count), false);
+  const mi_page_guards_t guards = mi_theap_page_guards(theap, _mi_size_of_slices(slice_count), false, false);
   mi_page_t* page = mi_arenas_page_try_find_abandoned(theap, slice_count, block_size, guards);
   if (page != NULL) {
     return page;  // return as abandoned
@@ -839,7 +843,7 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_theap_t* theap, size_t block
   const size_t cache_offset_size = (mi_page_block_can_cache_offset(block_size, os_align) ? MI_PAGE_CACHE_OFFSET_MAX : 0);
   // determine the guard pages based on the page size without guard pages
   const size_t size = info_size + cache_offset_size + block_size;
-  const mi_page_guards_t guards = mi_theap_page_guards(theap, _mi_size_of_slices(_mi_slice_count_of_size(size)), os_align);
+  const mi_page_guards_t guards = mi_theap_page_guards(theap, _mi_size_of_slices(_mi_slice_count_of_size(size)), true, os_align);
   const size_t slice_count = _mi_slice_count_of_size(mi_page_guard_front_block_start(guards.front, block_size) + size + guards.end);
 
   mi_page_t* page = mi_arenas_page_alloc_fresh(theap, slice_count, block_size, block_alignment, true /* commit singletons always */, guards);

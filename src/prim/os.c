@@ -138,7 +138,7 @@ void _mi_os_init(void) {
   config.has_memtag = (config.has_memtag && mi_memtag_line_size() == MI_MEMTAG_LINE_SIZE);
   mi_process_sealed_t* const sealed = _mi_process_unseal();
   sealed->os_mem_config = config;  // publish at once
-  sealed->memtag_max_size = (config.has_memtag ? mi_option_get_size(mi_option_memtag_max_size) : 0);
+  sealed->memtag_max_size = (config.has_memtag ? mi_max(mi_option_get_size(mi_option_memtag_max_size), MI_LARGE_MAX_OBJ_SIZE) : 0);  // tag at least all non-singleton blocks
   _mi_process_seal();
   if (_mi_os_page_size() > MI_ARENA_SLICE_SIZE) {
     _mi_error_message(ENOTSUP, "the OS page size (%zu KiB) is larger than the arena slice size (%zu KiB); increase MI_ARENA_SLICE_SHIFT\n", _mi_os_page_size()/MI_KiB, (size_t)(MI_ARENA_SLICE_SIZE/MI_KiB));

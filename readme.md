@@ -432,6 +432,7 @@ to make mimalloc more robust against exploits. In particular:
 - All free list pointers are
   [encoded](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af43a0793910a9f2d01ac7863/include/mimalloc-internal.h#L396)
   with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption.
+- Huge blocks (larger than 512 KiB) are followed by a guard page.
 - Double free's are detected (and ignored).
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
   mitigate against attacks that rely on a predicable allocation order. Similarly, the larger heap blocks allocated by mimalloc
@@ -439,6 +440,9 @@ to make mimalloc more robust against exploits. In particular:
 - If using `-DMI_SECURE=FULL` there will also be guard pages at the end of each (64KiB) mimalloc page (thus interleaving
   valid block data with inaccessible gaps). This setting is not recommended in general as it is more expensive and can lead to
   reaching the maximum VMA limit on Linux systems if the heap gets too large.
+- Using `-DMI_SECURE=MINIMAL` only enables the guard pages (around meta-data and after huge blocks) and address randomization.
+  This is the default when building with memory tagging (`-DMI_MTE=ON`), so blocks that are too large to be memory tagged
+  are still protected against buffer overflows.
 
 As always, evaluate with care as part of an overall security strategy as all of the above are mitigations but not guarantees.
 
