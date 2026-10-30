@@ -10,8 +10,8 @@ terms of the MIT license. A copy of the license can be found in the file
 ---------------------------------------------------------------------------- */
 
 #pragma once
-#ifndef MI_BITS_H
-#define MI_BITS_H
+#ifndef MI_ARCH_H
+#define MI_ARCH_H
 
 #include <stddef.h>   // size_t
 #include <stdint.h>   // int64_t etc
@@ -103,7 +103,7 @@ typedef __PTRADDR_TYPE__      mi_addr_t;
 #else
 typedef uintptr_t             mi_addr_t;
 #endif
-#define MI_AU(x)              ((mi_addr_t)(x))
+#define MI_ADDR(x)            ((mi_addr_t)(x))
 
 // With memory tagging (MTE), pointers carry a 4-bit tag starting at bit `MI_PTR_MEMTAG_SHIFT` (see `memtag.h`).
 // The address mask removes all top bits ignored by the hardware, not just the logical memory tag:
@@ -111,12 +111,12 @@ typedef uintptr_t             mi_addr_t;
 // (For a future x86 ChkTag the tag would use bits 57-60, with LAM ignoring bits 57-62, but bit 56 is part of the address.)
 #if MI_MTE
 #define MI_PTR_MEMTAG_SHIFT   (56)
-#define MI_PTR_MEMTAG_MASK    (MI_AU(0x0F) << MI_PTR_MEMTAG_SHIFT)
-#define MI_PTR_ADDR_MASK      (~(MI_AU(0xFF) << MI_PTR_MEMTAG_SHIFT))
+#define MI_PTR_MEMTAG_MASK    (MI_ADDR(0x0F) << MI_PTR_MEMTAG_SHIFT)
+#define MI_PTR_ADDR_MASK      (~(MI_ADDR(0xFF) << MI_PTR_MEMTAG_SHIFT))
 #else
 #define MI_PTR_MEMTAG_SHIFT   (0)
-#define MI_PTR_MEMTAG_MASK    (MI_AU(0))
-#define MI_PTR_ADDR_MASK      (~MI_AU(0))
+#define MI_PTR_MEMTAG_MASK    (MI_ADDR(0))
+#define MI_PTR_ADDR_MASK      (~MI_ADDR(0))
 #endif
 
 // Get the address part of a pointer (without provenance or memory tag)
@@ -573,4 +573,4 @@ static inline uint32_t mi_rotl32(uint32_t x, uint32_t r) {
   #endif
 }
 
-#endif // MI_BITS_H
+#endif // MI_ARCH_H

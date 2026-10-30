@@ -244,7 +244,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
   mi_page_t* page;
   #if MI_PAGE_META_SMALL_IS_ALIGNED
     if (free_small) {
-      const mi_addr_t up = mi_addr(p) & ~MI_AU(MI_SMALL_PAGE_SIZE-1);  // like this for codegen on gcc
+      const mi_addr_t up = mi_addr(p) & ~MI_ADDR(MI_SMALL_PAGE_SIZE-1);  // like this for codegen on gcc
       if mi_unlikely(up==0 && check_p_for_null) { return false; }
       page = (mi_page_t*)mi_ptr_with_addr(mi_ptr_memtag_meta(p), up);
     }

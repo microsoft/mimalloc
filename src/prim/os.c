@@ -30,7 +30,7 @@ static const mi_os_mem_config_t mi_os_mem_config_default = {
   0,        // large page size (usually 2MiB)
   4096,     // allocation granularity
   MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB,
-  MI_MAX_VABITS, // in `bits.h`
+  MI_MAX_VABITS, // in `arch.h`
   0,        // memory tag check mode
   true,     // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
   false,    // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
@@ -161,9 +161,9 @@ bool _mi_os_commit(mi_subproc_t* subproc, void* addr, size_t size, bool* is_zero
 // (otherwise an initial large allocation of say 2TiB has a 50% chance to include (known) addresses
 //  in the middle of the 2TiB - 6TiB address range (see issue #372))
 
-#define MI_HINT_BASE  (MI_AU(2) << 40)   // 2TiB start
-#define MI_HINT_AREA  (MI_AU(4) << 40)   // upto (2+4) 6TiB  (since before win8 there is "only" 8TiB available to processes)
-#define MI_HINT_MAX   (MI_AU(30) << 40)  // wrap after 30TiB (area after 32TiB is used for huge OS pages)
+#define MI_HINT_BASE  (MI_ADDR(2) << 40)   // 2TiB start
+#define MI_HINT_AREA  (MI_ADDR(4) << 40)   // upto (2+4) 6TiB  (since before win8 there is "only" 8TiB available to processes)
+#define MI_HINT_MAX   (MI_ADDR(30) << 40)  // wrap after 30TiB (area after 32TiB is used for huge OS pages)
 
 void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
 {
@@ -185,7 +185,7 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
     mi_theap_t* const theap = _mi_theap_default();     // don't use `mi_theap_get_default()` as that can cause allocation recursively (issue #1267)
     if (!mi_theap_is_initialized(theap)) return NULL;  // no hint as we lack randomness at this point
     const size_t r = _mi_theap_random_next(theap);
-    init = init + ((MI_AU(MI_MiB) * ((r>>17) & 0x3FFFFF)) % MI_HINT_AREA);  // (randomly 22 bits)* 1MiB == 0 to 4TiB
+    init = init + ((MI_ADDR(MI_MiB) * ((r>>17) & 0x3FFFFF)) % MI_HINT_AREA);  // (randomly 22 bits)* 1MiB == 0 to 4TiB
     #endif
     mi_addr_t expected = hint + req_size;
     mi_atomic_cas_strong_relaxed(&_mi_process.os.aligned_base, &expected, init);
@@ -807,12 +807,12 @@ static uint8_t* mi_os_claim_huge_pages(size_t pages, size_t* total_size) {
     start = huge_start;
     if (start == 0) {
       // Initialize the start address after the 32TiB area
-      start = (MI_AU(32) << 40);    // 32TiB virtual start address (after addresses returned by _mi_os_get_aligned_hint)
+      start = (MI_ADDR(32) << 40);    // 32TiB virtual start address (after addresses returned by _mi_os_get_aligned_hint)
       #if (MI_SECURE || MI_DEBUG==0)  // security: randomize start of huge pages unless in debug mode
       mi_theap_t* const theap = _mi_theap_default();     // don't use `mi_theap_get_default()` as that can cause allocation recursively (issue #1267)
       if (mi_theap_is_initialized(theap)) {              // todo: or no hint at all if we lack randomness?
         const size_t r = _mi_theap_random_next(theap);
-        start = start + (MI_AU(MI_HUGE_OS_PAGE_SIZE) * ((r>>17) & 0x0FFF));  // (randomly 12bits)*1GiB == between 0 to 4TiB
+        start = start + (MI_ADDR(MI_HUGE_OS_PAGE_SIZE) * ((r>>17) & 0x0FFF));  // (randomly 12bits)*1GiB == between 0 to 4TiB
       }
       else {
         _mi_warning_message("failed to randomize the start address of huge pages allocation (%zu bytes at %p)", size, mi_ptr_from_addr(start));

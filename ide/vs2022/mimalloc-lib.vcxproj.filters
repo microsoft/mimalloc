@@ -195,7 +195,7 @@
     <ClInclude Include="..\..\include\mimalloc\prim.h">
       <Filter>Headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\include\mimalloc\bits.h">
+    <ClInclude Include="..\..\include\mimalloc\arch.h">
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\mimalloc-stats.h">

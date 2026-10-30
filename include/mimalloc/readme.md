@@ -3,7 +3,7 @@
 - [`types.h`](types.h): Defines the types of all internal mimalloc datastructures
 and configuration options.
 - [`decl.h`](decl.h): Compiler attributes, assertions, initialization macros, and platform-specific declarations.
-- [`bits.h`](bits.h): Architecture dependent type definitions, bit operations, and pointer provenance support (as on CHERI).
+- [`arch.h`](arch.h): Architecture dependent type definitions, bit operations, and pointer provenance support (as on CHERI).
 - [`atomic.h`](atomic.h): Portable atomic operations and locks.
 - [`prim.h`](prim.h): Primitive and minimal portability API needed from a host system.
 - [`memtag.h`](memtag.h): Primitives for memory-tagging ([MTE] or MIE); this is enabled when building with `-DMI_MTE=ON`.
