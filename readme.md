@@ -99,7 +99,7 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
   Experimental support for CHERI platforms. Improved Rust bindings (thank you @OscarTHZhang and @Techcable).
   Add `-DMI_SECURE=MINIMAL` as improved [security](#secure-mode) with minimal (~1%) performance impact which
   puts guard pages around all mimalloc meta-data (but does not encode free lists).
-  Move all static variables into a [`mi_process_t`](include/mimalloc/heap/proces.h) struct (that is guarded).
+  Move all static variables into a [`mi_process_t`](include/mimalloc/heap/process.h) struct (that is guarded).
 * 2026-10-23, `v3.6.0`: (v3) add initial [profiling](#profiling) hooks and default profiler, "always on"
   detailed statistics per size-bin, and always-on profiling. Initial rust bindings. Better support
   for large OS page sizes, support a quiescent state based reclamation interfacec (for CPython),
