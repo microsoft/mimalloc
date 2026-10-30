@@ -418,8 +418,10 @@ typedef uintptr_t         mi_addr_t;
 #endif
 #define MI_AU(x)          ((mi_addr_t)(x))
 
-// With memory tagging (MTE), pointers carry a tag in the top bits that is not part of the address (see `memtag.h`)
-// The mask covers the full top byte (ignored by the hardware) as this gives better codegen (e.g. `p & 0x00FFFFFFF0000000`)
+// With memory tagging (MTE), pointers carry a 4-bit tag starting at bit `MI_PTR_TAG_SHIFT` (see `memtag.h`).
+// The mask covers all top bits that are ignored by the hardware (and not part of the address) and may be wider than the tag:
+// on ARM it is the full top byte as this gives better codegen (e.g. `p & 0x00FFFFFFF0000000`).
+// (For a future x86 ChkTag the tag would use bits 57-60, with LAM ignoring bits 57-62, but bit 56 is part of the address.)
 #if MI_MTE
 #define MI_PTR_TAG_SHIFT  (56)
 #define MI_PTR_TAG_MASK   (MI_AU(0xFF) << MI_PTR_TAG_SHIFT)

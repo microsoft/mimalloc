@@ -135,7 +135,7 @@ void _mi_os_init(void) {
   mi_os_mem_config_t config = mi_os_mem_config_default;
   _mi_prim_mem_init(&config);
   mi_assert(config.page_size != 0);
-  config.has_memtag = (config.has_memtag && mi_memtag_line_size() == MI_MEMTAG_LINE_SIZE);
+  config.has_memtag = (config.has_memtag && mi_memtag_cpu_is_supported());
   mi_process_sealed_t* const sealed = _mi_process_unseal();
   sealed->os_mem_config = config;  // publish at once
   sealed->memtag_max_size = (config.has_memtag ? mi_max(mi_option_get_size(mi_option_memtag_max_size), MI_LARGE_MAX_OBJ_SIZE) : 0);  // tag at least all non-singleton blocks

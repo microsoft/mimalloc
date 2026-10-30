@@ -12,13 +12,16 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "bits.h"
 
 /* ----------------------------------------------------------------------------
-Memory tagging (ARM MTE)
+Memory tagging
+Currently supports ARM MTE but we should be able to support future memory tagging
+extensions as well (like x86 ChkTag and LAM)
 
 Every 16-byte granule of tagged memory has a 4-bit tag, and each access must use a
-pointer with a matching tag in the top bits (56-59). Blocks in tagged pages get a
-random tag where blocks at even and odd indices use disjoint tag sets, such that
-adjacent blocks always have different tags. Tag 0 is never used for blocks and is
-reserved for meta data and free arena memory. Tag 15 is reserved as well.
+pointer with a matching tag in the top bits (56-59 on ARM, see `MI_PTR_TAG_SHIFT`).
+Blocks in tagged pages get a random tag where blocks at even and odd indices use
+disjoint tag sets, such that adjacent blocks always have different tags. Tag 0 is
+never used for blocks and is reserved for meta data and free arena memory. Tag 15
+is reserved as well.
 
 Memory tagging is only used when built with `MI_MTE=1` and when it is enabled
 at runtime (see `mi_memtag_is_enabled`); otherwise all operations are no-ops and
@@ -59,7 +62,7 @@ static inline bool mi_memtag_use_for(bool is_memtag, size_t bsize) {
 -----------------------------------------------------------------------------*/
 
 static inline size_t mi_ptr_tag(const void* p) {
-  return (size_t)((mi_addr_tagged(p) & MI_PTR_TAG_MASK) >> MI_PTR_TAG_SHIFT);
+  return (size_t)((mi_addr_tagged(p) & MI_PTR_TAG_MASK) >> MI_PTR_TAG_SHIFT) & 0x0F;
 }
 
 static inline void* mi_ptr_with_tag(const void* p, size_t tag) {
@@ -103,6 +106,16 @@ static inline size_t mi_memtag_line_size(void) {
   uint64_t dczid;
   __asm__ ("mrs %0, dczid_el0" : "=r"(dczid));
   return ((dczid & 0x10) != 0 ? 0 : (MI_ZU(4) << (dczid & 0x0F)));
+}
+
+// Does the CPU support the memory tag operations as we use them? (called once at initialization if the OS supports tagging)
+static inline bool mi_memtag_cpu_is_supported(void) {
+  return (mi_memtag_line_size() == MI_MEMTAG_LINE_SIZE);
+}
+
+// Read from `p` such that it faults if the tag of `p` does not match the memory tag
+static inline void mi_memtag_check(const void* p) {
+  (void)(*(const volatile uint8_t*)p);
 }
 
 // Set the tag of the granule at `p` (or two granules, or the cache line) to the tag of `p`, and zero it if `zero` is set
@@ -161,7 +174,8 @@ static inline void* mi_memtag_random_next(void* p) {
 }
 
 #else
-static inline size_t mi_memtag_line_size(void)                 { return 0; }
+static inline bool  mi_memtag_cpu_is_supported(void)          { return false; }
+static inline void  mi_memtag_check(const void* p)             { MI_UNUSED(p); }
 static inline void* mi_memtag_random(void* p, size_t exclude)  { MI_UNUSED(exclude); return p; }
 static inline void* mi_memtag_load(void* p)                    { return p; }
 static inline void  mi_memtag_store(void* p, size_t size)      { MI_UNUSED(p); MI_UNUSED(size); }
@@ -191,9 +205,7 @@ static inline void mi_memtag_blocks_init(void* start, size_t bsize, size_t idx, 
 // Retag a block on free with a fresh tag (of the same class) and zero it if it is small; returns the block with its new tag.
 // The first read uses the current tag of `block` so a stale pointer (e.g. a double free) faults.
 static inline void* mi_memtag_block_free(void* block, size_t bsize) {
-  #if MI_MTE
-  (void)(*(volatile uint8_t*)block);
-  #endif
+  mi_memtag_check(block);
   void* const tblock = mi_memtag_random_next(block);
   if (bsize <= MI_MEMTAG_ZERO_MAX) { mi_memtag_store_zero(tblock, bsize); }
                               else { mi_memtag_store(tblock, bsize); }
@@ -203,9 +215,7 @@ static inline void* mi_memtag_block_free(void* block, size_t bsize) {
 // Retag a canonical block (with the meta tag, see `_mi_memtag_canonical`) at index `idx` with a fresh tag of its class;
 // returns the block with its new tag. The first read uses the meta tag so a stale pointer faults.
 static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_t idx) {
-  #if MI_MTE
-  (void)(*(volatile uint8_t*)block);
-  #endif
+  mi_memtag_check(block);
   void* const tblock = mi_memtag_random(block, mi_memtag_class_exclude(idx));
   mi_memtag_store(tblock, bsize);
   return tblock;
