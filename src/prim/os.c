@@ -60,10 +60,6 @@ bool _mi_os_has_memtag(void) {
   return mi_os_mem_config()->has_memtag;
 }
 
-size_t _mi_os_memtag_max_size(void) {
-  return mi_process_get_sealed()->memtag_max_size;
-}
-
 // OS (small) page size
 size_t _mi_os_page_size(void) {
   return mi_os_mem_config()->page_size;
@@ -138,12 +134,11 @@ void _mi_os_init(void) {
   config.has_memtag = (config.has_memtag && mi_memtag_cpu_is_supported());
   mi_process_sealed_t* const sealed = _mi_process_unseal();
   sealed->os_mem_config = config;  // publish at once
-  sealed->memtag_max_size = (config.has_memtag ? mi_max(mi_option_get_size(mi_option_memtag_max_size), MI_LARGE_MAX_OBJ_SIZE) : 0);  // tag at least all non-singleton blocks
   _mi_process_seal();
   if (_mi_os_page_size() > MI_ARENA_SLICE_SIZE) {
     _mi_error_message(ENOTSUP, "the OS page size (%zu KiB) is larger than the arena slice size (%zu KiB); increase MI_ARENA_SLICE_SHIFT\n", _mi_os_page_size()/MI_KiB, (size_t)(MI_ARENA_SLICE_SIZE/MI_KiB));
   }
-  if (config.has_memtag) { _mi_verbose_message("memory tagging is enabled (for blocks up to %zu KiB)\n", _mi_os_memtag_max_size() / MI_KiB); }
+  if (config.has_memtag) { _mi_verbose_message("memory tagging is enabled (for blocks up to %zu KiB)\n", (size_t)(MI_LARGE_MAX_OBJ_SIZE / MI_KiB)); }
 }
 
 

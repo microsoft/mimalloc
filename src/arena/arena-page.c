@@ -670,7 +670,9 @@ static void mi_arenas_page_init_meta(mi_theap_t* theap, mi_page_t* page, uint8_t
   page->slice_pcommitted = (uint16_t)(commit_size / _mi_os_page_size());
 
   page->heap = mi_theap_heap(theap);
-  if (mi_memtag_use_for(memid.is_memtag, block_size)) { mi_page_flags_set(page, true, MI_PAGE_IS_MEMTAG); }
+  if (block_size <= MI_LARGE_MAX_OBJ_SIZE && mi_memtag_use_for(memid.is_memtag, block_size)) {  // singleton blocks are not tagged (and have an end guard page in secure mode)
+    mi_page_flags_set(page, true, MI_PAGE_IS_MEMTAG);
+  }
   mi_page_set_theap(page,theap);
   // mi_assert_internal(mi_page_theap(page) == _mi_heap_theap_peek(page->heap))
 }

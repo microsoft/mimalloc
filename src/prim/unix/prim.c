@@ -50,6 +50,29 @@ terms of the MIT license. A copy of the license can be found in the file
       #include <asm/hwprobe.h>
     #endif
   #endif
+  #if MI_MTE && defined(__aarch64__)
+    #include <sys/auxv.h>   // getauxval
+    #define MI_UNIX_LINUX_MTE  1
+    #ifndef HWCAP2_MTE
+    #define HWCAP2_MTE  (1UL << 18)
+    #endif
+    #ifndef PROT_MTE
+    #define PROT_MTE    (0x20)
+    #endif
+    #ifndef PR_SET_TAGGED_ADDR_CTRL
+    #define PR_SET_TAGGED_ADDR_CTRL  55
+    #define PR_GET_TAGGED_ADDR_CTRL  56
+    #define PR_TAGGED_ADDR_ENABLE    (1UL << 0)
+    #endif
+    #ifndef PR_MTE_TCF_SHIFT
+    #define PR_MTE_TCF_SHIFT         1
+    #define PR_MTE_TCF_SYNC          (1UL << PR_MTE_TCF_SHIFT)
+    #define PR_MTE_TCF_ASYNC         (2UL << PR_MTE_TCF_SHIFT)
+    #define PR_MTE_TCF_MASK          (3UL << PR_MTE_TCF_SHIFT)
+    #define PR_MTE_TAG_SHIFT         3
+    #define PR_MTE_TAG_MASK          (0xFFFFUL << PR_MTE_TAG_SHIFT)
+    #endif
+  #endif
 #elif defined(__APPLE__)
   #include <AvailabilityMacros.h>
   #include <TargetConditionals.h>
@@ -292,12 +315,32 @@ static size_t unix_detect_virtual_address_bits(void) {
   return MI_MAX_VABITS;
 }
 
-// Detect if memory tagging (MTE) is enabled for this process
+// Detect if memory tagging (MTE) is enabled for this process (only called if the `memtag` option is enabled)
 static bool unix_detect_memtag(void) {
   #if MI_UNIX_MACH_MTE
   if (__builtin_available(macOS 26.0, iOS 26.0, *)) {
     return ((os_security_config_get() & OS_SECURITY_CONFIG_MTE) != 0);   // set through process entitlements
   }
+  #elif MI_UNIX_LINUX_MTE
+  // Enable the tagged address ABI with the requested tag check mode, and allow tags 1 to 14 for `irg`.
+  // These settings are per thread and inherited by threads created afterwards.
+  if ((getauxval(AT_HWCAP2) & HWCAP2_MTE) == 0) return false;
+  const int ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
+  if (ctrl < 0) return false;
+  unsigned long tcf;
+  switch (mi_option_get(mi_option_mte)) {
+    case MI_MEMTAG_MODE_SYNC:      tcf = PR_MTE_TCF_SYNC; break;
+    case MI_MEMTAG_MODE_ASYNC:     tcf = PR_MTE_TCF_ASYNC; break;
+    case MI_MEMTAG_MODE_PREFERRED: tcf = PR_MTE_TCF_SYNC | PR_MTE_TCF_ASYNC; break;
+    default: tcf = ((unsigned long)ctrl & PR_MTE_TCF_MASK); if (tcf == 0) { tcf = PR_MTE_TCF_SYNC; } break;
+  }
+  const unsigned long tags = ((unsigned long)ctrl & PR_MTE_TAG_MASK) | (0x7FFEUL << PR_MTE_TAG_SHIFT);
+  if (prctl(PR_SET_TAGGED_ADDR_CTRL, PR_TAGGED_ADDR_ENABLE | tcf | tags, 0, 0, 0) != 0) {
+    _mi_warning_message("unable to enable memory tagging (error %d)\n", errno);
+    return false;
+  }
+  _mi_verbose_message("memory tag check mode: %s\n", (tcf == PR_MTE_TCF_SYNC ? "sync" : (tcf == PR_MTE_TCF_ASYNC ? "async" : "preferred")));
+  return true;
   #endif
   return false;
 }
@@ -316,7 +359,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_transparent_huge_pages = (config->large_page_size <= MI_UNIX_MAX_THP_PAGE_SIZE) && unix_detect_thp();
   config->has_overcommit = unix_detect_overcommit();
   config->virtual_address_bits = unix_detect_virtual_address_bits();
-  config->has_memtag = (unix_detect_memtag() && mi_option_is_enabled(mi_option_memtag));
+  config->has_memtag = (mi_option_is_enabled(mi_option_mte) && unix_detect_memtag());
 
   // disable transparent huge pages for this process?
   #if (defined(__linux__) || defined(__ANDROID__)) && defined(PR_GET_THP_DISABLE)
@@ -462,10 +505,17 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   #endif
   void* p = NULL;
   const int fd = unix_mmap_fd();
-  #if MI_UNIX_MACH_MTE
+  bool allow_huge = allow_large;
+  #if MI_UNIX_MACH_MTE || MI_UNIX_LINUX_MTE
   if (_mi_os_has_memtag()) {   // no large OS pages with memory tagging
     *is_large = false;
-    return (large_only ? NULL : unix_mmap_memtag(size, try_alignment, protect_flags, fd));
+    if (large_only) return NULL;
+    #if MI_UNIX_MACH_MTE
+    return unix_mmap_memtag(size, try_alignment, protect_flags, fd);
+    #else
+    allow_huge = false;
+    protect_flags |= PROT_MTE;  // also on `PROT_NONE` reservations as it is sticky with later `mprotect` calls
+    #endif
   }
   #endif
   int flags = MAP_PRIVATE | MAP_ANONYMOUS;
@@ -477,7 +527,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   #endif
   // huge page allocation
   #if MI_OS_HAS_HUGE_PAGES
-  if (allow_large && (large_only || (_mi_os_canuse_large_page(size, try_alignment) && mi_option_is_enabled(mi_option_allow_large_os_pages)))) {
+  if (allow_huge && (large_only || (_mi_os_canuse_large_page(size, try_alignment) && mi_option_is_enabled(mi_option_allow_large_os_pages)))) {
     size_t backoff = mi_atomic_load_relaxed(&_mi_process.os.large_page_backoff);
     if (!large_only && backoff > 0) {
       // If the OS is not configured for large OS pages, or the user does not have
@@ -531,7 +581,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
     }
   } // huge pages
   #else
-  MI_UNUSED(large_only);
+  MI_UNUSED(large_only); MI_UNUSED(allow_huge);
   #endif
   // regular allocation
   if (p == NULL) {

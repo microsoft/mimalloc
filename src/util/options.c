@@ -184,8 +184,7 @@ static const mi_option_desc_t mi_option_descs[_mi_option_last] =
   { 512*MI_KiB, MI_OPTION(profile_sample_rate) }, // sample rate in bytes for the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`) (=512 KiB)
   { MI_DEFAULT_STATS_MERGE_THRESHOLD, MI_OPTION(stats_merge_threshold) },    // on a page stats update, merge theap stats into the heap if N bytes were freed/allocated; 0 disables (=4 MiB)
   { MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE, MI_OPTION(arena_purge_immediate_size) }, // ranges above this size are purged immediately
-  { 1, MI_OPTION(memtag) },                   // use memory tagging (MTE) if available (and built with `MI_MTE=ON`)
-  { MI_LARGE_MAX_OBJ_SIZE/MI_KiB, MI_OPTION(memtag_max_size) },  // maximal block size (in KiB) that is memory tagged
+  { 1, MI_OPTION(mte) },                      // use memory tagging (MTE) if available (and built with `MI_MTE=ON`); on Linux the tag check mode can be set as well (sync, async, preferred)
 
 };
 
@@ -212,7 +211,7 @@ static mi_option_state_t* mi_option_state(mi_option_t option) {
 static bool mi_option_has_size_in_kib(mi_option_t option) {
   return (option == mi_option_reserve_os_memory || option == mi_option_arena_reserve ||
           option == mi_option_arena_purge_min_size || option == mi_option_arena_purge_immediate_size ||
-          option == mi_option_arena_max_object_size || option == mi_option_memtag_max_size
+          option == mi_option_arena_max_object_size
           // || option == mi_option_profile_alloc_interval || option == mi_option_profile_inuse_interval || option == mi_option_profile_sample_rate
          );
 }
@@ -300,7 +299,7 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
   _mi_fprintf(out, arg, "thread santizer enabled\n");
   #endif
   #if MI_MTE
-  if (mi_memtag_is_enabled()) { _mi_fprintf(out, arg, "mem tagging : enabled, max size: %zu\n", _mi_os_memtag_max_size()); }
+  if (mi_memtag_is_enabled()) { _mi_fprintf(out, arg, "mem tagging : enabled\n"); }
   else { _mi_fprintf(out, arg, "mem tagging : disabled\n"); }
   #endif
   _mi_fprintf(out, arg, "mem tracking: %s\n", MI_TRACK_TOOL);
@@ -695,6 +694,10 @@ static void mi_option_init(mi_option_t option, mi_option_state_t* state) {
     }
     else if (_mi_streq(buf,"0") || _mi_streq(buf,"FALSE") || _mi_streq(buf,"NO") || _mi_streq(buf,"OFF")) {
       state->value = 0;
+      state->init = MI_OPTION_INITIALIZED;
+    }
+    else if (option == mi_option_mte && (_mi_streq(buf,"SYNC") || _mi_streq(buf,"ASYNC") || _mi_streq(buf,"PREFERRED"))) {
+      state->value = (buf[0]=='S' ? MI_MEMTAG_MODE_SYNC : (buf[0]=='A' ? MI_MEMTAG_MODE_ASYNC : MI_MEMTAG_MODE_PREFERRED));
       state->init = MI_OPTION_INITIALIZED;
     }
     else {

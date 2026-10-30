@@ -41,7 +41,15 @@ the hardware instructions are never executed (as these trap on CPU's without MTE
 
 // Set once at process initialization in the sealed process data (see `prim/os.c:_mi_os_init`)
 bool   _mi_os_has_memtag(void);         // is memory tagging used?
-size_t _mi_os_memtag_max_size(void);    // maximal block size that is tagged
+
+// Values of the `mte` option (`MIMALLOC_MTE=off|on|sync|async|preferred`). The tag check mode can only be selected on Linux
+// (on macOS it is determined by the OS). With `preferred` the kernel selects the preferred mode of the CPU which can
+// also be `asymm` (see `/sys/devices/system/cpu/cpu<N>/mte_tcf_preferred`).
+#define MI_MEMTAG_MODE_OFF        (0)
+#define MI_MEMTAG_MODE_DEFAULT    (1)   // keep the current tag check mode of the process if set, and use `sync` otherwise
+#define MI_MEMTAG_MODE_SYNC       (2)
+#define MI_MEMTAG_MODE_ASYNC      (3)
+#define MI_MEMTAG_MODE_PREFERRED  (4)
 
 static inline bool mi_memtag_is_enabled(void) {
   #if MI_MTE
@@ -51,9 +59,9 @@ static inline bool mi_memtag_is_enabled(void) {
   #endif
 }
 
-// Should blocks of size `bsize` in memory that supports tagging (`memid.is_memtag`) be tagged?
+// Should blocks of size `bsize` in memory that supports tagging (`memid.is_memtag`) be tagged? (singleton blocks are never tagged)
 static inline bool mi_memtag_use_for(bool is_memtag, size_t bsize) {
-  return (mi_memtag_is_enabled() && is_memtag && bsize <= _mi_os_memtag_max_size() && (bsize % MI_MEMTAG_GRANULE_SIZE) == 0);
+  return (mi_memtag_is_enabled() && is_memtag && (bsize % MI_MEMTAG_GRANULE_SIZE) == 0);
 }
 
 
