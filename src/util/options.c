@@ -299,6 +299,10 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
   #if MI_TSAN
   _mi_fprintf(out, arg, "thread santizer enabled\n");
   #endif
+  #if MI_MTE
+  if (mi_memtag_is_enabled()) { _mi_fprintf(out, arg, "mem tagging : enabled, max size: %zu\n", _mi_os_memtag_max_size()); }
+  else { _mi_fprintf(out, arg, "mem tagging : disabled\n"); }
+  #endif
   _mi_fprintf(out, arg, "mem tracking: %s\n", MI_TRACK_TOOL);
   _mi_fprintf(out, arg, "debug level : %d\n", MI_DEBUG );
   _mi_fprintf(out, arg, "secure level: %d\n", MI_SECURE );
