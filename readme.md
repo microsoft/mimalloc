@@ -27,7 +27,7 @@ without code changes, for example, on dynamically linked ELF-based systems (Linu
 It also includes a way to dynamically override the default allocator in [Windows](#override_on_windows).
 Notable aspects of the design include:
 
-- __small and consistent__: the library is about 10k LOC using simple and
+- __small and consistent__: the library is about 12k LOC using simple and
   consistent data structures. This makes it very suitable
   to integrate and adapt in other projects. For runtime systems it
   provides hooks for a monotonic _heartbeat_ and deferred freeing (for
@@ -91,7 +91,7 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 ### Releases
 
 * 2026-10-30, `v3.6.1`: (v3) Many small fixes for CPython integration (thank you @DinoV),
-  Emscripten fixes (#1455, thank you @kleisauke) and reduce memory usage on WASI and Emscripten,
+  Emscripten fixes (#1455, thank you @kleisauke) and reduced memory usage on WASI and Emscripten,
   C23 free_sized(_aligned) overrides (#1470), improved fork support (#1456),
   fix armv5tej compilation (#1464), fix MSVC overrides for strdup family (#1460),
   faster STL allocator trait (#1468),
@@ -537,8 +537,9 @@ Note: recently we also enabled static overloading on Windows. In that case you n
 to link with the static CRT _release_ runtime (`/MT`) and link with the static
 `mimalloc(-debug).obj` (to take precendence over the definitions in the CRT library).
 The debug CRT (`/MTd`) is not supported. The static override covers the `malloc` family,
-`_aligned_*`, `_expand`, `_msize`, `_strdup`, and `_wcsdup`, but other CRT functions that return
-allocated memory (like `_dupenv_s`, `_getcwd(NULL,..)`, `_fullpath(NULL,..)`, or `_tempnam`)
+`_aligned_*`, `_expand`, `_msize`, `_strdup`, and `_wcsdup`.
+Unfortunately, some other CRT functions that return
+allocated memory, namely `_dupenv_s`, `_getcwd(NULL,..)`, `_fullpath(NULL,..)`, and `_tempnam`,
 still allocate from the CRT heap and cannot be freed with `free`. Use the dynamic override
 in that case (or the `mi_` equivalents like `mi_dupenv_s` where available).
 
