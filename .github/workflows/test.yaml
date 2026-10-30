@@ -55,8 +55,8 @@ jobs:
             tests: emscripten       # wasm32 on node
           - os: ubuntu-latest
             tests: linux-arm64-mte  # qemu
-          # - os: ubuntu-latest
-          #   tests: android-x64
+          - os: ubuntu-latest
+            tests: android-arm64    # qemu
           # - os: ubuntu-latest       # slow, so disable by default
           #   tests: freebsd-arm64    # qemu
 
@@ -661,33 +661,57 @@ jobs:
           cmake --build out/single-wasm --parallel 4 --config Release
           ctest --test-dir out/single-wasm --verbose --timeout 240 -C Release
 
-      # - name: Android, Setup
-      #   if: matrix.tests == 'android-x64'
-      #   uses: android-actions/setup-android@v4
-      #   #id: setup-ndk
-      #   # with:
-      #     # ndk-version: r27d
-      #     # link-to-sdk: true
-      #     # local-cache: true
+      # Android arm64: cross-built with the preinstalled NDK as static executables (bionic) and run with QEMU (`-cpu max` emulates MTE).
+      # No malloc override: since NDK r30 the static bionic startup code always links in bionic's own `malloc`.
+      - name: Android arm64, Setup
+        if: matrix.tests == 'android-arm64'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q qemu-user-static
+          qemu-aarch64-static --version
+          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          test -f "$NDK/build/cmake/android.toolchain.cmake" || { echo "::error::Android NDK not found"; exit 1; }
+          echo "NDK: $NDK"
+          echo "QEMU_CPU=max" >> $GITHUB_ENV
+          echo "MI_TEST_LIGHT=1" >> $GITHUB_ENV
+          echo "MI_CMAKE_ANDROID=-DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 -DANDROID_STL=c++_static -DMI_BUILD_SHARED=OFF -DMI_OVERRIDE=OFF -DCMAKE_EXE_LINKER_FLAGS=-static -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64-static" >> $GITHUB_ENV
 
-      # - name: Android, Debug Build
-      #   if: matrix.tests == 'android-x64'
-      #   # env:
-      #   #  ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-      #   run: |
-      #     env
-      #     cmake . -G Ninja -B out/android-x64 -DCMAKE_BUILD_TYPE=Debug \
-      #       -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
-      #       -DANDROID_ABI=x86_64 -DANDROID_PLATFORM=android-27
-      #     cmake --build out/android-x64 --parallel 4 --config Debug
+      - name: Android arm64, Debug
+        if: matrix.tests == 'android-arm64'
+        run: |
+          cmake . -B out/debug-android -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL $MI_CMAKE_ANDROID
+          cmake --build out/debug-android --parallel 4 --config Debug
+          ctest --test-dir out/debug-android --verbose --timeout 600 -C Debug
 
-      # - name: Android, Debug Run
-      #   if: matrix.tests == 'android-x64'
-      #   uses: reactivecircus/android-emulator-runner@v2
-      #   with:
-      #     api-level: 27
-      #     target: default
-      #     arch: x86_64
-      #     script: |
-      #       adb push out/android-x64/mimalloc-test-api /data/local/tmp/
-      #       adb shell "/data/local/tmp/mimalloc-test-api"
+      - name: Android arm64, Release
+        if: matrix.tests == 'android-arm64'
+        run: |
+          cmake . -B out/release-android -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON $MI_CMAKE_ANDROID
+          cmake --build out/release-android --parallel 4 --config Release
+          ctest --test-dir out/release-android --verbose --timeout 600 -C Release
+
+      - name: Android arm64, Secure
+        if: matrix.tests == 'android-arm64'
+        run: |
+          cmake . -B out/secure-android -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_SECURE=ON $MI_CMAKE_ANDROID
+          cmake --build out/secure-android --parallel 4 --config Release
+          ctest --test-dir out/secure-android --verbose --timeout 600 -C Release
+
+      - name: Android arm64, Debug, MTE
+        if: matrix.tests == 'android-arm64'
+        env:
+          MI_TEST_REQUIRE_MTE: 1
+        run: |
+          cmake . -B out/debug-android-mte -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_MTE=ON $MI_CMAKE_ANDROID
+          cmake --build out/debug-android-mte --parallel 4 --config Debug
+          ctest --test-dir out/debug-android-mte --verbose --timeout 600 -C Debug
+
+      - name: Android arm64, Release, MTE
+        if: matrix.tests == 'android-arm64'
+        env:
+          MI_TEST_REQUIRE_MTE: 1
+        run: |
+          cmake . -B out/release-android-mte -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_MTE=ON $MI_CMAKE_ANDROID
+          cmake --build out/release-android-mte --parallel 4 --config Release
+          MIMALLOC_VERBOSE=1 qemu-aarch64-static out/release-android-mte/mimalloc-test-mte
+          ctest --test-dir out/release-android-mte --verbose --timeout 600 -C Release

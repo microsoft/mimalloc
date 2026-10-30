@@ -931,6 +931,9 @@ if(NOT WIN32 AND MI_PROFILE)
     list(APPEND mi_defines MI_HAS_UNISTDH=1)
   endif()
   CHECK_INCLUDE_FILES("execinfo.h" MI_HAS_EXECINFOH)
+  if(MI_HAS_EXECINFOH AND ANDROID AND ANDROID_PLATFORM_LEVEL LESS 33)
+    set(MI_HAS_EXECINFOH OFF)   # `backtrace` is only available from Android API level 33
+  endif()
   if(MI_HAS_EXECINFOH)
     list(APPEND mi_defines MI_HAS_EXECINFOH=1)
     # On FreeBSD (and some other BSDs) `backtrace`/`backtrace_symbols` are not part of
