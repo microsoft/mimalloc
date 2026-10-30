@@ -59,10 +59,10 @@ static inline uint8_t* mi_page_area(const mi_page_t* page) {
 static bool mi_page_list_is_valid(mi_page_t* page, mi_block_t* p) {
   size_t psize;
   uint8_t* page_area = mi_page_area(page, &psize);
-  mi_block_t* start = (mi_block_t*)page_area;
-  mi_block_t* end   = (mi_block_t*)(page_area + psize);
+  const mi_addr_t start = mi_addr(page_area);
+  const mi_addr_t end   = start + psize;
   while(p != NULL) {
-    if (p < start || p >= end) return false;
+    if (mi_addr(p) < start || mi_addr(p) >= end) return false;  // compare without memory tags
     p = mi_block_next(page, p);
   }
 #if MI_DEBUG>3 // generally too expensive to check this
