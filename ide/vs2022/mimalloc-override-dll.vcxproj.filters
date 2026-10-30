@@ -31,7 +31,7 @@
     <ClCompile Include="..\..\src\heap\theap.c">
       <Filter>Sources</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\heap\init.c">
+    <ClCompile Include="..\..\src\heap\process.c">
       <Filter>Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\util\libc.c">
@@ -129,7 +129,7 @@
     <ClInclude Include="..\..\include\mimalloc\heap\subproc.h">
       <Filter>Headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\include\mimalloc\heap\init.h">
+    <ClInclude Include="..\..\include\mimalloc\heap\process.h">
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\mimalloc\prim\os.h">

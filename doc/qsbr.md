@@ -17,8 +17,7 @@ is not included here.
 ## Enabling the hooks
 
 Define `MI_QSBR=1` before including mimalloc headers and `src/static.c`.
-Defining `MI_CPYTHON` also enables it by default; other runtimes need not define
-`MI_CPYTHON`. Supply function definitions for the runtime primitives declared in
+Supply function definitions for the runtime primitives declared in
 `include/mimalloc/qsbr.h`, either in the same translation unit or linked from
 another host source file.
 Missing hooks deliberately fail to build rather than silently release pages.
@@ -148,8 +147,9 @@ A delayed owned page belongs to two independent lists:
 - Its ordinary mimalloc size-class queue, so it remains available for allocation.
 - Its theap's QSBR queue, so ready pages can be drained efficiently.
 
-Mimalloc owns `qsbr_next`, `qsbr_prev`, and `qsbr_in_queue` in each page and
-`qsbr_first`/`qsbr_last` in each theap. The membership bit distinguishes an
+Mimalloc owns `qsbr_next`, `qsbr_prev`, and `qsbr_xthread_id` in each page and
+`qsbr_first`/`qsbr_last` in each theap. The membership bit (the lowest bit of
+`qsbr_xthread_id`) distinguishes an
 unlinked page from a singleton queue without dereferencing an abandoned page's
 old theap. Only owned pages can be queued. A recorded goal alone does not imply
 queue membership: abandoned pages retain their goals after being unlinked.
@@ -285,7 +285,13 @@ orphans awaiting terminal destruction.
 
 ## Fork handling
 
-Forking requires other threads to be outside mimalloc. A host that also performs
-uncoordinated fork-and-exec operations can define `MI_NO_PTHREAD_ATFORK=1` and
-call `_mi_fork_child()` explicitly after a coordinated fork, before resuming
-allocator use. Exec-only children must not use the allocator before exec.
+mimalloc registers a `pthread_atfork` child handler that only marks the threads
+that do not exist in the child; their pages are abandoned lazily when a new
+thread starts in the child (as it can reuse the thread id of a dead thread), or
+during the periodic administration on the generic allocation path.
+Uncoordinated fork-and-exec is therefore safe as long as the child does not use
+the allocator before exec. A child that keeps allocating
+requires that other threads were outside mimalloc at the fork (if such a thread
+held an allocator lock, its pages are leaked in the child). With
+`MI_NO_PTHREAD_ATFORK=1`, a host can call `_mi_fork_child()` itself after a
+coordinated fork, before resuming allocator use.

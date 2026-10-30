@@ -29,6 +29,27 @@ fn feature(name: &str) -> bool {
     env::var_os(format!("CARGO_FEATURE_{}", name.to_uppercase())).is_some()
 }
 
+/// Check if `cfg!(debug_assertions)` is enabled for the current build.
+fn is_rust_debug() -> bool {
+    // Before Rust 1.93 the `CARGO_CFG_DEBUG_ASSERTIONS` variable was never set by cargo.
+    // On those versions, there is no way for build scripts to detect `cfg!(debug_assertions)` with 100% accuracy.
+    // However, checking the `PROFILE` gives a decent approximation.
+    if rustversion::cfg!(since(1.93)) {
+        // implemented in PR https://github.com/rust-lang/cargo/pull/16160
+        env::var_os("CARGO_CFG_DEBUG_ASSERTIONS").is_some()
+    } else {
+        // This is wrong in three cases
+        // 1. the profile inherits from "release" but enables debug-assertions
+        // 2. the profile inherits from "dev" but disables debug-assertions
+        // 3. if -Cdebug-assertions is manually set via RUSTFLAGS
+        //
+        // The "DEBUG" variable is not taken into consideration,
+        // because it would hurt compiling with release + debuginfo,
+        // which is often used for benchmarks.
+        matches!(env::var("PROFILE").as_deref(), Ok("debug"))
+    }
+}
+
 // Extra defines from `MIMALLOC_DEFINES`, e.g. `MI_DEBUG=3 MI_SKIP_COLLECT_ON_EXIT=1`
 fn user_defines() -> Vec<(String, Option<String>)> {
     println!("cargo:rerun-if-env-changed=MIMALLOC_DEFINES");
@@ -82,7 +103,7 @@ fn main() {
 
     // build options
     let debug = feature("debug")
-        || (feature("debug_in_debug") && env::var_os("CARGO_CFG_DEBUG_ASSERTIONS").is_some());
+        || (feature("debug_in_debug") && is_rust_debug());
     if debug {
         define("MI_DEBUG", "2");
     } else if !is_user("MI_DEBUG") {

@@ -443,7 +443,7 @@
     <ClInclude Include="..\..\include\mimalloc\util\random.h" />
     <ClInclude Include="..\..\include\mimalloc\prim\prim-tls.h" />
     <ClInclude Include="..\..\include\mimalloc\heap\subproc.h" />
-    <ClInclude Include="..\..\include\mimalloc\heap\init.h" />
+    <ClInclude Include="..\..\include\mimalloc\heap\process.h" />
     <ClInclude Include="..\..\include\mimalloc\prim\os.h" />
     <ClInclude Include="..\..\include\mimalloc\util\threadlocal.h" />
     <ClInclude Include="..\..\include\mimalloc\arena\arena.h" />
@@ -513,7 +513,7 @@
     <ClCompile Include="..\..\src\profile\sample-profile.c" />
     <ClCompile Include="..\..\src\heap\subproc.c" />
     <ClCompile Include="..\..\src\heap\theap.c" />
-    <ClCompile Include="..\..\src\heap\init.c" />
+    <ClCompile Include="..\..\src\heap\process.c" />
     <ClCompile Include="..\..\src\util\libc.c" />
     <ClCompile Include="..\..\src\heap\page-map.c" />
     <ClCompile Include="..\..\src\prim\prim.c" />

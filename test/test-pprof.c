@@ -72,8 +72,17 @@ static void allocate_and_free(size_t n, size_t block_size) {
 // fewer distinct ones (or even just one).
 static void* volatile mi_test_pprof_sink;
 
+// Prevent inlining of the sites (as that would also collapse the backtraces).
+#if defined(_MSC_VER)
+#define mi_test_noinline  __declspec(noinline)
+#elif defined(__GNUC__)
+#define mi_test_noinline  __attribute__((noinline))
+#else
+#define mi_test_noinline
+#endif
+
 #define MI_TEST_PPROF_DEFINE_SITE(N) \
-  static void* alloc_site_##N(size_t block_size, size_t i) { \
+  static mi_test_noinline void* alloc_site_##N(size_t block_size, size_t i) { \
     void* p = mi_malloc(block_size + (i % 37)); \
     mi_test_pprof_sink = p; \
     return p; \

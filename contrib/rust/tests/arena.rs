@@ -31,6 +31,11 @@ fn check_heap_uses_arena(heap: &Heap, arena: Arena) {
     }
 }
 
+// size of memory at an unaligned address that is always large enough for an arena
+fn unaligned_arena_size() -> usize {
+    Arena::min_size().max(Arena::min_alignment()) + Arena::min_alignment()
+}
+
 // leak `size` bytes of memory that start at an `align`-aligned address
 // (we align by hand: with the `override` feature the system allocator is mimalloc, which does not
 // support alignments as large as `Arena::min_alignment()`)
@@ -92,7 +97,7 @@ fn full_arena_returns_null() {
 #[test]
 fn from_static_memory_unaligned() {
     // what the README recommends for memory at an unaligned address
-    let memory = Box::leak(Box::<[u8]>::new_uninit_slice(2 * Arena::min_alignment()));
+    let memory = Box::leak(Box::<[u8]>::new_uninit_slice(unaligned_arena_size()));
     let (start, len) = (memory.as_ptr() as usize, memory.len());
     let arena = Arena::from_static_memory(memory, true).unwrap();
     let area = arena.area();
@@ -104,7 +109,7 @@ fn from_static_memory_unaligned() {
 #[test]
 fn from_static_memory_inside_mimalloc_block() {
     // an arena inside a leaked mimalloc block
-    let len = 2 * Arena::min_alignment();
+    let len = unaligned_arena_size();
     let p = unsafe { MiMalloc.alloc(Layout::from_size_align(len, 16).unwrap()) };
     assert!(!p.is_null());
     let memory = unsafe { core::slice::from_raw_parts_mut(p.cast::<MaybeUninit<u8>>(), len) };

@@ -4,8 +4,8 @@ project(libmimalloc C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
-set(MI_SECURE "OFF" CACHE STRING "Use security mitigations (like meta data guard pages, allocation randomization, double-free mitigation, and free-list corruption detection): OFF, ON, FULL. The FULL setting adds guard pages at the end of each mimalloc page (which may be expensive)")
-set_property(CACHE MI_SECURE PROPERTY STRINGS "OFF" "ON" "FULL")
+set(MI_SECURE "OFF" CACHE STRING "Use security mitigations (like meta data guard pages, allocation randomization, double-free mitigation, and free-list corruption detection): OFF, MINIMAL, ON, FULL. The FULL setting adds guard pages at the end of each mimalloc page (which may be expensive). MINIMAL only uses guard pages around metadata (and randomizes OS allocation addresses).")
+set_property(CACHE MI_SECURE PROPERTY STRINGS "OFF"  "MINIMAL" "ON" "FULL")
 
 option(MI_OVERRIDE          "Override the standard malloc interface (i.e. define entry points for 'malloc', 'free', etc)" ON)
 option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
@@ -127,7 +127,7 @@ set(mi_sources
     src/alloc/page.c
     src/alloc/page-queue.c
     src/heap/heap.c
-    src/heap/init.c
+    src/heap/process.c
     src/heap/page-map.c
     src/heap/subproc.c
     src/heap/theap.c
@@ -342,6 +342,10 @@ endif()
 if(MI_SECURE STREQUAL "FULL")
   message(STATUS "Use full secure build (MI_SECURE=FULL, may be expensive)")
   list(APPEND mi_defines MI_SECURE=5)
+elseif(MI_SECURE STREQUAL "MINIMAL")
+  message(STATUS "Use minimal security mitigations (guard pages around metadata and randomized OS allocation addresses) (MI_SECURE=MINIMAL)")
+  list(APPEND mi_defines MI_SECURE=1)
+  set(MI_SECURE "OFF")  # so if(MI_SECURE) is false in subsequent checks
 elseif(MI_SECURE)
   message(STATUS "Use secure build (MI_SECURE=${MI_SECURE})")
   list(APPEND mi_defines MI_SECURE=4)
@@ -464,7 +468,7 @@ elseif(NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 if(MI_GUARDED STREQUAL "DEFAULT")
-  if(MI_DEBUG)
+  if(MI_DEBUG AND NOT (EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "WASI"))   # no memory protection on wasm
     set(MI_GUARDED "FULL")
   else()
     set(MI_GUARDED "OFF")
@@ -552,10 +556,6 @@ else()
   list(APPEND mi_defines MI_PROFILE=0)
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
-  message(STATUS "Enabling MI_FREE_USE_PAGEMAP since the target (WASI) does not support large OS aligned allocations well")
-  set(MI_FREE_USE_PAGEMAP ON)
-endif()
 if(MI_FREE_USE_PAGEMAP)
   message(STATUS "Always use the pagemap in mi_free (MI_FREE_USE_PAGEMAP=ON)")
   list(APPEND mi_defines MI_FREE_USE_PAGEMAP=1)
@@ -752,7 +752,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU" AND NOT MI_CLANG_CL)
     list(APPEND mi_cflags -Wstrict-prototypes)
   endif()
   if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")
-    list(APPEND mi_cflags -Wno-static-in-inline -mno-outline)
+    list(APPEND mi_cflags -mno-outline)
   endif()
   if(CMAKE_C_COMPILER_ID STREQUAL "AppleClang" AND MI_ARCH STREQUAL "arm64")
     list(APPEND mi_cflags -Xclang -fno-split-cold-code)
@@ -898,6 +898,9 @@ else()
     list(APPEND mi_libraries "${MI_LIB_ATOMIC}")
   endif()
 endif()
+if(EMSCRIPTEN)
+  list(APPEND mi_libraries -sALLOW_MEMORY_GROWTH=1)  # mimalloc reserves memory in large chunks
+endif()
 
 # set language for source files now
 if(MI_USE_CXX)
@@ -924,19 +927,34 @@ if(NOT WIN32 AND MI_PROFILE)
     endif()
   else()
     # No `execinfo.h` available (e.g. musl-based Linux distributions such as Alpine
-    # do not implement `backtrace`); fall back to `libunwind` if it is installed.
-    CHECK_INCLUDE_FILES("libunwind.h" MI_HAS_LIBUNWINDH)
-    if(MI_HAS_LIBUNWINDH)
-      find_link_library("unwind" MI_LIB_UNWIND)
-      if(MI_LIB_UNWIND)
-        list(APPEND mi_defines MI_HAS_LIBUNWINDH=1)
-        list(APPEND mi_libraries "${MI_LIB_UNWIND}")
-      endif()
+    # do not implement `backtrace`); fall back to `_Unwind_Backtrace` from `unwind.h`
+    # which is provided by the compiler's unwinder (libgcc_s or LLVM libunwind).
+    include(CheckCSourceCompiles)
+    set(mi_unwind_test_source "
+      #include <unwind.h>
+      #include <stdint.h>
+      static _Unwind_Reason_Code mi_unwind_test(struct _Unwind_Context* ctx, void* arg) {
+        *(uintptr_t*)arg = (uintptr_t)_Unwind_GetIP(ctx);
+        return _URC_END_OF_STACK;
+      }
+      int main(void) { uintptr_t ip = 0; _Unwind_Backtrace(&mi_unwind_test, &ip); return (ip == 0); }")
+    check_c_source_compiles("${mi_unwind_test_source}" MI_HAS_UNWINDH)
+    if(NOT MI_HAS_UNWINDH)
+      foreach(mi_unwind_lib IN ITEMS gcc_s unwind)
+        set(CMAKE_REQUIRED_LIBRARIES ${mi_unwind_lib})
+        check_c_source_compiles("${mi_unwind_test_source}" MI_HAS_UNWINDH_${mi_unwind_lib})
+        unset(CMAKE_REQUIRED_LIBRARIES)
+        if(MI_HAS_UNWINDH_${mi_unwind_lib})
+          set(MI_HAS_UNWINDH ON)
+          list(APPEND mi_libraries ${mi_unwind_lib})
+          break()
+        endif()
+      endforeach()
+    endif()
+    if(MI_HAS_UNWINDH)
+      list(APPEND mi_defines MI_HAS_UNWINDH=1)
     else()
-      message(WARNING "No backtrace support available: neither execinfo.h nor libunwind.h found.")
-      if(EXISTS "/etc/alpine-release")
-        message(STATUS "(On Alpine Linux, use `apk add libunwind-dev` to add the libunwind library)")
-      endif()
+      message(WARNING "No backtrace support available: neither execinfo.h nor unwind.h (_Unwind_Backtrace) found.")
     endif()
   endif()
   # FreeBSD (and DragonFly) need `kinfo_getvmmap` (in `libutil`) to collect the
@@ -1049,6 +1067,9 @@ if(MI_BUILD_SHARED)
   target_compile_definitions(mimalloc PRIVATE ${mi_defines} MI_SHARED_LIB MI_SHARED_LIB_EXPORT)
   target_compile_options(mimalloc PRIVATE ${mi_cflags} ${mi_cflags_dynamic})
   target_link_libraries(mimalloc PRIVATE ${mi_libraries})
+  if(EMSCRIPTEN)
+    target_link_options(mimalloc PRIVATE -Wno-pthreads-mem-growth)
+  endif()
   target_include_directories(mimalloc PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:${mi_install_incdir}>
@@ -1195,6 +1216,15 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/mimalloc.pc"
 if (MI_BUILD_TESTS)
   enable_testing()
 
+  # run tests through the emulator when cross compiling (e.g. `node` for emscripten)
+  set(mi_test_runner ${CMAKE_CROSSCOMPILING_EMULATOR})
+  if(EMSCRIPTEN)
+    add_link_options(-sNODE_HOST_ENV=1)  # pass environment variables
+    if(CMAKE_C_FLAGS MATCHES "-pthread")
+      add_link_options(-pthread -sPTHREAD_POOL_SIZE=40 -Wno-pthreads-mem-growth)  # pre-spawn workers so threads can start while main blocks
+    endif()
+  endif()
+
   # static link tests
   foreach(TEST_NAME api api-fill arena bitmap stress-heaps stress-subprocs stress stress-pprof profile pprof fork)
     if((TEST_NAME STREQUAL "arena" OR TEST_NAME STREQUAL "bitmap") AND (NOT MI_BUILD_STATIC OR MI_DEBUG_TSAN))
@@ -1218,9 +1248,9 @@ if (MI_BUILD_TESTS)
     if(MI_DEBUG_TSAN AND TEST_NAME STREQUAL "fork")
     # don't add as a test
     elseif(MI_GUARDED AND NOT (TEST_NAME STREQUAL "profile" OR TEST_NAME STREQUAL "pprof" OR TEST_NAME STREQUAL "stress-pprof"))
-    add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_GUARDED_SAMPLE_RATE=1024 $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
+    add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_GUARDED_SAMPLE_RATE=1024 ${mi_test_runner} $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
     elseif(TEST_NAME STREQUAL "stress-heaps")
-    add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_ARENA_EAGER_COMMIT=0 MIMALLOC_PAGE_COMMIT_ON_DEMAND=0 $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
+    add_test(NAME test-${TEST_NAME} COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_ARENA_EAGER_COMMIT=0 MIMALLOC_PAGE_COMMIT_ON_DEMAND=0 ${mi_test_runner} $<TARGET_FILE:mimalloc-test-${TEST_NAME}>)
     elseif((NOT MI_PROFILE) AND (TEST_NAME STREQUAL "profile" OR TEST_NAME STREQUAL "pprof" OR TEST_NAME STREQUAL "stress-pprof"))
     # don't add as a test
     elseif(NOT APPLE AND TEST_NAME STREQUAL "stress-pprof")
@@ -1241,11 +1271,11 @@ if (MI_BUILD_TESTS)
     target_compile_options(mimalloc-test-stress-static PRIVATE ${mi_cflags})
     target_include_directories(mimalloc-test-stress-static PRIVATE include)
     target_link_libraries(mimalloc-test-stress-static PRIVATE mimalloc-obj  ${mi_libraries})  # override statically with an object file
-    add_test(NAME test-stress-static COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_VERBOSE=1 MIMALLOC_SHOW_STATS=1 $<TARGET_FILE:mimalloc-test-stress-static>)
+    add_test(NAME test-stress-static COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_VERBOSE=1 MIMALLOC_SHOW_STATS=1 ${mi_test_runner} $<TARGET_FILE:mimalloc-test-stress-static>)
   endif()
 
   # dynamic override test
-  if(MI_BUILD_SHARED AND MI_OVERRIDE AND NOT (MI_CYGWIN OR (MI_TRACK STREQUAL "ASAN") OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN)) # AND NOT (APPLE AND MI_USE_CXX))
+  if(MI_BUILD_SHARED AND MI_OVERRIDE AND NOT (EMSCRIPTEN OR MI_CYGWIN OR (MI_TRACK STREQUAL "ASAN") OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN)) # AND NOT (APPLE AND MI_USE_CXX))
     add_executable(mimalloc-test-stress-dynamic test/test-stress.c)
     target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE ${mi_defines} "USE_STD_MALLOC=1")
     target_compile_options(mimalloc-test-stress-dynamic PRIVATE ${mi_cflags})
@@ -1270,7 +1300,7 @@ if (MI_BUILD_TESTS)
     endif()
   endif()
 
-  # The QSBR adapter embeds its own allocator with an extended internal layout.
+  # Check QSBR
   add_executable(mimalloc-test-qsbr test/test-qsbr.c)
   target_compile_definitions(mimalloc-test-qsbr PRIVATE ${mi_defines})
   target_compile_options(mimalloc-test-qsbr PRIVATE ${mi_cflags})
@@ -1280,7 +1310,7 @@ if (MI_BUILD_TESTS)
 
   # Rust crate tests (only if `cargo` is available)
   find_program(MI_CARGO cargo HINTS "$ENV{CARGO_HOME}/bin" "$ENV{HOME}/.cargo/bin")
-  if(MI_CARGO AND NOT (MI_DEBUG_TSAN OR MI_DEBUG_UBSAN OR (MI_TRACK STREQUAL "ASAN")))
+  if(MI_CARGO AND NOT (CMAKE_CROSSCOMPILING OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN OR (MI_TRACK STREQUAL "ASAN")))
     message(STATUS "Add Rust crate tests (using ${MI_CARGO})")
     set(mi_cargo_args test --manifest-path "${CMAKE_CURRENT_SOURCE_DIR}/contrib/rust/Cargo.toml"
                            --target-dir "${CMAKE_CURRENT_BINARY_DIR}/rust" "$<IF:$<CONFIG:Debug>,--features=debug,--release>")

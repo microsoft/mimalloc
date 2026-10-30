@@ -16,6 +16,14 @@ terms of the MIT license. A copy of the license can be found in the file
 // ---------------------------------------------------------------------------
 static int ok = 0;
 static int failed = 0;
+static int skipped = 0;
+
+// can tests create threads?
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+#define MI_TEST_HAS_THREADS  0
+#else
+#define MI_TEST_HAS_THREADS  1
+#endif
 
 static bool check_result(bool result, const char* testname, const char* fname, long lineno) {
   if (!(result)) {
@@ -37,12 +45,28 @@ static bool check_result(bool result, const char* testname, const char* fname, l
 
 #define CHECK(name,expr)      CHECK_BODY(name){ result = (expr); }
 
+// tests that need threads are skipped if threads are unavailable
+static inline bool check_skip(const char* reason) {
+  skipped++;
+  fprintf(stderr, "skipped (%s).\n", reason);
+  return true;
+}
+
+#define CHECK_THREADS_BODY(name) \
+  fprintf(stderr,"test: %s...  ", name ); \
+  errno = 0; \
+  for(bool done = (!MI_TEST_HAS_THREADS && check_skip("no threads")), result = true; !done; done = check_result(result,name,__FILE__,__LINE__))
+
+#define CHECK_THREADS(name,expr)  CHECK_THREADS_BODY(name){ result = (expr); }
+
 // Print summary of test. Return value can be directly use as a return value for main().
 static inline int print_test_summary(void)
 {
   fprintf(stderr,"\n\n---------------------------------------------\n"
                  "succeeded: %i\n"
-                 "failed   : %i\n\n", ok, failed);
+                 "failed   : %i\n", ok, failed);
+  if (skipped > 0) { fprintf(stderr, "skipped  : %i\n", skipped); }
+  fprintf(stderr, "\n");
   return failed;
 }
 

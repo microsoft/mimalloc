@@ -14,7 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 use core::ffi::{c_char, c_int, c_long, c_ulonglong, c_void};
 
-pub const MI_MALLOC_VERSION: c_int = 30600;
+pub const MI_MALLOC_VERSION: c_int = 30601;
 pub const MI_SMALL_WSIZE_MAX: usize = 128;
 pub const MI_SMALL_SIZE_MAX: usize = MI_SMALL_WSIZE_MAX * core::mem::size_of::<usize>();
 
