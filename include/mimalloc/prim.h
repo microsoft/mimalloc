@@ -28,6 +28,7 @@ typedef struct mi_os_mem_config_s {
   size_t  alloc_granularity;      // smallest allocation size (usually 4KiB, on Windows 64KiB)
   size_t  physical_memory_in_kib; // physical memory size in KiB
   size_t  virtual_address_bits;   // usually 48 or 56 bits on 64-bit systems. (used to determine secure randomization)
+  size_t  memtag_mode;            // OS specific memory tag check mode (only used in the `prim` layer, see `unix/prim.c`)
   bool    has_overcommit;         // can we reserve more memory than can be actually committed?
   bool    has_partial_free;       // can allocated blocks be freed partially? (true for mmap, false for VirtualAlloc)
   bool    has_virtual_reserve;    // supports virtual address space reservation? (if true we can reserve virtual address space without using commit or physical memory)
@@ -141,6 +142,9 @@ void _mi_prim_thread_done_auto_done(void);
 
 // Called when the default theap for a thread changes
 void _mi_prim_thread_associate_default_theap(mi_theap_t* theap);
+
+// Called once on each thread initialization (before the first allocation in that thread)
+void _mi_prim_thread_init(void);
 
 // Is this thread part of a thread pool?
 bool _mi_prim_thread_is_in_threadpool(void);

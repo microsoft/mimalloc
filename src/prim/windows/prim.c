@@ -790,6 +790,10 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 #endif  // MI_USE_RTLGENRANDOM
 
 
+void _mi_prim_thread_init(void) {
+  // nothing
+}
+
 //----------------------------------------------------------------
 // Thread pool?
 //----------------------------------------------------------------

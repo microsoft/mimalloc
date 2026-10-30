@@ -290,6 +290,10 @@ void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
 }
 #endif
 
+void _mi_prim_thread_init(void) {
+  // nothing
+}
+
 bool _mi_prim_thread_is_in_threadpool(void) {
   return false;
 }

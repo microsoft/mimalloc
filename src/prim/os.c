@@ -31,6 +31,7 @@ static const mi_os_mem_config_t mi_os_mem_config_default = {
   4096,     // allocation granularity
   MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB,
   MI_MAX_VABITS, // in `bits.h`
+  0,        // memory tag check mode
   true,     // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
   false,    // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
   true,     // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)

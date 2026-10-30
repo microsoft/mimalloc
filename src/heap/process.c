@@ -388,6 +388,7 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
   // if the theap_default is already set we have already initialized
   mi_theap_t* theap = _mi_theap_default();
   if (mi_theap_is_initialized(theap)) return theap;
+  _mi_prim_thread_init();
 
   // initialize the default theap
   // note: we cannot access thread-locals yet as that can cause (recursive) allocation

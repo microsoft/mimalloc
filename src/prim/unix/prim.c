@@ -315,15 +315,23 @@ static size_t unix_detect_virtual_address_bits(void) {
   return MI_MAX_VABITS;
 }
 
-// Detect if memory tagging (MTE) is enabled for this process (only called if the `memtag` option is enabled)
-static bool unix_detect_memtag(void) {
+#if MI_UNIX_LINUX_MTE
+// Enable the tagged address ABI with the tag check mode `tcf` and allow tags 1 to 14 for `irg` (for the current thread)
+static bool unix_memtag_thread_enable(unsigned long ctrl, unsigned long tcf) {
+  const unsigned long tags = (ctrl & PR_MTE_TAG_MASK) | (0x7FFEUL << PR_MTE_TAG_SHIFT);
+  return (prctl(PR_SET_TAGGED_ADDR_CTRL, PR_TAGGED_ADDR_ENABLE | tcf | tags, 0, 0, 0) == 0);
+}
+#endif
+
+// Detect if memory tagging (MTE) is enabled for this process (only called if the `mte` option is enabled)
+static bool unix_detect_memtag(mi_os_mem_config_t* config) {
+  MI_UNUSED(config);
   #if MI_UNIX_MACH_MTE
   if (__builtin_available(macOS 26.0, iOS 26.0, *)) {
     return ((os_security_config_get() & OS_SECURITY_CONFIG_MTE) != 0);   // set through process entitlements
   }
   #elif MI_UNIX_LINUX_MTE
-  // Enable the tagged address ABI with the requested tag check mode, and allow tags 1 to 14 for `irg`.
-  // These settings are per thread and inherited by threads created afterwards.
+  // These settings are per thread and inherited by threads created afterwards (see also `_mi_prim_thread_init`)
   if ((getauxval(AT_HWCAP2) & HWCAP2_MTE) == 0) return false;
   const int ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
   if (ctrl < 0) return false;
@@ -334,11 +342,11 @@ static bool unix_detect_memtag(void) {
     case MI_MEMTAG_MODE_PREFERRED: tcf = PR_MTE_TCF_SYNC | PR_MTE_TCF_ASYNC; break;
     default: tcf = ((unsigned long)ctrl & PR_MTE_TCF_MASK); if (tcf == 0) { tcf = PR_MTE_TCF_SYNC; } break;
   }
-  const unsigned long tags = ((unsigned long)ctrl & PR_MTE_TAG_MASK) | (0x7FFEUL << PR_MTE_TAG_SHIFT);
-  if (prctl(PR_SET_TAGGED_ADDR_CTRL, PR_TAGGED_ADDR_ENABLE | tcf | tags, 0, 0, 0) != 0) {
+  if (!unix_memtag_thread_enable((unsigned long)ctrl, tcf)) {
     _mi_warning_message("unable to enable memory tagging (error %d)\n", errno);
     return false;
   }
+  config->memtag_mode = tcf;
   _mi_verbose_message("memory tag check mode: %s\n", (tcf == PR_MTE_TCF_SYNC ? "sync" : (tcf == PR_MTE_TCF_ASYNC ? "async" : "preferred")));
   return true;
   #endif
@@ -359,7 +367,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_transparent_huge_pages = (config->large_page_size <= MI_UNIX_MAX_THP_PAGE_SIZE) && unix_detect_thp();
   config->has_overcommit = unix_detect_overcommit();
   config->virtual_address_bits = unix_detect_virtual_address_bits();
-  config->has_memtag = (mi_option_is_enabled(mi_option_mte) && unix_detect_memtag());
+  config->has_memtag = (mi_option_is_enabled(mi_option_mte) && unix_detect_memtag(config));
 
   // disable transparent huge pages for this process?
   #if (defined(__linux__) || defined(__ANDROID__)) && defined(PR_GET_THP_DISABLE)
@@ -1227,6 +1235,20 @@ void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
 }
 
 #endif
+
+void _mi_prim_thread_init(void) {
+  #if MI_UNIX_LINUX_MTE
+  // ensure tag checking is enabled on threads that existed before mimalloc was initialized (and keep any mode that is already set)
+  if (_mi_os_has_memtag()) {
+    const int ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
+    if (ctrl >= 0 && ((ctrl & PR_TAGGED_ADDR_ENABLE) == 0 || (ctrl & PR_MTE_TCF_MASK) == 0)) {
+      if (!unix_memtag_thread_enable((unsigned long)ctrl, (unsigned long)mi_process_get_sealed()->os_mem_config.memtag_mode)) {
+        _mi_warning_message("unable to enable memory tagging on thread 0x%zx (error %d)\n", _mi_thread_id(), errno);
+      }
+    }
+  }
+  #endif
+}
 
 bool _mi_prim_thread_is_in_threadpool(void) {
   return false;
