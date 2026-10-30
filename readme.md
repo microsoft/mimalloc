@@ -99,7 +99,7 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
   Experimental support for CHERI platforms. Improved Rust bindings (thank you @OscarTHZhang and @Techcable).
   Add `-DMI_SECURE=MINIMAL` as improved [security](#secure-mode) with minimal (~1%) performance impact which
   puts guard pages around all mimalloc meta-data (but does not encode free lists).
-  Move all static variables into a [`mi_process_t`](include/mimalloc/heap/proces.h) struct (that is guarded).
+  Move all static variables into a [`mi_process_t`](include/mimalloc/heap/process.h) struct (that is guarded).
 * 2026-10-23, `v3.6.0`: (v3) add initial [profiling](#profiling) hooks and default profiler, "always on"
   detailed statistics per size-bin, and always-on profiling. Initial rust bindings. Better support
   for large OS page sizes, support a quiescent state based reclamation interfacec (for CPython),
@@ -437,12 +437,12 @@ OS will copy the entire 1GiB huge page (or 2MiB large page) which can cause the 
 
 _mimalloc_ can be build in secure mode by using the `-DMI_SECURE=OFF|MINIMAL|ON|FULL` flags in `cmake`. This build mode
 enables various mitigations to make mimalloc more robust against exploits.
-With `MINIMAL` only security mitigations are added that have minimal impact on performance (usually about 1 or 2%):
+With `MINIMAL` (v3) only security mitigations are added that have minimal impact on performance (usually about 1 or 2%):
 
-- (v3) All internal mimalloc meta data (including the page map and static data) is surrounded by guard pages
+- All internal mimalloc meta data (including the page map and static data) is surrounded by guard pages
   (so a buffer overflow/underflow exploit cannot reach into the allocator's meta data).
   However, free lists are not encoded at this level, and a heap block overflow can still corrupt a free list.
-- (v3) The start address of OS allocated memory is randomized
+- The start address of OS allocated memory is randomized
   (if possible), and mimalloc aborts on corrupted meta data detection.
 
 With `ON`, performance is impacted a bit more (usually less than 25%), but adds:
