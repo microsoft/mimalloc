@@ -36,13 +36,13 @@ the hardware instructions are never executed (as these trap on CPU's without MTE
 #define MI_MEMTAG_EXCLUDE_ODD     (MI_MEMTAG_EXCLUDE | 0x00FE)   // odd blocks use tags 8 to 14
 #define MI_MEMTAG_ODD_BIT         (MI_AU(8) << MI_PTR_TAG_SHIFT)  // tag bit that is set for odd blocks
 
-// Set once at process initialization (in `prim/os.c`)
-extern mi_decl_hidden bool   _mi_memtag_enabled;    // is memory tagging used?
-extern mi_decl_hidden size_t _mi_memtag_max_size;   // maximal block size that is tagged
+// Set once at process initialization in the sealed process data (see `prim/os.c:_mi_os_init`)
+bool   _mi_os_has_memtag(void);         // is memory tagging used?
+size_t _mi_os_memtag_max_size(void);    // maximal block size that is tagged
 
 static inline bool mi_memtag_is_enabled(void) {
   #if MI_MTE
-  return _mi_memtag_enabled;
+  return _mi_os_has_memtag();
   #else
   return false;
   #endif
@@ -50,7 +50,7 @@ static inline bool mi_memtag_is_enabled(void) {
 
 // Should blocks of size `bsize` in memory that supports tagging (`memid.is_memtag`) be tagged?
 static inline bool mi_memtag_use_for(bool is_memtag, size_t bsize) {
-  return (mi_memtag_is_enabled() && is_memtag && bsize <= _mi_memtag_max_size && (bsize % MI_MEMTAG_GRANULE_SIZE) == 0);
+  return (mi_memtag_is_enabled() && is_memtag && bsize <= _mi_os_memtag_max_size() && (bsize % MI_MEMTAG_GRANULE_SIZE) == 0);
 }
 
 

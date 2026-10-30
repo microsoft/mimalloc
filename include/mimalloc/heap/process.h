@@ -63,6 +63,7 @@ typedef struct mi_process_sealed_s {
   _Atomic(void*)      error_arg;
 
   mi_os_mem_config_t  os_mem_config;    // OS memory configuration (see `prim/os.c`)
+  size_t              memtag_max_size;  // maximal block size that is memory tagged (0 if memory tagging is disabled)
   bool                is_protected;     // `true` if the sealed page is read-only (see `_mi_process_unseal`)
 } mi_process_sealed_t;
 

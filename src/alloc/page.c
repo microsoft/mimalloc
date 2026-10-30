@@ -781,7 +781,7 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
     // and link the current block to it
     counts[next]--;
     mi_block_t* const block = blocks[current];
-    blocks[current] = mi_block_after(block, bsize, memtag && counts[current] > 0);  // bump to the following block
+    blocks[current] = mi_block_after(block, bsize, memtag && (counts[current] > 0 || current == next));  // bump to the following block
     mi_block_set_next(page, block, blocks[next]);   // and set next; note: we may have `current == next`
     current = next;
   }

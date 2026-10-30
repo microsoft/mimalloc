@@ -38,9 +38,6 @@ static const mi_os_mem_config_t mi_os_mem_config_default = {
   false     // has memory tagging? (if true, all non-large OS memory supports memory tagging)
 };
 
-mi_decl_hidden bool   _mi_memtag_enabled;   // = false
-mi_decl_hidden size_t _mi_memtag_max_size;  // = 0
-
 // The OS memory configuration in the sealed process data (zero until `_mi_os_init`)
 static inline const mi_os_mem_config_t* mi_os_mem_config(void) {
   const mi_os_mem_config_t* const config = &mi_process_get_sealed()->os_mem_config;
@@ -61,6 +58,10 @@ bool _mi_os_has_thp(void) {
 
 bool _mi_os_has_memtag(void) {
   return mi_os_mem_config()->has_memtag;
+}
+
+size_t _mi_os_memtag_max_size(void) {
+  return mi_process_get_sealed()->memtag_max_size;
 }
 
 // OS (small) page size
@@ -134,15 +135,15 @@ void _mi_os_init(void) {
   mi_os_mem_config_t config = mi_os_mem_config_default;
   _mi_prim_mem_init(&config);
   mi_assert(config.page_size != 0);
+  config.has_memtag = (config.has_memtag && mi_memtag_line_size() == MI_MEMTAG_LINE_SIZE);
   mi_process_sealed_t* const sealed = _mi_process_unseal();
   sealed->os_mem_config = config;  // publish at once
+  sealed->memtag_max_size = (config.has_memtag ? mi_option_get_size(mi_option_memtag_max_size) : 0);
   _mi_process_seal();
   if (_mi_os_page_size() > MI_ARENA_SLICE_SIZE) {
     _mi_error_message(ENOTSUP, "the OS page size (%zu KiB) is larger than the arena slice size (%zu KiB); increase MI_ARENA_SLICE_SHIFT\n", _mi_os_page_size()/MI_KiB, (size_t)(MI_ARENA_SLICE_SIZE/MI_KiB));
   }
-  _mi_memtag_enabled  = (config.has_memtag && mi_memtag_line_size() == MI_MEMTAG_LINE_SIZE);
-  _mi_memtag_max_size = mi_option_get_size(mi_option_memtag_max_size);
-  if (_mi_memtag_enabled) { _mi_verbose_message("memory tagging is enabled (for blocks up to %zu KiB)\n", _mi_memtag_max_size / MI_KiB); }
+  if (config.has_memtag) { _mi_verbose_message("memory tagging is enabled (for blocks up to %zu KiB)\n", _mi_os_memtag_max_size() / MI_KiB); }
 }
 
 
