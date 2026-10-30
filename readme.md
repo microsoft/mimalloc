@@ -482,7 +482,7 @@ on the hardware, but on an M5 it is usually within about 10% of a release build.
 
 Building with MTE also enables `-DMI_SECURE=MINIMAL` by default. Since MTE catches use-after-free, double-free,
 and heap block overflows (probalistically), `-DMI_MTE=ON` gives similar guarantees as `-DMI_SECURE=ON` but now with
-hardware support.
+hardware support. MTE enabled builds have the suffix `-mte` (e.g. `mimalloc-mte.o`).
 
 - macOS: requires an Apple M5 (or later) with macOS 26. MTE is only enabled for executables signed with
   the hardened-process entitlements (the tests are signed automatically):
