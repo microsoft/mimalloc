@@ -289,6 +289,35 @@ jobs:
           cmake --build out/release-secure-full --parallel 8 --config Release
           ctest --test-dir out/release-secure-full --verbose --timeout 240 -C Release
 
+      # MTE on macOS/arm64 (only actually supported on M5 and later)
+      - name: Debug, MTE
+        if: matrix.tests == 'extra' && runner.os == 'macOS' && runner.arch == 'ARM64'
+        run: |
+          cmake . -B out/debug-mte -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_MTE=ON
+          cmake --build out/debug-mte --parallel 8 --config Debug
+          ctest --test-dir out/debug-mte --verbose --timeout 240 -C Debug
+
+      - name: Release, MTE
+        if: matrix.tests == 'extra' && runner.os == 'macOS' && runner.arch == 'ARM64'
+        run: |
+          cmake . -B out/release-mte -DCMAKE_BUILD_TYPE=Release -DMI_MTE=ON
+          cmake --build out/release-mte --parallel 8 --config Release
+          ctest --test-dir out/release-mte --verbose --timeout 240 -C Release
+
+      - name: Debug, Secure, MTE
+        if: matrix.tests == 'extra' && runner.os == 'macOS' && runner.arch == 'ARM64'
+        run: |
+          cmake . -B out/debug-secure-mte -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_SECURE=ON -DMI_MTE=ON
+          cmake --build out/debug-secure-mte --parallel 8 --config Debug
+          ctest --test-dir out/debug-secure-mte --verbose --timeout 240 -C Debug
+
+      - name: Release, Secure, MTE
+        if: matrix.tests == 'extra' && runner.os == 'macOS' && runner.arch == 'ARM64'
+        run: |
+          cmake . -B out/release-secure-mte -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON -DMI_MTE=ON
+          cmake --build out/release-secure-mte --parallel 8 --config Release
+          ctest --test-dir out/release-secure-mte --verbose --timeout 240 -C Release
+
       # MSYS2 mingw64
       - name: mingw-ucrt64 x64, Setup
         if: matrix.tests == 'mingw-ucrt64'
