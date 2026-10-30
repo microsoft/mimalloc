@@ -446,6 +446,43 @@ to make mimalloc more robust against exploits. In particular:
 
 As always, evaluate with care as part of an overall security strategy as all of the above are mitigations but not guarantees.
 
+## Memory Tagging (MTE)
+
+On recent arm64 hardware with the memory tagging extensions (MTE), _mimalloc_ can be built with `-DMI_MTE=ON`
+to give every heap block a randomized memory tag that can only be accessed with a matching pointer that has the same
+tag. Adjacent blocks always get different tags, and blocks are retagged when freed, so most buffer overflows and
+use-after-free accesses fault immediately.
+
+Tagging is only enabled at runtime if both the hardware and OS support it -- and otherwise _mimalloc_ runs untagged.
+An MTE build running untagged is very close in performance to a regular release build. When using tagging, it depends
+on the hardware, but on an M5 it is usually within about 10% of a release build.
+
+Building with MTE also enables `-DMI_SECURE=MINIMAL` by default. Since MTE catches use-after-free, double-free,
+and heap block overflows (probalistically), `-DMI_MTE=ON` gives similar guarantees as `-DMI_SECURE=ON` but now with
+hardware support.
+
+- macOS: requires an Apple M5 (or later) with macOS 26. MTE is only enabled for executables signed with
+  the hardened-process entitlements (the tests are signed automatically):
+  ```
+  > cmake -DMI_MTE=ON ../..
+  > make -j
+  > codesign -s - -f --entitlements ../../cmake/mte-entitlements.plist myprogram
+  ```
+- Linux: requires an arm64 kernel with MTE support (check with `grep mte /proc/cpuinfo`). The tag check mode
+  can be set with `MIMALLOC_MTE=sync` (default), `async`, or `preferred`. Without MTE hardware you can still
+  test using QEMU emulation (e.g. `QEMU_CPU=max qemu-aarch64 ./myprogram`).
+  ```
+  > cmake -DMI_MTE=ON ../..
+  > make -j
+  ```
+- Android: requires an MTE capable device (like the Pixel 8 or later) with MTE enabled in
+  _Developer options_ / _Memory Tagging Extension_. Build with the Android NDK as:
+  ```
+  > cmake -DMI_MTE=ON -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+          -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 ../..
+  > make -j
+  ```
+
 ## Debug Mode
 
 When _mimalloc_ is built using debug mode, (`-DCMAKE_BUILD_TYPE=Debug`) (or when using `-DMI_DEBUG=ON` explicitly),
@@ -484,6 +521,7 @@ many system calls. Therefore, there are various environment variables (and optio
   a 1 byte overflow is detected. This violates the C/C++ minimal alignment guarantees, and can cause
   aligned allocations to be un-aligned so use with care.
 -->
+
 
 # Overriding Standard Malloc
 
