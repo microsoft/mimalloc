@@ -116,7 +116,9 @@ pub const mi_option_profile_time_interval: mi_option_t = 50;
 pub const mi_option_profile_sample_rate: mi_option_t = 51;
 pub const mi_option_stats_merge_threshold: mi_option_t = 52;
 pub const mi_option_arena_purge_immediate_size: mi_option_t = 53;
-pub const _mi_option_last: mi_option_t = 54;
+/// Use memory tagging (MTE) if available (with the `mte` feature): 0=off, 1=on (default), and on Linux 2=sync, 3=async, 4=preferred tag check mode.
+pub const mi_option_mte: mi_option_t = 54;
+pub const _mi_option_last: mi_option_t = 55;
 
 unsafe extern "C" {
     // standard malloc interface

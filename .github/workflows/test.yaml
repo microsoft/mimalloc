@@ -53,6 +53,8 @@ jobs:
             tests: cheri-sim        # simulated CHERI
           - os: ubuntu-latest
             tests: emscripten       # wasm32 on node
+          - os: ubuntu-latest
+            tests: linux-arm64-mte  # qemu
           # - os: ubuntu-latest
           #   tests: android-x64
           # - os: ubuntu-latest       # slow, so disable by default
@@ -587,6 +589,51 @@ jobs:
           cmake --build out/guarded-cheri-sim --parallel 4 --config Release
           ctest --test-dir out/guarded-cheri-sim --verbose --timeout 240 -C Release
           MIMALLOC_GUARDED_SAMPLE_RATE=1 out/guarded-cheri-sim/mimalloc-test-api
+
+      # Linux arm64 with memory tagging (MTE) emulated by QEMU (`-cpu max`)
+      - name: Linux arm64 MTE, Setup
+        if: matrix.tests == 'linux-arm64-mte'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user-static
+          qemu-aarch64-static --version
+          ls /proc/sys/fs/binfmt_misc/ | grep aarch64 || echo "no binfmt registration for aarch64"
+          echo "QEMU_LD_PREFIX=/usr/aarch64-linux-gnu" >> $GITHUB_ENV
+          echo "QEMU_CPU=max" >> $GITHUB_ENV
+          echo "MI_TEST_LIGHT=1" >> $GITHUB_ENV
+          echo "MI_TEST_REQUIRE_MTE=1" >> $GITHUB_ENV
+          echo "MI_CMAKE_ARM64_MTE=-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64-static -DMI_MTE=ON" >> $GITHUB_ENV
+
+      - name: Linux arm64 MTE, Release
+        if: matrix.tests == 'linux-arm64-mte'
+        run: |
+          cmake . -B out/release-arm64-mte -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON $MI_CMAKE_ARM64_MTE
+          cmake --build out/release-arm64-mte --parallel 4 --config Release
+          MIMALLOC_VERBOSE=1 qemu-aarch64-static out/release-arm64-mte/mimalloc-test-mte
+          ctest --test-dir out/release-arm64-mte --verbose --timeout 600 -C Release
+
+      - name: Linux arm64 MTE, Release, Async
+        if: matrix.tests == 'linux-arm64-mte'
+        env:
+          MIMALLOC_MTE: async
+        run: |
+          ctest --test-dir out/release-arm64-mte --verbose --timeout 600 -C Release
+
+      - name: Linux arm64 MTE, Debug
+        if: matrix.tests == 'linux-arm64-mte'
+        run: |
+          cmake . -B out/debug-arm64-mte -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL $MI_CMAKE_ARM64_MTE
+          cmake --build out/debug-arm64-mte --parallel 4 --config Debug
+          ctest --test-dir out/debug-arm64-mte --verbose --timeout 600 -C Debug
+
+      # Native MTE build on the arm64 runner (test-mte is skipped if the hardware has no MTE)
+      - name: Linux arm64, Release, MTE
+        if: matrix.os == 'ubuntu-22.04-arm' && matrix.tests == 'basic' && matrix.c_or_cxx == 'c'
+        run: |
+          if grep -qw mte /proc/cpuinfo; then echo "::notice::native MTE is available"; else echo "::notice::native MTE is not available"; fi
+          cmake . -B out/release-mte -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_MTE=ON
+          cmake --build out/release-mte --parallel 4 --config Release
+          ctest --test-dir out/release-mte --verbose --timeout 240 -C Release
 
       # Emscripten (tests run on node)
       - name: Emscripten, Setup
