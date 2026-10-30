@@ -145,11 +145,13 @@ mi_block_t* _mi_page_ptr_unalign(const mi_page_t* page, const void* p) {
 }
 
 // Retag the entire block of `p` with the canonical (meta) tag and return `p` with that tag.
+// As the tag no longer determines the class of the block, frees in the page now use the generic path (see `mi_page_ptr_block_check`).
 void* _mi_memtag_canonical(void* p) {
   if (p==NULL || mi_ptr_tag(p)==MI_MEMTAG_META) return p;
-  const mi_page_t* const page = mi_ptr_page(p);
+  mi_page_t* const page = mi_ptr_page(p);
   mi_block_t* const block = _mi_page_ptr_unalign(page, p);
   mi_memtag_clear(block, mi_page_block_size(page));
+  mi_page_set_has_interior_pointers(page, true);  // safe as in `alloc-aligned.c` (the block keeps the page alive)
   return mi_ptr_with_tag(p, MI_MEMTAG_META);
 }
 
@@ -170,7 +172,7 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
   }
   else {
     size_t offset;
-    mi_block_t* const block = mi_page_ptr_unalign_ex(page,p,&offset);
+    mi_block_t* block = mi_page_ptr_unalign_ex(page,p,&offset);
     #if MI_GUARDED || MI_PROFILE
     if (offset >= sizeof(mi_block_t)) {
       #if MI_PROFILE
@@ -189,6 +191,10 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
       { /* nothing */ }
     }
     #endif
+    if (mi_page_is_memtag(page) && !*was_guarded && mi_ptr_tag(block)==MI_MEMTAG_META) {  // a canonical block (see `_mi_memtag_canonical`)
+      const size_t bsize = mi_page_block_size(page);
+      block = (mi_block_t*)mi_memtag_block_uncanonical(block, bsize, (mi_addr(block) - mi_addr(mi_page_start(page))) / bsize);
+    }
     return block;
   }
 }

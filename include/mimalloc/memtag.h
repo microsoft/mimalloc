@@ -174,11 +174,16 @@ static inline void* mi_memtag_random_next(void* p)             { return p; }
   Tagging blocks
 -----------------------------------------------------------------------------*/
 
+// The tag exclusion mask for the block at index `idx` (alternating between even and odd so adjacent blocks never share a tag)
+static inline size_t mi_memtag_class_exclude(size_t idx) {
+  return ((idx&1)==0 ? MI_MEMTAG_EXCLUDE_EVEN : MI_MEMTAG_EXCLUDE_ODD);
+}
+
 // Tag `count` fresh blocks of size `bsize` at `start` where the first block has index `idx` in its page.
 static inline void mi_memtag_blocks_init(void* start, size_t bsize, size_t idx, size_t count) {
   uint8_t* p = (uint8_t*)start;
   for (size_t i = idx; i < idx + count; i++, p += bsize) {
-    void* const tp = mi_memtag_random(p, ((i&1)==0 ? MI_MEMTAG_EXCLUDE_EVEN : MI_MEMTAG_EXCLUDE_ODD));
+    void* const tp = mi_memtag_random(p, mi_memtag_class_exclude(i));
     mi_memtag_store(tp, bsize);
   }
 }
@@ -192,6 +197,17 @@ static inline void* mi_memtag_block_free(void* block, size_t bsize) {
   void* const tblock = mi_memtag_random_next(block);
   if (bsize <= MI_MEMTAG_ZERO_MAX) { mi_memtag_store_zero(tblock, bsize); }
                               else { mi_memtag_store(tblock, bsize); }
+  return tblock;
+}
+
+// Retag a canonical block (with the meta tag, see `_mi_memtag_canonical`) at index `idx` with a fresh tag of its class;
+// returns the block with its new tag. The first read uses the meta tag so a stale pointer faults.
+static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_t idx) {
+  #if MI_MTE
+  (void)(*(volatile uint8_t*)block);
+  #endif
+  void* const tblock = mi_memtag_random(block, mi_memtag_class_exclude(idx));
+  mi_memtag_store(tblock, bsize);
   return tblock;
 }
 
