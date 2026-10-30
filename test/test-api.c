@@ -86,6 +86,49 @@ static bool mem_is_zero(const void* p, size_t size) {
 int main(void) {
   mi_option_disable(mi_option_verbose);
 
+  CHECK_BODY("pointer-address-and-memtag") {
+    uint8_t area[128];
+    for (size_t tag = 0; tag < 16; tag++) {
+      void* p = mi_ptr_with_memtag(area, tag);
+      void* q = mi_ptr_with_addr(p, mi_addr(area) + 32);
+      result = result && mi_addr(p) == mi_addr(area) && mi_addr(q) == mi_addr(area + 32);
+      #if MI_MTE
+      result = result && mi_ptr_memtag(p) == tag;
+      #else
+      result = result && mi_ptr_memtag(p) == 0;
+      #endif
+      result = result && mi_ptr_memtag(q) == mi_ptr_memtag(p);
+      result = result && mi_ptr_memtag_meta(q) == area + 32;
+    }
+    #if MI_MTE
+    // Ignored pointer bits are not logical memory-tag bits.
+    void* p = (void*)((uintptr_t)mi_ptr_with_memtag(area, 5) | (~MI_PTR_ADDR_MASK & ~MI_PTR_MEMTAG_MASK));
+    result = result && mi_addr(p) == mi_addr(area) && mi_ptr_memtag(p) == 5;
+    result = result && mi_ptr_with_memtag(p, 0xF5) == mi_ptr_with_memtag(area, 5);
+    #endif
+  };
+  CHECK_BODY("pointer-pack-rederive") {
+    uint8_t area[128];
+    for (size_t tag = 0; tag < 16; tag++) {
+      void* p = mi_ptr_with_memtag(mi_ptr_bounded(area + 32, 16), tag);
+      void* auth = mi_ptr_with_memtag(area, tag ^ 1);
+      void* unpacked = mi_ptr_unpack(auth, mi_ptr_pack(p));
+      void* derived = mi_ptr_rederive(auth, p);
+      result = result && mi_addr(unpacked) == mi_addr(p) && mi_addr(derived) == mi_addr(p);
+      result = result && mi_ptr_memtag(unpacked) == mi_ptr_memtag(p) && mi_ptr_memtag(derived) == mi_ptr_memtag(p);
+      // Recover authority before moving outside the user's bounds.
+      void* base = mi_ptr_with_addr(derived, mi_addr(area));
+      result = result && mi_addr(base) == mi_addr(area) && mi_ptr_memtag(base) == mi_ptr_memtag(p);
+      #if MI_CHERI
+      result = result && __builtin_cheri_tag_get(unpacked) && __builtin_cheri_tag_get(base);
+      result = result && __builtin_cheri_base_get(unpacked) == __builtin_cheri_base_get(auth);
+      result = result && __builtin_cheri_length_get(unpacked) == __builtin_cheri_length_get(auth);
+      result = result && __builtin_cheri_base_get(base) == __builtin_cheri_base_get(auth);
+      result = result && __builtin_cheri_length_get(base) == __builtin_cheri_length_get(auth);
+      #endif
+    }
+  };
+
   // ---------------------------------------------------
   // Malloc
   // ---------------------------------------------------

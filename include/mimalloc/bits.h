@@ -405,7 +405,7 @@ static inline uint32_t mi_rotl32(uint32_t x, uint32_t r) {
 
 
 // ------------------------------------------------------
-// Raw addresses: the integer value of a pointer (without provenance).
+// Raw addresses: the integer address of a pointer (without provenance or memory tag).
 // Usually `mi_addr_t == uintptr_t == size_t`, but on CHERI `uintptr_t` is a 128-bit capability
 // while the address (`ptraddr_t`) is 64-bit. Use `mi_addr(p)` to get the address of a pointer
 // (and derive pointers from an existing pointer to keep provenance).
@@ -418,16 +418,18 @@ typedef uintptr_t         mi_addr_t;
 #endif
 #define MI_AU(x)          ((mi_addr_t)(x))
 
-// With memory tagging (MTE), pointers carry a 4-bit tag starting at bit `MI_PTR_TAG_SHIFT` (see `memtag.h`).
-// The mask covers all top bits that are ignored by the hardware (and not part of the address) and may be wider than the tag:
+// With memory tagging (MTE), pointers carry a 4-bit tag starting at bit `MI_PTR_MEMTAG_SHIFT` (see `memtag.h`).
+// The address mask removes all top bits ignored by the hardware, not just the logical memory tag:
 // on ARM it is the full top byte as this gives better codegen (e.g. `p & 0x00FFFFFFF0000000`).
 // (For a future x86 ChkTag the tag would use bits 57-60, with LAM ignoring bits 57-62, but bit 56 is part of the address.)
 #if MI_MTE
-#define MI_PTR_TAG_SHIFT  (56)
-#define MI_PTR_TAG_MASK   (MI_AU(0xFF) << MI_PTR_TAG_SHIFT)
+#define MI_PTR_MEMTAG_SHIFT  (56)
+#define MI_PTR_MEMTAG_MASK   (MI_AU(0x0F) << MI_PTR_MEMTAG_SHIFT)
+#define MI_PTR_ADDR_MASK     (~(MI_AU(0xFF) << MI_PTR_MEMTAG_SHIFT))
 #else
-#define MI_PTR_TAG_SHIFT  (0)
-#define MI_PTR_TAG_MASK   (MI_AU(0))
+#define MI_PTR_MEMTAG_SHIFT  (0)
+#define MI_PTR_MEMTAG_MASK   (MI_AU(0))
+#define MI_PTR_ADDR_MASK     (~MI_AU(0))
 #endif
 
 // Get the address part of a pointer (without provenance or memory tag)
@@ -435,16 +437,7 @@ static inline mi_addr_t mi_addr(const void* p) {
   #if MI_CHERI
   return (mi_addr_t)__builtin_cheri_address_get(p);
   #else
-  return ((mi_addr_t)(uintptr_t)(p) & ~MI_PTR_TAG_MASK);
-  #endif
-}
-
-// Get the address of a pointer including its memory tag (but without provenance); used to store pointers in free lists
-static inline mi_addr_t mi_addr_tagged(const void* p) {
-  #if MI_CHERI
-  return mi_addr(p);
-  #else
-  return (mi_addr_t)(uintptr_t)(p);
+  return ((mi_addr_t)(uintptr_t)(p) & MI_PTR_ADDR_MASK);
   #endif
 }
 
@@ -457,18 +450,35 @@ static inline void* mi_ptr_with_addr(const void* p, mi_addr_t addr) {
   #endif
 }
 
-// Derive a pointer with a tagged address `taddr` (from `mi_addr_tagged`) from `p` (keeping the provenance of `p`)
-static inline void* mi_ptr_with_addr_tagged(const void* p, mi_addr_t taddr) {
+// An address-only pointer (e.g. a mapping hint), without provenance or memory tag
+static inline void* mi_ptr_from_addr(mi_addr_t addr) {
+  return (void*)(uintptr_t)addr;
+}
+
+// ------------------------------------------------------
+// Pointer serialization for free-list links. Packed bits retain the memory tag
+// but not capability authority; they are not raw addresses and must not be used
+// for address arithmetic. Keep this representation confined to serialization.
+// ------------------------------------------------------
+
+typedef mi_addr_t mi_addr_tagged_t;
+
+static inline mi_addr_tagged_t mi_ptr_pack(const void* p) {
   #if MI_CHERI
-  return (void*)__builtin_cheri_address_set(p, taddr);
+  return (mi_addr_tagged_t)mi_addr(p);
   #else
-  return (void*)((uintptr_t)p + (taddr - mi_addr_tagged(p)));
+  return (mi_addr_tagged_t)(uintptr_t)p;
   #endif
 }
 
-// A pointer from an address without provenance
-static inline void* mi_ptr_from_addr(mi_addr_t addr) {
-  return (void*)(uintptr_t)addr;
+// Restore the saved address and memory tag, using `auth` for capability authority
+static inline void* mi_ptr_unpack(const void* auth, mi_addr_tagged_t addrt) {
+  #if MI_CHERI
+  return mi_ptr_with_addr(auth, (mi_addr_t)addrt);
+  #else
+  MI_UNUSED(auth);
+  return (void*)(uintptr_t)addrt;
+  #endif
 }
 
 // ------------------------------------------------------
@@ -536,13 +546,13 @@ static inline void* mi_ptr_bounded_data(void* p, size_t size) {
   #endif
 }
 
-// Re-derive `p` from the capability `auth` (when `p` lacks the bounds or permissions, e.g. a user pointer)
-static inline void* mi_ptr_rederive(void* auth, void* p) {
+// Keep the address and memory tag of `p`, taking capability authority from `auth`
+static inline void* mi_ptr_rederive(const void* auth, const void* p) {
   #if MI_CHERI
   return mi_ptr_with_addr(auth, mi_addr(p));
   #else
   MI_UNUSED(auth);
-  return p;
+  return (void*)p;
   #endif
 }
 

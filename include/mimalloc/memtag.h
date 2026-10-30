@@ -17,7 +17,7 @@ Currently supports ARM MTE but we should be able to support future memory taggin
 extensions as well (like x86 ChkTag and LAM)
 
 Every 16-byte granule of tagged memory has a 4-bit tag, and each access must use a
-pointer with a matching tag in the top bits (56-59 on ARM, see `MI_PTR_TAG_SHIFT`).
+pointer with a matching tag in the top bits (56-59 on ARM, see `MI_PTR_MEMTAG_SHIFT`).
 Blocks in tagged pages get a random tag where blocks at even and odd indices use
 disjoint tag sets, such that adjacent blocks always have different tags. Tag 0 is
 never used for blocks and is reserved for meta data and free arena memory. Tag 15
@@ -37,7 +37,7 @@ the hardware instructions are never executed (as these trap on CPU's without MTE
 #define MI_MEMTAG_EXCLUDE         (0x8001)
 #define MI_MEMTAG_EXCLUDE_EVEN    (MI_MEMTAG_EXCLUDE | 0x7F00)   // even blocks use tags 1 to 7
 #define MI_MEMTAG_EXCLUDE_ODD     (MI_MEMTAG_EXCLUDE | 0x00FE)   // odd blocks use tags 8 to 14
-#define MI_MEMTAG_ODD_BIT         (MI_AU(8) << MI_PTR_TAG_SHIFT)  // tag bit that is set for odd blocks
+#define MI_MEMTAG_ODD_BIT         (8)  // logical tag bit that is set for odd blocks
 
 // Set once at process initialization in the sealed process data (see `prim/os.c:_mi_os_init`)
 bool   _mi_os_has_memtag(void);         // is memory tagging used?
@@ -66,24 +66,30 @@ static inline bool mi_memtag_use_for(bool is_memtag, size_t bsize) {
 
 
 /* ----------------------------------------------------------------------------
-  Pointer tags
+  Pointer memory tags
 -----------------------------------------------------------------------------*/
 
-static inline size_t mi_ptr_tag(const void* p) {
-  return (size_t)((mi_addr_tagged(p) & MI_PTR_TAG_MASK) >> MI_PTR_TAG_SHIFT) & 0x0F;
+static inline size_t mi_ptr_memtag(const void* p) {
+  #if MI_MTE
+  return (size_t)(((uintptr_t)p & MI_PTR_MEMTAG_MASK) >> MI_PTR_MEMTAG_SHIFT);
+  #else
+  MI_UNUSED(p);
+  return 0;
+  #endif
 }
 
-static inline void* mi_ptr_with_tag(const void* p, size_t tag) {
-  return mi_ptr_with_addr_tagged(p, mi_addr(p) | ((MI_AU(tag) << MI_PTR_TAG_SHIFT) & MI_PTR_TAG_MASK));
+static inline void* mi_ptr_with_memtag(const void* p, size_t memtag) {
+  #if MI_MTE
+  return (void*)(((uintptr_t)p & MI_PTR_ADDR_MASK) | (((uintptr_t)memtag << MI_PTR_MEMTAG_SHIFT) & MI_PTR_MEMTAG_MASK));
+  #else
+  MI_UNUSED(memtag);
+  return (void*)p;
+  #endif
 }
 
 // Pointer to meta data (or free arena memory) derived from a (possibly tagged) pointer `p`
-static inline void* mi_ptr_meta(const void* p) {
-  #if MI_MTE
-  return mi_ptr_with_tag(p, MI_MEMTAG_META);
-  #else
-  return (void*)p;
-  #endif
+static inline void* mi_ptr_memtag_meta(const void* p) {
+  return mi_ptr_with_memtag(p, MI_MEMTAG_META);
 }
 
 
@@ -175,7 +181,7 @@ static inline void mi_memtag_store_zero(void* p, size_t size) {
 
 // Return `p` with a fresh random tag of the same class (odd or even) that differs from its current tag (`gmi`, `irg`)
 static inline void* mi_memtag_random_next(void* p) {
-  const size_t class_exclude = ((mi_addr_tagged(p) & MI_MEMTAG_ODD_BIT) == 0 ? MI_MEMTAG_EXCLUDE_EVEN : MI_MEMTAG_EXCLUDE_ODD);
+  const size_t class_exclude = ((mi_ptr_memtag(p) & MI_MEMTAG_ODD_BIT) == 0 ? MI_MEMTAG_EXCLUDE_EVEN : MI_MEMTAG_EXCLUDE_ODD);
   size_t exclude;
   __asm__ (MI_MEMTAG_ASM "gmi %0, %1, %2" : "=r"(exclude) : "r"(p), "r"(class_exclude));
   return mi_memtag_random(p, exclude);
@@ -231,7 +237,7 @@ static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_
 
 // Reset the tags of `[p,p+size)` to the meta data tag
 static inline void mi_memtag_clear(void* p, size_t size) {
-  mi_memtag_store(mi_ptr_meta(p), size);
+  mi_memtag_store(mi_ptr_memtag_meta(p), size);
 }
 
 #endif // MI_MEMTAG_H

@@ -57,11 +57,6 @@ static inline uint8_t* mi_page_start(const mi_page_t* page) {
   return page->page_start;
 }
 
-// Derive a block pointer from a (tagged) address in the page; On systems with pointer provenance, this keeps the authority of the page start.
-static inline mi_block_t* mi_page_block_from_addr(const mi_page_t* page, mi_addr_t taddr) {
-  return (mi_block_t*)mi_ptr_with_addr_tagged(mi_page_start(page), taddr);
-}
-
 static inline size_t mi_page_size(const mi_page_t* page) {
   return mi_page_block_size(page) * page->reserved;
 }
@@ -612,9 +607,9 @@ static inline void* mi_ptr_decode(const mi_page_t* page, const mi_encoded_t x, c
   #else
   const mi_addr_t k2 = mi_rotr(k1,13);
   #endif
-  const mi_addr_t taddr = (mi_rotr((mi_addr_t)x - k1, k1) ^ k2);
-  if (taddr == mi_addr(page)) return NULL;
-  return mi_page_block_from_addr(page, taddr);
+  const mi_addr_tagged_t addrt = (mi_rotr((mi_addr_tagged_t)x - k1, k1) ^ k2);
+  if (addrt == (mi_addr_tagged_t)mi_addr(page)) return NULL;
+  return mi_ptr_unpack(mi_page_start(page), addrt);
 }
 
 static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const mi_addr_t* keys) {
@@ -624,7 +619,7 @@ static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const 
   #else
   const mi_addr_t k2 = mi_rotr(k1,13);
   #endif
-  const mi_addr_t x = (p==NULL ? mi_addr(null) : mi_addr_tagged(p));
+  const mi_addr_tagged_t x = (p==NULL ? (mi_addr_tagged_t)mi_addr(null) : mi_ptr_pack(p));
   return (mi_encoded_t)(mi_rotl(x ^ k2, k1) + k1);
 }
 
@@ -654,8 +649,8 @@ static inline mi_block_t* mi_block_nextx( const mi_page_t* page, const mi_block_
   next = (mi_block_t*)mi_ptr_decode(page, block->next, keys);
   #else
   MI_UNUSED(keys);
-  const mi_addr_t addr = (mi_addr_t)block->next;
-  next = (addr==0 ? NULL : mi_page_block_from_addr(page, addr));
+  const mi_addr_tagged_t addrt = (mi_addr_tagged_t)block->next;
+  next = (addrt==0 ? NULL : (mi_block_t*)mi_ptr_unpack(mi_page_start(page), addrt));
   #endif
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
   return next;
@@ -667,7 +662,7 @@ static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const
   block->next = mi_ptr_encode(null, next, keys);
   #else
   MI_UNUSED(keys); MI_UNUSED(null);
-  block->next = (mi_encoded_t)mi_addr_tagged(next);  // never store a capability in a (freed) block
+  block->next = (mi_encoded_t)mi_ptr_pack(next);  // never store a capability in a (freed) block
   #endif
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
 }

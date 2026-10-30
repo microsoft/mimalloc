@@ -3,9 +3,10 @@
 - [`types.h`](types.h): Defines the types of all internal mimalloc datastructures
 and configuration options.
 - [`decl.h`](decl.h): Compiler attributes, assertions, initialization macros, and platform-specific declarations.
-- [`bits.h`](bits.h): Architecture dependent type definitions, and bit operations.
+- [`bits.h`](bits.h): Architecture dependent type definitions, bit operations, and pointer provenance support (as on CHERI).
 - [`atomic.h`](atomic.h): Portable atomic operations and locks.
 - [`prim.h`](prim.h): Primitive and minimal portability API needed from a host system.
+- [`memtag.h`](memtag.h): Primitives for memory-tagging ([MTE] or MIE); this is enabled when building with `-DMI_MTE=ON`.
 - [`track.h`](track.h): Memory-tracking integration for Valgrind, AddressSanitizer, and Windows event tracing.
 - [`qsbr.h`](qsbr.h): Quiescent-state based reclamation primitives (for runtime systems like CPython).
 - [`internal.h`](internal.h): Deprecated: umbrella header for internal allocator declarations and utilities.
@@ -19,3 +20,5 @@ and configuration options.
 - [`profile`](profile): Sampled allocation, guarded allocation, and profiler interfaces.
 - [`util`](util): Runtime utilities, options, randomness, statistics, and dynamic thread-local interfaces.
 
+
+[MTE]:   https://thore.io/posts/2025/09/introduction-to-arm-memory-tagging-extensions/
