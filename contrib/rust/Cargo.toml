@@ -6,7 +6,7 @@
 # -----------------------------------------------------------------------------
 [package]
 name = "mimalloc"
-version = "3.6.1"
+version = "3.6.2"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
@@ -39,4 +39,4 @@ nightly_allocator_api = ["nightly"]
 
 [dependencies]
 # the exact version as the fast paths depend on `MI_SMALL_SIZE_MAX` and internal entry points
-mimalloc-sys = { version = "=3.6.1", path = "sys" }
+mimalloc-sys = { version = "=3.6.2", path = "sys" }
