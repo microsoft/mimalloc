@@ -25,10 +25,10 @@ jobs:
       fail-fast: false
       matrix:
         tests: [basic,extra]
-        os: [windows-latest, macos-latest, ubuntu-latest, macos-14, macos-15-intel, ubuntu-22.04-arm, windows-11-arm]
+        os: [windows-latest, macos-latest, ubuntu-latest, macos-15, macos-15-intel, ubuntu-22.04-arm, windows-11-arm]
         c_or_cxx: [c, cxx]
         exclude:
-          - os: macos-14
+          - os: macos-15
             tests: extra
           - c_or_cxx: cxx
             tests: extra
