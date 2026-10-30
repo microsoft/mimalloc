@@ -32,6 +32,18 @@ mi_decl_nodiscard size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept {
   return mi_usable_size(p);
 }
 
+void mi_free_sized(void* p, size_t size) mi_attr_noexcept {
+  mi_free_size(p, size);
+}
+
+void mi_free_aligned_sized(void* p, size_t alignment, size_t size) mi_attr_noexcept {
+  mi_free_size_aligned(p, size, alignment);  // in mimalloc alignment is always after size for consistency
+}
+
+
+// ------------------------------------------------------
+// Override standard allocation functions
+// ------------------------------------------------------
 
 #if defined(MI_MALLOC_OVERRIDE) && !defined(_DLL)
 
@@ -62,6 +74,7 @@ typedef void* mi_nothrow_t;
   #define MI_FORWARD3(fun,x,y,z)  MI_FORWARD(fun)
   #define MI_FORWARD0(fun,x)      MI_FORWARD(fun)
   #define MI_FORWARD02(fun,x,y)   MI_FORWARD(fun)
+  #define MI_FORWARD03(fun,x,y,z) MI_FORWARD(fun)
 #else
   // otherwise use forwarding by calling our `mi_` function
   #define MI_FORWARD1(fun,x)      { return fun(x); }
@@ -69,6 +82,7 @@ typedef void* mi_nothrow_t;
   #define MI_FORWARD3(fun,x,y,z)  { return fun(x,y,z); }
   #define MI_FORWARD0(fun,x)      { fun(x); }
   #define MI_FORWARD02(fun,x,y)   { fun(x,y); }
+  #define MI_FORWARD03(fun,x,y,z) { fun(x,y,z); }
 #endif
 
 #if defined(__APPLE__) && defined(MI_SHARED_LIB_EXPORT) && defined(MI_OSX_INTERPOSE)
@@ -362,6 +376,7 @@ typedef void* mi_nothrow_t;
   #endif
 #endif // __cplusplus
 
+
 // ------------------------------------------------------
 // Further Posix & Unix functions definitions
 // ------------------------------------------------------
@@ -408,6 +423,10 @@ void* _aligned_malloc(size_t size, size_t alignment)    { return mi_malloc_align
 void* reallocarray(void* p, size_t count, size_t size)  { return mi_reallocarray(p, count, size); }
 // some systems define reallocarr so mark it as a weak symbol (#751)
 mi_decl_weak int reallocarr(void* p, size_t count, size_t size)    { return mi_reallocarr(p, count, size); }
+
+// C23
+void free_sized(void* p, size_t size)                           MI_FORWARD02(mi_free_sized,p,size)
+void free_aligned_sized(void* p, size_t alignment, size_t size) MI_FORWARD03(mi_free_aligned_sized,p,alignment,size)
 
 #if defined(__wasi__) || defined(__EMSCRIPTEN__)
   // forward __libc interface (see PR #667)

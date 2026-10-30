@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2023, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2026, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -16,7 +16,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdio.h>   // fputs, stderr
 #include <stdlib.h>  // atexit
 
-// xbox has no console IO and cannot use LoadLibrary or GetModuleHandle
+// xbox has no console IO (and might not be able to use GetModuleHandle)
 #if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)
 #define MI_WIN_DESKTOP  1
 #endif
@@ -86,7 +86,7 @@ typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalM
 
 // Load a library
 static HMODULE mi_win_loadlibrary(const wchar_t* library) {
-  #if MI_WIN_DESKTOP
+  #if 1 // used to be `MI_WIN_DESKTOP`, see #1340 and #1467
     return LoadLibraryW(library);
   #else
     return LoadPackagedLibrary(library, 0);
@@ -160,7 +160,7 @@ static bool win_enable_large_os_pages_once(void)
   err = GetLastError();
   if (ok) {
     TOKEN_PRIVILEGES tp;
-    ok = LookupPrivilegeValue(NULL, TEXT("SeLockMemoryPrivilege"), &tp.Privileges[0].Luid);
+    ok = LookupPrivilegeValueW(NULL, L"SeLockMemoryPrivilege", &tp.Privileges[0].Luid);
     err = GetLastError();
     if (ok) {
       tp.PrivilegeCount = 1;

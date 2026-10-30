@@ -1465,7 +1465,18 @@ int mi__posix_memalign(void** p, size_t alignment, size_t size);
 void* mi_memalign(size_t alignment, size_t size);
 void* mi_valloc(size_t size);
 void* mi_pvalloc(size_t size);
+
+/// Corresponds to C11 [aligned_alloc](https://en.cppreference.com/w/c/memory/aligned_alloc).
+/// Same as mi_malloc_aligned().
 void* mi_aligned_alloc(size_t alignment, size_t size);
+
+/// Corresponds to C23 [free_sized](https://en.cppreference.com/w/c/memory/free_sized).
+/// Same as mi_free_size().
+void mi_free_sized(void* p, size_t size);
+
+/// Corresponds to C23 [free_aligned_sized](https://en.cppreference.com/w/c/memory/free_aligned_sized).
+/// Same as mi_free_size_aligned() (but note the switched \a alignment and \a size arguments!).
+void mi_free_aligned_sized(void* p, size_t alignment, size_t size);
 
 unsigned short* mi_wcsdup(const unsigned short* s);
 unsigned char*  mi_mbsdup(const unsigned char* s);
@@ -1944,6 +1955,9 @@ char*  strdup(const char* s);
 char*  strndup(const char* s, size_t n);
 char*  realpath(const char* fname, char* resolved_name);
 
+// C23
+void   free_sized(void* p, size_t size);
+void   free_aligned_sized(void* p, size_t alignment, size_t size);
 
 // C++
 void   operator delete(void* p);
