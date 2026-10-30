@@ -174,7 +174,7 @@ typedef struct mi_page_guards_s {
 // There are no guard pages if the theap allocates from an exclusive pinned arena (as pinned memory cannot be protected).
 static mi_page_guards_t mi_theap_page_guards(const mi_theap_t* theap, size_t size, bool singleton, bool os_align) {
   const size_t gsize = _mi_os_secure_guard_page_size();
-  const bool guard_end = (theap->guard_end || (singleton && MI_SECURE > 0));  // in secure mode, huge blocks are always followed by a guard page
+  const bool guard_end = (theap->guard_end || (singleton && MI_SECURE >= 1));  // in secure mode, huge blocks are always followed by a guard page
   mi_page_guards_t guards = { 0, 0 };
   const mi_arena_t* const req_arena = mi_theap_heap(theap)->exclusive_arena;
   if (req_arena != NULL && req_arena->memid.is_pinned) return guards;
@@ -741,7 +741,7 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   uint8_t* const slice_start    = mi_arenas_page_alloc_fresh_area(theap,slice_count,max_page_meta_count,block_alignment,os_align,commit || guards.front > 0,allow_large,&memid,&arena_pages,&page_meta);
   if (!slice_start) return NULL;
   // in a torn forked child, the free slices may still have a guard page of a page that was allocated during the fork
-  if (MI_SECURE > 0 && memid.memkind == MI_MEM_ARENA && !memid.is_pinned && _mi_fork_is_torn()) {
+  if (MI_SECURE >= 1 && memid.memkind == MI_MEM_ARENA && !memid.is_pinned && _mi_fork_is_torn()) {
     _mi_os_unguard(slice_start, _mi_size_of_slices(slice_count), true /* make accessible */);
   }
 

@@ -446,13 +446,13 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
   (if possible), and mimalloc aborts on corrupted meta data detection.
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
   mitigate against attacks that rely on a predicable allocation order.
+- Large blocks (> 512 KiB) are followed by a guard page.
 
 With `ON`, performance is impacted a bit more (usually less than 25%), but adds:
 
 - All free list pointers are
   [encoded](include/mimalloc/alloc/page.h#L555)
   with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption.
-- Huge blocks (larger than 512 KiB) are followed by a guard page.
 - Double free's are detected (and ignored).
 - Padding is added at the end of each heap block to detect heap block overflows (once the block is freed).
 - Some use-after-free accesses are detected (if these modify the first word in the block).
