@@ -37,7 +37,7 @@ the hardware instructions are never executed (as these trap on CPU's without MTE
 #define MI_MEMTAG_EXCLUDE         (0x8001)
 #define MI_MEMTAG_EXCLUDE_EVEN    (MI_MEMTAG_EXCLUDE | 0x7F00)   // even blocks use tags 1 to 7
 #define MI_MEMTAG_EXCLUDE_ODD     (MI_MEMTAG_EXCLUDE | 0x00FE)   // odd blocks use tags 8 to 14
-#define MI_MEMTAG_ODD_BIT         (8)  // logical tag bit that is set for odd blocks
+#define MI_MEMTAG_ODD_BIT         (8)   // logical tag bit that is set for odd blocks
 
 // Set once at process initialization in the sealed process data (see `prim/os.c:_mi_os_init`)
 bool   _mi_os_has_memtag(void);         // is memory tagging used?
@@ -92,6 +92,19 @@ static inline void* mi_ptr_memtag_meta(const void* p) {
   return mi_ptr_with_memtag(p, MI_MEMTAG_META);
 }
 
+// Primitive memory tag operations
+static inline bool  mi_memtag_cpu_is_supported(void);
+static inline void  mi_memtag_check(const void* p);
+static inline void* mi_memtag_random(void* p, size_t exclude);
+static inline void* mi_memtag_load(void* p);
+static inline void  mi_memtag_store(void* p, size_t size);
+static inline void  mi_memtag_store_zero(void* p, size_t size);
+static inline void* mi_memtag_random_next(void* p);
+static inline void  mi_memtag_blocks_init(void* start, size_t bsize, size_t idx, size_t count);
+static inline void* mi_memtag_block_free(void* block, size_t bsize);
+static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_t idx);
+static inline void  mi_memtag_clear(void* p, size_t size);
+
 
 /* ----------------------------------------------------------------------------
   Memory tag instructions (only valid to call if `mi_memtag_is_enabled()`).
@@ -116,7 +129,7 @@ static inline void* mi_memtag_load(void* p) {
 }
 
 // Size of the cache line tagged by `dc gva` (as given by `dczid_el0`), or 0 if not permitted
-static inline size_t mi_memtag_line_size(void) {
+static inline size_t __mi_memtag_line_size(void) {
   uint64_t dczid;
   __asm__ ("mrs %0, dczid_el0" : "=r"(dczid));
   return ((dczid & 0x10) != 0 ? 0 : (MI_ZU(4) << (dczid & 0x0F)));
@@ -124,7 +137,7 @@ static inline size_t mi_memtag_line_size(void) {
 
 // Does the CPU support the memory tag operations as we use them? (called once at initialization if the OS supports tagging)
 static inline bool mi_memtag_cpu_is_supported(void) {
-  return (mi_memtag_line_size() == MI_MEMTAG_LINE_SIZE);
+  return (__mi_memtag_line_size() == MI_MEMTAG_LINE_SIZE);
 }
 
 // Read from `p` such that it faults if the tag of `p` does not match the memory tag
@@ -133,15 +146,15 @@ static inline void mi_memtag_check(const void* p) {
 }
 
 // Set the tag of the granule at `p` (or two granules, or the cache line) to the tag of `p`, and zero it if `zero` is set
-static inline void mi_memtag_store_granule(uint8_t* p, bool zero) {
+static inline void __mi_memtag_store_granule(uint8_t* p, bool zero) {
   if (zero) { __asm__ __volatile__ (MI_MEMTAG_ASM "stzg %0, [%0]" : : "r"(p) : "memory"); }
        else { __asm__ __volatile__ (MI_MEMTAG_ASM "stg %0, [%0]"  : : "r"(p) : "memory"); }
 }
-static inline void mi_memtag_store_granule2(uint8_t* p, bool zero) {
+static inline void __mi_memtag_store_granule2(uint8_t* p, bool zero) {
   if (zero) { __asm__ __volatile__ (MI_MEMTAG_ASM "stz2g %0, [%0]" : : "r"(p) : "memory"); }
        else { __asm__ __volatile__ (MI_MEMTAG_ASM "st2g %0, [%0]"  : : "r"(p) : "memory"); }
 }
-static inline void mi_memtag_store_line(uint8_t* p, bool zero) {
+static inline void __mi_memtag_store_line(uint8_t* p, bool zero) {
   if (zero) { __asm__ __volatile__ (MI_MEMTAG_ASM "dc gzva, %0" : : "r"(p) : "memory"); }
        else { __asm__ __volatile__ (MI_MEMTAG_ASM "dc gva, %0"  : : "r"(p) : "memory"); }
 }
@@ -149,34 +162,34 @@ static inline void mi_memtag_store_line(uint8_t* p, bool zero) {
 // Set the memory tags of `[p,p+size)` to the tag of `p`, and zero it if `zero` is set.
 // Small ranges are tagged per granule; for larger ranges only the (unaligned) edges are tagged per granule
 // while the aligned middle is tagged per cache line (which is much faster).
-static inline void mi_memtag_store_ex(void* p, size_t size, bool zero) {
+static inline void __mi_memtag_store_ex(void* p, size_t size, bool zero) {
   mi_assert_internal(((uintptr_t)p % MI_MEMTAG_GRANULE_SIZE) == 0 && (size % MI_MEMTAG_GRANULE_SIZE) == 0 && size > 0);
   uint8_t* q = (uint8_t*)p;
   uint8_t* const end = q + size;
   if (size <= 2*MI_MEMTAG_LINE_SIZE) {
-    if ((size % (2*MI_MEMTAG_GRANULE_SIZE)) != 0) { mi_memtag_store_granule(q, zero); q += MI_MEMTAG_GRANULE_SIZE; }
-    for (; q < end; q += 2*MI_MEMTAG_GRANULE_SIZE) { mi_memtag_store_granule2(q, zero); }
+    if ((size % (2*MI_MEMTAG_GRANULE_SIZE)) != 0) { __mi_memtag_store_granule(q, zero); q += MI_MEMTAG_GRANULE_SIZE; }
+    for (; q < end; q += 2*MI_MEMTAG_GRANULE_SIZE) { __mi_memtag_store_granule2(q, zero); }
   }
   else {
-    mi_memtag_store_granule(q, zero);
-    mi_memtag_store_granule(end - MI_MEMTAG_GRANULE_SIZE, zero);
-    mi_memtag_store_granule2((uint8_t*)(((uintptr_t)q + 31) & ~(uintptr_t)31), zero);
-    mi_memtag_store_granule2((uint8_t*)((uintptr_t)end & ~(uintptr_t)31) - 32, zero);
+    __mi_memtag_store_granule(q, zero);
+    __mi_memtag_store_granule(end - MI_MEMTAG_GRANULE_SIZE, zero);
+    __mi_memtag_store_granule2((uint8_t*)(((uintptr_t)q + 31) & ~(uintptr_t)31), zero);
+    __mi_memtag_store_granule2((uint8_t*)((uintptr_t)end & ~(uintptr_t)31) - 32, zero);
     uint8_t* const line_end = (uint8_t*)((uintptr_t)end & ~(uintptr_t)(MI_MEMTAG_LINE_SIZE-1));
     for (q = (uint8_t*)(((uintptr_t)q + MI_MEMTAG_LINE_SIZE-1) & ~(uintptr_t)(MI_MEMTAG_LINE_SIZE-1)); q < line_end; q += MI_MEMTAG_LINE_SIZE) {
-      mi_memtag_store_line(q, zero);
+      __mi_memtag_store_line(q, zero);
     }
   }
 }
 
 // Set the memory tags of `[p,p+size)` to the tag of `p`
 static inline void mi_memtag_store(void* p, size_t size) {
-  mi_memtag_store_ex(p, size, false);
+  __mi_memtag_store_ex(p, size, false);
 }
 
 // Zero `[p,p+size)` and set its memory tags to the tag of `p`
 static inline void mi_memtag_store_zero(void* p, size_t size) {
-  mi_memtag_store_ex(p, size, true);
+  __mi_memtag_store_ex(p, size, true);
 }
 
 // Return `p` with a fresh random tag of the same class (odd or even) that differs from its current tag (`gmi`, `irg`)
@@ -187,23 +200,12 @@ static inline void* mi_memtag_random_next(void* p) {
   return mi_memtag_random(p, exclude);
 }
 
-#else
-static inline bool  mi_memtag_cpu_is_supported(void)          { return false; }
-static inline void  mi_memtag_check(const void* p)             { MI_UNUSED(p); }
-static inline void* mi_memtag_random(void* p, size_t exclude)  { MI_UNUSED(exclude); return p; }
-static inline void* mi_memtag_load(void* p)                    { return p; }
-static inline void  mi_memtag_store(void* p, size_t size)      { MI_UNUSED(p); MI_UNUSED(size); }
-static inline void  mi_memtag_store_zero(void* p, size_t size) { MI_UNUSED(p); MI_UNUSED(size); }
-static inline void* mi_memtag_random_next(void* p)             { return p; }
-#endif
-
-
 /* ----------------------------------------------------------------------------
   Tagging blocks
 -----------------------------------------------------------------------------*/
 
 // The tag exclusion mask for the block at index `idx` (alternating between even and odd so adjacent blocks never share a tag)
-static inline size_t mi_memtag_class_exclude(size_t idx) {
+static inline size_t __mi_memtag_class_exclude(size_t idx) {
   return ((idx&1)==0 ? MI_MEMTAG_EXCLUDE_EVEN : MI_MEMTAG_EXCLUDE_ODD);
 }
 
@@ -211,7 +213,7 @@ static inline size_t mi_memtag_class_exclude(size_t idx) {
 static inline void mi_memtag_blocks_init(void* start, size_t bsize, size_t idx, size_t count) {
   uint8_t* p = (uint8_t*)start;
   for (size_t i = idx; i < idx + count; i++, p += bsize) {
-    void* const tp = mi_memtag_random(p, mi_memtag_class_exclude(i));
+    void* const tp = mi_memtag_random(p, __mi_memtag_class_exclude(i));
     mi_memtag_store(tp, bsize);
   }
 }
@@ -230,7 +232,7 @@ static inline void* mi_memtag_block_free(void* block, size_t bsize) {
 // returns the block with its new tag. The first read uses the meta tag so a stale pointer faults.
 static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_t idx) {
   mi_memtag_check(block);
-  void* const tblock = mi_memtag_random(block, mi_memtag_class_exclude(idx));
+  void* const tblock = mi_memtag_random(block, __mi_memtag_class_exclude(idx));
   mi_memtag_store(tblock, bsize);
   return tblock;
 }
@@ -239,5 +241,28 @@ static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_
 static inline void mi_memtag_clear(void* p, size_t size) {
   mi_memtag_store(mi_ptr_memtag_meta(p), size);
 }
+
+#else
+static inline bool  mi_memtag_cpu_is_supported(void)           { return false; }
+static inline void  mi_memtag_check(const void* p)             { MI_UNUSED(p); }
+static inline void* mi_memtag_random(void* p, size_t exclude)  { MI_UNUSED(exclude); return p; }
+static inline void* mi_memtag_load(void* p)                    { return p; }
+static inline void  mi_memtag_store(void* p, size_t size)      { MI_UNUSED(p); MI_UNUSED(size); }
+static inline void  mi_memtag_store_zero(void* p, size_t size) { MI_UNUSED(p); MI_UNUSED(size); }
+static inline void* mi_memtag_random_next(void* p)             { return p; }
+
+static inline void mi_memtag_blocks_init(void* start, size_t bsize, size_t idx, size_t count) {
+  MI_UNUSED(start); MI_UNUSED(bsize); MI_UNUSED(idx); MI_UNUSED(count);
+}
+static inline void* mi_memtag_block_free(void* block, size_t bsize) {
+  MI_UNUSED(bsize); return block;
+}
+static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_t idx) {
+  MI_UNUSED(bsize); MI_UNUSED(idx); return block;
+}
+static inline void mi_memtag_clear(void* p, size_t size) {
+  MI_UNUSED(p); MI_UNUSED(size);
+}
+#endif
 
 #endif // MI_MEMTAG_H
