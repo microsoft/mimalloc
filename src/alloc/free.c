@@ -697,7 +697,7 @@ size_t _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr_noexce
   if mi_unlikely(page==NULL) return 0;
   mi_assert_internal(mi_ptr_page_validate(p,"_mi_page_usable_size") == page);
   const mi_block_t* block = _mi_page_ptr_unalign(page, p); // for safety, always unalign
-  if mi_likely((const void*)block==page) {
+  if mi_likely((const void*)block==p) {
     return mi_ptr_bounds_limit(p, mi_page_usable_size_of(page, block, false /* is guarded */));
   }
   else {
