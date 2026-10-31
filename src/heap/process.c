@@ -33,6 +33,9 @@ static const mi_page_t mi_page_empty = {
   0,                      // xlast_alloc
   #endif
   NULL,                   // page_start
+  #if MI_FREE_IS_CHECKED
+  MI_ATOMIC_VAR_INIT(0),  // capacity_size
+  #endif
   0,                      // capacity
   0,                      // reserved capacity
   0,                      // slice_pcommitted

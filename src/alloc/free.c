@@ -278,8 +278,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
   // the page map maps all slices of a page, so `p` may still point below the page start (into the page meta data,
   // guard page, or alignment padding), or beyond the blocks handed out (`capacity`); freeing such pointer would
   // corrupt the free list. The unsigned difference checks both cases at once (as `p < page_start` wraps around).
-  // (a non-owning thread may read `capacity` concurrently but it only grows while the page is alive)
-  if mi_unlikely((size_t)(mi_addr(p) - mi_addr(mi_page_start(page))) >= (size_t)page->capacity * mi_page_block_size(page)) {
+  if mi_unlikely((size_t)(mi_addr(p) - mi_addr(mi_page_start(page))) >= mi_atomic_load_relaxed(&page->capacity_size)) {
     #if MI_DEBUG
     _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p);
     #endif

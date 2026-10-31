@@ -73,6 +73,12 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(mi_page_block_size(page) > 0);
   mi_assert_internal(mi_page_used(page) <= page->capacity);
   mi_assert_internal(page->capacity <= page->reserved);
+  #if MI_FREE_IS_CHECKED
+  const size_t capacity_size = mi_atomic_load_relaxed(&page->capacity_size);
+  mi_assert_internal(page->capacity == capacity_size / mi_page_block_size(page));
+  mi_assert_internal(capacity_size % mi_page_block_size(page) == 0);
+  MI_UNUSED(capacity_size);
+  #endif
 
   mi_assert_internal(page->heap!=NULL);
   mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
@@ -890,6 +896,9 @@ bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   }
   // enable the new free list
   page->capacity += (uint16_t)extend;
+  #if MI_FREE_IS_CHECKED
+  mi_atomic_store_relaxed(&page->capacity_size, (size_t)page->capacity * bsize);
+  #endif
   mi_theap_stat_increase(theap, page_committed, extend * bsize);
   mi_assert_expensive(mi_page_is_valid_init(page));
   return true;

@@ -732,7 +732,50 @@ static bool test_theap_cleanup(bool os_pages) {
   return result;
 }
 
+#if MI_FREE_IS_CHECKED
+static bool test_page_capacity_size(bool os_pages) {
+  const long disallow = mi_option_get(mi_option_disallow_arena_alloc);
+  const long guarded = mi_option_get(mi_option_guarded_sample_rate);
+  mi_option_set(mi_option_disallow_arena_alloc, (os_pages ? 1 : 0));
+  mi_option_set(mi_option_guarded_sample_rate, 0);
+  mi_heap_t* heap = mi_heap_new();
+  void* blocks[256] = { NULL };
+  mi_page_t* first_page = NULL;
+  size_t initial_size = 0;
+  bool result = (heap != NULL);
+  for (size_t i = 0; result && i < 256; i++) {
+    blocks[i] = mi_heap_malloc(heap, 64);
+    if (blocks[i] == NULL) { result = false; break; }
+    mi_page_t* page = mi_ptr_page(blocks[i]);
+    const size_t capacity_size = mi_atomic_load_relaxed(&page->capacity_size);
+    if (i == 0) {
+      first_page = page;
+      initial_size = capacity_size;
+    }
+    result = (capacity_size > 0 &&
+              (size_t)(mi_addr(blocks[i]) - mi_addr(mi_page_start(page))) < capacity_size);
+  }
+  if (result) {
+    result = (mi_atomic_load_relaxed(&first_page->capacity_size) > initial_size);
+  }
+  for (size_t i = 0; i < 256; i++) {
+    if (blocks[i] == NULL) continue;
+    size_t bsize = 0;
+    mi_ufree(blocks[i], &bsize);
+    result = (bsize > 0 && result);
+  }
+  mi_heap_destroy(heap);
+  mi_option_set(mi_option_disallow_arena_alloc, disallow);
+  mi_option_set(mi_option_guarded_sample_rate, guarded);
+  return result;
+}
+#endif
+
 int main(void) {
+  #if MI_FREE_IS_CHECKED
+  CHECK("page-capacity-size-arena", test_page_capacity_size(false));
+  CHECK("page-capacity-size-os", test_page_capacity_size(true));
+  #endif
   CHECK_THREADS("theap-cleanup-arena", test_theap_cleanup(false));
   CHECK_THREADS("theap-cleanup-os", test_theap_cleanup(true));
   CHECK("theap-collect-detached", test_theap_collect_detached());
