@@ -40,7 +40,7 @@ static const mi_os_mem_config_t mi_os_mem_config_default = {
 // The OS memory configuration in the sealed process data (zero until `_mi_os_init`)
 static inline const mi_os_mem_config_t* mi_os_mem_config(void) {
   const mi_os_mem_config_t* const config = &mi_process_get_sealed()->os_mem_config;
-  return (mi_likely(config->page_size != 0) ? config : &mi_os_mem_config_default);
+  return (config->page_size != 0 ? config : &mi_os_mem_config_default);
 }
 
 bool _mi_os_has_overcommit(void) {
