@@ -317,10 +317,42 @@ static size_t unix_detect_virtual_address_bits(void) {
 }
 
 #if MI_UNIX_LINUX_MTE
+// With `-DMI_MTE=REQUIRED` it is a fatal error if tag checking cannot be enabled for all threads
+#if MI_MTE >= 2
+#define unix_memtag_thread_error(...)   _mi_fatal_error(__VA_ARGS__)
+#else
+#define unix_memtag_thread_error(...)   _mi_warning_message(__VA_ARGS__)
+#endif
+
 // Enable the tagged address ABI with the tag check mode `tcf` and allow tags 1 to 15 for `irg` (for the current thread)
 static bool unix_memtag_thread_enable(unsigned long ctrl, unsigned long tcf) {
   const unsigned long tags = (ctrl & PR_MTE_TAG_MASK) | (0xFFFEUL << PR_MTE_TAG_SHIFT);
   return (prctl(PR_SET_TAGGED_ADDR_CTRL, PR_TAGGED_ADDR_ENABLE | tcf | tags, 0, 0, 0) == 0);
+}
+
+// Return the current number of threads in the process (or 0 if unknown)
+// (we use `/proc/self/stat` instead of `/proc/self/status` as it is emulated by qemu-user to only count guest threads)
+static size_t unix_thread_count(void) {
+  const int fd = mi_prim_open("/proc/self/stat", O_RDONLY);
+  if (fd < 0) return 0;
+  char buf[1024];
+  const ssize_t nread = mi_prim_read(fd, &buf, sizeof(buf)-1);
+  mi_prim_close(fd);
+  if (nread <= 0 || nread >= (ssize_t)sizeof(buf)) return 0;
+  buf[nread] = 0;
+  // skip to the last `)` (as the executable name can contain spaces and parenthesis) which ends field 2
+  const char* s = NULL;
+  for (const char* p = buf; *p != 0; p++) { if (*p == ')') { s = p + 1; } }
+  if (s == NULL) return 0;
+  // and skip fields 3 to 19 to get to field 20 (`num_threads`)
+  for (int field = 3; field < 20; field++) {
+    while (*s == ' ') { s++; }
+    while (*s != ' ' && *s != 0) { s++; }
+  }
+  while (*s == ' ') { s++; }
+  size_t count = 0;
+  while (*s >= '0' && *s <= '9') { count = 10*count + (size_t)(*s - '0'); s++; }
+  return count;
 }
 #endif
 
@@ -365,6 +397,12 @@ static bool unix_detect_memtag(mi_os_mem_config_t* config) {
   }
   config->memtag_mode = tcf;
   _mi_verbose_message("memory tag check mode: %s\n", (tcf == PR_MTE_TCF_SYNC ? "sync" : (tcf == PR_MTE_TCF_ASYNC ? "async" : "preferred")));
+  // tag checking is only enabled for this thread and threads created from it afterwards (or that allocate)
+  const size_t nthreads = unix_thread_count();
+  if (nthreads > 1) {
+    unix_memtag_thread_error("memory tagging was enabled after %zu other thread(s) were created; these may not use tag checking\n"
+                        "  (and system calls with tagged pointers may fail in those threads until they call mimalloc)\n", nthreads - 1);
+  }
   return true;
   #endif
   return false;
@@ -1265,7 +1303,7 @@ void _mi_prim_thread_init(void) {
     const int ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
     if (ctrl >= 0 && ((ctrl & PR_TAGGED_ADDR_ENABLE) == 0 || (ctrl & PR_MTE_TCF_MASK) == 0)) {
       if (!unix_memtag_thread_enable((unsigned long)ctrl, (unsigned long)mi_process_get_sealed()->os_mem_config.memtag_mode)) {
-        _mi_warning_message("unable to enable memory tagging on thread 0x%zx (error %d)\n", _mi_thread_id(), errno);
+        unix_memtag_thread_error("unable to enable memory tagging on thread 0x%zx (error %d)\n", _mi_thread_id(), errno);
       }
     }
   }

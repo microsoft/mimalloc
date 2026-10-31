@@ -184,7 +184,7 @@ static inline mi_process_sealed_t* mi_process_get_sealed(void) {
 static inline void* mi_meta_load(void* p) {
   mi_assert_internal(p != NULL);
   #if MI_MTE >= 2
-  return mi_memtag_load(p);  // the CPU supports MTE (`-DMI_MTE=REQUIRED`), and `ldg` returns tag 0 if tagging is not enabled at runtime
+  return mi_memtag_load(p);  // the CPU supports MTE and tagging is enabled at runtime (`-DMI_MTE=REQUIRED`)
   #else
   #if MI_MTE
   if (mi_process_get_sealed()->os_mem_config.has_memtag) { return mi_memtag_load(p); }

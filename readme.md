@@ -485,8 +485,9 @@ at the end so overflows will still fault (this is done as tagging memory is line
 Tagging is only enabled at runtime if both the hardware and OS support it -- and otherwise _mimalloc_ runs untagged.
 An MTE build running untagged is very close in performance to a regular release build. When using tagging, it depends
 on the hardware, but on an M5 it is usually within about 10% of a release build. When building with `-DMI_MTE=REQUIRED`,
-_mimalloc_ assumes that the CPU supports MTE (which avoids some runtime checks) and aborts at initialization if it
-does not (but still runs untagged if tagging is not enabled at runtime).
+_mimalloc_ assumes that the CPU supports MTE (which avoids some runtime checks), and aborts at initialization if
+the CPU does not support MTE or if tagging is not enabled at runtime (or, on Linux, if tag checking cannot be enabled
+for all threads).
 
 Building with MTE also enables `-DMI_SECURE=CHECKED` by default (including encoded free lists). Since MTE catches (most) use-after-free, double-free,
 and heap block overflows, `-DMI_MTE=ON` gives similar guarantees as `-DMI_SECURE=ON` but now with
@@ -502,6 +503,10 @@ hardware support. MTE enabled builds have the suffix `-mte` (e.g. `mimalloc-mte.
 - Linux: requires an arm64 kernel with MTE support (check with `grep mte /proc/cpuinfo`). The tag check mode
   can be set with `MIMALLOC_MTE=sync` (default), `async`, or `preferred`. Without MTE hardware you can still
   test using QEMU emulation (e.g. `QEMU_CPU=max qemu-aarch64 ./myprogram`).
+  On Linux, tag checking is enabled per thread and inherited by threads created afterwards; _mimalloc_ should therefore be
+  initialized before other threads are created (which is the case when it is dynamically linked or preloaded). Otherwise
+  a warning is given (or a fatal error with `-DMI_MTE=REQUIRED`) as those threads may not use tag checking (until they allocate),
+  and system calls with tagged pointers may fail in threads that never call _mimalloc_.
   ```
   > cmake -DMI_MTE=ON ../..
   > make -j

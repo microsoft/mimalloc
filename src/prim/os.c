@@ -193,6 +193,12 @@ void _mi_os_init(void) {
       config.memtag_line_size = line_size;
     }
   }
+  #if MI_MTE >= 2
+  if (!config.has_memtag) {
+    _mi_fatal_error("built with MI_MTE=REQUIRED but memory tagging is not enabled at runtime\n"
+                    "  (on macOS the program needs the MTE entitlement, and the `mte` option must not be disabled)\n");
+  }
+  #endif
   mi_process_sealed_t* const sealed = _mi_process_unseal();
   sealed->os_mem_config = config;  // publish at once
   _mi_process_seal();
