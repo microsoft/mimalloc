@@ -576,4 +576,29 @@ static inline uint32_t mi_rotl32(uint32_t x, uint32_t r) {
   #endif
 }
 
+/* --------------------------------------------------------------------------------
+  multiply-xor: the xor of the low and high 64 bits of the full 128-bit product
+-------------------------------------------------------------------------------- */
+
+static inline uint64_t mi_mul_xor64(uint64_t x, uint64_t y) {
+  #if defined(__SIZEOF_INT128__)
+    const unsigned __int128 r = (unsigned __int128)x * y;
+    return ((uint64_t)r ^ (uint64_t)(r >> 64));
+  #elif defined(_MSC_VER) && MI_ARCH_X64
+    uint64_t hi;
+    const uint64_t lo = _umul128(x, y, &hi);
+    return (lo ^ hi);
+  #elif defined(_MSC_VER) && MI_ARCH_ARM64
+    return ((x*y) ^ __umulh(x, y));
+  #else
+    const uint64_t x0 = (uint32_t)x, x1 = (x >> 32);
+    const uint64_t y0 = (uint32_t)y, y1 = (y >> 32);
+    const uint64_t p00 = x0*y0, p01 = x0*y1, p10 = x1*y0, p11 = x1*y1;
+    const uint64_t mid = (p00 >> 32) + (uint32_t)p01 + (uint32_t)p10;  // cannot overflow
+    const uint64_t lo  = (mid << 32) | (uint32_t)p00;
+    const uint64_t hi  = p11 + (p01 >> 32) + (p10 >> 32) + (mid >> 32);
+    return (lo ^ hi);
+  #endif
+}
+
 #endif // MI_ARCH_H

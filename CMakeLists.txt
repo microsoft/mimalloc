@@ -6,8 +6,8 @@ if(NOT DEFINED CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
 endif()
 
-set(MI_SECURE "DEFAULT" CACHE STRING "Use security mitigations (like meta data guard pages, allocation randomization, double-free mitigation, and free-list corruption detection): OFF, MINIMAL, ON, FULL, DEFAULT. The FULL setting adds guard pages at the end of each mimalloc page (which may be expensive). MINIMAL only uses guard pages around metadata and after huge blocks (and randomizes OS allocation addresses and free lists). DEFAULT is MINIMAL with MI_MTE=ON, and OFF otherwise.")
-set_property(CACHE MI_SECURE PROPERTY STRINGS "DEFAULT" "OFF" "MINIMAL" "ON" "FULL")
+set(MI_SECURE "DEFAULT" CACHE STRING "Use security mitigations (like meta data guard pages, allocation randomization, double-free mitigation, and free-list corruption detection): OFF, MINIMAL, CHECKED, ON, FULL, DEFAULT. The FULL setting adds guard pages at the end of each mimalloc page (which may be expensive). MINIMAL only uses guard pages around metadata and after huge blocks (and randomizes OS allocation addresses and free lists). CHECKED adds validation of pointers passed to free. DEFAULT is CHECKED with MI_MTE=ON, and OFF otherwise.")
+set_property(CACHE MI_SECURE PROPERTY STRINGS "DEFAULT" "OFF" "MINIMAL" "CHECKED" "ON" "FULL")
 
 option(MI_OVERRIDE          "Override the standard malloc interface (i.e. define entry points for 'malloc', 'free', etc)" ON)
 option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
@@ -198,7 +198,7 @@ if((MI_SECURE STREQUAL "DEFAULT" OR NOT MI_SECURE) AND NOT MI_SECURE_FULL AND "$
   set(MI_SECURE "ON")
 elseif(MI_SECURE STREQUAL "DEFAULT")
   if(MI_MTE)
-    set(MI_SECURE "MINIMAL")  # guard pages after huge blocks (which are not memory tagged)
+    set(MI_SECURE "CHECKED")  # guard pages after huge blocks (which are not memory tagged), and validate pointers on free
   else()
     set(MI_SECURE "OFF")
   endif()
@@ -354,6 +354,13 @@ if(MI_SECURE STREQUAL "FULL")
 elseif(MI_SECURE STREQUAL "MINIMAL")
   message(STATUS "Use minimal security mitigations (guard pages around metadata and after huge blocks, and randomized OS allocation addresses and free lists) (MI_SECURE=MINIMAL)")
   list(APPEND mi_defines MI_SECURE=1)
+  set(MI_SECURE "OFF")  # so if(MI_SECURE) is false in subsequent checks
+elseif(MI_SECURE STREQUAL "CHECKED")
+  message(STATUS "Use minimal security mitigations and validate pointers passed to free (MI_SECURE=CHECKED)")
+  list(APPEND mi_defines MI_SECURE=2)
+  if(MI_FREE_IS_CHECKED STREQUAL "DEFAULT")
+    set(MI_FREE_IS_CHECKED ON)  # implied by MI_SECURE=2
+  endif()
   set(MI_SECURE "OFF")  # so if(MI_SECURE) is false in subsequent checks
 elseif(MI_SECURE)
   message(STATUS "Use secure build (MI_SECURE=${MI_SECURE})")

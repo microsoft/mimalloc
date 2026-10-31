@@ -435,7 +435,7 @@ OS will copy the entire 1GiB huge page (or 2MiB large page) which can cause the 
 
 ## Secure Mode
 
-_mimalloc_ can be build in secure mode by using the `-DMI_SECURE=OFF|MINIMAL|ON|FULL` flags in `cmake`. This build mode
+_mimalloc_ can be build in secure mode by using the `-DMI_SECURE=OFF|MINIMAL|CHECKED|ON|FULL` flags in `cmake`. This build mode
 enables various mitigations to make mimalloc more robust against exploits.
 With `MINIMAL` only security mitigations are added that have minimal impact on performance (usually about 1 or 2%):
 
@@ -447,6 +447,11 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
   mitigate against attacks that rely on a predictable allocation order.
 - Large blocks (> 512 KiB) are followed by a guard page.
+
+With `CHECKED` (the default with `-DMI_MTE=ON`), the performance impact is still small, but it adds:
+
+- All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
+  are ignored. Interior pointers are adjusted to the start of their block.
 
 With `ON`, performance is impacted a bit more (usually less than 25%), but adds:
 

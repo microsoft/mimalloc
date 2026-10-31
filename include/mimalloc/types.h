@@ -66,17 +66,21 @@ terms of the MIT license. A copy of the license can be found in the file
 // Define MI_SECURE to enable security mitigations
 // #define MI_SECURE 0  // no security mitigations
 // #define MI_SECURE 1  // + guard pages around metadata (and separated metadata) and after singleton blocks, randomized arena/OS allocation addresses, randomized free list initialization and allocation addresses within mimalloc pages, abort on EFAULT (corrupted meta-data) (`-DMI_SECURE=MINIMAL`)
-// #define MI_SECURE 2  // + invalid-pointer check on free (checked lookup in page-map.h), clear free list `next` on allocation.
+// #define MI_SECURE 2  // + invalid-pointer check on free (checked lookup in page-map.h, and no interior pointers), clear free list `next` on allocation (`-DMI_SECURE=CHECKED`)
 // #define MI_SECURE 3  // (currently the same as 2)
 // #define MI_SECURE 4  // + check buffer overflow (with padding), check double free, encode free lists (and detect corrupted free lists), decommit with mprotect (`-DMI_SECURE=ON`)
 // #define MI_SECURE 5  // + guard page at the end of each mimalloc page (expensive!), and byte-precise buffer overflow checks (`-DMI_SECURE=FULL`)
 
 #if !defined(MI_SECURE)
+#if MI_MTE
+#define MI_SECURE 2
+#else
 #define MI_SECURE 0
 #endif
+#endif
 
-// Secure level 2 and higher always check for invalid pointers in `mi_free`
-#if MI_SECURE>=2 && !MI_FREE_IS_CHECKED
+// MTE or secure level 2 and higher always check for invalid pointers in `mi_free`
+#if (MI_MTE || MI_SECURE>=2) && !MI_FREE_IS_CHECKED
 #undef  MI_FREE_IS_CHECKED
 #define MI_FREE_IS_CHECKED 1
 #endif
@@ -150,10 +154,10 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_CHECK_DOUBLE_FREE  1
 // #endif
 
-#if MI_SECURE>=4 || MI_PADDING || (MI_FREE_IS_CHECKED && MI_FREE_USE_PAGEMAP)
-#define MI_PAGE_KEY_COUNT 2
-#else
-#define MI_PAGE_KEY_COUNT 1
+// On 64-bit, free list links are encoded as a masked page offset with a keyed 32-bit tag;
+// otherwise we use a keyed xor-shift encoding of the full address (see `alloc/page.h`).
+#if !defined(MI_ENCODE_FREELIST_TAGGED)
+#define MI_ENCODE_FREELIST_TAGGED  (MI_SIZE_BITS==64)
 #endif
 
 // Enable large pages for objects between 64KiB and 512KiB.
@@ -543,7 +547,7 @@ typedef struct mi_decl_memtag_unit_align mi_page_s {
   mi_memid_t                memid;             // const: provenance of the page memory
 
   #if (MI_ENCODE_FREELIST || MI_PADDING)
-  mi_addr_t                 keys[MI_PAGE_KEY_COUNT]; // const: one or two random keys to encode the free lists (see `_mi_block_next`) or padding canary
+  mi_addr_t                 keys[2];           // const: random keys to encode the free lists and padding canary (see `alloc/page.h`)
   #endif
   #if MI_QSBR
   _Atomic(mi_thread_id_t)   qsbr_xthread_id;   // thread id of the last owning thread (`theap->tld->thread_id`) | `MI_PAGE_QSBR_IN_QUEUE` (written only by the owning thread)

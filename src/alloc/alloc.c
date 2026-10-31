@@ -36,7 +36,7 @@ static mi_decl_noinline void mi_page_block_setup_padding(mi_page_t* page, mi_blo
   const ptrdiff_t delta = ((uint8_t*)padding - (uint8_t*)block - (size - MI_PADDING_SIZE));
   mi_assert_internal(delta >= 0 && bsize >= (size - MI_PADDING_SIZE + delta));
   mi_track_mem_defined(padding,sizeof(mi_padding_t));  // note: re-enable since mi_page_usable_block_size may set noaccess
-  padding->canary = mi_ptr_encode_canary(page,block,page->keys);
+  padding->canary = mi_ptr_encode_canary(page,block);
   padding->delta  = (uint32_t)(delta);
   #if MI_PADDING_CHECK_BYTES
   if (!mi_page_is_huge(page)) {

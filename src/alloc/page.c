@@ -922,12 +922,12 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   uint8_t* page_start = mi_page_area(page, &page_size); MI_UNUSED(page_start);
   mi_track_mem_noaccess(page_start,page_size);
   mi_assert_internal(page_size / mi_page_block_size(page) < (1L<<16));
+  mi_assert_internal(page->reserved == 1 || page_size <= MI_LARGE_PAGE_SIZE);  // block offsets fit in a free list link (see `mi_ptr_encode`)
+  mi_assert_internal(mi_ptr_memtag(page_start) == 0);  // tagged free list links are relative to an untagged page start (see `mi_ptr_decode`)
   mi_assert_internal(page->reserved > 0);
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   page->keys[0] = _mi_theap_random_next(theap);
-  #if MI_PAGE_KEY_COUNT==2
   page->keys[1] = _mi_theap_random_next(theap);
-  #endif
   #endif
   #if MI_DEBUG>2
   if (page->memid.initially_zero) {
@@ -952,9 +952,7 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_internal(!mi_page_has_interior_pointers(page));
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   mi_assert_internal(page->keys[0] != 0);
-  #if MI_PAGE_KEY_COUNT==2
   mi_assert_internal(page->keys[1] != 0);
-  #endif
   #endif
   mi_assert_expensive(mi_page_is_valid_init(page));
 

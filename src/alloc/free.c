@@ -296,6 +296,18 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
   #if !MI_GUARDED
   if (free_small) { mi_assert_internal(page->block_size <= MI_SMALL_MAX_OBJ_SIZE); /* free small should only be called on small pages */ }
   #endif
+  #if MI_FREE_IS_CHECKED
+  // the page map maps all slices of a page, so `p` may still point below the page start (into the page meta data,
+  // guard page, or alignment padding), or beyond the blocks handed out (`capacity`); freeing such pointer would
+  // corrupt the free list. The unsigned difference checks both cases at once (as `p < page_start` wraps around).
+  // (a non-owning thread may read `capacity` concurrently but it only grows while the page is alive)
+  if mi_unlikely((size_t)(mi_addr(p) - mi_addr(mi_page_start(page))) >= (size_t)page->capacity * mi_page_block_size(page)) {
+    #if MI_DEBUG
+    _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p);
+    #endif
+    return false;
+  }
+  #endif
   *ppage = page;
   return true;
 }
@@ -737,7 +749,7 @@ static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, cons
 }
 
 static mi_decl_noinline bool mi_check_double_freex(const mi_page_t* page, const mi_block_t* block) {
-  // The decoded value is in the same page (or NULL).
+  // The block contains a valid free list link.
   // Walk the free lists to verify positively if it is already freed
   if (mi_list_contains(page, page->free, block, "free") ||
       mi_list_contains(page, page->local_free, block, "local free") ||
@@ -751,16 +763,17 @@ static mi_decl_noinline bool mi_check_double_freex(const mi_page_t* page, const 
 
 // Used for double free checking to avoid checking free lists too frequently
 static inline bool mi_block_could_be_double_free(const mi_page_t* page, const mi_block_t* block) {
-  mi_block_t* n = mi_block_nextx(page,block,page->keys);
-  return (mi_is_aligned(block,MI_SIZE_SIZE) &&           // quick check: aligned pointer?
-          (n==NULL || mi_page_contains_address(page,n))); // quick check: in the same page or NULL?
+  if (!mi_is_aligned(block,MI_SIZE_SIZE)) return false;   // quick check: aligned pointer?
+  bool valid;
+  mi_block_decode(page, block, mi_block_link(block), &valid);
+  return valid;                                            // quick check: contains a valid free list link?
 }
 
 // check if `block` was free'd before
 static inline bool mi_check_double_free(const mi_page_t* page, const mi_block_t* block) {
-  if mi_unlikely(mi_block_could_be_double_free(page,block))  // quick check: next field is aligned in the same page or NULL?
+  if mi_unlikely(mi_block_could_be_double_free(page,block))  // quick check: contains a valid free list link?
   {
-    // Suspicious: decoded value a in block is in the same page (or NULL) -- maybe a double free?
+    // Suspicious: the block contains a valid free list link -- maybe a double free?
     // (continue in separate function to improve code generation)
     return mi_check_double_freex(page, block);
   }
@@ -786,7 +799,7 @@ static inline bool mi_page_decode_padding(const mi_page_t* page, const mi_block_
   mi_track_mem_defined(padding,sizeof(mi_padding_t));
   *delta = padding->delta;
   const uint32_t canary = padding->canary;
-  const bool ok = (mi_ptr_encode_canary(page,block,page->keys) == canary && *delta <= *bsize);
+  const bool ok = (mi_ptr_encode_canary(page,block) == canary && *delta <= *bsize);
   if (double_free!=NULL) {
     if mi_unlikely(!ok) { *double_free = mi_ptr_decode_canary_is_freed(canary); }   // double free?
                    else { padding->canary = mi_ptr_encode_canary_freed(); }         // mark as freed

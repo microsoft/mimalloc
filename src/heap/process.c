@@ -44,11 +44,7 @@ static const mi_page_t mi_page_empty = {
   NULL, NULL,             // next, prev
   MI_MEMID_STATIC,        // memid
   #if (MI_PADDING || MI_ENCODE_FREELIST)
-  #if MI_PAGE_KEY_COUNT==2
   { 0, 0 },               // keys
-  #else
-  { 0 },                  // key
-  #endif
   #endif
   #if MI_QSBR
   MI_ATOMIC_VAR_INIT(0),  // qsbr_xthread_id
