@@ -29,10 +29,11 @@ at runtime (see `mi_memtag_is_enabled`); otherwise all operations are no-ops and
 the hardware instructions are never executed (as these trap on CPU's without MTE).
 -----------------------------------------------------------------------------*/
 
+#define MI_MEMTAG_GRANULE_SIZE    (16)        // memory is tagged per granule
+#define MI_MEMTAG_GRANULE_MAX     (128)       // ranges up to this size are always tagged per granule
 #define MI_MEMTAG_META            (0)         // tag used for meta data (and free arena memory)
 #define MI_MEMTAG_LINE_MIN        (32)        // supported range of the cache line size tagged by `dc gva` (checked at initialization)
 #define MI_MEMTAG_LINE_MAX        (2048)
-#define MI_MEMTAG_GRANULE_MAX     (128)       // ranges up to this size are always tagged per granule
 #define MI_MEMTAG_ZERO_MAX        (1024)      // blocks up to this size are zeroed on free (larger ones are only retagged)
 
 // Tag exclusion masks (bit `i` set excludes tag `i`); blocks never use tag 0.
