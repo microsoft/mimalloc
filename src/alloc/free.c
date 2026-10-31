@@ -706,7 +706,7 @@ static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, cons
 }
 
 static mi_decl_noinline bool mi_check_double_freex(const mi_page_t* page, const mi_block_t* block) {
-  // The decoded value is in the same page (or NULL).
+  // The block contains a valid free list link.
   // Walk the free lists to verify positively if it is already freed
   if (mi_list_contains(page, page->free, block, "free") ||
       mi_list_contains(page, page->local_free, block, "local free") ||
@@ -720,16 +720,17 @@ static mi_decl_noinline bool mi_check_double_freex(const mi_page_t* page, const 
 
 // Used for double free checking to avoid checking free lists too frequently
 static inline bool mi_block_could_be_double_free(const mi_page_t* page, const mi_block_t* block) {
-  mi_block_t* n = mi_block_nextx(page,block,page->keys);
-  return (mi_is_aligned(block,MI_SIZE_SIZE) &&           // quick check: aligned pointer?
-          (n==NULL || mi_page_contains_address(page,n))); // quick check: in the same page or NULL?
+  if (!mi_is_aligned(block,MI_SIZE_SIZE)) return false;   // quick check: aligned pointer?
+  bool valid;
+  mi_block_decode(page, block, mi_block_link(block), &valid);
+  return valid;                                            // quick check: contains a valid free list link?
 }
 
 // check if `block` was free'd before
 static inline bool mi_check_double_free(const mi_page_t* page, const mi_block_t* block) {
-  if mi_unlikely(mi_block_could_be_double_free(page,block))  // quick check: next field is aligned in the same page or NULL?
+  if mi_unlikely(mi_block_could_be_double_free(page,block))  // quick check: contains a valid free list link?
   {
-    // Suspicious: decoded value a in block is in the same page (or NULL) -- maybe a double free?
+    // Suspicious: the block contains a valid free list link -- maybe a double free?
     // (continue in separate function to improve code generation)
     return mi_check_double_freex(page, block);
   }
@@ -755,7 +756,7 @@ static inline bool mi_page_decode_padding(const mi_page_t* page, const mi_block_
   mi_track_mem_defined(padding,sizeof(mi_padding_t));
   *delta = padding->delta;
   const uint32_t canary = padding->canary;
-  const bool ok = (mi_ptr_encode_canary(page,block,page->keys) == canary && *delta <= *bsize);
+  const bool ok = (mi_ptr_encode_canary(page,block) == canary && *delta <= *bsize);
   if (double_free!=NULL) {
     if mi_unlikely(!ok) { *double_free = mi_ptr_decode_canary_is_freed(canary); }   // double free?
                    else { padding->canary = mi_ptr_encode_canary_freed(); }         // mark as freed

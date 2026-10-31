@@ -561,24 +561,45 @@ Encoding/Decoding the free list next pointers
 
 This is to protect against buffer overflow exploits where the
 free list is mutated. Many hardened allocators xor the next pointer `p`
-with a secret key `k1`, as `p^k1`. This prevents overwriting with known
-values but might be still too weak: if the attacker can guess
-the pointer `p` this  can reveal `k1` (since `p^k1^p == k1`).
-Moreover, if multiple blocks can be read as well, the attacker can
-xor both as `(p1^k1) ^ (p2^k1) == p1^p2` which may reveal a lot
-about the pointers (and subsequently `k1`).
+with a secret key `k`, as `p^k`. This is weak: if the attacker can guess
+`p` this reveals `k`, and xor-ing two entries cancels the key. A non-linear
+encoding like `((p^k2)<<<k1)+k1` avoids this but can still be broken with
+just a few known `p`.
 
-Instead mimalloc uses an extra key `k2` and encodes as `((p^k2)<<<k1)+k1`.
-Since these operations are not associative, the above approaches do not
-work so well any more even if the `p` can be guesstimated. For example,
-for the read case we can subtract two entries to discard the `+k1` term,
-but that leads to `((p1^k2)<<<k1) - ((p2^k2)<<<k1)` at best.
-We include the left-rotation since xor and addition are otherwise linear
-in the lowest bit. Finally, both keys are unique per page which reduces
-the re-use of keys by a large factor.
+Instead, each page has two random keys (`keys[0]` and `keys[1]`), and each
+link is bound to the address `b` of the block it is stored in (so links
+cannot be copied). We use one of two encodings:
 
-We also pass a separate `null` value to be used as `NULL` or otherwise
-`(k2<<<k1)+k1` would appear (too) often as a sentinel value.
+1. Tagged offsets (`MI_ENCODE_FREELIST_TAGGED`, the default on 64-bit).
+   We store the 32-bit page offset `v` of the next block (with `NULL` as
+   the reserved offset `MI_BLOCK_OFS_NULL`) together with a keyed 32-bit tag:
+
+     x      = (T(b,v) << 32) | (v ^ m)
+     T(b,v) = let t = mulxor64(v ^ keys[0], b ^ keys[1]) in t ^ (t >> 32)
+
+   where `mulxor64` xor's the low and high halves of the full 128-bit
+   product, and the mask `m` (the upper 32 bits of `keys[0]`) hides the
+   (randomized) free list order. Decoding is just an xor and an add; the tag
+   is verified alongside with a predictable branch so the multiply mostly costs
+   throughput. A corrupted or forged link validates with
+   probability 2^-32, and it is difficult to recover the keys
+   from known `(b,v,x)` triples (except for `m`), leaving ~96 bits of key.
+
+2. Xor-shift (the default on 32-bit, where we lack a cheap wide multiply).
+   We store the full next address `p` (with `NULL` encoded as the page address):
+
+     x    = L(p - t) <<< keys[0]
+     t    = L(b ^ keys[0]) + keys[1]
+     L(y) = y ^ (y << (MI_SIZE_BITS/2))      (which is its own inverse)
+
+   The tweak `t` binds the link to the block `b`, the xor-shift `L` diffuses
+   low bits into the high bits (such that partial overwrites decode outside
+   the page), and the secret rotation prevents linear combinations of
+   additions and xor's. Decoded links are validated by checking that they
+   are in the page.
+
+The padding canary encodes `NULL` at the unaligned address `b|1` (so it can
+never be used as a valid free list link).
 ------------------------------------------------------------------- */
 
 static inline bool mi_is_in_same_page(const void* p, const void* q) {
@@ -587,33 +608,66 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
   // return (mi_ptr_page(p) == mi_ptr_page(q));
 }
 
-// Encoding uses just the address and the decoded block is derived from the page (with `page` as the `null` value).
-// (the rotations assume `sizeof(mi_addr_t)==sizeof(size_t)`)
-static inline void* mi_ptr_decode(const mi_page_t* page, const mi_encoded_t x, const mi_addr_t* keys) {
-  const mi_addr_t k1 = keys[0];
-  #if MI_PAGE_KEY_COUNT==2
-  const mi_addr_t k2 = keys[1];
-  #else
-  const mi_addr_t k2 = mi_rotr(k1,13);
-  #endif
-  const mi_addr_t addr = (mi_rotr((mi_addr_t)x - k1, k1) ^ k2);
-  if (addr == mi_addr(page)) return NULL;
-  return mi_page_block_from_addr(page, addr);
+#if (MI_ENCODE_FREELIST || MI_PADDING)
+#if MI_ENCODE_FREELIST_TAGGED
+#define MI_BLOCK_OFS_NULL  UINT32_MAX   // never a block offset
+
+static inline uint32_t mi_ptr_tag(const mi_page_t* page, mi_addr_t baddr, uint32_t ofs) {
+  const uint64_t t = mi_mul_xor64(ofs ^ page->keys[0], baddr ^ page->keys[1]);
+  return (uint32_t)(t ^ (t >> 32));
 }
 
-static inline mi_encoded_t mi_ptr_encode(const void* null, const void* p, const mi_addr_t* keys) {
-  const mi_addr_t k1 = keys[0];
-  #if MI_PAGE_KEY_COUNT==2
-  const mi_addr_t k2 = keys[1];
-  #else
-  const mi_addr_t k2 = mi_rotr(k1,13);
-  #endif
-  const mi_addr_t x = mi_addr(p==NULL ? null : p);
-  return (mi_encoded_t)(mi_rotl(x ^ k2, k1) + k1);
+static inline uint32_t mi_ptr_ofs_mask(const mi_page_t* page) {
+  return (uint32_t)(page->keys[0] >> 32);
 }
 
-static inline uint32_t mi_ptr_encode_canary(const void* null, const void* p, const mi_addr_t* keys) {
-  const uint32_t x = (uint32_t)(mi_ptr_encode(null,p,keys));
+// Encode a pointer `p` (in the page, or NULL) to be stored at address `baddr`
+static inline mi_encoded_t mi_ptr_encode(const mi_page_t* page, mi_addr_t baddr, const void* p) {
+  mi_assert_internal(p==NULL || mi_page_contains_address(page,p));
+  const uint32_t ofs = (p==NULL ? MI_BLOCK_OFS_NULL : (uint32_t)(mi_addr(p) - mi_addr(mi_page_start(page))));
+  const uint64_t tag = mi_ptr_tag(page, baddr, ofs);
+  return (mi_encoded_t)((tag << 32) | (ofs ^ mi_ptr_ofs_mask(page)));
+}
+
+// Decode a value `x` stored at address `baddr`; `valid` is false if `x` was not a valid encoding
+static inline void* mi_ptr_decode(const mi_page_t* page, mi_addr_t baddr, mi_encoded_t x, bool* valid) {
+  const uint64_t e = (uint64_t)x;
+  const uint32_t ofs = (uint32_t)e ^ mi_ptr_ofs_mask(page);
+  *valid = ((uint32_t)(e >> 32) == mi_ptr_tag(page, baddr, ofs));
+  return (ofs == MI_BLOCK_OFS_NULL ? NULL : mi_page_start(page) + ofs);
+}
+
+#else
+
+static inline mi_addr_t mi_xorshift_half(mi_addr_t y) {
+  return (y ^ (y << (MI_SIZE_BITS/2)));
+}
+
+static inline mi_addr_t mi_ptr_tweak(const mi_page_t* page, mi_addr_t baddr) {
+  return (mi_xorshift_half(baddr ^ page->keys[0]) + page->keys[1]);
+}
+
+// Encode a pointer `p` (in the page, or NULL) to be stored at address `baddr`
+static inline mi_encoded_t mi_ptr_encode(const mi_page_t* page, mi_addr_t baddr, const void* p) {
+  mi_assert_internal(p==NULL || mi_page_contains_address(page,p));
+  const mi_addr_t addr = (p==NULL ? mi_addr(page) : mi_addr(p));
+  return (mi_encoded_t)mi_rotl(mi_xorshift_half(addr - mi_ptr_tweak(page,baddr)), page->keys[0]);
+}
+
+// Decode a value `x` stored at address `baddr`; `valid` is false if `x` was not a valid encoding
+static inline void* mi_ptr_decode(const mi_page_t* page, mi_addr_t baddr, mi_encoded_t x, bool* valid) {
+  const mi_addr_t addr = mi_xorshift_half(mi_rotr((mi_addr_t)x, page->keys[0])) + mi_ptr_tweak(page,baddr);
+  if (addr == mi_addr(page)) { *valid = true; return NULL; }
+  void* const p = mi_page_block_from_addr(page, addr);
+  *valid = mi_page_contains_address(page, p);
+  return p;
+}
+
+#endif
+
+static inline uint32_t mi_ptr_encode_canary(const mi_page_t* page, const mi_block_t* block) {
+  const mi_addr_t e = (mi_addr_t)mi_ptr_encode(page, mi_addr(block)|1, NULL);
+  const uint32_t x = (uint32_t)(e ^ (e >> (MI_SIZE_BITS/2)));
   // make the lowest byte 0 to prevent spurious read overflows which could be a security issue (issue #951)
   // also clear bit 9 which we set only when a block is freed.
   #if MI_BIG_ENDIAN
@@ -631,53 +685,50 @@ static inline bool mi_ptr_decode_canary_is_freed(uint32_t canary) {
   return (canary == mi_ptr_encode_canary_freed());
 }
 
-static inline mi_block_t* mi_block_nextx( const mi_page_t* page, const mi_block_t* block, const mi_addr_t* keys ) {
-  mi_track_mem_defined(block,sizeof(mi_block_t));
-  mi_block_t* next;
+#endif // MI_ENCODE_FREELIST || MI_PADDING
+
+// Decode the free list link `x` stored in `block`; `valid` is false if the link was corrupted
+static inline mi_block_t* mi_block_decode(const mi_page_t* page, const mi_block_t* block, mi_encoded_t x, bool* valid) {
   #if MI_ENCODE_FREELIST
-  next = (mi_block_t*)mi_ptr_decode(page, block->next, keys);
+  return (mi_block_t*)mi_ptr_decode(page, mi_addr(block), x, valid);
   #else
-  MI_UNUSED(keys);
-  const mi_addr_t addr = (mi_addr_t)block->next;
-  next = (addr==0 ? NULL : mi_page_block_from_addr(page, addr));
+  MI_UNUSED(block);
+  *valid = true;
+  const mi_addr_t addr = (mi_addr_t)x;
+  return (addr==0 ? NULL : mi_page_block_from_addr(page, addr));
   #endif
-  mi_track_mem_noaccess(block,sizeof(mi_block_t));
-  return next;
 }
 
-static inline void mi_block_set_nextx(const void* null, mi_block_t* block, const mi_block_t* next, const mi_addr_t* keys) {
-  mi_track_mem_undefined(block,sizeof(mi_block_t));
+static inline mi_encoded_t mi_block_encode(const mi_page_t* page, const mi_block_t* block, const mi_block_t* next) {
   #if MI_ENCODE_FREELIST
-  block->next = mi_ptr_encode(null, next, keys);
+  return mi_ptr_encode(page, mi_addr(block), next);
   #else
-  MI_UNUSED(keys); MI_UNUSED(null);
-  block->next = (mi_encoded_t)mi_addr(next);  // never store a capability in a (freed) block
+  MI_UNUSED(page); MI_UNUSED(block);
+  return (mi_encoded_t)mi_addr(next);  // never store a capability in a (freed) block
   #endif
+}
+
+static inline mi_encoded_t mi_block_link(const mi_block_t* block) {
+  mi_track_mem_defined(block,sizeof(mi_block_t));
+  const mi_encoded_t x = block->next;
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
+  return x;
 }
 
 static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t* block) {
-  #if MI_ENCODE_FREELIST
-  mi_block_t* next = mi_block_nextx(page,block,page->keys);
-  // check for free list corruption: is `next` at least in the same page?
-  // todo: check if `next` is `page->block_size` aligned?
-  if mi_unlikely(next!=NULL && !mi_page_contains_address(page,next)) {
-    return _mi_block_next_is_corrupted(page,block,next); // returns NULL
+  const mi_encoded_t x = mi_block_link(block);
+  bool valid;
+  mi_block_t* const next = mi_block_decode(page, block, x, &valid);
+  if mi_unlikely(!valid) {
+    return _mi_block_next_is_corrupted(page, block, x); // returns NULL
   }
   return next;
-  #else
-  MI_UNUSED(page);
-  return mi_block_nextx(page,block,NULL);
-  #endif
 }
 
 static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, const mi_block_t* next) {
-  #if MI_ENCODE_FREELIST
-  mi_block_set_nextx(page,block,next, page->keys);
-  #else
-  MI_UNUSED(page);
-  mi_block_set_nextx(page,block,next,NULL);
-  #endif
+  mi_track_mem_undefined(block,sizeof(mi_block_t));
+  block->next = mi_block_encode(page, block, next);
+  mi_track_mem_noaccess(block,sizeof(mi_block_t));
 }
 
 #endif

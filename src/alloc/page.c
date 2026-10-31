@@ -798,7 +798,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
   // initialize a sequential free list
   mi_block_t* const last = mi_page_block_at(page, page_area, bsize, page->capacity + extend - 1);
   mi_block_t* block = start;
-  while(block <= last) {
+  while(block < last) {
     mi_block_t* next = (mi_block_t*)((uint8_t*)block + bsize);
     mi_block_set_next(page,block,next);
     block = next;
@@ -906,12 +906,11 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   uint8_t* page_start = mi_page_area(page, &page_size); MI_UNUSED(page_start);
   mi_track_mem_noaccess(page_start,page_size);
   mi_assert_internal(page_size / mi_page_block_size(page) < (1L<<16));
+  mi_assert_internal(page->reserved == 1 || page_size < UINT32_MAX);  // block offsets fit in 32 bits (see `mi_ptr_encode`)
   mi_assert_internal(page->reserved > 0);
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   page->keys[0] = _mi_theap_random_next(theap);
-  #if MI_PAGE_KEY_COUNT==2
   page->keys[1] = _mi_theap_random_next(theap);
-  #endif
   #endif
   #if MI_DEBUG>2
   if (page->memid.initially_zero) {
@@ -936,9 +935,7 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_internal(!mi_page_has_interior_pointers(page));
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   mi_assert_internal(page->keys[0] != 0);
-  #if MI_PAGE_KEY_COUNT==2
   mi_assert_internal(page->keys[1] != 0);
-  #endif
   #endif
   mi_assert_expensive(mi_page_is_valid_init(page));
 

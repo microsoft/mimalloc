@@ -286,7 +286,7 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
   _mi_fprintf(out, arg, "free mode   : pagemap, page size: %zu\n", sizeof(mi_page_t));
   #endif
   #if MI_ENCODE_FREELIST
-  _mi_fprintf(out, arg, "free lists  : encoded with %d key(s)\n", MI_PAGE_KEY_COUNT);
+  _mi_fprintf(out, arg, "free lists  : encoded (%s)\n", MI_ENCODE_FREELIST_TAGGED ? "tagged offsets" : "xor-shift");
   #endif
   #if MI_GUARDED
   _mi_fprintf(out, arg, "guarded mode: %s, rate=%ld\n",  MI_SAMPLE==2 ? "fine-grained" : "enabled", mi_option_get(mi_option_guarded_sample_rate));
@@ -651,8 +651,8 @@ void _mi_error_message(int err, const char* fmt, ...) {
   }
 }
 
-mi_decl_noinline mi_block_t* _mi_block_next_is_corrupted(const mi_page_t* page, const mi_block_t* block, const mi_block_t* next) {
-  _mi_error_message(EFAULT, "corrupted free list entry of size %zub at %p: value 0x%zx\n", mi_page_block_size(page), block, (size_t)mi_addr(next));
+mi_decl_noinline mi_block_t* _mi_block_next_is_corrupted(const mi_page_t* page, const mi_block_t* block, mi_encoded_t x) {
+  _mi_error_message(EFAULT, "corrupted free list entry of size %zub at %p: value 0x%zx\n", mi_page_block_size(page), block, (size_t)x);
   return NULL;
 }
 

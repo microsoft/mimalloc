@@ -149,10 +149,10 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_CHECK_DOUBLE_FREE  1
 // #endif
 
-#if MI_SECURE>=4 || MI_PADDING || (MI_FREE_IS_CHECKED && MI_FREE_USE_PAGEMAP)
-#define MI_PAGE_KEY_COUNT 2
-#else
-#define MI_PAGE_KEY_COUNT 1
+// On 64-bit, free list links are encoded as a masked page offset with a keyed 32-bit tag;
+// otherwise we use a keyed xor-shift encoding of the full address (see `alloc/page.h`).
+#if !defined(MI_ENCODE_FREELIST_TAGGED)
+#define MI_ENCODE_FREELIST_TAGGED  (MI_SIZE_BITS==64)
 #endif
 
 // Enable large pages for objects between 64KiB and 512KiB.
@@ -533,7 +533,7 @@ typedef struct mi_page_s {
   mi_memid_t                memid;             // const: provenance of the page memory
 
   #if (MI_ENCODE_FREELIST || MI_PADDING)
-  mi_addr_t                 keys[MI_PAGE_KEY_COUNT]; // const: one or two random keys to encode the free lists (see `_mi_block_next`) or padding canary
+  mi_addr_t                 keys[2];           // const: random keys to encode the free lists and padding canary (see `alloc/page.h`)
   #endif
   #if MI_QSBR
   _Atomic(mi_thread_id_t)   qsbr_xthread_id;   // thread id of the last owning thread (`theap->tld->thread_id`) | `MI_PAGE_QSBR_IN_QUEUE` (written only by the owning thread)
