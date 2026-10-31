@@ -73,7 +73,12 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.c_or_cxx }}" = "cxx" ]; then
-            echo "CMAKE_CXX_OPT_DEFAULT=-DMI_USE_CXX=ON"  >> $GITHUB_OUTPUT
+            if [ "${{ matrix.os }}" = "windows-latest" ]; then
+              # use C++20 with MSVC so `mi_likely`/`mi_unlikely` expand to `[[likely]]`/`[[unlikely]]` (which are only valid in an `if` condition)
+              echo "CMAKE_CXX_OPT_DEFAULT=-DMI_USE_CXX=ON -DCMAKE_CXX_STANDARD=20"  >> $GITHUB_OUTPUT
+            else
+              echo "CMAKE_CXX_OPT_DEFAULT=-DMI_USE_CXX=ON"  >> $GITHUB_OUTPUT
+            fi
           else # Default to C mode
             echo "CMAKE_CXX_OPT_DEFAULT=-DMI_USE_CXX=OFF" >> $GITHUB_OUTPUT
           fi

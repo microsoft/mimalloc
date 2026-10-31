@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.18)
 project(libmimalloc C)
 
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
+if(NOT DEFINED CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
 
 set(MI_SECURE "DEFAULT" CACHE STRING "Use security mitigations (like meta data guard pages, allocation randomization, double-free mitigation, and free-list corruption detection): OFF, MINIMAL, ON, FULL, DEFAULT. The FULL setting adds guard pages at the end of each mimalloc page (which may be expensive). MINIMAL only uses guard pages around metadata and after huge blocks (and randomizes OS allocation addresses and free lists). DEFAULT is MINIMAL with MI_MTE=ON, and OFF otherwise.")
 set_property(CACHE MI_SECURE PROPERTY STRINGS "DEFAULT" "OFF" "MINIMAL" "ON" "FULL")
