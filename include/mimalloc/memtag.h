@@ -29,7 +29,6 @@ at runtime (see `mi_memtag_is_enabled`); otherwise all operations are no-ops and
 the hardware instructions are never executed (as these trap on CPU's without MTE).
 -----------------------------------------------------------------------------*/
 
-#define MI_MEMTAG_GRANULE_SIZE    (16)        // memory is tagged per granule
 #define MI_MEMTAG_GRANULE_MAX     (128)       // ranges up to this size are always tagged per granule
 #define MI_MEMTAG_META            (0)         // tag used for meta data (and free arena memory)
 #define MI_MEMTAG_LINE_MIN        (32)        // supported range of the cache line size tagged by `dc gva` (checked at initialization)
@@ -43,7 +42,7 @@ the hardware instructions are never executed (as these trap on CPU's without MTE
 #define MI_MEMTAG_ODD_BIT         (8)   // logical tag bit that is set for odd blocks
 
 #if (MI_CACHE_LINE_SIZE % MI_MEMTAG_GRANULE_SIZE) != 0
-#error "`mi_decl_mte_align` must align on a memory tag granule"
+#error "`mi_decl_cache_align` must align on a memory tag granule"
 #endif
 
 // Set once at process initialization in the sealed process data (see `prim/os.c:_mi_os_init`)

@@ -512,7 +512,7 @@ static inline mi_used_t mi_xused_used_reset(mi_used_t xused) { xused.used_alloc 
 // - The layout below is optimized for `alloc/free.c:mi_free` and `alloc/alloc.c:mi_page_alloc` -- do not change it without careful consideration.
 // - With memory tagging the page info is tagged per page, so its size must be a multiple of the tag granule size.
 
-typedef struct mi_decl_mte_align mi_page_s {
+typedef struct mi_decl_align(16) mi_page_s {
   #if (MI_PAGE_META_IS_ALIGNED)
   _Atomic(struct mi_page_s*) self;             // points to the actual page info (for pages that span multiple slices)
   #endif

@@ -50,7 +50,7 @@ typedef struct mi_os_state_s {
 // Process meta data: this is allocated from the OS at process initialization (see `heap/process.c:mi_process_metadata_init`)
 // instead of being static so it is not at a fixed offset from the program image, is surrounded by guard pages in secure mode,
 // and can be memory tagged. With memory tagging, each field has its own tag (where adjacent fields have different tags),
-// so fields are aligned with `mi_decl_mte_align` and accessed through `mi_process_metadata_field` (which loads the tag).
+// so fields are aligned with `mi_decl_cache_align` and accessed through `mi_process_metadata_field` (which loads the tag).
 // Apply `F(tp,name)` to each field of the process meta data (used for the definition and for tagging each field)
 #define mi_process_metadata_fields(F) \
   F(mi_subproc_t,     subproc_main)             /* initial subprocess */ \
@@ -62,7 +62,7 @@ typedef struct mi_os_state_s {
   F(mi_theap_t,       theap_empty_wrong)        /* empty theap used to signal that a theap for a heap could not be allocated */ \
   F(mi_memid_t,       memid)                    /* OS provenance of the meta data (never freed) */
 
-#define mi_process_metadata_field_decl(tp,name)  mi_decl_mte_align tp name;
+#define mi_process_metadata_field_decl(tp,name)  mi_decl_cache_align tp name;
 
 typedef struct mi_process_metadata_s {
   mi_process_metadata_fields(mi_process_metadata_field_decl)
@@ -127,39 +127,39 @@ typedef struct mi_process_sealed_s {
 // Statically allocated process data. This is zero initialized and padded such that
 // in secure mode it is surrounded by guard pages (see `heap/process.c:mi_process_guard_init`)
 typedef struct mi_process_s {
-  uint8_t                           guard_front[MI_SECURE_SEALED_GUARD];  // in secure mode, contains the sealed page (see `mi_process_get_sealed`)
+  uint8_t             guard_front[MI_SECURE_SEALED_GUARD];  // in secure mode, contains the sealed page (see `mi_process_get_sealed`)
   #if !MI_SECURE_SEALED_PAGE
-  mi_process_sealed_t               sealed;                 // sealed data (unprotected)
+  mi_process_sealed_t sealed;                   // sealed data (unprotected)
   #endif
 
-  bool                              process_is_initialized; // set to `true` in `mi_process_init`
-  bool                              libc_is_initialized;    // `true` once the C runtime is initialized (and `false` again after process done)
-  bool                              malloc_is_redirected;   // `true` if malloc is redirected to mimalloc (on Windows with `mimalloc-redirect.dll`)
-  _Atomic(size_t)                   process_done_is_called; // set once `mi_process_done` is called
-  _Atomic(size_t)                   subprocs_created_count; // total number of sub-processes created (used for `subproc_seq`)
-  _Atomic(size_t)                   error_count;            // stop emitting errors when >= `mi_option_max_errors`
-  _Atomic(size_t)                   warning_count;          // stop emitting warnings when >= `mi_option_max_warnings`
-  _Atomic(size_t)                   output_buf_len;         // used length of `output_buf`
+  bool                process_is_initialized;   // set to `true` in `mi_process_init`
+  bool                libc_is_initialized;      // `true` once the C runtime is initialized (and `false` again after process done)
+  bool                malloc_is_redirected;     // `true` if malloc is redirected to mimalloc (on Windows with `mimalloc-redirect.dll`)
+  _Atomic(size_t)     process_done_is_called;   // set once `mi_process_done` is called
+  _Atomic(size_t)     subprocs_created_count;   // total number of sub-processes created (used for `subproc_seq`)
+  _Atomic(size_t)     error_count;              // stop emitting errors when >= `mi_option_max_errors`
+  _Atomic(size_t)     warning_count;            // stop emitting warnings when >= `mi_option_max_warnings`
+  _Atomic(size_t)     output_buf_len;           // used length of `output_buf`
 
-  mi_lock_t                         thread_locals_lock;     // initialized in `_mi_thread_locals_init` (see `util/threadlocal.c`)
-  mi_bitmap_t*                      thread_locals_free;     // bitmap of free thread local slots (1=free, 0=in-use) (stored without memory tag)
-  mi_memid_t                        thread_locals_memid;    // provenance of `thread_locals_free`
-  size_t                            thread_locals_version;  // version to be able to reuse slots safely
+  mi_lock_t           thread_locals_lock;       // initialized in `_mi_thread_locals_init` (see `util/threadlocal.c`)
+  mi_bitmap_t*        thread_locals_free;       // bitmap of free thread local slots (1=free, 0=in-use) (stored without memory tag)
+  mi_memid_t          thread_locals_memid;      // provenance of `thread_locals_free`
+  size_t              thread_locals_version;    // version to be able to reuse slots safely
 
-  mi_os_state_t                     os;                     // OS state
-  mi_fork_state_t                   fork;                   // fork state (see `heap/subproc.c`)
-  mi_subproc_t*                     subprocs;               // list of all sub-processes (stored without memory tag)
-  mi_lock_t                         subprocs_lock;          // initialized in `_mi_subproc_main_init` (as a zero lock is invalid on some platforms)
-  mi_profiler_t*                    profile_env_profiler;   // the pprof profiler if `MIMALLOC_PROFILE` was set (see `profile/pprof.c`) (stored without memory tag)
-  mi_atomic_guard_t                 profile_snapshot_guard; // allow only one thread at a time to take a profile snapshot
-  mi_atomic_guard_t                 arena_purge_guard;      // allow only one thread at a time to purge arenas
+  mi_os_state_t       os;                       // OS state
+  mi_fork_state_t     fork;                     // fork state (see `heap/subproc.c`)
+  mi_subproc_t*       subprocs;                 // list of all sub-processes (stored without memory tag)
+  mi_lock_t           subprocs_lock;            // initialized in `_mi_subproc_main_init` (as a zero lock is invalid on some platforms)
+  mi_profiler_t*      profile_env_profiler;     // the pprof profiler if `MIMALLOC_PROFILE` was set (see `profile/pprof.c`) (stored without memory tag)
+  mi_atomic_guard_t   profile_snapshot_guard;   // allow only one thread at a time to take a profile snapshot
+  mi_atomic_guard_t   arena_purge_guard;        // allow only one thread at a time to purge arenas
 
   // arrays last
-  mi_option_state_t                 options[_mi_option_last]; // current option values (see `util/options.c`)
-  char                              output_buf[MI_MAX_DELAY_OUTPUT+1]; // delayed output buffer (see `util/options.c`)
+  mi_option_state_t   options[_mi_option_last]; // current option values (see `util/options.c`)
+  char                output_buf[MI_MAX_DELAY_OUTPUT+1]; // delayed output buffer (see `util/options.c`)
 
   // end guard
-  mi_decl_cache_align uint8_t       guard_end[MI_SECURE_STATIC_GUARD];
+  mi_decl_cache_align uint8_t guard_end[MI_SECURE_STATIC_GUARD];
 } mi_process_t;
 
 extern mi_decl_hidden mi_decl_process_align mi_process_t _mi_process;
