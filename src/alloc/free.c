@@ -279,7 +279,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
   // guard page, or alignment padding), or beyond the blocks handed out (`capacity`); freeing such pointer would
   // corrupt the free list. The unsigned difference checks both cases at once (as `p < page_start` wraps around).
   // (a non-owning thread may read `capacity` concurrently but it only grows while the page is alive)
-  if mi_unlikely((size_t)((uint8_t*)p - mi_page_start(page)) >= (size_t)page->capacity * mi_page_block_size(page)) {
+  if mi_unlikely((size_t)(mi_addr(p) - mi_addr(mi_page_start(page))) >= (size_t)page->capacity * mi_page_block_size(page)) {
     #if MI_DEBUG
     _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p);
     #endif
@@ -666,7 +666,7 @@ size_t _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr_noexce
   if mi_unlikely(page==NULL) return 0;
   mi_assert_internal(mi_ptr_page_validate(p,"_mi_page_usable_size") == page);
   const mi_block_t* block = _mi_page_ptr_unalign(page, p); // for safety, always unalign
-  if mi_likely((const void*)block==page) {
+  if mi_likely((const void*)block==p) {
     return mi_ptr_bounds_limit(p, mi_page_usable_size_of(page, block, false /* is guarded */));
   }
   else {
