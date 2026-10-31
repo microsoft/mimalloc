@@ -746,7 +746,7 @@ static void mi_process_done_once(void) {
 void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   // we don't use `mi_atomic_do_once` here to avoid deadlocks if threads are killed due to a forced exit (issue #1377)
   size_t expected = 0;
-  if (mi_atomic_cas_strong_relaxed(&_mi_process.process_done_called, &expected, 1)) {
+  if (mi_atomic_cas_strong_relaxed(&_mi_process.process_done_is_called, &expected, 1)) {
     mi_process_done_once();
   }
 }

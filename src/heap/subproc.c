@@ -144,7 +144,7 @@ mi_subproc_id_t mi_subproc_current(void) {
 
 static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc, mi_subproc_t* parent) {
   subproc->parent = parent;
-  subproc->subproc_seq = mi_atomic_increment_relaxed(&_mi_process.subprocs_created);
+  subproc->subproc_seq = mi_atomic_increment_relaxed(&_mi_process.subprocs_created_count);
   mi_stats_header_init(&subproc->stats);
   mi_lock_init(&subproc->arena_reserve_lock);
   mi_lock_init(&subproc->heaps_lock);

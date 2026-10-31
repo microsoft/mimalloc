@@ -588,26 +588,22 @@ size_t _mi_prim_numa_node_count(void) {
 //----------------------------------------------------------------
 
 static mi_msecs_t mi_to_msecs(LARGE_INTEGER t) {
-  int64_t ticks_per_msec = _mi_process.clock_ticks_per_msec;
+  int64_t ticks_per_msec = mi_process_get_sealed()->clock_ticks_per_msec;
   if (ticks_per_msec == 0) {
     LARGE_INTEGER f;
     if (QueryPerformanceFrequency(&f)) {
       ticks_per_msec = f.QuadPart/1000LL;
     }
     if (ticks_per_msec == 0) { ticks_per_msec = 1; }
-    _mi_process.clock_ticks_per_msec = ticks_per_msec;
+    mi_process_get_sealed()->clock_ticks_per_msec = ticks_per_msec;
   }
   return (mi_msecs_t)(t.QuadPart / ticks_per_msec);
 }
 
 mi_msecs_t _mi_prim_clock_now(void) {
   LARGE_INTEGER t;
-  if (QueryPerformanceCounter(&t)) {
-    return mi_to_msecs(t);
-  }
-  else {
-    return 0;
-  }
+  if (!QueryPerformanceCounter(&t)) { t.QuadPart = 0; }
+  return mi_to_msecs(t);  // initialize the frequency even if the counter query failed
 }
 
 

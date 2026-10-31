@@ -55,15 +55,18 @@ typedef struct mi_process_sealed_s {
   _Atomic(size_t)     page_map_committed;   // committed entries in the page map
 
   // user callbacks
-  _Atomic(void*)      deferred_free;    // is `mi_deferred_free_fun*` (but some platforms don't support atomic function pointers)
+  _Atomic(void*)      deferred_free;        // is `mi_deferred_free_fun*` (but some platforms don't support atomic function pointers)
   _Atomic(void*)      deferred_arg;
-  _Atomic(void*)      out_default;      // is `mi_output_fun*`
+  _Atomic(void*)      out_default;          // is `mi_output_fun*`
   _Atomic(void*)      out_arg;
-  _Atomic(void*)      error_handler;    // is `mi_error_fun*`
+  _Atomic(void*)      error_handler;        // is `mi_error_fun*`
   _Atomic(void*)      error_arg;
 
-  mi_os_mem_config_t  os_mem_config;    // OS memory configuration (see `prim/os.c`)
-  bool                is_protected;     // `true` if the sealed page is read-only (see `_mi_process_unseal`)
+  mi_os_mem_config_t  os_mem_config;        // OS memory configuration (see `prim/os.c`)
+  mi_msecs_t          clock_process_start;  // clock at process initialization (see `util/stats.c`)
+  mi_msecs_t          clock_overhead;       // measured overhead of reading the clock (subtracted in `_mi_clock_end`)
+  int64_t             clock_ticks_per_msec; // performance counter ticks per millisecond (on Windows)
+  bool                is_protected;         // `true` if the sealed page is read-only (see `_mi_process_unseal`)
 } mi_process_sealed_t;
 
 
@@ -95,31 +98,24 @@ typedef struct mi_process_s {
   bool                              process_is_initialized; // set to `true` in `mi_process_init`
   bool                              libc_is_initialized;    // `true` once the C runtime is initialized (and `false` again after process done)
   bool                              malloc_is_redirected;   // `true` if malloc is redirected to mimalloc (on Windows with `mimalloc-redirect.dll`)
-  _Atomic(size_t)                   process_done_called;    // set once `mi_process_done` is called
-  _Atomic(size_t)                   subprocs_created;       // total number of sub-processes created (used for `subproc_seq`)
-  mi_atomic_guard_t                 arena_purge_guard;      // allow only one thread at a time to purge arenas
-
-  mi_msecs_t                        clock_process_start;    // clock at process initialization (see `util/stats.c`)
-  mi_msecs_t                        clock_overhead;         // measured overhead of reading the clock (subtracted in `_mi_clock_end`)
-  int64_t                           clock_ticks_per_msec;   // performance counter ticks per millisecond (on Windows) (0 until first use)
-
-  _Atomic(size_t)                   output_buf_len;         // used length of `output_buf`
+  _Atomic(size_t)                   process_done_is_called; // set once `mi_process_done` is called
+  _Atomic(size_t)                   subprocs_created_count; // total number of sub-processes created (used for `subproc_seq`)
   _Atomic(size_t)                   error_count;            // stop emitting errors when >= `mi_option_max_errors`
   _Atomic(size_t)                   warning_count;          // stop emitting warnings when >= `mi_option_max_warnings`
-
-  mi_os_state_t                     os;                     // OS state
+  _Atomic(size_t)                   output_buf_len;         // used length of `output_buf`
 
   mi_lock_t                         thread_locals_lock;     // initialized in `_mi_thread_locals_init` (see `util/threadlocal.c`)
   mi_bitmap_t*                      thread_locals_free;     // bitmap of free thread local slots (1=free, 0=in-use)
   mi_memid_t                        thread_locals_memid;    // provenance of `thread_locals_free`
   size_t                            thread_locals_version;  // version to be able to reuse slots safely
 
+  mi_os_state_t                     os;                     // OS state
+  mi_fork_state_t                   fork;                   // fork state (see `heap/subproc.c`)
   mi_subproc_t*                     subprocs;               // list of all sub-processes
   mi_lock_t                         subprocs_lock;          // initialized in `_mi_subproc_main_init` (as a zero lock is invalid on some platforms)
-  mi_fork_state_t                   fork;                   // fork state (see `heap/subproc.c`)
-
   mi_profiler_t*                    profile_env_profiler;   // the pprof profiler if `MIMALLOC_PROFILE` was set (see `profile/pprof.c`)
   mi_atomic_guard_t                 profile_snapshot_guard; // allow only one thread at a time to take a profile snapshot
+  mi_atomic_guard_t                 arena_purge_guard;      // allow only one thread at a time to purge arenas
 
   mi_decl_cache_align mi_subproc_t  subproc_main;           // initial subprocess
   mi_decl_cache_align mi_heap_t     heap_main;              // initial heap for the process
