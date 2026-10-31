@@ -732,7 +732,110 @@ static bool test_theap_cleanup(bool os_pages) {
   return result;
 }
 
+#if MI_FREE_IS_CHECKED
+static bool test_page_capacity_size(bool os_pages) {
+  const long disallow = mi_option_get(mi_option_disallow_arena_alloc);
+  const long guarded = mi_option_get(mi_option_guarded_sample_rate);
+  mi_option_set(mi_option_disallow_arena_alloc, (os_pages ? 1 : 0));
+  mi_option_set(mi_option_guarded_sample_rate, 0);
+  mi_heap_t* heap = mi_heap_new();
+  void* blocks[256] = { NULL };
+  mi_page_t* first_page = NULL;
+  size_t initial_size = 0;
+  bool result = (heap != NULL);
+  for (size_t i = 0; result && i < 256; i++) {
+    blocks[i] = mi_heap_malloc(heap, 64);
+    if (blocks[i] == NULL) { result = false; break; }
+    mi_page_t* page = mi_ptr_page(blocks[i]);
+    const size_t capacity_size = mi_atomic_load_relaxed(&page->capacity_size);
+    if (i == 0) {
+      first_page = page;
+      initial_size = capacity_size;
+    }
+    result = (capacity_size > 0 &&
+              (size_t)(mi_addr(blocks[i]) - mi_addr(mi_page_start(page))) < capacity_size);
+  }
+  if (result) {
+    result = (mi_atomic_load_relaxed(&first_page->capacity_size) > initial_size);
+  }
+  for (size_t i = 0; i < 256; i++) {
+    if (blocks[i] == NULL) continue;
+    size_t bsize = 0;
+    mi_ufree(blocks[i], &bsize);
+    result = (bsize > 0 && result);
+  }
+  mi_heap_destroy(heap);
+  mi_option_set(mi_option_disallow_arena_alloc, disallow);
+  mi_option_set(mi_option_guarded_sample_rate, guarded);
+  return result;
+}
+#endif
+
+static void mi_cdecl record_free_list_error(int err, void* arg) {
+  if (err == EFAULT) { (*(size_t*)arg)++; }
+}
+
+static bool record_free_list_block(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t size, void* arg) {
+  MI_UNUSED(heap); MI_UNUSED(area); MI_UNUSED(block); MI_UNUSED(size);
+  (*(size_t*)arg)++;
+  return true;
+}
+
+static bool test_free_list_cycle(bool collect, bool self_cycle) {
+  const long guarded = mi_option_get(mi_option_guarded_sample_rate);
+  mi_option_set(mi_option_guarded_sample_rate, 0);
+  mi_heap_t* heap = mi_heap_new();
+  void* p = (heap == NULL ? NULL : mi_heap_malloc(heap, 64));
+  void* q = (heap == NULL ? NULL : mi_heap_malloc(heap, 64));
+  void* live = (heap == NULL ? NULL : mi_heap_malloc(heap, 64));
+  bool result = (p != NULL && q != NULL && live != NULL);
+  if (result) {
+    mi_page_t* page = mi_ptr_page(p);
+    result = (page == mi_ptr_page(q) && page == mi_ptr_page(live) && page->free != NULL);
+    if (result) {
+      mi_free(p);
+      mi_free(q);
+      if (!collect) { _mi_page_free_collect(page, true); }
+      mi_block_t* head = (collect ? page->local_free : page->free);
+      mi_block_t* link = (self_cycle ? head : mi_block_next(page, head));
+      mi_block_t* saved_next = mi_block_next(page, link);
+      mi_block_t* saved_free = page->free;
+      mi_block_set_next(page, link, head);
+      size_t errors = 0;
+      size_t visited = 0;
+      mi_heap_area_t area;
+      _mi_heap_area_init(&area, page);
+      mi_register_error(&record_free_list_error, &errors);
+      if (collect) {
+        _mi_page_free_collect(page, true);
+        result = (page->local_free == head && page->free == saved_free);
+      }
+      else {
+        result = (_mi_theap_area_visit_blocks(&area, page, &record_free_list_block, &visited) &&
+                  visited == (size_t)page->capacity - (self_cycle ? 1 : 2));
+      }
+      mi_block_set_next(page, link, saved_next);
+      mi_register_error(NULL, NULL);
+      result = (errors == (collect ? 1 : 0) && result);
+      _mi_page_free_collect(page, true);
+      visited = 0;
+      result = (_mi_theap_area_visit_blocks(&area, page, &record_free_list_block, &visited) && visited == 1 && result);
+    }
+  }
+  mi_heap_destroy(heap);
+  mi_option_set(mi_option_guarded_sample_rate, guarded);
+  return result;
+}
+
 int main(void) {
+  CHECK("collect-self-cycle", test_free_list_cycle(true, true));
+  CHECK("collect-two-block-cycle", test_free_list_cycle(true, false));
+  CHECK("visit-self-cycle", test_free_list_cycle(false, true));
+  CHECK("visit-two-block-cycle", test_free_list_cycle(false, false));
+  #if MI_FREE_IS_CHECKED
+  CHECK("page-capacity-size-arena", test_page_capacity_size(false));
+  CHECK("page-capacity-size-os", test_page_capacity_size(true));
+  #endif
   CHECK_THREADS("theap-cleanup-arena", test_theap_cleanup(false));
   CHECK_THREADS("theap-cleanup-os", test_theap_cleanup(true));
   CHECK("theap-collect-detached", test_theap_collect_detached());

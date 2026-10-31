@@ -531,6 +531,9 @@ typedef struct mi_decl_memtag_unit_align mi_page_s {
   #endif
 
   uint8_t*                  page_start;        // const: start of the blocks (on CHERI, the capability from which all blocks are derived)
+  #if MI_FREE_IS_CHECKED
+  _Atomic(size_t)           capacity_size;     // byte size of committed blocks (read by non-owning threads on free)
+  #endif
   uint16_t                  capacity;          // number of blocks committed
   uint16_t                  reserved;          // number of blocks reserved in memory
   uint16_t                  slice_pcommitted;  // committed size in OS page sizes relative to the first arena slice of the page data (or 0 if the page is fully committed already)
