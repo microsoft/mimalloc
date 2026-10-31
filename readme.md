@@ -441,7 +441,7 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
 
 - All internal mimalloc meta data (including the page map and static data) is surrounded by guard pages
   (so a buffer overflow/underflow exploit cannot reach into the allocator's meta data).
-  However, free lists are not encoded at this level, and a heap block overflow can still corrupt a free list.
+  However, free lists are not encoded at this level (only from `CHECKED` on), and a heap block overflow can still corrupt a free list.
 - The start address of OS allocated memory is randomized
   (if possible), and mimalloc aborts on corrupted meta data detection.
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
@@ -452,12 +452,12 @@ With `CHECKED` (the default with `-DMI_MTE=ON`), the performance impact is still
 
 - All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
   are ignored. Interior pointers are adjusted to the start of their block.
+- All free list pointers are
+  [encoded](include/mimalloc/alloc/page.h#L622)
+  with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption.
 
 With `ON`, performance is impacted a bit more (usually less than 25%), but adds:
 
-- All free list pointers are
-  [encoded](include/mimalloc/alloc/page.h#L555)
-  with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption.
 - Double free's are detected (and ignored).
 - Padding is added at the end of each heap block to detect heap block overflows (once the block is freed).
 - Some use-after-free accesses are detected (if these modify the first word in the block).
@@ -487,7 +487,7 @@ on the hardware, but on an M5 it is usually within about 10% of a release build.
 _mimalloc_ assumes that the CPU supports MTE (which avoids some runtime checks) and aborts at initialization if it
 does not (but still runs untagged if tagging is not enabled at runtime).
 
-Building with MTE also enables `-DMI_SECURE=MINIMAL` by default. Since MTE catches (most) use-after-free, double-free,
+Building with MTE also enables `-DMI_SECURE=CHECKED` by default (including encoded free lists). Since MTE catches (most) use-after-free, double-free,
 and heap block overflows, `-DMI_MTE=ON` gives similar guarantees as `-DMI_SECURE=ON` but now with
 hardware support. MTE enabled builds have the suffix `-mte` (e.g. `mimalloc-mte.o`).
 

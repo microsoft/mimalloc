@@ -204,7 +204,7 @@ mi_process_metadata_t* _mi_process_metadata_init(void);
 // Do not access fields through this pointer directly but use `mi_process_metadata_field` instead.
 static inline mi_process_metadata_t* mi_process_metadata(void) {
   mi_process_metadata_t* const metadata = mi_process_get_sealed()->metadata;  // stored without memory tag
-  return (mi_likely(metadata != NULL) ? metadata : _mi_process_metadata_init());
+  return (metadata != NULL ? metadata : _mi_process_metadata_init());
 }
 
 // Get a pointer (with its memory tag) to a field of the process meta data.
