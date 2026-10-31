@@ -684,6 +684,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
 
   #if MI_DEBUG>1
   size_t free_count = 0;
+  bool free_list_corrupted = false;
   #endif
   for (mi_block_t* block = page->free; block != NULL; block = mi_block_next(page, block)) {
     #if MI_DEBUG>1
@@ -698,9 +699,17 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
     mi_assert_internal(blockidx < MI_MAX_BLOCKS);
     size_t bitidx = (blockidx / MI_SIZE_BITS);
     size_t bit = blockidx - (bitidx * MI_SIZE_BITS);
-    free_map[bitidx] |= ((size_t)1 << bit);
+    const size_t mask = (size_t)1 << bit;
+    if mi_unlikely((free_map[bitidx] & mask) != 0) {
+      _mi_warning_message("corrupted free list (possibly due to a double free)\n");
+      #if MI_DEBUG>1
+      free_list_corrupted = true;
+      #endif
+      break;  // visit blocks not yet marked free as potentially live
+    }
+    free_map[bitidx] |= mask;
   }
-  mi_assert_internal(page->capacity == (free_count + mi_page_used(page)));
+  mi_assert_internal(free_list_corrupted || page->capacity == (free_count + mi_page_used(page)));
 
   // walk through all blocks skipping the free ones
   #if MI_DEBUG>1
@@ -732,7 +741,7 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
       block += bsize * MI_SIZE_BITS;
     }
   }
-  mi_assert_internal(mi_page_used(page) == used_count);
+  mi_assert_internal(free_list_corrupted || mi_page_used(page) == used_count);
   return true;
 }
 

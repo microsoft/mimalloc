@@ -395,7 +395,12 @@ bool _mi_page_free_collect(mi_page_t* page, bool force) {
       // append -- only on shutdown (force) as this is a linear operation
       mi_block_t* tail = page->local_free;
       mi_block_t* next;
+      size_t count = 1;
       while ((next = mi_block_next(page, tail)) != NULL) {
+        if mi_unlikely(++count > page->capacity) {
+          _mi_error_message(EFAULT, "corrupted local-free list (possibly due to a double free)\n");
+          return collected_xfree;
+        }
         tail = next;
       }
       mi_block_set_next(page, tail, page->free);
