@@ -471,7 +471,7 @@ static uint8_t* mi_arenas_page_alloc_from_slices(mi_theap_t* theap, size_t slice
   *ppage_meta = mi_aligned_ptr_page0(start);
   #else
   mi_assert_internal(MI_PAGE_META_IS_SEPARATED!=0 || arena->pages_meta == NULL);
-  *ppage_meta = (arena->pages_meta == NULL ? NULL : &arena->pages_meta[memid->mem.arena.slice_index]);
+  *ppage_meta = (arena->pages_meta == NULL ? NULL : mi_page_meta_load(&arena->pages_meta[memid->mem.arena.slice_index]));
   #endif
   return start;
 }
@@ -653,16 +653,30 @@ static void mi_arenas_page_init_memory(mi_theap_t* theap, mi_page_t* page, uint8
 
 // With memory tagging, give the page meta data a random tag. Page meta data in front of the slices
 // has the opposite tag class of the first block, while separate page meta data alternates the tag class
-// with adjacent page meta data. Unused page meta data and free arena memory are untagged.
+// with adjacent page meta data (see `mi_page_meta_memtag_idx`). Free arena memory is untagged, but the
+// separate arena page meta entries always have a random tag (see `arena.c:mi_arena_memtag_init`).
 // (note: the extra aligned page meta entries that only point to the page (see `mi_arenas_page_link_aligned_meta`) stay untagged)
 static mi_page_t* mi_page_meta_memtag(mi_page_t* page, uint8_t* slice_start, mi_memid_t memid) {
   if (!mi_memtag_use_for_meta(memid.is_memtag)) return page;
-  const size_t idx = (mi_addr(page) == mi_addr(slice_start) ? 1 : mi_addr(page) / sizeof(mi_page_t));
+  const size_t idx = (mi_addr(page) == mi_addr(slice_start) ? 1 : mi_page_meta_memtag_idx(page));
   return mi_page_meta_bounded(mi_memtag_meta_init(page, sizeof(mi_page_t), idx));
 }
 
-static void mi_page_meta_memtag_clear(mi_page_t* page, mi_memid_t memid) {
-  if (mi_memtag_use_for_meta(memid.is_memtag)) { mi_memtag_clear(page, sizeof(mi_page_t)); }
+// Is this page meta data an entry of the separate arena page meta data (`arena->pages_meta`)?
+static bool mi_page_meta_is_arena_entry(mi_page_t* page) {
+  #if MI_PAGE_META_IS_ALIGNED
+  MI_UNUSED(page); return false;
+  #else
+  return (page->memid.memkind == MI_MEM_ARENA && mi_page_meta_is_separated(page));
+  #endif
+}
+
+// After freeing a page its meta data cannot be accessed anymore: separate arena page meta entries get a fresh
+// random tag while other page meta data is untagged again (as free arena memory).
+static void mi_page_meta_memtag_done(mi_page_t* page, mi_memid_t memid) {
+  if (!mi_memtag_use_for_meta(memid.is_memtag)) return;
+  if (mi_page_meta_is_arena_entry(page)) { mi_memtag_meta_init(page, sizeof(mi_page_t), mi_page_meta_memtag_idx(page)); }
+                                    else { mi_memtag_clear(page, sizeof(mi_page_t)); }
 }
 
 // Initialize the fields of the page meta data.
@@ -992,7 +1006,7 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
   if (mi_page_meta_is_separated(page)) { page->block_size = 0; }  // for assertion checking
   const mi_memid_t memid = page->memid;
   const size_t full_size = mi_page_full_size(page);
-  mi_page_meta_memtag_clear(page, memid);  // the page meta data cannot be accessed anymore
+  mi_page_meta_memtag_done(page, memid);  // the page meta data cannot be accessed anymore
   _mi_arenas_free(subproc, slice_start, full_size, memid);
 }
 

@@ -79,6 +79,11 @@ static inline mi_arena_t* mi_arena_from_memid(mi_memid_t memid, size_t* slice_in
   return arena;
 }
 
+// With memory tagging, the tag class index of separate page meta data (alternating for adjacent page meta data)
+static inline size_t mi_page_meta_memtag_idx(const mi_page_t* page) {
+  return (mi_addr(page) / sizeof(mi_page_t));
+}
+
 // initialize the bitmap for `slice_count` slices at base (and advance the base pointer)
 static inline mi_bitmap_t* mi_arena_bitmap_init(size_t slice_count, uint8_t** base) {
   mi_bitmap_t* bitmap = (mi_bitmap_t*)(*base);

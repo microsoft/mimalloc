@@ -123,7 +123,7 @@ mi_arena_t* _mi_arena_from_id(mi_arena_id_t id) {
     }
   }
   #else
-  mi_arena_t* const arena = (mi_arena_t*)id;
+  mi_arena_t* const arena = (mi_arena_t*)mi_meta_load_maybe(id);  // id's are untagged (see `mi_arena_memtag_init`)
   #endif
   mi_assert_internal(arena==NULL || arena->parent==NULL); // id's should never point to sub-arena's
   return arena;
@@ -534,6 +534,33 @@ static mi_bbitmap_t* mi_arena_bbitmap_init(mi_subproc_t* subproc, size_t slice_c
   return (mi_bbitmap_t*)mi_ptr_bounded_data(bbitmap, size);
 }
 
+// With memory tagging, each part of the arena meta data gets its own random tag: the arena info, each bitmap,
+// and each separate page meta entry. We tag in reverse address order such that adjacent parts have a different
+// tag class (where the page meta entries use the tag class of `mi_page_meta_memtag_idx`).
+// Returns the arena with its tag; the arena id's stay untagged (see `mi_arena_id_from_arena`).
+static mi_arena_t* mi_arena_memtag_init(mi_arena_t* arena) {
+  if (!mi_memtag_use_for_meta(arena->memid.is_memtag)) return arena;
+  const size_t slice_count = arena->slice_count;
+  size_t idx = 0;
+  if (arena->pages_meta != NULL) {
+    for (size_t i = 0; i < slice_count; i++) {
+      mi_page_t* const page = &arena->pages_meta[i];
+      mi_memtag_meta_init(page, sizeof(mi_page_t), mi_page_meta_memtag_idx(page));
+    }
+    idx = mi_page_meta_memtag_idx(arena->pages_meta) + 1;
+  }
+  const size_t bitmap_size = mi_bitmap_size(slice_count, NULL);
+  for (size_t i = MI_ARENA_BIN_COUNT; i > 0; i--) {
+    arena->pages_main.pages_abandoned[i-1] = (mi_bitmap_t*)mi_memtag_meta_init(arena->pages_main.pages_abandoned[i-1], bitmap_size, idx++);
+  }
+  arena->pages_main.pages = (mi_bitmap_t*)mi_memtag_meta_init(arena->pages_main.pages, bitmap_size, idx++);
+  arena->slices_purge     = (mi_bitmap_t*)mi_memtag_meta_init(arena->slices_purge, bitmap_size, idx++);
+  arena->slices_dirty     = (mi_bitmap_t*)mi_memtag_meta_init(arena->slices_dirty, bitmap_size, idx++);
+  arena->slices_committed = (mi_bitmap_t*)mi_memtag_meta_init(arena->slices_committed, bitmap_size, idx++);
+  arena->slices_free      = (mi_bbitmap_t*)mi_memtag_meta_init(arena->slices_free, mi_bbitmap_size(slice_count, NULL), idx++);
+  return (mi_arena_t*)mi_memtag_meta_init(arena, mi_align_up(sizeof(mi_arena_t), MI_BCHUNK_SIZE), idx);
+}
+
 
 static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
                                         size_t slice_count, mi_arena_t* parent, size_t total_size,
@@ -657,6 +684,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
     mi_bitmap_unsafe_setN(arena->slices_dirty, 0, arena->slice_count);
   }
 
+  arena = mi_arena_memtag_init(arena);
   if (!mi_arenas_add(subproc, arena, arena_id)) { return NULL;  }
   return arena;
 }
