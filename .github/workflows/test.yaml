@@ -591,6 +591,7 @@ jobs:
           MIMALLOC_GUARDED_SAMPLE_RATE=1 out/guarded-cheri-sim/mimalloc-test-api
 
       # Linux arm64 with memory tagging (MTE) emulated by QEMU (`-cpu max` as QEMU user mode faults on `dc zva` with tagged pointers, which glibc and bionic use in `memset` on `neoverse-n2`)
+      # (test-fork is excluded under QEMU as QEMU 8.2 user mode can deadlock when forking with threads, also without MTE)
       - name: Linux arm64, Setup, MTE
         if: matrix.tests == 'linux-arm64-mte'
         run: |
@@ -610,21 +611,21 @@ jobs:
           cmake . -B out/release-arm64-mte -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON $MI_CMAKE_ARM64_MTE
           cmake --build out/release-arm64-mte --parallel 4 --config Release
           MIMALLOC_VERBOSE=1 qemu-aarch64-static out/release-arm64-mte/mimalloc-test-mte
-          ctest --test-dir out/release-arm64-mte --verbose --timeout 600 -C Release
+          ctest --test-dir out/release-arm64-mte -E test-fork --verbose --timeout 600 -C Release
 
       - name: Linux arm64, Release, Async, MTE
         if: matrix.tests == 'linux-arm64-mte'
         env:
           MIMALLOC_MTE: async
         run: |
-          ctest --test-dir out/release-arm64-mte --verbose --timeout 600 -C Release
+          ctest --test-dir out/release-arm64-mte -E test-fork --verbose --timeout 600 -C Release
 
       - name: Linux arm64, Debug, MTE
         if: matrix.tests == 'linux-arm64-mte'
         run: |
           cmake . -B out/debug-arm64-mte -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL $MI_CMAKE_ARM64_MTE
           cmake --build out/debug-arm64-mte --parallel 4 --config Debug
-          ctest --test-dir out/debug-arm64-mte --verbose --timeout 600 -C Debug
+          ctest --test-dir out/debug-arm64-mte -E test-fork --verbose --timeout 600 -C Debug
 
       # Native MTE build on the arm64 runner (test-mte is skipped if the hardware has no MTE)
       - name: Linux arm64, Release, MTE
@@ -662,6 +663,7 @@ jobs:
           ctest --test-dir out/single-wasm --verbose --timeout 240 -C Release
 
       # Android arm64: cross-built with the preinstalled NDK as static executables (bionic) and run with QEMU (`-cpu max` emulates MTE).
+      # (test-fork is excluded as QEMU 8.2 user mode can deadlock when forking with threads)
       # No malloc override: since NDK r30 the static bionic startup code always links in bionic's own `malloc`.
       - name: Android arm64, Setup
         if: matrix.tests == 'android-arm64'
@@ -681,21 +683,21 @@ jobs:
         run: |
           cmake . -B out/debug-android -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL $MI_CMAKE_ANDROID
           cmake --build out/debug-android --parallel 4 --config Debug
-          ctest --test-dir out/debug-android --verbose --timeout 600 -C Debug
+          ctest --test-dir out/debug-android -E test-fork --verbose --timeout 600 -C Debug
 
       - name: Android arm64, Release
         if: matrix.tests == 'android-arm64'
         run: |
           cmake . -B out/release-android -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON $MI_CMAKE_ANDROID
           cmake --build out/release-android --parallel 4 --config Release
-          ctest --test-dir out/release-android --verbose --timeout 600 -C Release
+          ctest --test-dir out/release-android -E test-fork --verbose --timeout 600 -C Release
 
       - name: Android arm64, Secure
         if: matrix.tests == 'android-arm64'
         run: |
           cmake . -B out/secure-android -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_SECURE=ON $MI_CMAKE_ANDROID
           cmake --build out/secure-android --parallel 4 --config Release
-          ctest --test-dir out/secure-android --verbose --timeout 600 -C Release
+          ctest --test-dir out/secure-android -E test-fork --verbose --timeout 600 -C Release
 
       - name: Android arm64, Debug, MTE
         if: matrix.tests == 'android-arm64'
@@ -704,7 +706,7 @@ jobs:
         run: |
           cmake . -B out/debug-android-mte -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_MTE=ON $MI_CMAKE_ANDROID
           cmake --build out/debug-android-mte --parallel 4 --config Debug
-          ctest --test-dir out/debug-android-mte --verbose --timeout 600 -C Debug
+          ctest --test-dir out/debug-android-mte -E test-fork --verbose --timeout 600 -C Debug
 
       - name: Android arm64, Release, MTE
         if: matrix.tests == 'android-arm64'
@@ -714,4 +716,4 @@ jobs:
           cmake . -B out/release-android-mte -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_MTE=ON $MI_CMAKE_ANDROID
           cmake --build out/release-android-mte --parallel 4 --config Release
           MIMALLOC_VERBOSE=1 qemu-aarch64-static out/release-android-mte/mimalloc-test-mte
-          ctest --test-dir out/release-android-mte --verbose --timeout 600 -C Release
+          ctest --test-dir out/release-android-mte -E test-fork --verbose --timeout 600 -C Release
