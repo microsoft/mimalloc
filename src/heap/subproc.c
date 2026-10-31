@@ -17,7 +17,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/util/threadlocal.h"
 
-// the list of sub-processes is in `_mi_process.subprocs` (and the main subprocess is statically allocated in `_mi_process`)
+// the list of sub-processes is in the sealed `subprocs` (and the main subprocess is allocated in the process meta data)
 
 /* -----------------------------------------------------------
   Meta-data allocation
@@ -151,11 +151,13 @@ static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc, mi_subproc_t* parent
   mi_lock_init(&subproc->heaps_lock);
   mi_lock_init(&subproc->theap_meta_lock);
   mi_lock(&_mi_process.subprocs_lock) {
-    // push on subproc list (the list head is stored without memory tag)
-    mi_subproc_t* const head = (mi_subproc_t*)mi_meta_load_maybe(_mi_process.subprocs);
+    // push on subproc list (the list head is sealed and stored without memory tag)
+    mi_subproc_t* const head = (mi_subproc_t*)mi_meta_load_maybe(mi_process_get_sealed()->subprocs);
     subproc->next = head;
     if (head!=NULL) { head->prev = subproc; }
-    _mi_process.subprocs = (mi_subproc_t*)mi_ptr_memtag_meta(subproc);
+    mi_process_sealed_t* const sealed = _mi_process_unseal();
+    sealed->subprocs = (mi_subproc_t*)mi_ptr_memtag_meta(subproc);
+    _mi_process_seal();
   }
   return subproc;
 }
@@ -212,7 +214,12 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
   mi_lock_maybe(&_mi_process.subprocs_lock, acquire_subprocs_lock) {
     if (subproc->next!=NULL) { subproc->next->prev = subproc->prev;  }
     if (subproc->prev!=NULL) { subproc->prev->next = subproc->next;  }
-                        else { mi_assert_internal(mi_addr(_mi_process.subprocs)==mi_addr(subproc));  _mi_process.subprocs = (mi_subproc_t*)mi_ptr_memtag_meta(subproc->next); }
+    else {
+      mi_process_sealed_t* const sealed = _mi_process_unseal();
+      mi_assert_internal(mi_addr(sealed->subprocs)==mi_addr(subproc));
+      sealed->subprocs = (mi_subproc_t*)mi_ptr_memtag_meta(subproc->next);
+      _mi_process_seal();
+    }
   }
 
   // destroy all subproc heaps
@@ -269,7 +276,7 @@ void mi_subproc_destroy(mi_subproc_id_t subproc_id) {
 
 void _mi_subprocs_unsafe_destroy_all(void) {
   mi_lock(&_mi_process.subprocs_lock) {
-    mi_subproc_t* subproc = (mi_subproc_t*)mi_meta_load_maybe(_mi_process.subprocs);
+    mi_subproc_t* subproc = (mi_subproc_t*)mi_meta_load_maybe(mi_process_get_sealed()->subprocs);
     while (subproc!=NULL) {
       mi_subproc_t* next = subproc->next;
       if (!_mi_subproc_is_main(subproc)) {
@@ -402,7 +409,7 @@ void _mi_fork_child_try_collect(void) {
   bool done = false;
   if (mi_lock_try_acquire(&_mi_process.subprocs_lock)) {
     done = true;
-    for (mi_subproc_t* subproc = (mi_subproc_t*)mi_meta_load_maybe(_mi_process.subprocs); subproc != NULL; subproc = subproc->next) {
+    for (mi_subproc_t* subproc = (mi_subproc_t*)mi_meta_load_maybe(mi_process_get_sealed()->subprocs); subproc != NULL; subproc = subproc->next) {
       if (mi_lock_try_acquire(&subproc->heaps_lock)) {
         for (mi_heap_t* heap = subproc->heaps; heap != NULL; heap = heap->next) {
           if (!mi_fork_heap_abandon_dead(heap)) { done = false; }

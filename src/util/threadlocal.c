@@ -225,16 +225,16 @@ void _mi_thread_locals_init(void) {
   mi_lock_init(&_mi_process.thread_locals_lock);
 }
 
-// the free slots bitmap is stored without memory tag in the process data
+// the free slots bitmap is sealed and stored without memory tag
 static mi_bitmap_t* mi_thread_locals_free(void) {
-  return (mi_bitmap_t*)mi_meta_load_maybe(_mi_process.thread_locals_free);
+  return (mi_bitmap_t*)mi_meta_load_maybe(mi_process_get_sealed()->thread_locals_free);
 }
 
 void _mi_thread_locals_done(void) {
   mi_lock(&_mi_process.thread_locals_lock) {
     mi_bitmap_t* const slots = mi_thread_locals_free();
     if (slots!=NULL) {
-      _mi_meta_free(_mi_subproc_main(), slots, _mi_process.thread_locals_memid);
+      _mi_meta_free(_mi_subproc_main(), slots, mi_process_get_sealed()->thread_locals_memid);
     }
   }
   mi_lock_done(&_mi_process.thread_locals_lock);
@@ -280,12 +280,15 @@ static bool mi_thread_local_create_expand(void) {
     // copy over the previous bitmap
     const size_t oldsize = mi_bitmap_size(oldcount,NULL);
     mi_memcpy_aligned(newslots, slots, oldsize);
-    _mi_meta_free(_mi_subproc_main(), slots, _mi_process.thread_locals_memid);
+    _mi_meta_free(_mi_subproc_main(), slots, mi_process_get_sealed()->thread_locals_memid);
   }
   mi_bitmap_init(newslots, newcount, true /* pretend already zero'd so we do not zero out the copied old entries */);
   mi_bitmap_unsafe_setN(newslots, oldcount, newcount - oldcount);  /* set the new expanded slots as available */
-  _mi_process.thread_locals_free = (mi_bitmap_t*)mi_ptr_memtag_meta(newslots);  // store without memory tag
-  _mi_process.thread_locals_memid = memid;
+  if (memid.memkind == MI_MEM_MALLOC) { memid.mem.malloc.base = mi_ptr_memtag_meta(memid.mem.malloc.base); }  // store without memory tag (`_mi_meta_free` does not use it)
+  mi_process_sealed_t* const sealed = _mi_process_unseal();
+  sealed->thread_locals_free = (mi_bitmap_t*)mi_ptr_memtag_meta(newslots);  // store without memory tag
+  sealed->thread_locals_memid = memid;
+  _mi_process_seal();
   return true;
 }
 

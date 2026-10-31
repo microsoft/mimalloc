@@ -84,6 +84,11 @@ typedef struct mi_process_sealed_s {
   _Atomic(void*)      error_arg;                // argument to the error function
 
   mi_process_metadata_t* metadata;              // process meta data without memory tag (`NULL` before initialization) (see `mi_process_metadata`)
+  mi_subproc_t*       subprocs;                 // list of all sub-processes without memory tag (written under `_mi_process.subprocs_lock`)
+  mi_bitmap_t*        thread_locals_free;       // bitmap of free thread local slots (1=free, 0=in-use) without memory tag (written under `_mi_process.thread_locals_lock`)
+  mi_memid_t          thread_locals_memid;      // provenance of `thread_locals_free` (a malloc base is stored without memory tag)
+  mi_profiler_t*      profile_env_profiler;     // the pprof profiler if `MIMALLOC_PROFILE` was set, without memory tag (see `profile/pprof.c`)
+
   mi_os_mem_config_t  os_mem_config;            // OS memory configuration (see `prim/os.c`)
   mi_msecs_t          clock_process_start;      // clock at process initialization (see `util/stats.c`)
   mi_msecs_t          clock_overhead;           // measured overhead of reading the clock (subtracted in `_mi_clock_end`)
@@ -142,15 +147,11 @@ typedef struct mi_process_s {
   _Atomic(size_t)     output_buf_len;           // used length of `output_buf`
 
   mi_lock_t           thread_locals_lock;       // initialized in `_mi_thread_locals_init` (see `util/threadlocal.c`)
-  mi_bitmap_t*        thread_locals_free;       // bitmap of free thread local slots (1=free, 0=in-use) (stored without memory tag)
-  mi_memid_t          thread_locals_memid;      // provenance of `thread_locals_free`
   size_t              thread_locals_version;    // version to be able to reuse slots safely
 
   mi_os_state_t       os;                       // OS state
   mi_fork_state_t     fork;                     // fork state (see `heap/subproc.c`)
-  mi_subproc_t*       subprocs;                 // list of all sub-processes (stored without memory tag)
   mi_lock_t           subprocs_lock;            // initialized in `_mi_subproc_main_init` (as a zero lock is invalid on some platforms)
-  mi_profiler_t*      profile_env_profiler;     // the pprof profiler if `MIMALLOC_PROFILE` was set (see `profile/pprof.c`) (stored without memory tag)
   mi_atomic_guard_t   profile_snapshot_guard;   // allow only one thread at a time to take a profile snapshot
   mi_atomic_guard_t   arena_purge_guard;        // allow only one thread at a time to purge arenas
 

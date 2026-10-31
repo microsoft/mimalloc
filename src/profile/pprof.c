@@ -28,7 +28,7 @@ format generation).
 #include "mimalloc/util/options.h"
 #include "mimalloc/util/stats.h"
 #include "mimalloc/profile/pprof.h"
-#include "mimalloc/heap/process.h"  // _mi_process.profile_env_profiler
+#include "mimalloc/heap/process.h"  // mi_process_get_sealed()->profile_env_profiler
 
 // ---------------------------------------------------------------------------
 // Internal API
@@ -142,7 +142,9 @@ void _mi_pprof_profiler_init(void) {
   const size_t time_interval_secs = mi_option_get_clamp(mi_option_profile_time_interval,0,24*60*60L);  // 0 by default (no automatic interval snapshots)
   mi_profiler_t* profiler = mi_pprof_profiler_new(sample_rate, fname, alloc_interval_size, inuse_interval_size, time_interval_secs);
   if (profiler == NULL) return;
-  _mi_process.profile_env_profiler = (mi_profiler_t*)mi_ptr_memtag_meta(profiler);  // store without memory tag
+  mi_process_sealed_t* const sealed = _mi_process_unseal();
+  sealed->profile_env_profiler = (mi_profiler_t*)mi_ptr_memtag_meta(profiler);  // store without memory tag
+  _mi_process_seal();
   _mi_verbose_message("pprof profiler initialized with base file name: %s\n", fname);
   mi_profile(profiler);           // attach to the main sub-process (and any current/future heaps in it)
   mi_profiler_start(profiler);
@@ -152,9 +154,11 @@ void _mi_pprof_profiler_init(void) {
 // Called once at process termination (see `mi_process_done` in `heap/process.c`).
 void _mi_pprof_profiler_done(void) {
   #if MI_PROFILE
-  mi_profiler_t* profiler = (mi_profiler_t*)mi_meta_load_maybe(_mi_process.profile_env_profiler);
+  mi_profiler_t* profiler = (mi_profiler_t*)mi_meta_load_maybe(mi_process_get_sealed()->profile_env_profiler);
   if (profiler == NULL) return;
-  _mi_process.profile_env_profiler = NULL;
+  mi_process_sealed_t* const sealed = _mi_process_unseal();
+  sealed->profile_env_profiler = NULL;
+  _mi_process_seal();
   mi_profiler_stop(profiler);
   _mi_verbose_message("pprof profiler done\n");
   mi_profiler_snapshot(profiler);    // final snapshot so short-lived processes still get a complete profile
