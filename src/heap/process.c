@@ -248,7 +248,7 @@ mi_decl_noinline mi_process_metadata_t* _mi_process_metadata_init(void) {
       static const size_t offsets[] = { mi_process_metadata_fields(mi_process_metadata_field_offset) sizeof(mi_process_metadata_t) };
       #undef mi_process_metadata_field_offset
       for (size_t i = 0; i + 1 < sizeof(offsets)/sizeof(offsets[0]); i++) {
-        mi_assert_internal(offsets[i] % MI_MEMTAG_GRANULE_SIZE == 0);
+        mi_assert_internal(offsets[i] % MI_MEMTAG_UNIT_SIZE == 0);
         mi_memtag_meta_init((uint8_t*)metadata + offsets[i], offsets[i+1] - offsets[i], i);
       }
     }

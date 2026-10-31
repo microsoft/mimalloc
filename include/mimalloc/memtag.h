@@ -16,7 +16,7 @@ Memory tagging
 Currently supports ARM MTE but we should be able to support future memory tagging
 extensions as well (like x86 ChkTag and LAM)
 
-Every 16-byte granule of tagged memory has a 4-bit tag, and each access must use a
+Every 16-byte unit of tagged memory has a 4-bit tag, and each access must use a
 pointer with a matching tag in the top bits (56-59 on ARM, see `MI_PTR_MEMTAG_SHIFT`).
 Blocks in tagged pages get a random tag where blocks at even and odd indices use
 disjoint tag sets (tags 1 to 7, and 8 to 15), such that adjacent blocks always have
@@ -29,7 +29,7 @@ at runtime (see `mi_memtag_is_enabled`); otherwise all operations are no-ops and
 the hardware instructions are never executed (as these trap on CPU's without MTE).
 -----------------------------------------------------------------------------*/
 
-#define MI_MEMTAG_GRANULE_MAX     (128)       // ranges up to this size are always tagged per granule
+#define MI_MEMTAG_UNIT_MAX        (128)       // ranges up to this size are always tagged per unit
 #define MI_MEMTAG_META            (0)         // tag used for meta data (and free arena memory)
 #define MI_MEMTAG_LINE_MIN        (32)        // supported range of the cache line size tagged by `dc gva` (checked at initialization)
 #define MI_MEMTAG_LINE_MAX        (2048)
@@ -41,7 +41,7 @@ the hardware instructions are never executed (as these trap on CPU's without MTE
 #define MI_MEMTAG_EXCLUDE_ODD     (MI_MEMTAG_EXCLUDE | 0x00FE)   // odd blocks use tags 8 to 15
 #define MI_MEMTAG_ODD_BIT         (8)   // logical tag bit that is set for odd blocks
 
-#if (MI_CACHE_LINE_SIZE % MI_MEMTAG_GRANULE_SIZE) != 0
+#if (MI_CACHE_LINE_SIZE % MI_MEMTAG_UNIT_SIZE) != 0
 #error "`mi_decl_cache_align` must align on a memory tag granule"
 #endif
 
@@ -73,7 +73,7 @@ static inline bool mi_memtag_use_for_meta(bool is_memtag) {
 
 // Should blocks of size `bsize` in memory that supports tagging (`memid.is_memtag`) be tagged? (singleton blocks are never tagged)
 static inline bool mi_memtag_use_for(bool is_memtag, size_t bsize) {
-  return (mi_memtag_is_enabled() && is_memtag && (bsize % MI_MEMTAG_GRANULE_SIZE) == 0);
+  return (mi_memtag_is_enabled() && is_memtag && (bsize % MI_MEMTAG_UNIT_SIZE) == 0);
 }
 
 
@@ -176,18 +176,18 @@ static inline void __mi_memtag_store_line(uint8_t* p, bool zero) {
 
 // Tag the granules in `[p,end)` (using pairs of granules where possible)
 static inline void __mi_memtag_store_granules(uint8_t* p, uint8_t* end, bool zero) {
-  if (((end - p) % (2*MI_MEMTAG_GRANULE_SIZE)) != 0) { __mi_memtag_store_granule(p, zero); p += MI_MEMTAG_GRANULE_SIZE; }
-  for (; p < end; p += 2*MI_MEMTAG_GRANULE_SIZE) { __mi_memtag_store_granule2(p, zero); }
+  if (((end - p) % (2*MI_MEMTAG_UNIT_SIZE)) != 0) { __mi_memtag_store_granule(p, zero); p += MI_MEMTAG_UNIT_SIZE; }
+  for (; p < end; p += 2*MI_MEMTAG_UNIT_SIZE) { __mi_memtag_store_granule2(p, zero); }
 }
 
 // Set the memory tags of `[p,p+size)` to the tag of `p`, and zero it if `zero` is set.
 // Small ranges are tagged per granule; for larger ranges only the (unaligned) edges are tagged per granule
 // while the aligned middle is tagged per cache line (which is much faster).
 static inline void __mi_memtag_store_ex(void* p, size_t size, bool zero) {
-  mi_assert_internal(((uintptr_t)p % MI_MEMTAG_GRANULE_SIZE) == 0 && (size % MI_MEMTAG_GRANULE_SIZE) == 0 && size > 0);
+  mi_assert_internal(((uintptr_t)p % MI_MEMTAG_UNIT_SIZE) == 0 && (size % MI_MEMTAG_UNIT_SIZE) == 0 && size > 0);
   uint8_t* const start = (uint8_t*)p;
   uint8_t* const end = start + size;
-  if (size <= MI_MEMTAG_GRANULE_MAX) {
+  if (size <= MI_MEMTAG_UNIT_MAX) {
     __mi_memtag_store_granules(start, end, zero);
   }
   else {

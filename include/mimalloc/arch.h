@@ -109,8 +109,8 @@ typedef uintptr_t             mi_addr_t;
 // The address mask removes all top bits ignored by the hardware, not just the logical memory tag:
 // on ARM it is the full top byte as this gives better codegen (e.g. `p & 0x00FFFFFFF0000000`).
 // (For a future x86 ChkTag the tag would use bits 57-60, with LAM ignoring bits 57-62, but bit 56 is part of the address.)
-#define MI_MEMTAG_GRANULE_SIZE        (16)               // memory is tagged per granule
-#define mi_decl_memtag_granule_align  mi_decl_align(16)  // align to a memory tag granule
+#define MI_MEMTAG_UNIT_SIZE        (16)               // memory is tagged per unit
+#define mi_decl_memtag_unit_align  mi_decl_align(16)  // align to a memory tag unit
 
 #if MI_MTE
 #define MI_PTR_MEMTAG_SHIFT   (56)

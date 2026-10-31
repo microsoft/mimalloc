@@ -74,7 +74,7 @@ mi_decl_nodiscard static mi_decl_noinline bool mi_page_map_commit_entries(mi_pag
   // tag the new entries with the tag of `pmap` before publishing the new count
   // (concurrent commits may tag the same entries again but that leaves the memory as is)
   if (mi_page_map_use_memtag(&pmap->memid)) {
-    const size_t tag_start = mi_align_down(mi_page_map_size_of_count(prev_count), MI_MEMTAG_GRANULE_SIZE);
+    const size_t tag_start = mi_align_down(mi_page_map_size_of_count(prev_count), MI_MEMTAG_UNIT_SIZE);
     mi_memtag_store((uint8_t*)pmap + tag_start, commit_size - tag_start);
   }
   mi_page_map_store(pmap, commit_count);
@@ -172,7 +172,7 @@ static bool mi_page_map_init_once(void) {
 
   // tag the committed page map entries and the first sub map (with a tag of a different class as it is adjacent)
   if (use_memtag) {
-    pmap = (mi_page_map_t*)mi_memtag_meta_init(pmap, mi_align_up(mi_page_map_size_of_count(commit_count), MI_MEMTAG_GRANULE_SIZE), 0);
+    pmap = (mi_page_map_t*)mi_memtag_meta_init(pmap, mi_align_up(mi_page_map_size_of_count(commit_count), MI_MEMTAG_UNIT_SIZE), 0);
     sub0 = (mi_submap_t)mi_memtag_meta_init(sub0, submap_size, 1);
   }
 
