@@ -41,6 +41,24 @@ static const mi_os_mem_config_t mi_os_mem_config_default = {
 };
 
 // The OS memory configuration in the sealed process data (zero until `_mi_os_init`)
+// OS statistics are recorded in the given sub-process, or in the bootstrap statistics if `subproc` is `NULL`.
+// A `NULL` sub-process is only used to allocate the process meta data (which contains the main sub-process),
+// and the bootstrap statistics are merged into the main sub-process at its initialization (see `_mi_os_stats_bootstrap_merge`).
+static mi_stats_t mi_os_stats_bootstrap;
+
+static inline mi_stats_t* mi_os_stats(mi_subproc_t* subproc) {
+  return (subproc == NULL ? &mi_os_stats_bootstrap : &subproc->stats);
+}
+
+#define mi_os_stat_counter_increase(subproc,stat,amount)  __mi_stat_counter_increase_mt( &mi_os_stats(subproc)->stat, amount)
+#define mi_os_stat_increase(subproc,stat,amount)          __mi_stat_increase_mt( &mi_os_stats(subproc)->stat, amount)
+#define mi_os_stat_decrease(subproc,stat,amount)          __mi_stat_decrease_mt( &mi_os_stats(subproc)->stat, amount)
+#define mi_os_stat_adjust_decrease(subproc,stat,amount)   __mi_stat_adjust_decrease_mt( &mi_os_stats(subproc)->stat, amount)
+
+void _mi_os_stats_bootstrap_merge(mi_subproc_t* subproc) {
+  _mi_stats_merge_into(&subproc->stats, &mi_os_stats_bootstrap);
+}
+
 static inline const mi_os_mem_config_t* mi_os_mem_config(void) {
   const mi_os_mem_config_t* const config = &mi_process_get_sealed()->os_mem_config;
   return (config->page_size != 0 ? config : &mi_os_mem_config_default);
@@ -303,7 +321,6 @@ bool _mi_os_secure_guard_pages_set_within(void* area, size_t area_size, size_t o
 static void mi_os_free_huge_os_pages(mi_subproc_t* subproc, void* p, size_t size);
 
 static void mi_os_prim_free(mi_subproc_t* subproc, void* addr, size_t size, size_t commit_size, bool adjust) {
-  mi_assert_internal(subproc!=NULL);
   mi_assert_internal((size % _mi_os_page_size()) == 0);
   if (addr == NULL) return; // || _mi_os_is_huge_reserved(addr)
   int err = _mi_prim_free(addr, size);  // allow size==0 (issue #1041)
@@ -311,12 +328,12 @@ static void mi_os_prim_free(mi_subproc_t* subproc, void* addr, size_t size, size
     _mi_warning_message("unable to free OS memory (error: %d (0x%x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
   }
   if (adjust) {
-    if (commit_size>0) { mi_subproc_stat_adjust_decrease(subproc, committed, commit_size); }
-    mi_subproc_stat_adjust_decrease(subproc, reserved, size);
+    if (commit_size>0) { mi_os_stat_adjust_decrease(subproc, committed, commit_size); }
+    mi_os_stat_adjust_decrease(subproc, reserved, size);
   }
   else {
-    if (commit_size>0) { mi_subproc_stat_decrease(subproc, committed, commit_size); }
-    mi_subproc_stat_decrease(subproc, reserved, size);
+    if (commit_size>0) { mi_os_stat_decrease(subproc, committed, commit_size); }
+    mi_os_stat_decrease(subproc, reserved, size);
   }
 }
 
@@ -386,11 +403,11 @@ static void* mi_os_prim_alloc_at(mi_subproc_t* subproc, void* hint_addr, size_t 
     _mi_warning_message("unable to allocate OS memory (error: %d (0x%x), addr: %p, size: 0x%zx bytes, align: 0x%zx, commit: %d, allow large: %d)\n", err, err, hint_addr, size, try_alignment, commit, allow_large);
   }
 
-  mi_subproc_stat_counter_increase(subproc, mmap_calls, 1);
+  mi_os_stat_counter_increase(subproc, mmap_calls, 1);
   if (p != NULL) {
-    mi_subproc_stat_increase(subproc, reserved, size);
+    mi_os_stat_increase(subproc, reserved, size);
     if (commit) {
-      mi_subproc_stat_increase(subproc, committed, size);
+      mi_os_stat_increase(subproc, committed, size);
       // seems needed for asan (or `mimalloc-test-api` fails)
       #ifdef MI_TRACK_ASAN
       if (*is_zero) { mi_track_mem_defined(p,size); }
@@ -559,7 +576,8 @@ void*  _mi_os_zalloc(mi_subproc_t* subproc, size_t size, mi_memid_t* memid) {
 }
 
 // Allocate OS memory with (in secure mode) a guard page right before and after it.
-// The memory can be freed using `_mi_os_free` with the returned `memid`.
+// The memory can be freed using `_mi_os_free_with_guards` with the returned `memid`.
+// The `subproc` can be `NULL` for statistics (see `mi_os_stats`).
 void* _mi_os_alloc_with_guards(mi_subproc_t* subproc, size_t size, bool commit, bool allow_large, mi_memid_t* memid) {
   const size_t guard_size = _mi_os_secure_guard_page_size();
   size = mi_align_up(size, _mi_os_page_size());
@@ -644,7 +662,7 @@ static void* mi_os_page_align_area_conservative(void* addr, size_t size, size_t*
 bool _mi_os_commit_ex(mi_subproc_t* subproc, void* addr, size_t size, bool* is_zero, size_t stat_already_committed) {
   mi_assert_internal(size >= stat_already_committed);
   if (is_zero != NULL) { *is_zero = false; }
-  mi_subproc_stat_counter_increase(subproc, commit_calls, 1);
+  mi_os_stat_counter_increase(subproc, commit_calls, 1);
 
   // page align range
   size_t csize;
@@ -667,7 +685,7 @@ bool _mi_os_commit_ex(mi_subproc_t* subproc, void* addr, size_t size, bool* is_z
   if (os_is_zero) { mi_track_mem_defined(start,csize); }
              else { mi_track_mem_undefined(start,csize); }
   #endif
-  mi_subproc_stat_increase(subproc, committed, size - stat_already_committed);  // for precise commit vs. decommit
+  mi_os_stat_increase(subproc, committed, size - stat_already_committed);  // for precise commit vs. decommit
   return true;
 }
 
@@ -690,7 +708,7 @@ static bool mi_os_decommit_ex(mi_subproc_t* subproc, void* addr, size_t size, bo
     _mi_warning_message("cannot decommit OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
   }
   else if (*needs_recommit) {
-    mi_subproc_stat_decrease(subproc, committed, stat_size);
+    mi_os_stat_decrease(subproc, committed, stat_size);
   }
   mi_assert_internal(err == 0);
   return (err == 0);
@@ -711,8 +729,8 @@ bool _mi_os_reset(mi_subproc_t* subproc, void* addr, size_t size) {
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
   if (csize == 0) return true;  // || _mi_os_is_huge_reserved(addr)
-  mi_subproc_stat_counter_increase(subproc, reset, csize);
-  mi_subproc_stat_counter_increase(subproc, reset_calls, 1);
+  mi_os_stat_counter_increase(subproc, reset, csize);
+  mi_os_stat_counter_increase(subproc, reset_calls, 1);
 
   #if (MI_DEBUG>1) && !MI_SECURE && !MI_TRACK_ENABLED // && !MI_TSAN
   memset(start, 0, csize); // pretend it is eagerly reset
@@ -743,8 +761,8 @@ void _mi_os_reuse( mi_subproc_t* subproc, void* addr, size_t size ) {
 bool _mi_os_purge_ex(mi_subproc_t* subproc, void* p, size_t size, bool allow_reset, size_t stat_size, mi_commit_fun_t* commit_fun, void* commit_fun_arg)
 {
   if (mi_option_get(mi_option_purge_delay) < 0) return false;  // is purging allowed?
-  mi_subproc_stat_counter_increase(subproc, purge_calls, 1);
-  mi_subproc_stat_counter_increase(subproc, purged, size);
+  mi_os_stat_counter_increase(subproc, purge_calls, 1);
+  mi_os_stat_counter_increase(subproc, purged, size);
 
   if (commit_fun != NULL) {
     bool decommitted = (*commit_fun)(false, p, size, NULL, commit_fun_arg);
@@ -886,8 +904,8 @@ void* _mi_os_alloc_huge_os_pages(mi_subproc_t* subproc, size_t pages, int numa_n
 
     // success, record it
     page++;  // increase before timeout check (see issue #711)
-    mi_subproc_stat_increase(subproc, committed, MI_HUGE_OS_PAGE_SIZE);
-    mi_subproc_stat_increase(subproc, reserved, MI_HUGE_OS_PAGE_SIZE);
+    mi_os_stat_increase(subproc, committed, MI_HUGE_OS_PAGE_SIZE);
+    mi_os_stat_increase(subproc, reserved, MI_HUGE_OS_PAGE_SIZE);
 
     // check for timeout
     if (max_msecs > 0) {

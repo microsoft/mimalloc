@@ -49,6 +49,7 @@ int           _mi_os_numa_node_count(void);
 void*         _mi_os_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t alignment, bool commit, bool allow_large, mi_memid_t* memid);
 void*         _mi_os_alloc_with_guards(mi_subproc_t* subproc, size_t size, bool commit, bool allow_large, mi_memid_t* memid);
 void          _mi_os_free_with_guards(mi_subproc_t* subproc, mi_memid_t memid);
+void          _mi_os_stats_bootstrap_merge(mi_subproc_t* subproc);
 void*         _mi_os_alloc_aligned_at_offset(mi_subproc_t* subproc, size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_memid_t* memid);
 
 void*         _mi_os_get_aligned_hint(size_t try_alignment, size_t size);

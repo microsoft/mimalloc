@@ -47,6 +47,20 @@ typedef struct mi_os_state_s {
 } mi_os_state_t;
 
 
+// Process meta data: this is allocated from the OS at process initialization (see `heap/process.c:mi_process_metadata_init`)
+// instead of being static so it is not at a fixed offset from the program image, is surrounded by guard pages in secure mode,
+// and can be memory tagged.
+typedef struct mi_process_metadata_s {
+  mi_decl_cache_align mi_subproc_t  subproc_main;           // initial subprocess
+  mi_decl_cache_align mi_heap_t     heap_main;              // initial heap for the process
+  mi_decl_cache_align mi_theap_t    theap_main;             // initial theap for the main thread
+  mi_decl_cache_align mi_tld_t      tld_main;               // initial tld for the main thread
+  mi_decl_cache_align mi_theap_t    theap_meta;             // detached theap for meta-data allocation
+  mi_decl_cache_align mi_tld_t      tld_meta;               // detached tld for `theap_meta`
+  mi_decl_cache_align mi_theap_t    theap_empty_wrong;      // empty theap used to signal that a theap for a heap could not be allocated
+  mi_memid_t                        memid;                  // OS provenance of the meta data (never freed)
+} mi_process_metadata_t;
+
 // Sealed process data that is read-only after process initialization in secure mode
 // (see `heap/process.c:_mi_process_unseal` for writing).
 typedef struct mi_process_sealed_s {
@@ -62,6 +76,7 @@ typedef struct mi_process_sealed_s {
   _Atomic(void*)      error_handler;    // is `mi_error_fun*`
   _Atomic(void*)      error_arg;
 
+  mi_process_metadata_t* metadata;      // process meta data (`NULL` before initialization) (see `heap/process.c:mi_process_metadata_init`)
   mi_os_mem_config_t  os_mem_config;    // OS memory configuration (see `prim/os.c`)
   bool                is_protected;     // `true` if the sealed page is read-only (see `_mi_process_unseal`)
 } mi_process_sealed_t;
@@ -121,14 +136,6 @@ typedef struct mi_process_s {
   mi_profiler_t*                    profile_env_profiler;   // the pprof profiler if `MIMALLOC_PROFILE` was set (see `profile/pprof.c`)
   mi_atomic_guard_t                 profile_snapshot_guard; // allow only one thread at a time to take a profile snapshot
 
-  mi_decl_cache_align mi_subproc_t  subproc_main;           // initial subprocess
-  mi_decl_cache_align mi_heap_t     heap_main;              // initial heap for the process
-  mi_decl_cache_align mi_theap_t    theap_main;             // initial theap for the main thread
-  mi_decl_cache_align mi_tld_t      tld_main;               // initial tld for the main thread
-  mi_decl_cache_align mi_theap_t    theap_meta;             // detached theap for meta-data allocation
-  mi_decl_cache_align mi_tld_t      tld_meta;               // detached tld for `theap_meta`
-  mi_decl_cache_align mi_theap_t    theap_empty_wrong;      // read-only empty theap used to signal that a theap for a heap could not be allocated
-
   // arrays last
   mi_option_state_t                 options[_mi_option_last]; // current option values (see `util/options.c`)
   char                              output_buf[MI_MAX_DELAY_OUTPUT+1]; // delayed output buffer (see `util/options.c`)
@@ -147,6 +154,14 @@ static inline mi_process_sealed_t* mi_process_get_sealed(void) {
   #else
   return &_mi_process.sealed;
   #endif
+}
+
+mi_process_metadata_t* _mi_process_metadata_init(void);
+
+// Get the process meta data (allocated at process initialization, or lazily on first access).
+static inline mi_process_metadata_t* mi_process_metadata(void) {
+  mi_process_metadata_t* const metadata = mi_process_get_sealed()->metadata;
+  return (mi_likely(metadata != NULL) ? metadata : _mi_process_metadata_init());
 }
 
 // Make the sealed process data writable (and take a lock); must be followed by `_mi_process_seal`.

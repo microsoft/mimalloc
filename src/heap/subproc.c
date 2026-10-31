@@ -97,11 +97,12 @@ bool _mi_meta_is_meta_page(const mi_subproc_t* subproc, const mi_page_t* page) {
 ----------------------------------------------------------- */
 
 mi_subproc_t* _mi_subproc_main(void) {
-  return &_mi_process.subproc_main;
+  return &mi_process_metadata()->subproc_main;
 }
 
 bool _mi_subproc_is_main(mi_subproc_t* subproc) {
-  return (subproc == &_mi_process.subproc_main);
+  const mi_process_metadata_t* const metadata = mi_process_get_sealed()->metadata;
+  return (metadata != NULL && subproc == &metadata->subproc_main);
 }
 
 mi_subproc_t* _mi_subproc(void) {
@@ -235,7 +236,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
 
   if (!_mi_subproc_is_main(subproc)) {
     // merge stats back into the main subproc
-    _mi_stats_merge_into(&_mi_process.subproc_main.stats, &subproc->stats);
+    _mi_stats_merge_into(&_mi_subproc_main()->stats, &subproc->stats);
   }
 
   // remove associated arenas
@@ -261,7 +262,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
 
 void mi_subproc_destroy(mi_subproc_id_t subproc_id) {
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
-  if (subproc==NULL || subproc==&_mi_process.subproc_main) return;
+  if (subproc==NULL || _mi_subproc_is_main(subproc)) return;
   mi_subproc_unsafe_destroy(subproc, true /* take lock */);
 }
 
@@ -270,13 +271,13 @@ void _mi_subprocs_unsafe_destroy_all(void) {
     mi_subproc_t* subproc = _mi_process.subprocs;
     while (subproc!=NULL) {
       mi_subproc_t* next = subproc->next;
-      if (subproc!=&_mi_process.subproc_main) {
+      if (!_mi_subproc_is_main(subproc)) {
         mi_subproc_unsafe_destroy(subproc, false /* take subprocs lock */);
       }
       subproc = next;
     }
   }
-  mi_subproc_unsafe_destroy(&_mi_process.subproc_main, true /* take subprocs lock */);
+  mi_subproc_unsafe_destroy(_mi_subproc_main(), true /* take subprocs lock */);
 }
 
 
@@ -318,9 +319,10 @@ bool mi_subproc_visit_heaps(mi_subproc_id_t subproc_id, mi_heap_visit_fun* visit
 
 mi_subproc_t* _mi_subproc_main_init(void) {
   mi_lock_init(&_mi_process.subprocs_lock);
-  mi_subproc_t* const subproc = &_mi_process.subproc_main;
+  mi_subproc_t* const subproc = _mi_subproc_main();
   subproc->memid = _mi_memid_create_static(subproc,sizeof(mi_subproc_t));
   mi_subproc_init(subproc,NULL);
+  _mi_os_stats_bootstrap_merge(subproc);  // account for the OS allocation of the process meta data
   return subproc;
 }
 
