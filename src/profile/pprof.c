@@ -29,6 +29,7 @@ format generation).
 #include "mimalloc/util/stats.h"
 #include "mimalloc/profile/pprof.h"
 #include "mimalloc/heap/process.h"  // mi_process_get_sealed()->profile_env_profiler
+#include "mimalloc/prim/os.h"       // _mi_os_is_elevated
 
 // ---------------------------------------------------------------------------
 // Internal API
@@ -128,12 +129,10 @@ static int64_t mi_prim_time_secs(void);  // wall-clock seconds since the Unix ep
 
 #if MI_PROFILE_USE_BUILTIN   // todo: also disable profiling in secure mode?
 
-static bool mi_is_elevated_process(void);
-
 // Called once at process initialization (see `mi_process_init` in `heap/process.c`).
 void _mi_pprof_profiler_init(void) {
   #if MI_PROFILE
-  if (mi_is_elevated_process()) return;  // don't let an untrusted environment influence a privileged process
+  if (_mi_os_is_elevated()) return;  // don't let an untrusted environment influence a privileged process
   char fname[1024];
   if (_mi_getenv("mimalloc_profile", fname, sizeof(fname)) != 0 || fname[0] == 0) return;  // `MIMALLOC_PROFILE` not set
   const size_t sample_rate   = mi_option_get_size(mi_option_profile_sample_rate);           // 512 KiB by default
@@ -571,7 +570,7 @@ void mi_pprof_profiler_snapshot(mi_pprof_profiler_t* profiler) {
 #include <sys/stat.h>   // _S_IREAD, _S_IWRITE
 #elif MI_HAS_UNISTDH
 #include <fcntl.h>      // open, O_CREAT, O_EXCL, O_NOFOLLOW
-#include <unistd.h>     // close, getuid, geteuid, getgid, getegid, issetugid
+#include <unistd.h>     // close
 #include <sys/stat.h>   // S_IRUSR, S_IWUSR
 #endif
 
@@ -579,27 +578,6 @@ void mi_pprof_profiler_snapshot(mi_pprof_profiler_t* profiler) {
 static void mi_pprof_write_mapped_libraries(FILE* f);
 static bool mi_pprof_snapshot_text(mi_pprof_profiler_t* prof, const char* fname);
 static bool mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname);
-
-
-// Detect if we are running with elevated privileges (e.g. a setuid/setgid executable or similar),
-// in which case we must not trust `MIMALLOC_PROFILE` environment.
-#if defined(_WIN32)
-static bool mi_is_elevated_process(void) {
-  return false;  // no direct setuid/setgid equivalent; a UAC elevation does not inherit the parent's environment
-}
-#elif MI_HAS_UNISTDH && (defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__))
-static bool mi_is_elevated_process(void) {
-  return (issetugid() != 0);
-}
-#elif MI_HAS_UNISTDH
-static bool mi_is_elevated_process(void) {
-  return (getuid() != geteuid() || getgid() != getegid());
-}
-#else
-static bool mi_is_elevated_process(void) {
-  return false;  // no portable way to check without `unistd.h`; assume not elevated
-}
-#endif
 
 
 static int64_t mi_prim_time_secs(void) {

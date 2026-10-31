@@ -692,6 +692,9 @@ static void mi_option_init(mi_option_t option, mi_option_state_t* state) {
       _mi_warning_message("environment option \"mimalloc_%s\" is deprecated -- use \"mimalloc_%s\" instead.\n", desc->legacy_name, desc->name);
     }
   }
+  if (err==0 && _mi_os_is_elevated()) {
+    err = ENOENT;  // don't let an untrusted environment influence a privileged process (e.g. disable memory tagging)
+  }
 
   if (err==0) {
     size_t len = _mi_strnlen(s, sizeof(buf) - 1);

@@ -372,7 +372,8 @@ completely and redirect all calls to the _mimalloc_ library instead .
 
 ## Environment Options
 
-You can set further options either programmatically (using [`mi_option_set`](https://microsoft.github.io/mimalloc/group__options.html)), or via environment variables:
+You can set further options either programmatically (using [`mi_option_set`](https://microsoft.github.io/mimalloc/group__options.html)), or via environment variables
+(which are ignored in processes with elevated privileges, like a `setuid` executable):
 
 - `MIMALLOC_SHOW_STATS=1`: show statistics when the program terminates.
 - `MIMALLOC_VERBOSE=1`: show verbose messages (including statistics).

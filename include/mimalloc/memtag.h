@@ -71,7 +71,7 @@ static inline bool mi_memtag_use_for_meta(bool is_memtag) {
   return (mi_memtag_is_enabled() && is_memtag);
 }
 
-// Should blocks of size `bsize` in memory that supports tagging (`memid.is_memtag`) be tagged? (singleton blocks are never tagged)
+// Should blocks of size `bsize` in memory that supports tagging (`memid.is_memtag`) be tagged?
 static inline bool mi_memtag_use_for(bool is_memtag, size_t bsize) {
   return (mi_memtag_is_enabled() && is_memtag && (bsize % MI_MEMTAG_UNIT_SIZE) == 0);
 }

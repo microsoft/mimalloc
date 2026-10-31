@@ -13,6 +13,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/util/stats.h"
 #include "mimalloc/prim/os.h"
 
+#if !defined(_WIN32) && MI_HAS_UNISTDH
+#include <unistd.h>   // issetugid, getuid, geteuid, getgid, getegid
+#endif
+
 /* -----------------------------------------------------------
   Initialization.
 ----------------------------------------------------------- */
@@ -37,6 +41,7 @@ static const mi_os_mem_config_t mi_os_mem_config_default = {
   false,    // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
   true,     // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
   false,    // has transparent huge pages? (if true we purge in (aligned) large page size chunks only to not fragment such pages)
+  false,    // is elevated? (set in `_mi_os_init`)
   false     // has memory tagging? (if true, all non-large OS memory supports memory tagging)
 };
 
@@ -82,6 +87,28 @@ bool _mi_os_has_memtag(void) {
 
 size_t _mi_os_memtag_line_size(void) {
   return mi_os_mem_config()->memtag_line_size;
+}
+
+// Are we running with elevated privileges (e.g. a setuid/setgid executable)?
+static bool mi_os_detect_elevated(void) {
+  #if defined(_WIN32)
+  return false;  // no direct setuid/setgid equivalent; a UAC elevation does not inherit the parent's environment
+  #elif MI_HAS_UNISTDH && (defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__))
+  return (issetugid() != 0);
+  #elif MI_HAS_UNISTDH
+  return (getuid() != geteuid() || getgid() != getegid());
+  #else
+  return false;  // no portable way to check without `unistd.h`; assume not elevated
+  #endif
+}
+
+// Are we running with elevated privileges? In that case the environment is untrusted (and we ignore
+// all `MIMALLOC_` environment options and don't show addresses in messages).
+// Before `_mi_os_init` has published the OS configuration (e.g. when reading options during the
+// initialization in `_mi_prim_mem_init`) we use a direct (system call) check.
+bool _mi_os_is_elevated(void) {
+  const mi_os_mem_config_t* const config = &mi_process_get_sealed()->os_mem_config;
+  return (config->page_size != 0 ? config->is_elevated : mi_os_detect_elevated());
 }
 
 // OS (small) page size
@@ -155,6 +182,7 @@ void _mi_os_init(void) {
   mi_os_mem_config_t config = mi_os_mem_config_default;
   _mi_prim_mem_init(&config);
   mi_assert(config.page_size != 0);
+  config.is_elevated = mi_os_detect_elevated();
   if (config.has_memtag) {
     const size_t line_size = mi_memtag_cpu_line_size();
     if (line_size < MI_MEMTAG_LINE_MIN || line_size > MI_MEMTAG_LINE_MAX || !mi_is_power_of_two(line_size)) {

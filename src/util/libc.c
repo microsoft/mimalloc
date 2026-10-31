@@ -17,6 +17,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim/prim-tls.h"
 #include "mimalloc/util/options.h"
 #include "mimalloc/util/libc.h"
+#include "mimalloc/prim/os.h"          // _mi_os_is_elevated
 #include <limits.h>                   // LONG_MIN, LONG_MAX
 
 #if MI_DEBUG && NDEBUG
@@ -368,6 +369,12 @@ static void mi_out_num(uintmax_t x, size_t base, char prefix, char** out, char* 
 }
 
 
+// Hide (randomized) addresses in `%p` output in secure release builds or in a privileged process
+// (as the output can reveal the address space layout to an attacker)
+static bool mi_redact_addresses(void) {
+  return ((MI_SECURE>=1 && MI_DEBUG==0) || _mi_os_is_elevated());
+}
+
 #define MI_NEXTC()  c = *in; if (c==0) break; in++;
 
 int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
@@ -452,8 +459,16 @@ int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
           void* const p = va_arg(args, void*);
           x = mi_addr(p);
           mi_outs("0x", &out, end);
+          if (mi_redact_addresses()) {
+            // only show the offset within a 4 KiB page as that is not randomized
+            mi_outs("...", &out, end);
+            x = (x & 0xFFF);
+            width = 3; fill = '0'; alignright = true;
+          }
+          else {
+            width = (width >= 2 ? width - 2 : 0);
+          }
           start = out;
-          width = (width >= 2 ? width - 2 : 0);
         }
         if (width == 0 && (c == 'x' || c == 'p')) {
           if (c == 'p')   { width = 2 * (x <= UINT32_MAX ? 4 : ((x >> 16) <= UINT32_MAX ? 6 : sizeof(size_t))); }

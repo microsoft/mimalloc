@@ -23,6 +23,7 @@ size_t        _mi_os_good_alloc_size(size_t size);
 bool          _mi_os_has_overcommit(void);
 bool          _mi_os_has_virtual_reserve(void);
 bool          _mi_os_has_thp(void);
+bool          _mi_os_is_elevated(void);                                     // setuid/setgid process? (then the environment is untrusted)
 size_t        _mi_os_virtual_address_bits(void);
 size_t        _mi_os_minimal_purge_size(void);
 
