@@ -23,6 +23,16 @@ static size_t mi_page_map_count_of_size(size_t size) {
   return (size < sizeof(mi_page_map_t) ? 0 : 1 + (size - sizeof(mi_page_map_t))/sizeof(mi_submap_t));
 }
 
+static size_t mi_page_map_size_of_count(size_t count) {
+  return (count == 0 ? 0 : sizeof(mi_page_map_t) + (count - 1)*sizeof(mi_submap_t));
+}
+
+// With memory tagging, the page map and its sub maps get a random tag (and are only accessed through the tagged pointers).
+// The page map is tagged incrementally as it is committed on-demand.
+static bool mi_page_map_use_memtag(const mi_memid_t* memid) {
+  return mi_memtag_use_for_meta(!memid->is_pinned);
+}
+
 // static void* mi_page_map_addr_of_index(size_t idx) {
 //   return (void*)((uintptr_t)idx * MI_PAGE_MAP_SUB_COUNT * MI_ARENA_SLICE_SIZE);
 // }
@@ -30,14 +40,14 @@ static size_t mi_page_map_count_of_size(size_t size) {
 // Store the page map and committed count in the sealed process data
 static void mi_page_map_store(mi_page_map_t* pmap, size_t committed_count) {
   mi_process_sealed_t* const sealed = _mi_process_unseal();
-  mi_atomic_store_ptr_release(mi_page_map_t, &sealed->page_map, pmap);
+  mi_atomic_store_ptr_release(mi_page_map_t, &sealed->page_map, (mi_page_map_t*)mi_ptr_memtag_meta(pmap));  // store without memory tag (see `mi_page_map`)
   mi_atomic_store_release(&sealed->page_map_committed, committed_count);
   _mi_process_seal();
 }
 
-// The page map with the authority to commit or free it (on CHERI)
+// The page map with the authority to commit or free it (on CHERI), and without a memory tag
 static mi_page_map_t* mi_page_map_vmem(mi_page_map_t* pmap) {
-  return (mi_page_map_t*)mi_ptr_rederive(pmap->memid.mem.os.base, pmap);
+  return (mi_page_map_t*)mi_ptr_memtag_meta(mi_ptr_rederive(pmap->memid.mem.os.base, pmap));
 }
 
 mi_decl_nodiscard static mi_decl_noinline bool mi_page_map_commit_entries(mi_page_map_t* pmap, size_t required_idx) {
@@ -51,13 +61,22 @@ mi_decl_nodiscard static mi_decl_noinline bool mi_page_map_commit_entries(mi_pag
   const size_t commit_count = mi_page_map_count_of_size(commit_size);
   mi_assert_internal(commit_count > required_idx);
   mi_assert_internal(commit_count <= reserved_count);
+  const size_t prev_count = mi_page_map_committed();
   // note: we rely on uncommitted memory to be zero initialized on the first commit (and further concurrent commits leave the memory as is).
-  bool is_zero;
-  if mi_unlikely(!_mi_os_commit(_mi_subproc_main(), mi_page_map_vmem(pmap), commit_size, &is_zero)) {
-    mi_page_map_cannot_commit();
-    return false;
+  if (!pmap->memid.initially_committed) {  // can be initially committed with memory tagging (see `mi_page_map_init_once`)
+    bool is_zero;
+    if mi_unlikely(!_mi_os_commit(_mi_subproc_main(), mi_page_map_vmem(pmap), commit_size, &is_zero)) {
+      mi_page_map_cannot_commit();
+      return false;
+    }
+    mi_assert_internal(is_zero || pmap->memid.initially_zero);
   }
-  mi_assert_internal(is_zero || pmap->memid.initially_zero);
+  // tag the new entries with the tag of `pmap` before publishing the new count
+  // (concurrent commits may tag the same entries again but that leaves the memory as is)
+  if (mi_page_map_use_memtag(&pmap->memid)) {
+    const size_t tag_start = mi_align_down(mi_page_map_size_of_count(prev_count), MI_MEMTAG_GRANULE_SIZE);
+    mi_memtag_store((uint8_t*)pmap + tag_start, commit_size - tag_start);
+  }
   mi_page_map_store(pmap, commit_count);
   return true;
 }
@@ -105,13 +124,17 @@ static bool mi_page_map_init_once(void) {
                       mi_option_is_enabled(mi_option_pagemap_commit) || _mi_os_has_overcommit();
   mi_subproc_t* const subproc = _mi_subproc_main();
   mi_memid_t memid;
-  mi_page_map_t* const pmap = (mi_page_map_t*)_mi_os_alloc_with_guards(subproc, extra_reserve_size, commit, true /* allow large */, &memid);
+  mi_page_map_t* pmap = (mi_page_map_t*)_mi_os_alloc_with_guards(subproc, extra_reserve_size, commit, true /* allow large */, &memid);
   if mi_unlikely(pmap==NULL) {
     _mi_error_message(ENOMEM, "unable to reserve virtual memory for the page map (%zu KiB)\n", extra_reserve_size / MI_KiB);
     return false;
   }
 
-  // commit
+  // commit first entries up to MI_MIN_VABITS entries
+  const bool use_memtag = mi_page_map_use_memtag(&memid);
+  const size_t min_commit_count = (MI_ZU(1) << (MI_MIN_VABITS - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT));
+  const size_t min_commit_size = mi_align_up( mi_page_map_size_of_count(min_commit_count), os_page_size);
+  mi_assert_internal(min_commit_size <= reserve_size);
   size_t commit_count;
   if (memid.initially_committed) {
     if (!memid.initially_zero) {
@@ -119,13 +142,10 @@ static bool mi_page_map_init_once(void) {
       mi_memzero_aligned(pmap, extra_reserve_size);
       memid.initially_zero = true;
     }
-    commit_count = mi_page_map_count_of_size(reserve_size);
+    // with memory tagging, we still "commit" on-demand so we only tag the used part of the page map
+    commit_count = mi_page_map_count_of_size(use_memtag ? min_commit_size : reserve_size);
   }
   else {
-    // commit first entries up to MI_MIN_VABITS entries
-    const size_t min_commit_count = (MI_ZU(1) << (MI_MIN_VABITS - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT));
-    const size_t min_commit_size = mi_align_up( sizeof(mi_page_map_t) + ((min_commit_count-1) * sizeof(mi_submap_t)), os_page_size);
-    mi_assert_internal(min_commit_size <= reserve_size);
     bool is_zero;
     if (!_mi_os_commit(subproc,pmap,min_commit_size,&is_zero)) {
       mi_page_map_cannot_commit();
@@ -134,11 +154,11 @@ static bool mi_page_map_init_once(void) {
     };
     mi_assert_internal(is_zero || memid.initially_zero);
     commit_count = mi_page_map_count_of_size(min_commit_size);
-    mi_assert_internal(commit_count >= min_commit_count);
   }
+  mi_assert_internal(commit_count >= min_commit_count);
 
   // ensure there is a submap for the NULL address
-  mi_page_t** const sub0 = (mi_submap_t)((uint8_t*)pmap + reserve_size);  // we reserved a submap part at the end already
+  mi_submap_t sub0 = (mi_submap_t)((uint8_t*)pmap + reserve_size);  // we reserved a submap part at the end already
   if (!memid.initially_committed) {
     if (!_mi_os_commit(subproc, sub0, submap_size, NULL)) {  // commit full submap (issue #1087)
       mi_page_map_cannot_commit();
@@ -148,6 +168,12 @@ static bool mi_page_map_init_once(void) {
   }
   if (!memid.initially_zero) {     // initialize low addresses with NULL
     mi_memzero_aligned(sub0, submap_size);
+  }
+
+  // tag the committed page map entries and the first sub map (with a tag of a different class as it is adjacent)
+  if (use_memtag) {
+    pmap = (mi_page_map_t*)mi_memtag_meta_init(pmap, mi_align_up(mi_page_map_size_of_count(commit_count), MI_MEMTAG_GRANULE_SIZE), 0);
+    sub0 = (mi_submap_t)mi_memtag_meta_init(sub0, submap_size, 1);
   }
 
   // initialize the fields
@@ -175,13 +201,16 @@ static mi_submap_t mi_page_map_alloc_submap(mi_subproc_t* subproc, mi_memid_t* m
   if (sub != NULL && !memid->initially_zero) {
     mi_memzero_aligned(sub, MI_PAGE_MAP_SUB_SIZE);
   }
+  if (sub != NULL && mi_page_map_use_memtag(memid)) {
+    sub = (mi_submap_t)mi_memtag_meta_init(sub, MI_PAGE_MAP_SUB_SIZE, 0);
+  }
   return sub;
 }
 
 // We do not store the memid of a sub map but can recreate it (see `_mi_os_alloc_with_guards`)
 static mi_memid_t mi_page_map_submap_memid(mi_submap_t sub) {
   const size_t guard_size = _mi_os_secure_guard_page_size();
-  return _mi_memid_create_os((uint8_t*)sub - guard_size, _mi_os_good_alloc_size(MI_PAGE_MAP_SUB_SIZE + 2*guard_size), true, false, false);
+  return _mi_memid_create_os((uint8_t*)mi_ptr_memtag_meta(sub) - guard_size, _mi_os_good_alloc_size(MI_PAGE_MAP_SUB_SIZE + 2*guard_size), true, false, false);
 }
 
 void _mi_page_map_unsafe_destroy(void) {
@@ -287,7 +316,7 @@ bool _mi_page_map_register(mi_page_t* page) {
   mi_assert_internal(pmap != NULL);  // should be initialized before multi-thread access!
   if mi_unlikely(pmap == NULL) {
     if (!_mi_page_map_init()) return false;
-    pmap = mi_atomic_load_ptr_acquire(mi_page_map_t,&mi_process_get_sealed()->page_map);
+    pmap = mi_page_map();
   }
   mi_assert(pmap!=NULL);
   size_t   slice_count;

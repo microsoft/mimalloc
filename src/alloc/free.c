@@ -246,7 +246,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
     if (free_small) {
       const mi_addr_t up = mi_addr(p) & ~MI_ADDR(MI_SMALL_PAGE_SIZE-1);  // like this for codegen on gcc
       if mi_unlikely(up==0 && check_p_for_null) { return false; }
-      page = (mi_page_t*)mi_ptr_with_addr(mi_ptr_memtag_meta(p), up);
+      page = mi_page_meta_load((mi_page_t*)mi_ptr_with_addr(p, up));
     }
     else
   #endif
@@ -262,6 +262,9 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
         #endif
         return false;
       }
+      #if MI_PAGE_META_IS_ALIGNED
+      page = mi_page_meta_load(page);
+      #endif
     }
   #if MI_DEBUG
   mi_page_t* const cpage = mi_checked_ptr_page(p);

@@ -19,27 +19,31 @@ extensions as well (like x86 ChkTag and LAM)
 Every 16-byte granule of tagged memory has a 4-bit tag, and each access must use a
 pointer with a matching tag in the top bits (56-59 on ARM, see `MI_PTR_MEMTAG_SHIFT`).
 Blocks in tagged pages get a random tag where blocks at even and odd indices use
-disjoint tag sets, such that adjacent blocks always have different tags. Tag 0 is
-never used for blocks and is reserved for meta data and free arena memory. Tag 15
-is reserved as well.
+disjoint tag sets (tags 1 to 7, and 8 to 15), such that adjacent blocks always have
+different tags. Tag 0 is never used for blocks and is reserved for free arena memory
+and untagged meta data. Most meta data (like the page meta data, the page map, and the
+process meta data) gets a random tag as well (see `mi_memtag_meta_init`).
 
 Memory tagging is only used when built with `MI_MTE=1` and when it is enabled
 at runtime (see `mi_memtag_is_enabled`); otherwise all operations are no-ops and
 the hardware instructions are never executed (as these trap on CPU's without MTE).
 -----------------------------------------------------------------------------*/
 
-#define MI_MEMTAG_GRANULE_SIZE    (16)
 #define MI_MEMTAG_META            (0)         // tag used for meta data (and free arena memory)
 #define MI_MEMTAG_LINE_MIN        (32)        // supported range of the cache line size tagged by `dc gva` (checked at initialization)
 #define MI_MEMTAG_LINE_MAX        (2048)
 #define MI_MEMTAG_GRANULE_MAX     (128)       // ranges up to this size are always tagged per granule
 #define MI_MEMTAG_ZERO_MAX        (1024)      // blocks up to this size are zeroed on free (larger ones are only retagged)
 
-// Tag exclusion masks (bit `i` set excludes tag `i`); blocks never use tag 0 or 15.
-#define MI_MEMTAG_EXCLUDE         (0x8001)
-#define MI_MEMTAG_EXCLUDE_EVEN    (MI_MEMTAG_EXCLUDE | 0x7F00)   // even blocks use tags 1 to 7
-#define MI_MEMTAG_EXCLUDE_ODD     (MI_MEMTAG_EXCLUDE | 0x00FE)   // odd blocks use tags 8 to 14
+// Tag exclusion masks (bit `i` set excludes tag `i`); blocks never use tag 0.
+#define MI_MEMTAG_EXCLUDE         (0x0001)
+#define MI_MEMTAG_EXCLUDE_EVEN    (MI_MEMTAG_EXCLUDE | 0xFF00)   // even blocks use tags 1 to 7
+#define MI_MEMTAG_EXCLUDE_ODD     (MI_MEMTAG_EXCLUDE | 0x00FE)   // odd blocks use tags 8 to 15
 #define MI_MEMTAG_ODD_BIT         (8)   // logical tag bit that is set for odd blocks
+
+#if (MI_CACHE_LINE_SIZE % MI_MEMTAG_GRANULE_SIZE) != 0
+#error "`mi_decl_mte_align` must align on a memory tag granule"
+#endif
 
 // Set once at process initialization in the sealed process data (see `prim/os.c:_mi_os_init`)
 bool   _mi_os_has_memtag(void);         // is memory tagging used?
@@ -60,6 +64,11 @@ static inline bool mi_memtag_is_enabled(void) {
   #else
   return false;
   #endif
+}
+
+// Should meta data in memory that supports tagging (`memid.is_memtag`) be tagged?
+static inline bool mi_memtag_use_for_meta(bool is_memtag) {
+  return (mi_memtag_is_enabled() && is_memtag);
 }
 
 // Should blocks of size `bsize` in memory that supports tagging (`memid.is_memtag`) be tagged? (singleton blocks are never tagged)
@@ -107,6 +116,7 @@ static inline void  mi_memtag_blocks_init(void* start, size_t bsize, size_t idx,
 static inline void* mi_memtag_block_free(void* block, size_t bsize);
 static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_t idx);
 static inline void  mi_memtag_clear(void* p, size_t size);
+static inline void* mi_memtag_meta_init(void* p, size_t size, size_t idx);
 
 
 /* ----------------------------------------------------------------------------
@@ -255,6 +265,14 @@ static inline void mi_memtag_clear(void* p, size_t size) {
   mi_memtag_store(mi_ptr_memtag_meta(p), size);
 }
 
+// Tag the meta data `[p,p+size)` with a random tag; returns `p` with its new tag.
+// The tag has the class of index `idx` such that meta data at adjacent indices has different tags.
+static inline void* mi_memtag_meta_init(void* p, size_t size, size_t idx) {
+  void* const tp = mi_memtag_random(mi_ptr_memtag_meta(p), __mi_memtag_class_exclude(idx));
+  mi_memtag_store(tp, size);
+  return tp;
+}
+
 #else
 static inline size_t mi_memtag_cpu_line_size(void)             { return 0; }
 static inline void  mi_memtag_check(const void* p)             { MI_UNUSED(p); }
@@ -275,6 +293,9 @@ static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_
 }
 static inline void mi_memtag_clear(void* p, size_t size) {
   MI_UNUSED(p); MI_UNUSED(size);
+}
+static inline void* mi_memtag_meta_init(void* p, size_t size, size_t idx) {
+  MI_UNUSED(size); MI_UNUSED(idx); return p;
 }
 #endif
 

@@ -174,7 +174,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
 
 
 // pre-allocate the process data
-mi_decl_hidden mi_decl_cache_align mi_process_t _mi_process = mi_init_struct_zero;
+mi_decl_hidden mi_decl_process_align mi_process_t _mi_process = mi_init_struct_zero;
 
 // The sealed lock is static as it can be used before process initialization (and a zero lock is invalid on some platforms)
 static mi_lock_t mi_sealed_lock = MI_LOCK_INITIALIZER;
@@ -236,15 +236,25 @@ mi_decl_noinline mi_process_metadata_t* _mi_process_metadata_init(void) {
   mi_atomic_do_once {
     if (mi_process_get_sealed()->os_mem_config.page_size == 0) { _mi_os_init(); }  // accessed before process initialization
     mi_memid_t memid;
-    mi_process_metadata_t* const metadata = (mi_process_metadata_t*)_mi_os_alloc_with_guards(NULL /* bootstrap stats */, sizeof(mi_process_metadata_t), true /* commit */, false /* allow large */, &memid);
+    mi_process_metadata_t* metadata = (mi_process_metadata_t*)_mi_os_alloc_with_guards(NULL /* bootstrap stats */, sizeof(mi_process_metadata_t), true /* commit */, false /* allow large */, &memid);
     if (metadata == NULL) {
       _mi_error_message(ENOMEM, "unable to allocate the process meta data (%zu bytes)\n", sizeof(mi_process_metadata_t));
       abort();
     }
     if (!memid.initially_zero) { mi_memzero_aligned(metadata, sizeof(mi_process_metadata_t)); }
-    metadata->memid = memid;
+    if (mi_memtag_use_for_meta(!memid.is_pinned)) {  // all non-large OS memory supports tagging
+      // tag each field separately (where adjacent fields have different tag classes)
+      #define mi_process_metadata_field_offset(tp,name)  offsetof(mi_process_metadata_t, name),
+      static const size_t offsets[] = { mi_process_metadata_fields(mi_process_metadata_field_offset) sizeof(mi_process_metadata_t) };
+      #undef mi_process_metadata_field_offset
+      for (size_t i = 0; i + 1 < sizeof(offsets)/sizeof(offsets[0]); i++) {
+        mi_assert_internal(offsets[i] % MI_MEMTAG_GRANULE_SIZE == 0);
+        mi_memtag_meta_init((uint8_t*)metadata + offsets[i], offsets[i+1] - offsets[i], i);
+      }
+    }
+    *((mi_memid_t*)mi_meta_load(&metadata->memid)) = memid;
     mi_process_sealed_t* const sealed = _mi_process_unseal();
-    sealed->metadata = metadata;
+    sealed->metadata = metadata;  // stored without memory tag (see `mi_process_metadata`)
     _mi_process_seal();
   }
   mi_process_metadata_t* const metadata = mi_process_get_sealed()->metadata;
@@ -274,32 +284,32 @@ static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc);
 
 // Initialize main heap
 static void mi_heap_main_init_once(void) {
-  mi_process_metadata_t* const metadata = mi_process_metadata();
   mi_memid_t memid_static = _mi_memid_create(MI_MEM_STATIC);
-  mi_memcpy(&metadata->theap_empty_wrong,&_mi_theap_empty,sizeof(metadata->theap_empty_wrong));
+  mi_theap_t* const theap_empty_wrong = mi_process_metadata_field(mi_theap_t, theap_empty_wrong);
+  mi_memcpy(theap_empty_wrong,&_mi_theap_empty,sizeof(*theap_empty_wrong));
 
   // initialize the main subprocess
   mi_subproc_t* subproc_main = _mi_subproc_main_init();
 
   // detached tld for theap_meta
-  mi_tld_t* const tld_meta = &metadata->tld_meta;
+  mi_tld_t* const tld_meta = mi_process_metadata_field(mi_tld_t, tld_meta);
   tld_meta->thread_id = MI_THREAD_ID_DETACHED;
   tld_meta->memid = memid_static;
   mi_tld_init(tld_meta, 0, subproc_main);
 
   // main process heap
-  mi_heap_t* const heap_main = &metadata->heap_main;
+  mi_heap_t* const heap_main = mi_process_metadata_field(mi_heap_t, heap_main);
   heap_main->memid = memid_static;
   mi_atomic_store_ptr_release(mi_heap_t,&subproc_main->heap_main,heap_main);
   _mi_heap_init(heap_main,mi_thread_local_key_fast,subproc_main,0,false);
 
   // detached theap for allocating meta-data (we can allocate on this without having an initialized thread)
-  mi_theap_t* const theap_meta = &metadata->theap_meta;
+  mi_theap_t* const theap_meta = mi_process_metadata_field(mi_theap_t, theap_meta);
   theap_meta->memid = memid_static;
   _mi_theap_meta_init(theap_meta,heap_main,tld_meta);
   subproc_main->theap_meta = theap_meta;
 
-  // mi_heap_theap_set(heap_main,&metadata->theap_main); // set in `mi_thread_init(_theap_default)`
+  // mi_heap_theap_set(heap_main,theap_main); // set in `mi_thread_init(_theap_default)`
 }
 
 static void mi_heap_main_init(void) {
@@ -320,7 +330,7 @@ mi_heap_t* _mi_subproc_heap_main(mi_subproc_t* subproc) {
   }
   else {
     mi_assert_internal(false);
-    return &mi_process_metadata()->heap_main;
+    return mi_process_metadata_field(mi_heap_t, heap_main);
   }
 }
 
@@ -330,9 +340,9 @@ mi_heap_t* _mi_subproc_heap_main(mi_subproc_t* subproc) {
 
 mi_theap_t* _mi_theap_main(void) {
   // All subprocess main heaps share this slot; do not follow a possibly deleted default theap.
-  const mi_process_metadata_t* const metadata = mi_process_get_sealed()->metadata;
+  mi_process_metadata_t* const metadata = mi_process_get_sealed()->metadata;
   if (metadata==NULL) return NULL;
-  const mi_thread_local_t key = metadata->heap_main.theap;
+  const mi_thread_local_t key = ((mi_heap_t*)mi_meta_load(&metadata->heap_main))->theap;
   return (key==0 ? NULL : (mi_theap_t*)_mi_thread_local_get(key));
 }
 
@@ -362,7 +372,7 @@ static mi_tld_t* mi_tld_create(mi_subproc_t* subproc) {
   mi_memid_t memid;
   mi_tld_t* tld;
   if (_mi_subproc_is_main(subproc) && tseq==0 /* first tld */) {
-    tld = &mi_process_metadata()->tld_main;
+    tld = mi_process_metadata_field(mi_tld_t, tld_main);
     memid = _mi_memid_create_static(tld,sizeof(*tld));
   }
   else {
@@ -422,7 +432,7 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
   // (on macOS <= 14 for example where the loader allocates thread-local data on demand).
   if (heap_main==NULL) {
     heap_main = mi_heap_main();
-    mi_assert_internal(heap_main == &mi_process_metadata()->heap_main);
+    mi_assert_internal(mi_addr(heap_main) == mi_addr(&mi_process_metadata()->heap_main));
   }
   mi_assert_internal(heap_main!=NULL);
 
@@ -440,8 +450,8 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
     mi_tld_t* tld = mi_tld_create(heap_main->subproc);
     if (tld==NULL) return NULL;    // out-of-memory on tld allocation
     // allocate and initialize the theap for the main heap
-    if (tld==&mi_process_metadata()->tld_main) {
-      theap = &mi_process_metadata()->theap_main;         // initial theap is pre-allocated
+    if (mi_addr(tld) == mi_addr(&mi_process_metadata()->tld_main)) {
+      theap = mi_process_metadata_field(mi_theap_t, theap_main);  // initial theap is pre-allocated
       theap->memid = _mi_memid_create_static(theap,sizeof(*theap));
     }
     else {
@@ -762,7 +772,7 @@ static void mi_process_done_once(void) {
   const size_t thread_count = mi_atomic_load_acquire(&_mi_subproc_main()->thread_count);
   if (thread_count == 1 || !_mi_prim_process_is_killed()) {  // can we safely take locks?
     mi_process_unwind_once();
-    _mi_verbose_message("process done: 0x%zx\n", mi_process_metadata()->tld_main.thread_id);
+    _mi_verbose_message("process done: 0x%zx\n", mi_process_metadata_field(mi_tld_t, tld_main)->thread_id);
   }
 
   _mi_subproc_main_done();

@@ -60,8 +60,15 @@ static inline size_t mi_page_map_lookup_index(const void* p, size_t* sub_idx) {
   return mi_page_map_index(p, sub_idx);
 }
 
+// The page map is stored without memory tag in the sealed process data (see `mi_meta_load`)
+static inline mi_page_map_t* mi_page_map_initialized(void) {
+  return (mi_page_map_t*)mi_meta_load(mi_atomic_load_ptr_relaxed(mi_page_map_t,&mi_process_get_sealed()->page_map));
+}
+
+// The page map, or `NULL` before initialization
 static inline mi_page_map_t* mi_page_map(void) {
-  return mi_atomic_load_ptr_relaxed(mi_page_map_t,&mi_process_get_sealed()->page_map);
+  mi_page_map_t* const pmap = mi_atomic_load_ptr_relaxed(mi_page_map_t,&mi_process_get_sealed()->page_map);
+  return (pmap==NULL ? NULL : (mi_page_map_t*)mi_meta_load(pmap));
 }
 
 static inline size_t mi_page_map_committed(void) {
@@ -73,7 +80,7 @@ static inline mi_submap_t mi_page_map_at(const mi_page_map_t* pmap, size_t idx) 
 }
 
 static inline mi_page_t* mi_unchecked_ptr_page(const void* p) {
-  const mi_page_map_t* pmap = mi_page_map();
+  const mi_page_map_t* pmap = mi_page_map_initialized();
   size_t sub_idx;
   const size_t idx = mi_page_map_lookup_index(p, &sub_idx);
   return mi_page_map_at(pmap,idx)[sub_idx];  // NULL if p==NULL
@@ -82,14 +89,20 @@ static inline mi_page_t* mi_unchecked_ptr_page(const void* p) {
 static inline mi_page_t* mi_checked_ptr_page(const void* p) {
   size_t sub_idx;
   const size_t idx = mi_page_map_lookup_index(p, &sub_idx);
-  const mi_page_map_t* pmap = mi_page_map();  // NULL before initialization (but then the committed count is 0)
-  const size_t committed_count = mi_page_map_committed();
+  const size_t committed_count = mi_page_map_committed();  // 0 before initialization
   if mi_unlikely(idx >= committed_count) return NULL;
+  const mi_page_map_t* pmap = mi_page_map_initialized();
   mi_submap_t const sub = mi_page_map_at(pmap,idx);
   if mi_unlikely(sub == NULL) return NULL;
   return sub[sub_idx];
 }
 
+
+// With memory tagging, page meta data has a random tag (see `arena/arena-page.c:mi_page_meta_memtag`);
+// this loads the tag for a `page` pointer that is derived from an address (instead of the page map).
+static inline mi_page_t* mi_page_meta_load(mi_page_t* page) {
+  return (mi_page_t*)mi_meta_load(page);
+}
 
 // Is `p` NULL given its page lookup `page`? (with an aligned page meta offset the aligned page lookup is never NULL)
 #if MI_PAGE_META_IS_ALIGNED && MI_PAGE_META_ALIGNED_OFFSET > 0
@@ -101,8 +114,9 @@ static inline mi_page_t* mi_checked_ptr_page(const void* p) {
 #if MI_PAGE_META_IS_ALIGNED
 // if the page meta data is aligned in front of pages we can find it efficiently
 // without needing to go through the page map (for valid pointers).
+// (note: the returned page meta data keeps the memory tag of `p` and needs `mi_page_meta_load` before access)
 static inline mi_page_t* mi_aligned_ptr_page0(const void* p) {
-  mi_page_t* const page_metas = (mi_page_t*)mi_align_down_ptr(mi_ptr_memtag_meta(p),MI_PAGE_META_ALIGNMENT);
+  mi_page_t* const page_metas = (mi_page_t*)mi_align_down_ptr(p,MI_PAGE_META_ALIGNMENT);
   // const ptrdiff_t page_idx = ((uint8_t*)p - (uint8_t*)page_metas)/MI_ARENA_SLICE_SIZE;
   const size_t page_idx       = (size_t)((mi_addr(p) / MI_ARENA_SLICE_SIZE) % (MI_PAGE_META_ALIGNMENT / MI_ARENA_SLICE_SIZE));
   mi_assert_internal(page_idx <= MI_PAGE_META_ALIGNED_COUNT);
@@ -116,8 +130,9 @@ static inline mi_page_t* mi_aligned_ptr_page0(const void* p) {
 }
 
 static inline mi_page_t* mi_aligned_ptr_page(const void* p) {
-  mi_page_t* const page = mi_aligned_ptr_page0(p);
+  mi_page_t* page = mi_aligned_ptr_page0(p);
   if mi_unlikely(mi_ptr_page_is_null(p,page)) return NULL;
+  page = mi_page_meta_load(page);
   #if MI_DEBUG
     mi_page_t* const cpage = mi_checked_ptr_page(p);
     if mi_unlikely(cpage==NULL) {

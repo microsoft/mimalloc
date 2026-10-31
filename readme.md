@@ -478,7 +478,9 @@ at the end so overflows will still fault (this is done as tagging memory is line
 
 Tagging is only enabled at runtime if both the hardware and OS support it -- and otherwise _mimalloc_ runs untagged.
 An MTE build running untagged is very close in performance to a regular release build. When using tagging, it depends
-on the hardware, but on an M5 it is usually within about 10% of a release build.
+on the hardware, but on an M5 it is usually within about 10% of a release build. When building with `-DMI_MTE=REQUIRED`,
+_mimalloc_ assumes that the CPU supports MTE (which avoids some runtime checks) and aborts at initialization if it
+does not (but still runs untagged if tagging is not enabled at runtime).
 
 Building with MTE also enables `-DMI_SECURE=MINIMAL` by default. Since MTE catches (most) use-after-free, double-free,
 and heap block overflows, `-DMI_MTE=ON` gives similar guarantees as `-DMI_SECURE=ON` but now with

@@ -317,10 +317,26 @@ static size_t unix_detect_virtual_address_bits(void) {
 }
 
 #if MI_UNIX_LINUX_MTE
-// Enable the tagged address ABI with the tag check mode `tcf` and allow tags 1 to 14 for `irg` (for the current thread)
+// Enable the tagged address ABI with the tag check mode `tcf` and allow tags 1 to 15 for `irg` (for the current thread)
 static bool unix_memtag_thread_enable(unsigned long ctrl, unsigned long tcf) {
-  const unsigned long tags = (ctrl & PR_MTE_TAG_MASK) | (0x7FFEUL << PR_MTE_TAG_SHIFT);
+  const unsigned long tags = (ctrl & PR_MTE_TAG_MASK) | (0xFFFEUL << PR_MTE_TAG_SHIFT);
   return (prctl(PR_SET_TAGGED_ADDR_CTRL, PR_TAGGED_ADDR_ENABLE | tcf | tags, 0, 0, 0) == 0);
+}
+#endif
+
+#if MI_MTE >= 2
+// Does the CPU support the memory tagging (MTE) instructions? (only checked with `-DMI_MTE=REQUIRED`;
+// on other systems we assume it does and fault on the first use of a tag instruction otherwise)
+static bool unix_detect_memtag_cpu(void) {
+  #if MI_UNIX_LINUX_MTE
+  return ((getauxval(AT_HWCAP2) & HWCAP2_MTE) != 0);
+  #elif defined(__APPLE__) && defined(__aarch64__)
+  int val = 0;
+  size_t len = sizeof(val);
+  return (sysctlbyname("hw.optional.arm.FEAT_MTE", &val, &len, NULL, 0) == 0 && val != 0);
+  #else
+  return true;
+  #endif
 }
 #endif
 
@@ -368,6 +384,12 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->has_transparent_huge_pages = (config->large_page_size <= MI_UNIX_MAX_THP_PAGE_SIZE) && unix_detect_thp();
   config->has_overcommit = unix_detect_overcommit();
   config->virtual_address_bits = unix_detect_virtual_address_bits();
+  #if MI_MTE >= 2
+  if (!unix_detect_memtag_cpu()) {
+    _mi_error_message(ENOTSUP, "mimalloc is built with MI_MTE=REQUIRED but the CPU does not support memory tagging (MTE)\n");
+    abort();
+  }
+  #endif
   config->has_memtag = (mi_option_is_enabled(mi_option_mte) && unix_detect_memtag(config));
 
   // disable transparent huge pages for this process?

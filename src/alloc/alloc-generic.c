@@ -316,7 +316,7 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
 ----------------------------------------------------------- */
 static mi_theap_t* mi_theap_init(mi_theap_t* theap) {
   if mi_likely(mi_theap_is_initialized(theap)) return theap;
-  if (theap==&mi_process_metadata()->theap_empty_wrong) {
+  if (mi_addr(theap) == mi_addr(&mi_process_metadata()->theap_empty_wrong)) {
     // we were unable to allocate a theap for a first-class heap
     return NULL;
   }

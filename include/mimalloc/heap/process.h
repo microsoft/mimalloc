@@ -49,23 +49,30 @@ typedef struct mi_os_state_s {
 
 // Process meta data: this is allocated from the OS at process initialization (see `heap/process.c:mi_process_metadata_init`)
 // instead of being static so it is not at a fixed offset from the program image, is surrounded by guard pages in secure mode,
-// and can be memory tagged.
+// and can be memory tagged. With memory tagging, each field has its own tag (where adjacent fields have different tags),
+// so fields are aligned with `mi_decl_mte_align` and accessed through `mi_process_metadata_field` (which loads the tag).
+// Apply `F(tp,name)` to each field of the process meta data (used for the definition and for tagging each field)
+#define mi_process_metadata_fields(F) \
+  F(mi_subproc_t, subproc_main)       /* initial subprocess */ \
+  F(mi_heap_t,    heap_main)          /* initial heap for the process */ \
+  F(mi_theap_t,   theap_main)         /* initial theap for the main thread */ \
+  F(mi_tld_t,     tld_main)           /* initial tld for the main thread */ \
+  F(mi_theap_t,   theap_meta)         /* detached theap for meta-data allocation */ \
+  F(mi_tld_t,     tld_meta)           /* detached tld for `theap_meta` */ \
+  F(mi_theap_t,   theap_empty_wrong)  /* empty theap used to signal that a theap for a heap could not be allocated */ \
+  F(mi_memid_t,   memid)              /* OS provenance of the meta data (never freed) */
+
+#define mi_process_metadata_field_decl(tp,name)  mi_decl_mte_align tp name;
+
 typedef struct mi_process_metadata_s {
-  mi_decl_cache_align mi_subproc_t  subproc_main;           // initial subprocess
-  mi_decl_cache_align mi_heap_t     heap_main;              // initial heap for the process
-  mi_decl_cache_align mi_theap_t    theap_main;             // initial theap for the main thread
-  mi_decl_cache_align mi_tld_t      tld_main;               // initial tld for the main thread
-  mi_decl_cache_align mi_theap_t    theap_meta;             // detached theap for meta-data allocation
-  mi_decl_cache_align mi_tld_t      tld_meta;               // detached tld for `theap_meta`
-  mi_decl_cache_align mi_theap_t    theap_empty_wrong;      // empty theap used to signal that a theap for a heap could not be allocated
-  mi_memid_t                        memid;                  // OS provenance of the meta data (never freed)
+  mi_process_metadata_fields(mi_process_metadata_field_decl)
 } mi_process_metadata_t;
 
 // Sealed process data that is read-only after process initialization in secure mode
 // (see `heap/process.c:_mi_process_unseal` for writing).
 typedef struct mi_process_sealed_s {
   // page map
-  _Atomic(struct mi_page_map_s*) page_map;  // the page map (`NULL` before initialization) (see `heap/page-map.h`); must be the first entry for better code-gen in secure mode
+  _Atomic(struct mi_page_map_s*) page_map;  // the page map without memory tag (`NULL` before initialization) (see `heap/page-map.h:mi_page_map`); must be the first entry for better code-gen in secure mode
   _Atomic(size_t)     page_map_committed;   // committed entries in the page map
 
   // user callbacks
@@ -76,7 +83,7 @@ typedef struct mi_process_sealed_s {
   _Atomic(void*)      error_handler;    // is `mi_error_fun*`
   _Atomic(void*)      error_arg;
 
-  mi_process_metadata_t* metadata;      // process meta data (`NULL` before initialization) (see `heap/process.c:mi_process_metadata_init`)
+  mi_process_metadata_t* metadata;      // process meta data without memory tag (`NULL` before initialization) (see `mi_process_metadata`)
   mi_os_mem_config_t  os_mem_config;    // OS memory configuration (see `prim/os.c`)
   bool                is_protected;     // `true` if the sealed page is read-only (see `_mi_process_unseal`)
 } mi_process_sealed_t;
@@ -92,6 +99,21 @@ typedef struct mi_process_sealed_s {
   #define MI_SECURE_STATIC_GUARD    (MI_CACHE_LINE_SIZE)          // no guard pages; just a cache line
   #define MI_SECURE_SEALED_PAGE     (0)
   #define MI_SECURE_SEALED_GUARD    (MI_SECURE_STATIC_GUARD)
+#endif
+
+// With a sealed page, we page align the process data (if the toolchain and loader support it) such that the
+// address of the sealed page is a link-time constant and `mi_process_get_sealed` is fast (as used on the free path).
+// (Windows toolchains cannot align beyond 8 KiB, and older ELF loaders may not honor alignments beyond the OS page size)
+#if MI_SECURE_SEALED_PAGE && defined(__GNUC__) && !defined(_WIN32) && (MI_OS_PROBABLE_PAGE_SIZE <= 16*MI_KiB)
+  #define MI_SECURE_SEALED_ALIGNED  (1)
+  #define mi_decl_process_align     mi_decl_align(MI_OS_PROBABLE_PAGE_SIZE)
+#else
+  #define MI_SECURE_SEALED_ALIGNED  (0)
+  #define mi_decl_process_align     mi_decl_cache_align
+#endif
+
+#if MI_SECURE_SEALED_ALIGNED && (MI_SECURE_SEALED_GUARD % MI_OS_PROBABLE_PAGE_SIZE) != 0
+#error "the sealed page must be page aligned"
 #endif
 
 // Output before an output function is registered (or the C runtime is initialized) is buffered (see `util/options.c`)
@@ -125,15 +147,15 @@ typedef struct mi_process_s {
   mi_os_state_t                     os;                     // OS state
 
   mi_lock_t                         thread_locals_lock;     // initialized in `_mi_thread_locals_init` (see `util/threadlocal.c`)
-  mi_bitmap_t*                      thread_locals_free;     // bitmap of free thread local slots (1=free, 0=in-use)
+  mi_bitmap_t*                      thread_locals_free;     // bitmap of free thread local slots (1=free, 0=in-use) (stored without memory tag)
   mi_memid_t                        thread_locals_memid;    // provenance of `thread_locals_free`
   size_t                            thread_locals_version;  // version to be able to reuse slots safely
 
-  mi_subproc_t*                     subprocs;               // list of all sub-processes
+  mi_subproc_t*                     subprocs;               // list of all sub-processes (stored without memory tag)
   mi_lock_t                         subprocs_lock;          // initialized in `_mi_subproc_main_init` (as a zero lock is invalid on some platforms)
   mi_fork_state_t                   fork;                   // fork state (see `heap/subproc.c`)
 
-  mi_profiler_t*                    profile_env_profiler;   // the pprof profiler if `MIMALLOC_PROFILE` was set (see `profile/pprof.c`)
+  mi_profiler_t*                    profile_env_profiler;   // the pprof profiler if `MIMALLOC_PROFILE` was set (see `profile/pprof.c`) (stored without memory tag)
   mi_atomic_guard_t                 profile_snapshot_guard; // allow only one thread at a time to take a profile snapshot
 
   // arrays last
@@ -144,25 +166,52 @@ typedef struct mi_process_s {
   mi_decl_cache_align uint8_t       guard_end[MI_SECURE_STATIC_GUARD];
 } mi_process_t;
 
-extern mi_decl_hidden mi_process_t _mi_process;
+extern mi_decl_hidden mi_decl_process_align mi_process_t _mi_process;
 
 // Get the sealed process data (for reading only).
 // In secure mode, this is the last full OS page within `guard_front` (just before the page where the process data starts).
 static inline mi_process_sealed_t* mi_process_get_sealed(void) {
-  #if MI_SECURE_SEALED_PAGE
+  #if MI_SECURE_SEALED_ALIGNED
+  return (mi_process_sealed_t*)((uint8_t*)&_mi_process + MI_SECURE_SEALED_GUARD - MI_OS_PROBABLE_PAGE_SIZE);
+  #elif MI_SECURE_SEALED_PAGE
   return (mi_process_sealed_t*)mi_align_down_ptr((uint8_t*)&_mi_process + MI_SECURE_SEALED_GUARD - MI_OS_PROBABLE_PAGE_SIZE, MI_OS_PROBABLE_PAGE_SIZE);
   #else
   return &_mi_process.sealed;
   #endif
 }
 
+// With memory tagging, load the memory tag of a (non-NULL) pointer `p` to meta data.
+// This is used for meta data pointers that are derived from an address, or that are stored
+// without their tag (like the page map and process meta data pointers in the sealed process data,
+// so these cannot be leaked by reading the (untagged) static process data).
+static inline void* mi_meta_load(void* p) {
+  mi_assert_internal(p != NULL);
+  #if MI_MTE >= 2
+  return mi_memtag_load(p);  // the CPU supports MTE (`-DMI_MTE=REQUIRED`), and `ldg` returns tag 0 if tagging is not enabled at runtime
+  #else
+  #if MI_MTE
+  if (mi_process_get_sealed()->os_mem_config.has_memtag) { return mi_memtag_load(p); }
+  #endif
+  return p;
+  #endif
+}
+
+// As `mi_meta_load` but `p` can be NULL.
+static inline void* mi_meta_load_maybe(void* p) {
+  return (p == NULL ? NULL : mi_meta_load(p));
+}
+
 mi_process_metadata_t* _mi_process_metadata_init(void);
 
-// Get the process meta data (allocated at process initialization, or lazily on first access).
+// Get the process meta data without memory tag (allocated at process initialization, or lazily on first access).
+// Do not access fields through this pointer directly but use `mi_process_metadata_field` instead.
 static inline mi_process_metadata_t* mi_process_metadata(void) {
-  mi_process_metadata_t* const metadata = mi_process_get_sealed()->metadata;
+  mi_process_metadata_t* const metadata = mi_process_get_sealed()->metadata;  // stored without memory tag
   return (mi_likely(metadata != NULL) ? metadata : _mi_process_metadata_init());
 }
+
+// Get a pointer (with its memory tag) to a field of the process meta data.
+#define mi_process_metadata_field(tp,field)   ((tp*)mi_meta_load(&mi_process_metadata()->field))
 
 // Make the sealed process data writable (and take a lock); must be followed by `_mi_process_seal`.
 mi_process_sealed_t* _mi_process_unseal(void);

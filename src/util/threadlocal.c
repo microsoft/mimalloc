@@ -225,9 +225,14 @@ void _mi_thread_locals_init(void) {
   mi_lock_init(&_mi_process.thread_locals_lock);
 }
 
+// the free slots bitmap is stored without memory tag in the process data
+static mi_bitmap_t* mi_thread_locals_free(void) {
+  return (mi_bitmap_t*)mi_meta_load_maybe(_mi_process.thread_locals_free);
+}
+
 void _mi_thread_locals_done(void) {
   mi_lock(&_mi_process.thread_locals_lock) {
-    mi_bitmap_t* const slots = _mi_process.thread_locals_free;
+    mi_bitmap_t* const slots = mi_thread_locals_free();
     if (slots!=NULL) {
       _mi_meta_free(_mi_subproc_main(), slots, _mi_process.thread_locals_memid);
     }
@@ -248,7 +253,8 @@ static bool mi_thread_local_claim_fun(size_t _slice_index, void* _arg, bool* kee
 // (so if we reuse a slot it will be returning NULL initially when a thread tries to get it)
 static mi_thread_local_t mi_thread_local_claim(void) {
   size_t idx = 0;
-  if (_mi_process.thread_locals_free != NULL && mi_bitmap_try_find_and_claim(_mi_process.thread_locals_free,0,&idx,&mi_thread_local_claim_fun,NULL)) {
+  mi_bitmap_t* const slots = mi_thread_locals_free();
+  if (slots != NULL && mi_bitmap_try_find_and_claim(slots,0,&idx,&mi_thread_local_claim_fun,NULL)) {
     _mi_process.thread_locals_version++;
     if (_mi_process.thread_locals_version >= MI_TLS_VERSION_MAX) { _mi_process.thread_locals_version = 1; }  /* wrap around the version */
     return mi_key_create( idx, _mi_process.thread_locals_version);
@@ -259,7 +265,7 @@ static mi_thread_local_t mi_thread_local_claim(void) {
 }
 
 static bool mi_thread_local_create_expand(void) {
-  mi_bitmap_t* const slots = _mi_process.thread_locals_free;
+  mi_bitmap_t* const slots = mi_thread_locals_free();
   // 1024 bits at a time
   const size_t oldcount = (slots==NULL ? 0 : mi_bitmap_max_bits(slots));
   const size_t newcount = 1024 + oldcount;
@@ -278,7 +284,7 @@ static bool mi_thread_local_create_expand(void) {
   }
   mi_bitmap_init(newslots, newcount, true /* pretend already zero'd so we do not zero out the copied old entries */);
   mi_bitmap_unsafe_setN(newslots, oldcount, newcount - oldcount);  /* set the new expanded slots as available */
-  _mi_process.thread_locals_free = newslots;
+  _mi_process.thread_locals_free = (mi_bitmap_t*)mi_ptr_memtag_meta(newslots);  // store without memory tag
   _mi_process.thread_locals_memid = memid;
   return true;
 }
@@ -305,7 +311,7 @@ void _mi_thread_local_free(mi_thread_local_t key) {
   if (key==0) return;
   const size_t idx = mi_key_index(key);
   mi_lock(&_mi_process.thread_locals_lock) {
-    mi_bitmap_t* const slots = _mi_process.thread_locals_free;
+    mi_bitmap_t* const slots = mi_thread_locals_free();
     if (slots!=NULL && idx < mi_bitmap_max_bits(slots)) {
       mi_bitmap_set(slots,idx);
     }

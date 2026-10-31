@@ -97,12 +97,12 @@ bool _mi_meta_is_meta_page(const mi_subproc_t* subproc, const mi_page_t* page) {
 ----------------------------------------------------------- */
 
 mi_subproc_t* _mi_subproc_main(void) {
-  return &mi_process_metadata()->subproc_main;
+  return mi_process_metadata_field(mi_subproc_t, subproc_main);
 }
 
 bool _mi_subproc_is_main(mi_subproc_t* subproc) {
   const mi_process_metadata_t* const metadata = mi_process_get_sealed()->metadata;
-  return (metadata != NULL && subproc == &metadata->subproc_main);
+  return (metadata != NULL && mi_addr(subproc) == mi_addr(&metadata->subproc_main));  // `metadata` has no memory tag
 }
 
 mi_subproc_t* _mi_subproc(void) {
@@ -151,10 +151,11 @@ static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc, mi_subproc_t* parent
   mi_lock_init(&subproc->heaps_lock);
   mi_lock_init(&subproc->theap_meta_lock);
   mi_lock(&_mi_process.subprocs_lock) {
-    // push on subproc list
-    subproc->next = _mi_process.subprocs;
-    if (_mi_process.subprocs!=NULL) { _mi_process.subprocs->prev = subproc; }
-    _mi_process.subprocs = subproc;
+    // push on subproc list (the list head is stored without memory tag)
+    mi_subproc_t* const head = (mi_subproc_t*)mi_meta_load_maybe(_mi_process.subprocs);
+    subproc->next = head;
+    if (head!=NULL) { head->prev = subproc; }
+    _mi_process.subprocs = (mi_subproc_t*)mi_ptr_memtag_meta(subproc);
   }
   return subproc;
 }
@@ -211,7 +212,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
   mi_lock_maybe(&_mi_process.subprocs_lock, acquire_subprocs_lock) {
     if (subproc->next!=NULL) { subproc->next->prev = subproc->prev;  }
     if (subproc->prev!=NULL) { subproc->prev->next = subproc->next;  }
-                        else { mi_assert_internal(_mi_process.subprocs==subproc);  _mi_process.subprocs = subproc->next; }
+                        else { mi_assert_internal(mi_addr(_mi_process.subprocs)==mi_addr(subproc));  _mi_process.subprocs = (mi_subproc_t*)mi_ptr_memtag_meta(subproc->next); }
   }
 
   // destroy all subproc heaps
@@ -268,7 +269,7 @@ void mi_subproc_destroy(mi_subproc_id_t subproc_id) {
 
 void _mi_subprocs_unsafe_destroy_all(void) {
   mi_lock(&_mi_process.subprocs_lock) {
-    mi_subproc_t* subproc = _mi_process.subprocs;
+    mi_subproc_t* subproc = (mi_subproc_t*)mi_meta_load_maybe(_mi_process.subprocs);
     while (subproc!=NULL) {
       mi_subproc_t* next = subproc->next;
       if (!_mi_subproc_is_main(subproc)) {
@@ -401,7 +402,7 @@ void _mi_fork_child_try_collect(void) {
   bool done = false;
   if (mi_lock_try_acquire(&_mi_process.subprocs_lock)) {
     done = true;
-    for (mi_subproc_t* subproc = _mi_process.subprocs; subproc != NULL; subproc = subproc->next) {
+    for (mi_subproc_t* subproc = (mi_subproc_t*)mi_meta_load_maybe(_mi_process.subprocs); subproc != NULL; subproc = subproc->next) {
       if (mi_lock_try_acquire(&subproc->heaps_lock)) {
         for (mi_heap_t* heap = subproc->heaps; heap != NULL; heap = heap->next) {
           if (!mi_fork_heap_abandon_dead(heap)) { done = false; }
