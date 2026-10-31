@@ -656,6 +656,17 @@ void _mi_error_message(int err, const char* fmt, ...) {
   }
 }
 
+// Unrecoverable error: always show the message (also before the C runtime is initialized) and abort.
+mi_decl_noreturn mi_decl_cold void _mi_fatal_error(const char* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  mi_vfprintf_thread(NULL, NULL, "mimalloc: fatal error: ", fmt, args);
+  va_end(args);
+  // flush delayed output (if not yet initialized) so the message is not lost
+  if (mi_atomic_load_ptr_acquire(void,&mi_process_get_sealed()->out_default) == NULL) { mi_out_buf_flush(&mi_out_stderr, true, NULL); }
+  abort();
+}
+
 mi_decl_noinline mi_block_t* _mi_block_next_is_corrupted(const mi_page_t* page, const mi_block_t* block, const mi_block_t* next) {
   _mi_error_message(EFAULT, "corrupted free list entry of size %zub at %p: value 0x%zx\n", mi_page_block_size(page), block, (size_t)mi_addr(next));
   return NULL;

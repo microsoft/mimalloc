@@ -200,6 +200,12 @@ void _mi_process_seal(void) {
 }
 
 // Initialize the sealed process data and, in secure mode, make it read-only.
+// With memory tagging, secure level > 1, or in debug mode, failing to seal is a fatal error.
+#if MI_MTE || (MI_SECURE > 1) || MI_DEBUG
+#define MI_SEALED_REQUIRED  (1)
+#else
+#define MI_SEALED_REQUIRED  (0)
+#endif
 static void mi_process_sealed_init(void) {
   bool protect = false;
   #if MI_SECURE_SEALED_PAGE
@@ -207,8 +213,8 @@ static void mi_process_sealed_init(void) {
   if ((MI_OS_PROBABLE_PAGE_SIZE % _mi_os_page_size()) == 0) {
     protect = true;
   }
-  else if (MI_SECURE > 1) {
-    _mi_error_message(EFAULT, "secure level %d, but unable to seal the process data as the OS page size (%zu KiB) is too large (rebuild with `-DMI_OS_PROBABLE_PAGE_SIZE=%zu`?)\n", MI_SECURE, _mi_os_page_size() / MI_KiB, _mi_os_page_size());
+  else if (MI_SEALED_REQUIRED) {  // fail early as the sealed data (like the page map root and user callbacks) would be writable
+    _mi_fatal_error("unable to seal the process data as the OS page size (%zu KiB) is larger than the probable OS page size (%zu KiB); rebuild with `-DMI_OS_PROBABLE_PAGE_SIZE=%zu`\n", _mi_os_page_size() / MI_KiB, (size_t)(MI_OS_PROBABLE_PAGE_SIZE / MI_KiB), _mi_os_page_size());
   }
   else {
     _mi_warning_message("unable to seal the process data as the OS page size (%zu KiB) is too large (rebuild with `-DMI_OS_PROBABLE_PAGE_SIZE=%zu`?)\n", _mi_os_page_size() / MI_KiB, _mi_os_page_size());
@@ -238,8 +244,7 @@ mi_decl_noinline mi_process_metadata_t* _mi_process_metadata_init(void) {
     mi_memid_t memid;
     mi_process_metadata_t* metadata = (mi_process_metadata_t*)_mi_os_alloc_with_guards(NULL /* bootstrap stats */, sizeof(mi_process_metadata_t), true /* commit */, false /* allow large */, &memid);
     if (metadata == NULL) {
-      _mi_error_message(ENOMEM, "unable to allocate the process meta data (%zu bytes)\n", sizeof(mi_process_metadata_t));
-      abort();
+      _mi_fatal_error("unable to allocate the process meta data (%zu bytes)\n", sizeof(mi_process_metadata_t));
     }
     if (!memid.initially_zero) { mi_memzero_aligned(metadata, sizeof(mi_process_metadata_t)); }
     if (mi_memtag_use_for_meta(!memid.is_pinned)) {  // all non-large OS memory supports tagging

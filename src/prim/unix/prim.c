@@ -386,8 +386,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->virtual_address_bits = unix_detect_virtual_address_bits();
   #if MI_MTE >= 2
   if (!unix_detect_memtag_cpu()) {
-    _mi_error_message(ENOTSUP, "mimalloc is built with MI_MTE=REQUIRED but the CPU does not support memory tagging (MTE)\n");
-    abort();
+    _mi_fatal_error("built with MI_MTE=REQUIRED but the CPU does not support memory tagging (MTE)\n");
   }
   #endif
   config->has_memtag = (mi_option_is_enabled(mi_option_mte) && unix_detect_memtag(config));
