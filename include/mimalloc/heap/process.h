@@ -28,22 +28,22 @@ extern mi_decl_hidden const mi_theap_t _mi_theap_empty; // read-only empty theap
 
 // Fork state
 typedef struct mi_fork_state_s {
-  size_t              epoch;            // incremented in the child at every fork
-  _Atomic(size_t)     pending;          // set in the child until the dead theaps are abandoned
-  bool                torn;             // set in a child that may have a torn snapshot of memory (on macOS)
-  mi_heap_t*          suspended_heap;   // heap with suspended abandoned reclaim (on macOS)
+  size_t              epoch;                    // incremented in the child at every fork
+  _Atomic(size_t)     pending;                  // set in the child until the dead theaps are abandoned
+  bool                torn;                     // set in a child that may have a torn snapshot of memory (on macOS)
+  mi_heap_t*          suspended_heap;           // heap with suspended abandoned reclaim (on macOS)
   size_t              suspended_count[MI_BIN_COUNT];  // and its abandoned counts
 } mi_fork_state_t;
 
 // OS state (see `prim/os.c` and the `prim/<os>/prim.c` files)
 typedef struct mi_os_state_s {
-  _Atomic(size_t)     numa_node_count;         // cached NUMA node count (0 until first use)
-  _Atomic(mi_addr_t)  aligned_base;            // next aligned address hint (see `_mi_os_get_aligned_hint`)
-  _Atomic(mi_addr_t)  huge_start;              // next address for huge OS pages (see `mi_os_claim_huge_pages`)
-  _Atomic(size_t)     large_page_access;       // 0: unknown, 1: granted, 2: denied (e.g. needs `SeLockMemoryPrivilege` on Windows)
-  _Atomic(size_t)     large_page_backoff;      // skip large OS page allocation while > 0 (set after a failed attempt)
-  _Atomic(size_t)     huge_page_unavailable;   // set once a huge (1GiB) OS page allocation failed
-  _Atomic(size_t)     lazy_reset_unavailable;  // set if a lazy reset (`MADV_FREE`) is not supported (and we use `MADV_DONTNEED`)
+  _Atomic(size_t)     numa_node_count;          // cached NUMA node count (0 until first use)
+  _Atomic(mi_addr_t)  aligned_base;             // next aligned address hint (see `_mi_os_get_aligned_hint`)
+  _Atomic(mi_addr_t)  huge_start;               // next address for huge OS pages (see `mi_os_claim_huge_pages`)
+  _Atomic(size_t)     large_page_access;        // 0: unknown, 1: granted, 2: denied (e.g. needs `SeLockMemoryPrivilege` on Windows)
+  _Atomic(size_t)     large_page_backoff;       // skip large OS page allocation while > 0 (set after a failed attempt)
+  _Atomic(size_t)     huge_page_unavailable;    // set once a huge (1GiB) OS page allocation failed
+  _Atomic(size_t)     lazy_reset_unavailable;   // set if a lazy reset (`MADV_FREE`) is not supported (and we use `MADV_DONTNEED`)
 } mi_os_state_t;
 
 
@@ -53,14 +53,14 @@ typedef struct mi_os_state_s {
 // so fields are aligned with `mi_decl_mte_align` and accessed through `mi_process_metadata_field` (which loads the tag).
 // Apply `F(tp,name)` to each field of the process meta data (used for the definition and for tagging each field)
 #define mi_process_metadata_fields(F) \
-  F(mi_subproc_t, subproc_main)       /* initial subprocess */ \
-  F(mi_heap_t,    heap_main)          /* initial heap for the process */ \
-  F(mi_theap_t,   theap_main)         /* initial theap for the main thread */ \
-  F(mi_tld_t,     tld_main)           /* initial tld for the main thread */ \
-  F(mi_theap_t,   theap_meta)         /* detached theap for meta-data allocation */ \
-  F(mi_tld_t,     tld_meta)           /* detached tld for `theap_meta` */ \
-  F(mi_theap_t,   theap_empty_wrong)  /* empty theap used to signal that a theap for a heap could not be allocated */ \
-  F(mi_memid_t,   memid)              /* OS provenance of the meta data (never freed) */
+  F(mi_subproc_t,     subproc_main)             /* initial subprocess */ \
+  F(mi_heap_t,        heap_main)                /* initial heap for the process */ \
+  F(mi_theap_t,       theap_main)               /* initial theap for the main thread */ \
+  F(mi_tld_t,         tld_main)                 /* initial tld for the main thread */ \
+  F(mi_theap_t,       theap_meta)               /* detached theap for meta-data allocation */ \
+  F(mi_tld_t,         tld_meta)                 /* detached tld for `theap_meta` */ \
+  F(mi_theap_t,       theap_empty_wrong)        /* empty theap used to signal that a theap for a heap could not be allocated */ \
+  F(mi_memid_t,       memid)                    /* OS provenance of the meta data (never freed) */
 
 #define mi_process_metadata_field_decl(tp,name)  mi_decl_mte_align tp name;
 
@@ -72,20 +72,23 @@ typedef struct mi_process_metadata_s {
 // (see `heap/process.c:_mi_process_unseal` for writing).
 typedef struct mi_process_sealed_s {
   // page map
-  _Atomic(struct mi_page_map_s*) page_map;  // the page map without memory tag (`NULL` before initialization) (see `heap/page-map.h:mi_page_map`); must be the first entry for better code-gen in secure mode
-  _Atomic(size_t)     page_map_committed;   // committed entries in the page map
+  _Atomic(struct mi_page_map_s*)  page_map;     // the page map without memory tag (`NULL` before initialization) (see `heap/page-map.h:mi_page_map`); must be the first entry for better code-gen in secure mode
+  _Atomic(size_t)     page_map_committed;       // committed entries in the page map
 
   // user callbacks
-  _Atomic(void*)      deferred_free;    // is `mi_deferred_free_fun*` (but some platforms don't support atomic function pointers)
-  _Atomic(void*)      deferred_arg;
-  _Atomic(void*)      out_default;      // is `mi_output_fun*`
-  _Atomic(void*)      out_arg;
-  _Atomic(void*)      error_handler;    // is `mi_error_fun*`
-  _Atomic(void*)      error_arg;
+  _Atomic(void*)      deferred_free;            // is `mi_deferred_free_fun*` (but some platforms don't support atomic function pointers)
+  _Atomic(void*)      deferred_arg;             // argument to the deferred free function
+  _Atomic(void*)      out_default;              // is `mi_output_fun*`
+  _Atomic(void*)      out_arg;                  // argument to the output function
+  _Atomic(void*)      error_handler;            // is `mi_error_fun*`
+  _Atomic(void*)      error_arg;                // argument to the error function
 
-  mi_process_metadata_t* metadata;      // process meta data without memory tag (`NULL` before initialization) (see `mi_process_metadata`)
-  mi_os_mem_config_t  os_mem_config;    // OS memory configuration (see `prim/os.c`)
-  bool                is_protected;     // `true` if the sealed page is read-only (see `_mi_process_unseal`)
+  mi_process_metadata_t* metadata;              // process meta data without memory tag (`NULL` before initialization) (see `mi_process_metadata`)
+  mi_os_mem_config_t  os_mem_config;            // OS memory configuration (see `prim/os.c`)
+  mi_msecs_t          clock_process_start;      // clock at process initialization (see `util/stats.c`)
+  mi_msecs_t          clock_overhead;           // measured overhead of reading the clock (subtracted in `_mi_clock_end`)
+  int64_t             clock_ticks_per_msec;     // performance counter ticks per millisecond (on Windows)
+  bool                is_protected;             // `true` if the sealed page is read-only (see `_mi_process_unseal`)
 } mi_process_sealed_t;
 
 
@@ -132,31 +135,24 @@ typedef struct mi_process_s {
   bool                              process_is_initialized; // set to `true` in `mi_process_init`
   bool                              libc_is_initialized;    // `true` once the C runtime is initialized (and `false` again after process done)
   bool                              malloc_is_redirected;   // `true` if malloc is redirected to mimalloc (on Windows with `mimalloc-redirect.dll`)
-  _Atomic(size_t)                   process_done_called;    // set once `mi_process_done` is called
-  _Atomic(size_t)                   subprocs_created;       // total number of sub-processes created (used for `subproc_seq`)
-  mi_atomic_guard_t                 arena_purge_guard;      // allow only one thread at a time to purge arenas
-
-  mi_msecs_t                        clock_process_start;    // clock at process initialization (see `util/stats.c`)
-  mi_msecs_t                        clock_overhead;         // measured overhead of reading the clock (subtracted in `_mi_clock_end`)
-  int64_t                           clock_ticks_per_msec;   // performance counter ticks per millisecond (on Windows) (0 until first use)
-
-  _Atomic(size_t)                   output_buf_len;         // used length of `output_buf`
+  _Atomic(size_t)                   process_done_is_called; // set once `mi_process_done` is called
+  _Atomic(size_t)                   subprocs_created_count; // total number of sub-processes created (used for `subproc_seq`)
   _Atomic(size_t)                   error_count;            // stop emitting errors when >= `mi_option_max_errors`
   _Atomic(size_t)                   warning_count;          // stop emitting warnings when >= `mi_option_max_warnings`
-
-  mi_os_state_t                     os;                     // OS state
+  _Atomic(size_t)                   output_buf_len;         // used length of `output_buf`
 
   mi_lock_t                         thread_locals_lock;     // initialized in `_mi_thread_locals_init` (see `util/threadlocal.c`)
   mi_bitmap_t*                      thread_locals_free;     // bitmap of free thread local slots (1=free, 0=in-use) (stored without memory tag)
   mi_memid_t                        thread_locals_memid;    // provenance of `thread_locals_free`
   size_t                            thread_locals_version;  // version to be able to reuse slots safely
 
+  mi_os_state_t                     os;                     // OS state
+  mi_fork_state_t                   fork;                   // fork state (see `heap/subproc.c`)
   mi_subproc_t*                     subprocs;               // list of all sub-processes (stored without memory tag)
   mi_lock_t                         subprocs_lock;          // initialized in `_mi_subproc_main_init` (as a zero lock is invalid on some platforms)
-  mi_fork_state_t                   fork;                   // fork state (see `heap/subproc.c`)
-
   mi_profiler_t*                    profile_env_profiler;   // the pprof profiler if `MIMALLOC_PROFILE` was set (see `profile/pprof.c`) (stored without memory tag)
   mi_atomic_guard_t                 profile_snapshot_guard; // allow only one thread at a time to take a profile snapshot
+  mi_atomic_guard_t                 arena_purge_guard;      // allow only one thread at a time to purge arenas
 
   // arrays last
   mi_option_state_t                 options[_mi_option_last]; // current option values (see `util/options.c`)
