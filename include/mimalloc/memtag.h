@@ -42,7 +42,7 @@ the hardware instructions are never executed (as these trap on CPU's without MTE
 #define MI_MEMTAG_ODD_BIT         (8)   // logical tag bit that is set for odd blocks
 
 #if (MI_CACHE_LINE_SIZE % MI_MEMTAG_UNIT_SIZE) != 0
-#error "`mi_decl_cache_align` must align on a memory tag granule"
+#error "`mi_decl_cache_align` must align on a memory tag unit"
 #endif
 
 // Set once at process initialization in the sealed process data (see `prim/os.c:_mi_os_init`)
@@ -140,7 +140,7 @@ static inline void* mi_memtag_random(void* p, size_t exclude) {
   return q;
 }
 
-// Return `p` with the tag of the memory granule at `p` (`ldg`)
+// Return `p` with the tag of the memory unit at `p` (`ldg`)
 static inline void* mi_memtag_load(void* p) {
   void* q = p;
   __asm__ __volatile__ (MI_MEMTAG_ASM "ldg %0, [%1]" : "+r"(q) : "r"(p) : "memory");
@@ -160,12 +160,12 @@ static inline void mi_memtag_check(const void* p) {
   (void)(*(const volatile uint8_t*)p);
 }
 
-// Set the tag of the granule at `p` (or two granules, or the cache line) to the tag of `p`, and zero it if `zero` is set
-static inline void __mi_memtag_store_granule(uint8_t* p, bool zero) {
+// Set the tag of the unit at `p` (or two units, or the cache line) to the tag of `p`, and zero it if `zero` is set
+static inline void __mi_memtag_store_unit(uint8_t* p, bool zero) {
   if (zero) { __asm__ __volatile__ (MI_MEMTAG_ASM "stzg %0, [%0]" : : "r"(p) : "memory"); }
        else { __asm__ __volatile__ (MI_MEMTAG_ASM "stg %0, [%0]"  : : "r"(p) : "memory"); }
 }
-static inline void __mi_memtag_store_granule2(uint8_t* p, bool zero) {
+static inline void __mi_memtag_store_unit2(uint8_t* p, bool zero) {
   if (zero) { __asm__ __volatile__ (MI_MEMTAG_ASM "stz2g %0, [%0]" : : "r"(p) : "memory"); }
        else { __asm__ __volatile__ (MI_MEMTAG_ASM "st2g %0, [%0]"  : : "r"(p) : "memory"); }
 }
@@ -174,33 +174,33 @@ static inline void __mi_memtag_store_line(uint8_t* p, bool zero) {
        else { __asm__ __volatile__ (MI_MEMTAG_ASM "dc gva, %0"  : : "r"(p) : "memory"); }
 }
 
-// Tag the granules in `[p,end)` (using pairs of granules where possible)
-static inline void __mi_memtag_store_granules(uint8_t* p, uint8_t* end, bool zero) {
-  if (((end - p) % (2*MI_MEMTAG_UNIT_SIZE)) != 0) { __mi_memtag_store_granule(p, zero); p += MI_MEMTAG_UNIT_SIZE; }
-  for (; p < end; p += 2*MI_MEMTAG_UNIT_SIZE) { __mi_memtag_store_granule2(p, zero); }
+// Tag the units in `[p,end)` (using pairs of units where possible)
+static inline void __mi_memtag_store_units(uint8_t* p, uint8_t* end, bool zero) {
+  if (((end - p) % (2*MI_MEMTAG_UNIT_SIZE)) != 0) { __mi_memtag_store_unit(p, zero); p += MI_MEMTAG_UNIT_SIZE; }
+  for (; p < end; p += 2*MI_MEMTAG_UNIT_SIZE) { __mi_memtag_store_unit2(p, zero); }
 }
 
 // Set the memory tags of `[p,p+size)` to the tag of `p`, and zero it if `zero` is set.
-// Small ranges are tagged per granule; for larger ranges only the (unaligned) edges are tagged per granule
+// Small ranges are tagged per unit; for larger ranges only the (unaligned) edges are tagged per unit
 // while the aligned middle is tagged per cache line (which is much faster).
 static inline void __mi_memtag_store_ex(void* p, size_t size, bool zero) {
   mi_assert_internal(((uintptr_t)p % MI_MEMTAG_UNIT_SIZE) == 0 && (size % MI_MEMTAG_UNIT_SIZE) == 0 && size > 0);
   uint8_t* const start = (uint8_t*)p;
   uint8_t* const end = start + size;
   if (size <= MI_MEMTAG_UNIT_MAX) {
-    __mi_memtag_store_granules(start, end, zero);
+    __mi_memtag_store_units(start, end, zero);
   }
   else {
     const uintptr_t line_size = _mi_os_memtag_line_size();
     uint8_t* const line_start = (uint8_t*)(((uintptr_t)start + line_size - 1) & ~(line_size - 1));
     uint8_t* const line_end   = (uint8_t*)((uintptr_t)end & ~(line_size - 1));
     if (line_start >= line_end) {
-      __mi_memtag_store_granules(start, end, zero);
+      __mi_memtag_store_units(start, end, zero);
     }
     else {
-      __mi_memtag_store_granules(start, line_start, zero);
+      __mi_memtag_store_units(start, line_start, zero);
       for (uint8_t* q = line_start; q < line_end; q += line_size) { __mi_memtag_store_line(q, zero); }
-      __mi_memtag_store_granules(line_end, end, zero);
+      __mi_memtag_store_units(line_end, end, zero);
     }
   }
 }

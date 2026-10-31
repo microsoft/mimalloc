@@ -27,12 +27,12 @@ terms of the MIT license. A copy of the license can be found in the file
   // ok, default alignment is 1 word
 #endif
 
-// Minimal block size in machine words (a block must be able to hold a pointer, and be a multiple of the memory tag granule size)
+// Minimal block size in machine words (a block must be able to hold a pointer, and be a multiple of the memory tag unit size)
 #if (MI_INTPTR_SIZE > MI_SIZE_SIZE) || MI_MTE
   #if (MI_INTPTR_SIZE > 2*MI_SIZE_SIZE) || !(defined(MI_ALIGN2W) || defined(MI_ALIGN4W))
   #error "define the minimal block size for this platform"
   #endif
-  #define MI_MIN_BLOCK_WSIZE  2   // as on CHERI, or with memory tagging (16-byte granules)
+  #define MI_MIN_BLOCK_WSIZE  2   // as on CHERI, or with memory tagging (16-byte units)
 #else
   #define MI_MIN_BLOCK_WSIZE  1
 #endif
