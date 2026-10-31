@@ -438,7 +438,7 @@ OS will copy the entire 1GiB huge page (or 2MiB large page) which can cause the 
 
 _mimalloc_ can be build in secure mode by using the `-DMI_SECURE=OFF|MINIMAL|CHECKED|ON|FULL` flags in `cmake`. This build mode
 enables various mitigations to make mimalloc more robust against exploits.
-With `MINIMAL` only security mitigations are added that have minimal impact on performance (usually about 1 or 2%):
+With `MINIMAL` only security mitigations are added that have minimal impact on performance (usually 1-3%):
 
 - All internal mimalloc meta data (including the page map and static data) is surrounded by guard pages
   (so a buffer overflow/underflow exploit cannot reach into the allocator's meta data).
@@ -449,21 +449,22 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
   mitigate against attacks that rely on a predictable allocation order.
 - Large blocks (> 512 KiB) are followed by a guard page.
 
-With `CHECKED` (the default with `-DMI_MTE=ON`), the performance impact is still small, but it adds:
+With `CHECKED` (the default with `-DMI_MTE=ON`), the performance impact is still small (usually less than 10%, but can be upto 2x slower):
 
 - All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
   are ignored. Interior pointers are adjusted to the start of their block.
 - All free list pointers are
-  [encoded](include/mimalloc/alloc/page.h#L622)
+  [encoded](include/mimalloc/alloc/page.h#L570)
   with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption.
 
-With `ON`, performance is impacted a bit more (usually less than 25%), but adds:
+With `ON`, performance is impacted a bit more (usually less than 25%, but can be upto 2x slower):
 
 - Double free's are detected (and ignored).
 - Padding is added at the end of each heap block to detect heap block overflows (once the block is freed).
 - Some use-after-free accesses are detected (if these modify the first word in the block).
 - (v3) All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
   are ignored.
+- The mimalloc library is build as `mimalloc-secure`.
 
 The `FULL` mode also adds:
 
@@ -484,14 +485,15 @@ at the end so overflows will still fault (this is done as tagging memory is line
 
 Tagging is only enabled at runtime if both the hardware and OS support it -- and otherwise _mimalloc_ runs untagged.
 An MTE build running untagged is very close in performance to a regular release build. When using tagging, it depends
-on the hardware, but on an M5 it is usually within about 10% of a release build. When building with `-DMI_MTE=REQUIRED`,
-_mimalloc_ assumes that the CPU supports MTE (which avoids some runtime checks), and aborts at initialization if
-the CPU does not support MTE or if tagging is not enabled at runtime (or, on Linux, if tag checking cannot be enabled
+on the hardware, but on an M5 it is usually within about 10% of a release build (but can be up to 2x slower).
+When building with `-DMI_MTE=REQUIRED`, _mimalloc_ requires the CPU supports MTE (which avoids some runtime checks),
+and aborts at initialization if MTE is not enabled at runtime (and, on Linux, if tag checking cannot be enabled
 for all threads).
 
-Building with MTE also enables `-DMI_SECURE=CHECKED` by default (including encoded free lists). Since MTE catches (most) use-after-free, double-free,
-and heap block overflows, `-DMI_MTE=ON` gives similar guarantees as `-DMI_SECURE=ON` but now with
-hardware support. MTE enabled builds have the suffix `-mte` (e.g. `mimalloc-mte.o`).
+Building with MTE also enables `-DMI_SECURE=CHECKED` by default (including encoded free lists).
+Since MTE catches (most) use-after-free, double-free, and heap block overflows, an MTE build gives
+similar guarantees as `-DMI_SECURE=ON` but now with hardware support. MTE enabled builds have
+the suffix `-mte` (e.g. `mimalloc-mte.o`).
 
 - macOS: requires an Apple M5 (or later) with macOS 26. MTE is only enabled for executables signed with
   the hardened-process entitlements (the tests are signed automatically):
