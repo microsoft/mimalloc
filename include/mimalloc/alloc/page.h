@@ -580,7 +580,7 @@ just a few known `p`.
 
 Instead, each page has two random keys (`keys[0]` and `keys[1]`), and each
 link is bound to the address `b` of the block it is stored in (so links
-cannot be copied). We use one of two encodings:
+cannot be copied). We use one of three encodings:
 
 1. Tagged offsets (`MI_ENCODE_FREELIST_TAGGED`, the default on 64-bit).
    We store the 32-bit page offset `v` of the next block (with `NULL` as
@@ -596,8 +596,22 @@ cannot be copied). We use one of two encodings:
    throughput. A corrupted or forged link validates with
    probability 2^-32, and it is difficult to recover the keys
    from known `(b,v,x)` triples (except for `m`), leaving ~96 bits of key.
+   With `MI_PAC` (weak or on) the process key `K` is also mixed in as
+   `mulxor64(v ^ keys[0], b ^ keys[1] ^ K)` (see `pac.h:mi_ptr_pac_mac`).
 
-2. Xor-shift (the default on 32-bit, where we lack a cheap wide multiply).
+2. Authenticated offsets (with `MI_PAC=REQUIRED`, or `MI_PAC_GA` on Apple).
+   As the tagged offsets, but the tag is computed with the (unreadable)
+   hardware pointer authentication key:
+
+     x      = (T(b,v) << 32) | v
+     T(b,v) = let t = pacga(v, b ^ keys[0]) in t | (t >> 32)
+
+   The page keys need not be secret anymore: the offset is not masked, and
+   `keys[0]` only serves as a nonce such that links from a previous use of the
+   page do not validate. A forged link validates with probability 2^-32 even
+   if the page keys are known.
+
+3. Xor-shift (the default on 32-bit, where we lack a cheap wide multiply).
    We store the full next address `p` (with `NULL` encoded as the page address):
 
      x    = L(p - t) <<< keys[0]
@@ -636,7 +650,19 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
 #error "the block offsets in a page with multiple blocks must fit in a free list link (see MI_BLOCK_OFS_BITS)"
 #endif
 
-// With `MI_PAC` the MAC also uses the process key or `pacga` (see `pac.h:mi_ptr_pac_mac`)
+#if MI_PAC_USE_GA_MAC
+// With `pacga` the MAC uses the hardware key, so the page keys need not be secret: the offset is stored
+// as is, and `keys[0]` is only used as a nonce such that links of a previous use of the page do not verify.
+static inline mi_addr_t mi_ptr_mac(const mi_page_t* page, mi_addr_t baddr, mi_addr_t d) {
+  return mi_ptr_pac_mac(d, baddr ^ page->keys[0]);
+}
+
+static inline mi_addr_t mi_ptr_ofs_key(const mi_page_t* page) {
+  MI_UNUSED(page);
+  return 0;
+}
+#else
+// With `MI_PAC` the MAC also uses the process key (see `pac.h:mi_ptr_pac_mac`)
 static inline mi_addr_t mi_ptr_mac(const mi_page_t* page, mi_addr_t baddr, mi_addr_t d) {
   return mi_ptr_pac_mac(d ^ page->keys[0], baddr ^ page->keys[1]);
 }
@@ -644,6 +670,7 @@ static inline mi_addr_t mi_ptr_mac(const mi_page_t* page, mi_addr_t baddr, mi_ad
 static inline mi_addr_t mi_ptr_ofs_key(const mi_page_t* page) {
   return mi_rotl(page->keys[0], 32);
 }
+#endif
 
 // Encode a pointer `p` (in the page, or NULL) to be stored at address `baddr`
 static inline mi_encoded_t mi_ptr_encode(const mi_page_t* page, mi_addr_t baddr, const void* p) {

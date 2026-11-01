@@ -41,8 +41,9 @@ are available for the authentication code (and the tag is still authenticated).
   checked at startup to be supported and enabled).
 
 The free list links are always encoded with a MAC using per-page keys (see `alloc/page.h`).
-With `MI_PAC` the MAC is extended with the process key `K` (or uses `pacga` with `MI_PAC=3`
-or `MI_PAC_GA`) such that the free list cannot be forged from just reading the page keys.
+With `MI_PAC` the MAC is extended with the process key `K` such that the free list cannot be
+forged from just reading the page keys. With `MI_PAC=3` or `MI_PAC_GA` the MAC is `pacga(v, b ^ keys[0])`
+instead, and the page offset is stored unmasked (as the page keys need not be secret).
 Decoding failures report `EFAULT` and return `NULL` (see `_mi_ptr_pac_invalid`).
 ----------------------------------------------------------------------------- */
 
