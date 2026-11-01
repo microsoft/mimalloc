@@ -495,15 +495,13 @@ Since MTE catches (most) use-after-free, double-free, and heap block overflows, 
 similar (and stronger) guarantees as `-DMI_SECURE=ON` but with hardware support. MTE enabled builds have
 the suffix `-mte` (e.g. `mimalloc-mte.o`).
 
-- macOS: requires an Apple M5 (or later) with macOS 26. MTE is only enabled for executables signed with
+- macOS: requires an Apple M5 (or later) with macOS 26+. MTE is only enabled for executables signed with
   the hardened-process entitlements (the tests are signed automatically):
   ```
   > cmake -DMI_MTE=ON ../..
   > make -j
   > codesign -s - -f --entitlements ../../cmake/mte-entitlements.plist myprogram
   ```
-- iOS (experimental, untested): requires an A19 (or later) with iOS 26, and an app with the Enhanced Security
-  capability that enables hardware memory tagging (the same hardened-process entitlements as on macOS).
 - Linux: requires an arm64 kernel with MTE support (check with `grep mte /proc/cpuinfo`). The tag check mode
   can be set with `MIMALLOC_MTE=sync` (default), `async`, or `preferred`. Without MTE hardware you can still
   test using QEMU emulation (e.g. `QEMU_CPU=max qemu-aarch64 ./myprogram`).
@@ -522,6 +520,15 @@ the suffix `-mte` (e.g. `mimalloc-mte.o`).
           -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 ../..
   > make -j
   ```
+- iOS (experimental, untested): requires an A19 (or later) with iOS 26+, and an app with the _Enhanced Security_
+  capability that enables hardware memory tagging (the same hardened-process entitlements as on macOS).
+  Build a static library with the iOS SDK as:
+  ```
+  > cmake -DMI_MTE=ON -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=26.0 \
+          -DMI_BUILD_SHARED=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF ../..
+  > make -j
+  ```
+  and link `libmimalloc-mte.a` into the app.
 
 [MTE]: https://support.arm.com/documentation/108035/0100/How-does-MTE-work-
 
