@@ -68,7 +68,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_SECURE 1  // + guard pages around metadata (and separated metadata) and after singleton blocks, randomized arena/OS allocation addresses, randomized free list initialization and allocation addresses within mimalloc pages, abort on EFAULT (corrupted meta-data) (`-DMI_SECURE=MINIMAL`)
 // #define MI_SECURE 2  // + invalid-pointer check on free (checked lookup in page-map.h), encode free lists (and detect corrupted free lists), clear free list `next` on allocation (`-DMI_SECURE=CHECKED`)
 // #define MI_SECURE 3  // (currently the same as 2)
-// #define MI_SECURE 4  // + check buffer overflow (with padding), check double free (with padding), decommit with mprotect (`-DMI_SECURE=ON`)
+// #define MI_SECURE 4  // + check buffer overflow (with padding), check double free (with padding), more randomized free lists, decommit with mprotect (`-DMI_SECURE=ON`)
 // #define MI_SECURE 5  // + guard page at the end of each mimalloc page (expensive!), and byte-precise buffer overflow checks (`-DMI_SECURE=FULL`)
 
 #if !defined(MI_SECURE)
@@ -147,6 +147,28 @@ terms of the MIT license. A copy of the license can be found in the file
 // and can detect buffer overflows, modify after free, and double `free`s.
 #if (MI_SECURE>=2 || MI_DEBUG>=1)
 #define MI_ENCODE_FREELIST  1
+#endif
+
+// In secure mode, initialize the free list of fresh blocks in a page in a randomized order.
+// With required memory tagging (and secure level < 4) we don't randomize as each block gets a fresh
+// tag and small blocks are zero'd, so predicting block addresses (heap feng-shui) is much less useful.
+#if !defined(MI_SECURE_SHUFFLE_FREELIST)
+#if MI_SECURE>=1 && !(MI_MTE>=2 && MI_SECURE<4)
+#define MI_SECURE_SHUFFLE_FREELIST  1
+#else
+#define MI_SECURE_SHUFFLE_FREELIST  0
+#endif
+#endif
+
+// In secure mode, randomly extend the free list of a page even if it still has free blocks
+#if !defined(MI_SECURE_RANDOM_EXTEND)
+#define MI_SECURE_RANDOM_EXTEND    (MI_SECURE>=1)
+#endif
+
+// In secure mode we always find the block start on free (to guard against freeing interior pointers);
+// a precomputed reciprocal of the block size per page avoids a division for that.
+#if !defined(MI_PAGE_BLOCK_RECIPROCAL)
+#define MI_PAGE_BLOCK_RECIPROCAL   (MI_SECURE>=2)
 #endif
 
 // Deprecated (double-free is now checked with padding)
@@ -551,6 +573,9 @@ typedef struct mi_decl_memtag_unit_align mi_page_s {
 
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   mi_addr_t                 keys[2];           // const: random keys to encode the free lists and padding canary (see `alloc/page.h`)
+  #endif
+  #if MI_PAGE_BLOCK_RECIPROCAL
+  uint64_t                  block_recip;       // const: `ceil(2^64/block_size)` for division by `block_size` (or 0 if the page has a single block) (see `alloc/free.c`)
   #endif
   #if MI_QSBR
   _Atomic(mi_thread_id_t)   qsbr_xthread_id;   // thread id of the last owning thread (`theap->tld->thread_id`) | `MI_PAGE_QSBR_IN_QUEUE` (written only by the owning thread)

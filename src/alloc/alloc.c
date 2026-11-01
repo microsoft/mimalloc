@@ -74,6 +74,8 @@ static mi_decl_noinline mi_decl_restrict void* mi_theap_malloc_sampled_new(mi_th
 // Fall back to generic allocation only if the list is empty.
 // Note: even though there is a lot of checks etc in the source,
 // in release mode the (inlined) routine is about 7 to 10 instructions with a single test.
+static void* _mi_page_malloc_corrupted(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept;
+
 static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, size_t sample_countdown, bool zero, bool is_new, mi_page_t** ppage)
 {
   if (page->block_size != 0) { // not the empty theap
@@ -102,7 +104,12 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
   if (ppage != NULL) { *ppage = page; };
 
   // pop from the free list
-  mi_block_t* next = mi_block_next(page,block);
+  const mi_encoded_t x = mi_block_link(block);
+  bool valid;
+  mi_block_t* const next = mi_block_decode(page, block, x, &valid);
+  if mi_unlikely(!valid) {
+    return _mi_page_malloc_corrupted(theap, page, size, zero);  // as a tail call so the fast path needs no stack frame
+  }
   mi_track_mem_undefined(block,sizeof(*block));
 
   #if MI_SECURE>=2
@@ -175,6 +182,15 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
 // extra entries for improved efficiency in `alloc/alloc-aligned.c` (and in `alloc/alloc-generic.c:mi_malloc_generic`.
 extern mi_decl_restrict void* _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept {
   return mi_page_malloc_zero(theap, page, size, theap->sample_countdown, zero, false, NULL);
+}
+
+// Called when the free list link of the first free block is corrupted: report it,
+// truncate the free list after that block, and allocate again.
+static mi_decl_noinline mi_decl_cold void* _mi_page_malloc_corrupted(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept {
+  mi_block_t* const block = page->free;
+  _mi_block_next_is_corrupted(page, block, mi_block_link(block));
+  mi_block_set_next(page, block, NULL);
+  return _mi_page_malloc_zero(theap, page, size, zero);
 }
 
 
@@ -880,7 +896,8 @@ static mi_decl_noinline void* mi_theap_malloc_sampled_new(mi_theap_t* theap, siz
 #endif
 
 // Fast tail calling allocation that invokes the new handler on failure (through `mi_malloc_generic_new`)
-mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new(mi_theap_t* theap, size_t size) {
+// (always inlined into `mi_new` as with an encoded free list the fast path can otherwise become too large to inline)
+static mi_decl_forceinline mi_decl_restrict void* mi_theap_alloc_new_inline(mi_theap_t* theap, size_t size) {
   // fast path for small objects
   #if MI_THEAP_INITASNULL
   if mi_likely(theap!=NULL && size <= MI_SMALL_SIZE_MAX)
@@ -895,8 +912,12 @@ mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new(mi_theap_t* theap, s
   }
 }
 
+mi_decl_nodiscard mi_decl_restrict void* mi_theap_alloc_new(mi_theap_t* theap, size_t size) {
+  return mi_theap_alloc_new_inline(theap, size);
+}
+
 mi_decl_nodiscard mi_decl_restrict void* mi_new(size_t size) {
-  return mi_theap_alloc_new(_mi_theap_default(), size);
+  return mi_theap_alloc_new_inline(_mi_theap_default(), size);
 }
 
 mi_decl_nodiscard static mi_decl_noinline mi_decl_restrict void* mi_heap_init_new(mi_heap_t* heap, size_t size) {
@@ -904,7 +925,7 @@ mi_decl_nodiscard static mi_decl_noinline mi_decl_restrict void* mi_heap_init_ne
 }
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new(mi_heap_t* heap, size_t size) {
   mi_theap_t* const theap = _mi_heap_theap_cached(heap);
-  if mi_likely(theap!=NULL) { return mi_theap_alloc_new(theap, size); }
+  if mi_likely(theap!=NULL) { return mi_theap_alloc_new_inline(theap, size); }
                        else { return mi_heap_init_new(heap, size); }
 }
 

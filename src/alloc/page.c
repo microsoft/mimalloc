@@ -742,12 +742,21 @@ void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {
   alternating between slices.
 ----------------------------------------------------------- */
 
+// The number of slices bounds the randomness of the next allocated block. Fewer slices are much
+// faster as the hardware prefetcher can still follow the interleaved sequential runs (and 4 slices
+// already make the next block unpredictable). At higher secure levels we use up to 64 slices.
+#ifndef MI_MAX_SLICE_SHIFT
+#if MI_SECURE>=4
 #define MI_MAX_SLICE_SHIFT  (6)   // at most 64 slices
+#else
+#define MI_MAX_SLICE_SHIFT  (2)   // at most 4 slices
+#endif
+#endif
 #define MI_MAX_SLICES       (1UL << MI_MAX_SLICE_SHIFT)
 #define MI_MIN_SLICES       (2)
 
 static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* const page, const size_t bsize, const size_t extend, const bool memtag) {
-  #if !(MI_SECURE>=1)
+  #if !MI_SECURE_RANDOM_EXTEND
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
   #endif
@@ -804,7 +813,7 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
 
 static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, const size_t bsize, const size_t extend, const bool memtag)
 {
-  #if !(MI_SECURE>=1)
+  #if !MI_SECURE_RANDOM_EXTEND
   mi_assert_internal(page->free == NULL);
   mi_assert_internal(page->local_free == NULL);
   #endif
@@ -832,7 +841,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 ----------------------------------------------------------- */
 
 #define MI_MAX_EXTEND_SIZE    (8*1024)      // heuristic, one or two OS pages seems to work well.
-#if (MI_SECURE>=1)
+#if MI_SECURE_SHUFFLE_FREELIST
 #define MI_MIN_EXTEND(bsize)  ((bsize) <= MI_SMALL_MAX_OBJ_SIZE ? 32 : 8)  // extend at least by this many (for free list randomization)
 #else
 #define MI_MIN_EXTEND(bsize)  (1)
@@ -845,7 +854,7 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 // extra test in malloc? or cache effects?)
 bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_expensive(mi_page_is_valid_init(page));
-  #if !(MI_SECURE>=1)
+  #if !MI_SECURE_RANDOM_EXTEND
   mi_assert(page->free == NULL);
   mi_assert(page->local_free == NULL);
   if (page->free != NULL) return true;
@@ -909,7 +918,7 @@ bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   }
 
   // and append the extend the free list
-  if (MI_SECURE>=1 && extend >= MI_MIN_SLICES) {
+  if (MI_SECURE_SHUFFLE_FREELIST && extend >= MI_MIN_SLICES) {
     mi_page_free_list_extend_secure(theap, page, bsize, extend, memtag);
   }
   else {

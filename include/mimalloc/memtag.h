@@ -14,7 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 /* ----------------------------------------------------------------------------
 Memory tagging
 Currently supports ARM MTE but we should be able to support future memory tagging
-extensions as well (like x86 ChkTag and LAM)
+extensions as well (like x86 ChkTag)
 
 Every 16-byte unit of tagged memory has a 4-bit tag, and each access must use a
 pointer with a matching tag in the top bits (56-59 on ARM, see `MI_PTR_MEMTAG_SHIFT`).

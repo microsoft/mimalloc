@@ -618,4 +618,16 @@ static inline uint64_t mi_mul_xor64(uint64_t x, uint64_t y) {
   #endif
 }
 
+// The high 64 bits of the 96-bit product `x*y` (with `x < 2^32`).
+static inline uint64_t mi_mul_hi64_32(uint32_t x, uint64_t y) {
+  #if defined(__SIZEOF_INT128__)
+    return (uint64_t)(((unsigned __int128)x * y) >> 64);
+  #elif defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_ARM64)
+    return __umulh(x, y);
+  #else
+    // `x*(y>>32) <= (2^32-1)^2` so adding a 32-bit value cannot overflow
+    return ((uint64_t)x * (y >> 32) + (((uint64_t)x * (uint32_t)y) >> 32)) >> 32;
+  #endif
+}
+
 #endif // MI_ARCH_H

@@ -127,15 +127,35 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
 // note: this can be called from `mi_free_generic_mt` where a non-owning thread accesses the
 // `page_woffset` and `block_size` fields; however these are constant and the page won't be
 // deallocated (as the block we are freeing keeps it alive) and thus safe to read concurrently.
+
+// The index of the block at byte offset `diff` in the page (`diff / block_size`).
+static inline size_t mi_page_block_index(const mi_page_t* page, size_t diff) {
+  #if MI_PAGE_BLOCK_RECIPROCAL
+  // `floor(diff * ceil(2^64/block_size) / 2^64) == diff / block_size` if both `diff` and `block_size`
+  // are below 2^32 (Lemire, Kaser, and Kurz, "Faster remainder by direct computation", 2019).
+  // Pages with a single block have `block_recip == 0` as the block index is always 0.
+  mi_assert_internal(page->block_recip==0 || diff <= UINT32_MAX);
+  const size_t idx = (size_t)mi_mul_hi64_32((uint32_t)diff, page->block_recip);
+  mi_assert_internal(idx == diff / mi_page_block_size(page));
+  return idx;
+  #else
+  return diff / mi_page_block_size(page);
+  #endif
+}
+
 static inline mi_block_t* mi_page_ptr_unalign_ex(const mi_page_t* page, const void* p, size_t* poffset) {
   mi_assert_internal(page!=NULL && p!=NULL);
 
   const size_t diff = mi_addr(p) - mi_addr(mi_page_start(page));
   const size_t block_size = mi_page_block_size(page);
+  #if MI_PAGE_BLOCK_RECIPROCAL
+  const size_t adjust = diff - (mi_page_block_index(page, diff) * block_size);
+  #else
   size_t adjust = diff & (block_size - 1);
   if mi_unlikely(!mi_is_power_of_two(block_size)) {
     adjust = diff % block_size;
   }
+  #endif
   if (poffset!=NULL) { *poffset = adjust; }
   void* const block = mi_ptr_rederive(mi_page_start(page), p);
   return (mi_block_t*)mi_ptr_with_addr(block, mi_addr(p) - adjust);
@@ -194,7 +214,7 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
     #endif
     if (mi_page_is_memtag(page) && !*was_guarded && mi_ptr_memtag(block)==MI_MEMTAG_META) {  // a canonical block (see `_mi_memtag_canonical`)
       const size_t bsize = mi_page_block_size(page);
-      block = (mi_block_t*)mi_memtag_block_uncanonical(block, bsize, (mi_addr(block) - mi_addr(mi_page_start(page))) / bsize);
+      block = (mi_block_t*)mi_memtag_block_uncanonical(block, bsize, mi_page_block_index(page, mi_addr(block) - mi_addr(mi_page_start(page))));
     }
     return block;
   }
