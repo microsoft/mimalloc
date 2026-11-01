@@ -479,9 +479,9 @@ As always, evaluate with care as part of an overall security strategy as all of 
 
 On recent arm64 hardware with the memory tagging extensions ([MTE]), _mimalloc_ can be built with `-DMI_MTE=ON`
 to give every heap block a randomized memory tag that can only be accessed with a matching pointer that has the same
-tag. Adjacent blocks always get different tags, and blocks are retagged when freed, so most buffer overflows and
-use-after-free accesses fault immediately. All blocks up to 512KiB are tagged, but larger blocks get a guard page
-at the end so overflows will still fault (this is done as tagging memory is linear in the size of the block).
+tag. Adjacent blocks always get different tags, and blocks are retagged when freed, so buffer overflows and
+(most) use-after-free accesses fault immediately. All blocks up to 512KiB are tagged, but larger blocks get a guard page
+at the end so overflows still fault (this is done as tagging memory is linear in the size of the block).
 
 Tagging is only enabled at runtime if both the hardware and OS support it -- and otherwise _mimalloc_ runs untagged.
 An MTE build running untagged is very close in performance to a regular release build. When using tagging, it depends
@@ -492,7 +492,7 @@ for all threads).
 
 Building with MTE also enables `-DMI_SECURE=CHECKED` by default (including encoded free lists).
 Since MTE catches (most) use-after-free, double-free, and heap block overflows, an MTE build gives
-similar guarantees as `-DMI_SECURE=ON` but now with hardware support. MTE enabled builds have
+similar (and stronger) guarantees as `-DMI_SECURE=ON` but with hardware support. MTE enabled builds have
 the suffix `-mte` (e.g. `mimalloc-mte.o`).
 
 - macOS: requires an Apple M5 (or later) with macOS 26. MTE is only enabled for executables signed with
@@ -502,6 +502,8 @@ the suffix `-mte` (e.g. `mimalloc-mte.o`).
   > make -j
   > codesign -s - -f --entitlements ../../cmake/mte-entitlements.plist myprogram
   ```
+- iOS (experimental, untested): requires an A19 (or later) with iOS 26, and an app with the Enhanced Security
+  capability that enables hardware memory tagging (the same hardened-process entitlements as on macOS).
 - Linux: requires an arm64 kernel with MTE support (check with `grep mte /proc/cpuinfo`). The tag check mode
   can be set with `MIMALLOC_MTE=sync` (default), `async`, or `preferred`. Without MTE hardware you can still
   test using QEMU emulation (e.g. `QEMU_CPU=max qemu-aarch64 ./myprogram`).

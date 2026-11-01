@@ -77,8 +77,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #elif defined(__APPLE__)
   #include <AvailabilityMacros.h>
   #include <TargetConditionals.h>
-  #if !defined(TARGET_OS_OSX) || TARGET_OS_OSX   // see issue #879, used to be (!TARGET_IOS_IPHONE && !TARGET_IOS_SIMULATOR)
-  #include <mach/vm_statistics.h>    // VM_MAKE_TAG, VM_FLAGS_SUPERPAGE_SIZE_2MB, etc.
+  #if !defined(TARGET_OS_OSX) || TARGET_OS_OSX || MI_MTE  // see issue #879 (on iOS only included for memory tagging)
+  #include <mach/vm_statistics.h>    // VM_MAKE_TAG, VM_FLAGS_SUPERPAGE_SIZE_2MB, VM_FLAGS_MTE, etc.
   #endif
   #if !defined(MAC_OS_X_VERSION_10_7)
   #define MAC_OS_X_VERSION_10_7   1070
@@ -87,7 +87,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #if MI_MTE && defined(VM_FLAGS_MTE) && __has_include(<os/security_config.h>)
   #include <os/security_config.h>   // os_security_config_get
   #include <mach/mach.h>
-  #include <mach/mach_vm.h>         // mach_vm_map
+  #include <mach/vm_map.h>          // vm_map (as `mach/mach_vm.h` is not supported on iOS)
   #define MI_UNIX_MACH_MTE  1
   #endif
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
@@ -548,13 +548,13 @@ static int unix_mmap_fd(void) {
 #endif
 
 #if MI_UNIX_MACH_MTE
-// Allocate memory that supports memory tagging (as `mmap` has no MTE flag on macOS)
+// Allocate memory that supports memory tagging (as `mmap` has no MTE flag on macOS/iOS)
 static void* unix_mmap_memtag(size_t size, size_t try_alignment, int protect_flags, int fd) {
-  const mach_vm_offset_t mask = (mi_is_power_of_two(try_alignment) && try_alignment <= MI_GiB ? try_alignment - 1 : 0);
+  const vm_offset_t mask = (mi_is_power_of_two(try_alignment) && try_alignment <= MI_GiB ? try_alignment - 1 : 0);
   const vm_prot_t prot = ((protect_flags & PROT_WRITE) != 0 ? VM_PROT_READ | VM_PROT_WRITE : VM_PROT_NONE);
-  mach_vm_address_t addr = 0;
-  const kern_return_t err = mach_vm_map(mach_task_self(), &addr, size, mask, VM_FLAGS_ANYWHERE | VM_FLAGS_MTE | (fd != -1 ? fd : 0),
-                                        MEMORY_OBJECT_NULL, 0, FALSE, prot, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_DEFAULT);
+  vm_address_t addr = 0;
+  const kern_return_t err = vm_map(mach_task_self(), &addr, size, mask, VM_FLAGS_ANYWHERE | VM_FLAGS_MTE | (fd != -1 ? fd : 0),
+                                   MEMORY_OBJECT_NULL, 0, FALSE, prot, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_DEFAULT);
   if (err != KERN_SUCCESS) {
     _mi_trace_message("unable to allocate memory tagged OS memory (error: %d, size: 0x%zx bytes, alignment: 0x%zx)\n", err, size, try_alignment);
     errno = ENOMEM;
