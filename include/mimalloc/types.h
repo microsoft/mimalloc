@@ -150,10 +150,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 // In secure mode, initialize the free list of fresh blocks in a page in a randomized order.
-// With required memory tagging (and secure level < 4) we don't randomize as each block gets a fresh
-// tag and small blocks are zero'd, so predicting block addresses (heap feng-shui) is much less useful.
 #if !defined(MI_SECURE_SHUFFLE_FREELIST)
-#if MI_SECURE>=1 && !(MI_MTE>=2 && MI_SECURE<4)
+#if MI_SECURE>=1 // && !(MI_MTE>=2 && MI_SECURE<4)
 #define MI_SECURE_SHUFFLE_FREELIST  1
 #else
 #define MI_SECURE_SHUFFLE_FREELIST  0
@@ -165,22 +163,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SECURE_RANDOM_EXTEND    (MI_SECURE>=1)
 #endif
 
-// In secure mode we always find the block start on free (to guard against freeing interior pointers);
-// a precomputed reciprocal of the block size per page avoids a division for that.
-#if !defined(MI_PAGE_BLOCK_RECIPROCAL)
-#define MI_PAGE_BLOCK_RECIPROCAL   (MI_SECURE>=2)
-#endif
-
 // Deprecated (double-free is now checked with padding)
 // #if (MI_ENCODE_FREELIST && (MI_SECURE>=4 || MI_DEBUG!=0))
 // #define MI_CHECK_DOUBLE_FREE  1
 // #endif
-
-// On 64-bit, free list links are encoded as a masked page offset with a keyed 32-bit tag;
-// otherwise we use a keyed xor-shift encoding of the full address (see `alloc/page.h`).
-#if !defined(MI_ENCODE_FREELIST_TAGGED)
-#define MI_ENCODE_FREELIST_TAGGED  (MI_SIZE_BITS==64)
-#endif
 
 // Enable large pages for objects between 64KiB and 512KiB.
 // This should perhaps be disabled by default as for many workloads the block sizes above 64 KiB
@@ -574,7 +560,7 @@ typedef struct mi_decl_memtag_unit_align mi_page_s {
   #if (MI_ENCODE_FREELIST || MI_PADDING)
   mi_addr_t                 keys[2];           // const: random keys to encode the free lists and padding canary (see `alloc/page.h`)
   #endif
-  #if MI_PAGE_BLOCK_RECIPROCAL
+  #if MI_FREE_IS_CHECKED
   uint64_t                  block_recip;       // const: `ceil(2^64/block_size)` for division by `block_size` (or 0 if the page has a single block) (see `alloc/free.c`)
   #endif
   #if MI_QSBR

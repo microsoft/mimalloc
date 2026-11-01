@@ -130,7 +130,7 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
 
 // The index of the block at byte offset `diff` in the page (`diff / block_size`).
 static inline size_t mi_page_block_index(const mi_page_t* page, size_t diff) {
-  #if MI_PAGE_BLOCK_RECIPROCAL
+  #if MI_FREE_IS_CHECKED
   // `floor(diff * ceil(2^64/block_size) / 2^64) == diff / block_size` if both `diff` and `block_size`
   // are below 2^32 (Lemire, Kaser, and Kurz, "Faster remainder by direct computation", 2019).
   // Pages with a single block have `block_recip == 0` as the block index is always 0.
@@ -148,7 +148,7 @@ static inline mi_block_t* mi_page_ptr_unalign_ex(const mi_page_t* page, const vo
 
   const size_t diff = mi_addr(p) - mi_addr(mi_page_start(page));
   const size_t block_size = mi_page_block_size(page);
-  #if MI_PAGE_BLOCK_RECIPROCAL
+  #if MI_FREE_IS_CHECKED
   const size_t adjust = diff - (mi_page_block_index(page, diff) * block_size);
   #else
   size_t adjust = diff & (block_size - 1);

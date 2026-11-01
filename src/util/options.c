@@ -287,7 +287,7 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
   _mi_fprintf(out, arg, "free mode   : pagemap, page size: %zu\n", sizeof(mi_page_t));
   #endif
   #if MI_ENCODE_FREELIST
-  _mi_fprintf(out, arg, "free lists  : encoded (%s)\n", MI_ENCODE_FREELIST_TAGGED ? "tagged offsets" : "xor-shift");
+  _mi_fprintf(out, arg, "free lists  : encoded (%s)\n", (MI_SIZE_BITS>=64 ? "tagged offsets" : "xor-shift"));
   #endif
   #if MI_GUARDED
   _mi_fprintf(out, arg, "guarded mode: %s, rate=%ld\n",  MI_SAMPLE==2 ? "fine-grained" : "enabled", mi_option_get(mi_option_guarded_sample_rate));

@@ -582,7 +582,7 @@ Instead, each page has two random keys (`keys[0]` and `keys[1]`), and each
 link is bound to the address `b` of the block it is stored in (so links
 cannot be copied). We use one of three encodings:
 
-1. Tagged offsets (`MI_ENCODE_FREELIST_TAGGED`, the default on 64-bit).
+1. Tagged offsets (on 64-bit platforms).
    We store the 32-bit page offset `v` of the next block (with `NULL` as
    the reserved offset `MI_BLOCK_OFS_NULL`) together with a keyed 32-bit tag:
 
@@ -635,7 +635,7 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
 }
 
 #if (MI_ENCODE_FREELIST || MI_PADDING)
-#if MI_ENCODE_FREELIST_TAGGED
+#if MI_SIZE_BITS>=64  // tagged offsets
 
 // On 64-bit, a free list link stores the offset `d` of the next block relative to the page start, masked with
 // a key, and a keyed MAC over `d` and the address of the link in all other bits. With memory tagging, `d` includes

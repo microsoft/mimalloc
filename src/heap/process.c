@@ -49,6 +49,9 @@ static const mi_page_t mi_page_empty = {
   #if (MI_PADDING || MI_ENCODE_FREELIST)
   { 0, 0 },               // keys
   #endif
+  #if MI_FREE_IS_CHECKED
+  0,                      // block_recip
+  #endif
   #if MI_QSBR
   MI_ATOMIC_VAR_INIT(0),  // qsbr_xthread_id
   NULL, NULL,             // qsbr_next, qsbr_prev
