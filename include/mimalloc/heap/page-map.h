@@ -40,13 +40,13 @@ mi_page_t*    _mi_safe_ptr_page(const void* p);
 // The page map pointer is stored in the sealed-once process data (see `mi_process_get_sealed_once`), and
 // the committed entry count in the sealed process data (see `mi_process_get_sealed`).
 // Both are zero before initialization so `mi_checked_ptr_page` returns NULL for any pointer (issue #1341).
-// The sub map pointers and the page pointers in a sub map are encoded with the address of their entry (see `pac.h`).
-typedef mi_ptr_pac_t* mi_submap_t;
+// The sub map pointers and the page pointers in a sub map are signed with the address of their entry (see `pac.h`).
+typedef mi_ptr_signed_t* mi_submap_t;
 typedef struct mi_page_map_s {
   size_t               reserved_size;    // full reserved size (mi_page_map_t + submaps)
   mi_memid_t           memid;            // provenance
   mi_lock_t            lock;             // used when allocating new submaps
-  _Atomic(mi_ptr_pac_t) submaps[1];
+  _Atomic(mi_ptr_signed_t) submaps[1];
 } mi_page_map_t;
 
 static inline size_t mi_page_map_index(const void* p, size_t* sub_idx) {
@@ -79,13 +79,13 @@ static inline size_t mi_page_map_committed(void) {
 }
 
 static inline mi_submap_t mi_page_map_at(const mi_page_map_t* pmap, size_t idx) {
-  const _Atomic(mi_ptr_pac_t)* const entry = &pmap->submaps[idx];
-  return (mi_submap_t)mi_ptr_pac_decode(mi_atomic_load_acquire((_Atomic(mi_ptr_pac_t)*)entry), mi_addr(entry));
+  const _Atomic(mi_ptr_signed_t)* const entry = &pmap->submaps[idx];
+  return (mi_submap_t)mi_ptr_auth(mi_atomic_load_acquire((_Atomic(mi_ptr_signed_t)*)entry), mi_addr(entry));
 }
 
 static inline mi_page_t* mi_submap_at(const mi_submap_t sub, size_t sub_idx) {
-  const mi_ptr_pac_t* const entry = &sub[sub_idx];
-  return (mi_page_t*)mi_ptr_pac_decode(*entry, mi_addr(entry));
+  const mi_ptr_signed_t* const entry = &sub[sub_idx];
+  return (mi_page_t*)mi_ptr_auth(*entry, mi_addr(entry));
 }
 
 static inline mi_page_t* mi_unchecked_ptr_page(const void* p) {
@@ -101,11 +101,11 @@ static inline mi_page_t* mi_checked_ptr_page(const void* p) {
   const size_t committed_count = mi_page_map_committed();  // 0 before initialization
   if mi_unlikely(idx >= committed_count) return NULL;
   const mi_page_map_t* pmap = mi_page_map_initialized();
-  const _Atomic(mi_ptr_pac_t)* const entry = &pmap->submaps[idx];
-  const mi_ptr_pac_t x = mi_atomic_load_acquire((_Atomic(mi_ptr_pac_t)*)entry);
+  const _Atomic(mi_ptr_signed_t)* const entry = &pmap->submaps[idx];
+  const mi_ptr_signed_t x = mi_atomic_load_acquire((_Atomic(mi_ptr_signed_t)*)entry);
   bool valid;
-  mi_submap_t const sub = (mi_submap_t)mi_ptr_pac_decode_valid(x, mi_addr(entry), &valid);
-  if mi_unlikely(!valid) return (mi_page_t*)_mi_ptr_pac_invalid(x, mi_addr(entry));  // as a tail call for better codegen
+  mi_submap_t const sub = (mi_submap_t)mi_ptr_auth_valid(x, mi_addr(entry), &valid);
+  if mi_unlikely(!valid) return (mi_page_t*)_mi_ptr_auth_failed(x, mi_addr(entry));  // as a tail call for better codegen
   if mi_unlikely(sub == NULL) return NULL;
   return mi_submap_at(sub, sub_idx);
 }

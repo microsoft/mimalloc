@@ -827,8 +827,8 @@ static bool test_free_list_cycle(bool collect, bool self_cycle) {
   return result;
 }
 
-#if MI_PAC && !MI_PAC_IB
-// Corrupt the (encoded) page map entry of a pointer and check that the lookup fails with EFAULT
+#if MI_PAC
+// Corrupt the (signed) page map entry of a pointer and check that the lookup fails with EFAULT
 static bool test_page_map_tamper(void) {
   void* p = mi_malloc(64);
   if (p == NULL) return false;
@@ -836,14 +836,14 @@ static bool test_page_map_tamper(void) {
   size_t sub_idx;
   const size_t idx = mi_page_map_index(p, &sub_idx);
   mi_submap_t const sub = mi_page_map_at(mi_page_map(), idx);
-  mi_ptr_pac_t* const entry = &sub[sub_idx];
-  const mi_ptr_pac_t saved = *entry;
+  mi_ptr_signed_t* const entry = &sub[sub_idx];
+  const mi_ptr_signed_t saved = *entry;
   size_t errors = 0;
   mi_register_error(&record_free_list_error, &errors);
   bool result = (page != NULL && mi_submap_at(sub, sub_idx) == page);
-  *entry = (mi_ptr_pac_t)page;                                // a raw pointer
+  *entry = (mi_ptr_signed_t)page;                                // a raw pointer
   result = (_mi_safe_ptr_page(p) == NULL && result);
-  *entry = mi_ptr_pac_encode(page, mi_addr(entry + 1));       // a valid encoding for the next slot
+  *entry = mi_ptr_sign(page, mi_addr(entry + 1));               // validly signed for the next slot
   result = (_mi_safe_ptr_page(p) == NULL && result);
   *entry = saved;
   result = (_mi_safe_ptr_page(p) == page && result);
@@ -854,7 +854,7 @@ static bool test_page_map_tamper(void) {
 #endif
 
 int main(void) {
-  #if MI_PAC && !MI_PAC_IB   // with the IB key, CPUs with FPAC trap on an authentication failure
+  #if MI_PAC
   CHECK("page-map-tamper", test_page_map_tamper());
   #endif
   CHECK("collect-self-cycle", test_free_list_cycle(true, true));

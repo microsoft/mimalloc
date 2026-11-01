@@ -17,20 +17,20 @@ static void mi_page_map_cannot_commit(void) {
 }
 
 // A 2-level page map
-#define MI_PAGE_MAP_SUB_SIZE          (MI_PAGE_MAP_SUB_COUNT * sizeof(mi_ptr_pac_t))
+#define MI_PAGE_MAP_SUB_SIZE          (MI_PAGE_MAP_SUB_COUNT * sizeof(mi_ptr_signed_t))
 
-// Set an (encoded) sub map pointer in the page map
+// Set a (signed) sub map pointer in the page map
 static void mi_page_map_set_at(mi_page_map_t* pmap, size_t idx, mi_submap_t sub) {
-  _Atomic(mi_ptr_pac_t)* const entry = &pmap->submaps[idx];
-  mi_atomic_store_release(entry, mi_ptr_pac_encode(sub, mi_addr(entry)));
+  _Atomic(mi_ptr_signed_t)* const entry = &pmap->submaps[idx];
+  mi_atomic_store_release(entry, mi_ptr_sign(sub, mi_addr(entry)));
 }
 
 static size_t mi_page_map_count_of_size(size_t size) {
-  return (size < sizeof(mi_page_map_t) ? 0 : 1 + (size - sizeof(mi_page_map_t))/sizeof(mi_ptr_pac_t));
+  return (size < sizeof(mi_page_map_t) ? 0 : 1 + (size - sizeof(mi_page_map_t))/sizeof(mi_ptr_signed_t));
 }
 
 static size_t mi_page_map_size_of_count(size_t count) {
-  return (count == 0 ? 0 : sizeof(mi_page_map_t) + (count - 1)*sizeof(mi_ptr_pac_t));
+  return (count == 0 ? 0 : sizeof(mi_page_map_t) + (count - 1)*sizeof(mi_ptr_signed_t));
 }
 
 // With memory tagging, the page map and its sub maps get a random tag (and are only accessed through the tagged pointers).
@@ -61,7 +61,7 @@ mi_decl_nodiscard static mi_decl_noinline bool mi_page_map_commit_entries(mi_pag
     mi_page_map_cannot_commit();
     return false;
   }
-  size_t commit_size = mi_align_up( sizeof(mi_page_map_t) + (required_idx * sizeof(mi_ptr_pac_t)), MI_ARENA_SLICE_SIZE );
+  size_t commit_size = mi_align_up( sizeof(mi_page_map_t) + (required_idx * sizeof(mi_ptr_signed_t)), MI_ARENA_SLICE_SIZE );
   if (pmap->reserved_size < commit_size) { commit_size = pmap->reserved_size; }
   const size_t commit_count = mi_page_map_count_of_size(commit_size);
   mi_assert_internal(commit_count > required_idx);
@@ -122,7 +122,7 @@ static bool mi_page_map_init_once(void) {
   mi_assert(MI_MIN_VABITS <= vbits);
   const size_t reserve_count    = (MI_ZU(1) << (vbits - MI_PAGE_MAP_SUB_SHIFT - MI_ARENA_SLICE_SHIFT));
   const size_t os_page_size  = _mi_os_page_size();
-  const size_t reserve_size  = mi_align_up( sizeof(mi_page_map_t) + ((reserve_count - 1) * sizeof(mi_ptr_pac_t)), os_page_size);
+  const size_t reserve_size  = mi_align_up( sizeof(mi_page_map_t) + ((reserve_count - 1) * sizeof(mi_ptr_signed_t)), os_page_size);
   const size_t submap_size   = MI_PAGE_MAP_SUB_SIZE;
   const size_t extra_reserve_size  = reserve_size + submap_size;
   const bool commit = (vbits == MI_MIN_VABITS) || (reserve_size <= 64*MI_KiB) || // 42 virtual address bits
@@ -288,7 +288,7 @@ static bool mi_page_map_set_range_prim(mi_page_map_t* pmap, mi_page_t* page, siz
     mi_assert_internal(sub!=NULL);
     // set the offsets for the page
     while (slice_count > 0 && sub_idx < MI_PAGE_MAP_SUB_COUNT) {
-      sub[sub_idx] = mi_ptr_pac_encode(page, mi_addr(&sub[sub_idx]));
+      sub[sub_idx] = mi_ptr_sign(page, mi_addr(&sub[sub_idx]));
       slice_count--;
       sub_idx++;
     }

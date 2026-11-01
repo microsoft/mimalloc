@@ -596,10 +596,10 @@ cannot be copied). We use one of three encodings:
    throughput. A corrupted or forged link validates with
    probability 2^-32, and it is difficult to recover the keys
    from known `(b,v,x)` triples (except for `m`), leaving ~96 bits of key.
-   With `MI_PAC` (weak or on) the process key `K` is also mixed in as
-   `mulxor64(v ^ keys[0], b ^ keys[1] ^ K)` (see `pac.h:mi_ptr_pac_mac`).
+   With `MI_PAC=WEAK` the process key `K` is also mixed in as
+   `mulxor64(v ^ keys[0], b ^ keys[1] ^ K)` (see `pac.h:mi_keyed_mac`).
 
-2. Authenticated offsets (with `MI_PAC=REQUIRED`, or `MI_PAC_GA` on Apple).
+2. Authenticated offsets (with `MI_PAC=REQUIRED`).
    As the tagged offsets, but the tag is computed with the (unreadable)
    hardware pointer authentication key:
 
@@ -650,23 +650,18 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
 #error "the block offsets in a page with multiple blocks must fit in a free list link (see MI_BLOCK_OFS_BITS)"
 #endif
 
-#if MI_PAC_USE_GA_MAC
-// With `pacga` the MAC uses the hardware key, so the page keys need not be secret: the offset is stored
-// as is, and `keys[0]` is only used as a nonce such that links of a previous use of the page do not verify.
+#if MI_PAC>=2
 static inline mi_addr_t mi_ptr_mac(const mi_page_t* page, mi_addr_t baddr, mi_addr_t d) {
-  return mi_ptr_pac_mac(d, baddr ^ page->keys[0]);
+  return mi_keyed_mac(d, baddr ^ page->keys[0]);
 }
-
 static inline mi_addr_t mi_ptr_ofs_key(const mi_page_t* page) {
   MI_UNUSED(page);
   return 0;
 }
 #else
-// With `MI_PAC` the MAC also uses the process key (see `pac.h:mi_ptr_pac_mac`)
 static inline mi_addr_t mi_ptr_mac(const mi_page_t* page, mi_addr_t baddr, mi_addr_t d) {
-  return mi_ptr_pac_mac(d ^ page->keys[0], baddr ^ page->keys[1]);
+  return mi_keyed_mac(d ^ page->keys[0], baddr ^ page->keys[1]);
 }
-
 static inline mi_addr_t mi_ptr_ofs_key(const mi_page_t* page) {
   return mi_rotl(page->keys[0], 32);
 }

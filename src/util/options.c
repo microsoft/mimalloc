@@ -672,10 +672,9 @@ mi_decl_noinline mi_block_t* _mi_block_next_is_corrupted(const mi_page_t* page, 
   return NULL;
 }
 
-#if MI_PAC
-mi_decl_noinline mi_decl_cold void* _mi_ptr_pac_invalid(mi_ptr_pac_t x, mi_addr_t salt) {
+mi_decl_noinline mi_decl_cold void* _mi_ptr_auth_failed(mi_ptr_signed_t x, mi_addr_t salt) {
   if (x != 0) {
-    _mi_error_message(EFAULT, "corrupted encoded pointer at 0x%zx: value 0x%zx\n", (size_t)salt, (size_t)x);
+    _mi_error_message(EFAULT, "pointer authentication failed at 0x%zx: value 0x%zx\n", (size_t)salt, (size_t)x);
   }
   void* p = NULL;
   #if defined(__GNUC__)
@@ -685,9 +684,8 @@ mi_decl_noinline mi_decl_cold void* _mi_ptr_pac_invalid(mi_ptr_pac_t x, mi_addr_
 }
 
 mi_decl_noinline mi_decl_cold void _mi_ptr_pac_unaligned(const void* p) {
-  _mi_fatal_error("internal error: encoded pointers must be aligned with memory tagging (%p)\n", p);
+  _mi_fatal_error("internal error: signed pointers must be aligned with memory tagging (%p)\n", p);
 }
-#endif
 
 // --------------------------------------------------------
 // Initialize options by checking the environment

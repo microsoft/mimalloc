@@ -180,7 +180,7 @@ size_t _mi_os_good_alloc_size(size_t size) {
   return mi_align_up(size, align_size);
 }
 
-#if MI_PAC_KEY
+#if MI_PAC == 1
 // Create a fresh random process key for encoded pointers (see `pac.h`)
 static mi_addr_t mi_ptr_pac_key_new(void) {
   mi_random_ctx_t ctx;
@@ -212,15 +212,9 @@ void _mi_os_init(void) {
                     "  (on macOS the program needs the MTE entitlement, and the `mte` option must not be disabled)\n");
   }
   #endif
-  #if MI_PAC_IB && (MI_PAC >= 3)
-  // check the IB key is enabled (as otherwise the hint instructions are a no-op)
-  if (mi_pac_sign(0x10000, MI_PAC_MODIFIER) == 0x10000 && mi_pac_sign(0x10000, MI_PAC_MODIFIER ^ 0x1000) == 0x10000) {
-    _mi_fatal_error("built with MI_PAC=REQUIRED but pointer authentication (PAC) is not enabled for this process\n");
-  }
-  #endif
   mi_process_sealed_once_t* const once = _mi_process_unseal_once();
   once->os_mem_config = config;  // publish at once
-  #if MI_PAC_KEY
+  #if MI_PAC == 1
   if (once->ptr_pac_key == 0) { once->ptr_pac_key = mi_ptr_pac_key_new(); }  // `_mi_os_init` may be called twice; the key never changes
   #endif
   _mi_process_seal_once();

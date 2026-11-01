@@ -51,7 +51,7 @@ terms of the MIT license. A copy of the license can be found in the file
       #include <asm/hwprobe.h>
     #endif
   #endif
-  #if MI_PAC >= 3 && defined(__aarch64__) && !MI_PAC_GA
+  #if MI_PAC >= 2 && defined(__aarch64__) && !defined(__APPLE__)
     #include <sys/auxv.h>   // getauxval
     #define MI_UNIX_LINUX_PAC  1
     #ifndef HWCAP_PACG
@@ -379,8 +379,8 @@ static bool unix_detect_memtag_cpu(void) {
 }
 #endif
 
-#if (MI_PAC >= 3) || MI_PAC_GA
-// Does the CPU (and OS) support generic pointer authentication (`pacga`)? (checked with `-DMI_PAC=REQUIRED`, or `ON` on Apple)
+#if MI_PAC >= 2
+// Does the CPU (and OS) support generic pointer authentication (`pacga`)? (checked with `-DMI_PAC=REQUIRED`)
 static bool unix_detect_pac_cpu(void) {
   #if MI_UNIX_LINUX_PAC
   return ((getauxval(AT_HWCAP) & HWCAP_PACG) != 0);
@@ -450,9 +450,9 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   }
   #endif
   config->has_memtag = (mi_option_is_enabled(mi_option_mte) && unix_detect_memtag(config));
-  #if (MI_PAC >= 3) || MI_PAC_GA
+  #if MI_PAC >= 2
   if (!unix_detect_pac_cpu()) {
-    _mi_fatal_error("built with MI_PAC=%s but the CPU does not support pointer authentication (PAC)\n", (MI_PAC >= 3 ? "REQUIRED" : "ON"));
+    _mi_fatal_error("built with MI_PAC=REQUIRED but the CPU does not support pointer authentication (PAC)\n");
   }
   #endif
 
