@@ -12,6 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "../prim/os.h"
 #include "../heap/heap.h"
 #include "../heap/page-map.h"
+#include "../pac.h"
 #include "../track.h"
 
 mi_decl_restrict void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, mi_page_t** ppage) mi_attr_noexcept mi_attr_malloc;
@@ -635,8 +636,9 @@ static inline bool mi_is_in_same_page(const void* p, const void* q) {
 #error "the block offsets in a page with multiple blocks must fit in a free list link (see MI_BLOCK_OFS_BITS)"
 #endif
 
+// With `MI_PAC` the MAC also uses the process key or `pacga` (see `pac.h:mi_ptr_pac_mac`)
 static inline mi_addr_t mi_ptr_mac(const mi_page_t* page, mi_addr_t baddr, mi_addr_t d) {
-  return mi_mul_xor64(d ^ page->keys[0], baddr ^ page->keys[1]);
+  return mi_ptr_pac_mac(d ^ page->keys[0], baddr ^ page->keys[1]);
 }
 
 static inline mi_addr_t mi_ptr_ofs_key(const mi_page_t* page) {

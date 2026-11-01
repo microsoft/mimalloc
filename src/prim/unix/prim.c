@@ -51,6 +51,13 @@ terms of the MIT license. A copy of the license can be found in the file
       #include <asm/hwprobe.h>
     #endif
   #endif
+  #if MI_PAC >= 3 && defined(__aarch64__) && !MI_PAC_GA
+    #include <sys/auxv.h>   // getauxval
+    #define MI_UNIX_LINUX_PAC  1
+    #ifndef HWCAP_PACG
+    #define HWCAP_PACG  (1UL << 31)
+    #endif
+  #endif
   #if MI_MTE && defined(__aarch64__)
     #include <sys/auxv.h>   // getauxval
     #define MI_UNIX_LINUX_MTE  1
@@ -372,6 +379,21 @@ static bool unix_detect_memtag_cpu(void) {
 }
 #endif
 
+#if (MI_PAC >= 3) || MI_PAC_GA
+// Does the CPU (and OS) support generic pointer authentication (`pacga`)? (checked with `-DMI_PAC=REQUIRED`, or `ON` on Apple)
+static bool unix_detect_pac_cpu(void) {
+  #if MI_UNIX_LINUX_PAC
+  return ((getauxval(AT_HWCAP) & HWCAP_PACG) != 0);
+  #elif defined(__APPLE__) && defined(__aarch64__)
+  int val = 0;
+  size_t len = sizeof(val);
+  return (sysctlbyname("hw.optional.arm.FEAT_PAuth", &val, &len, NULL, 0) == 0 && val != 0);
+  #else
+  return true;
+  #endif
+}
+#endif
+
 // Detect if memory tagging (MTE) is enabled for this process (only called if the `mte` option is enabled)
 static bool unix_detect_memtag(mi_os_mem_config_t* config) {
   MI_UNUSED(config);
@@ -428,6 +450,11 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   }
   #endif
   config->has_memtag = (mi_option_is_enabled(mi_option_mte) && unix_detect_memtag(config));
+  #if (MI_PAC >= 3) || MI_PAC_GA
+  if (!unix_detect_pac_cpu()) {
+    _mi_fatal_error("built with MI_PAC=%s but the CPU does not support pointer authentication (PAC)\n", (MI_PAC >= 3 ? "REQUIRED" : "ON"));
+  }
+  #endif
 
   // disable transparent huge pages for this process?
   #if (defined(__linux__) || defined(__ANDROID__)) && defined(PR_GET_THP_DISABLE)

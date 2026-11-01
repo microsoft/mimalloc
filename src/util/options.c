@@ -672,6 +672,23 @@ mi_decl_noinline mi_block_t* _mi_block_next_is_corrupted(const mi_page_t* page, 
   return NULL;
 }
 
+#if MI_PAC
+mi_decl_noinline mi_decl_cold void* _mi_ptr_pac_invalid(mi_ptr_pac_t x, mi_addr_t salt) {
+  if (x != 0) {
+    _mi_error_message(EFAULT, "corrupted encoded pointer at 0x%zx: value 0x%zx\n", (size_t)salt, (size_t)x);
+  }
+  void* p = NULL;
+  #if defined(__GNUC__)
+  __asm__ ("" : "+r"(p));  // hide that the result is always NULL so calls are compiled as tail calls (and avoid a stack frame at the call site)
+  #endif
+  return p;
+}
+
+mi_decl_noinline mi_decl_cold void _mi_ptr_pac_unaligned(const void* p) {
+  _mi_fatal_error("internal error: encoded pointers must be aligned with memory tagging (%p)\n", p);
+}
+#endif
+
 // --------------------------------------------------------
 // Initialize options by checking the environment
 // --------------------------------------------------------

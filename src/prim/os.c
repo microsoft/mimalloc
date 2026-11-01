@@ -12,6 +12,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/util/options.h"
 #include "mimalloc/util/stats.h"
 #include "mimalloc/prim/os.h"
+#include "mimalloc/util/random.h"
+#include "mimalloc/pac.h"
 
 #if !defined(_WIN32) && MI_HAS_UNISTDH
 #include <unistd.h>   // issetugid, getuid, geteuid, getgid, getegid
@@ -178,6 +180,17 @@ size_t _mi_os_good_alloc_size(size_t size) {
   return mi_align_up(size, align_size);
 }
 
+#if MI_PAC_KEY
+// Create a fresh random process key for encoded pointers (see `pac.h`)
+static mi_addr_t mi_ptr_pac_key_new(void) {
+  mi_random_ctx_t ctx;
+  _mi_random_init(&ctx);
+  const mi_addr_t key = (mi_addr_t)_mi_random_next(&ctx) | MI_PAC_KEY_ALWAYS;
+  mi_memzero(&ctx, sizeof(ctx));
+  return key;
+}
+#endif
+
 void _mi_os_init(void) {
   mi_os_mem_config_t config = mi_os_mem_config_default;
   _mi_prim_mem_init(&config);
@@ -199,8 +212,17 @@ void _mi_os_init(void) {
                     "  (on macOS the program needs the MTE entitlement, and the `mte` option must not be disabled)\n");
   }
   #endif
+  #if MI_PAC_IB && (MI_PAC >= 3)
+  // check the IB key is enabled (as otherwise the hint instructions are a no-op)
+  if (mi_pac_sign(0x10000, MI_PAC_MODIFIER) == 0x10000 && mi_pac_sign(0x10000, MI_PAC_MODIFIER ^ 0x1000) == 0x10000) {
+    _mi_fatal_error("built with MI_PAC=REQUIRED but pointer authentication (PAC) is not enabled for this process\n");
+  }
+  #endif
   mi_process_sealed_once_t* const once = _mi_process_unseal_once();
   once->os_mem_config = config;  // publish at once
+  #if MI_PAC_KEY
+  if (once->ptr_pac_key == 0) { once->ptr_pac_key = mi_ptr_pac_key_new(); }  // `_mi_os_init` may be called twice; the key never changes
+  #endif
   _mi_process_seal_once();
   if (_mi_os_page_size() > MI_ARENA_SLICE_SIZE) {
     _mi_error_message(ENOTSUP, "the OS page size (%zu KiB) is larger than the arena slice size (%zu KiB); increase MI_ARENA_SLICE_SHIFT\n", _mi_os_page_size()/MI_KiB, (size_t)(MI_ARENA_SLICE_SIZE/MI_KiB));

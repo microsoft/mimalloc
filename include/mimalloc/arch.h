@@ -368,6 +368,45 @@ static inline size_t mi_ptr_bounds_limit(const void* p, size_t size) {
 #endif
 
 
+// ------------------------------------------------------
+// Encoded pointers (see `pac.h`): with `MI_PAC` some internal pointers are stored encoded
+// (using ARM pointer authentication or a software keyed encoding); this is a `uintptr_t` so it can be atomic.
+// ------------------------------------------------------
+
+typedef uintptr_t  mi_ptr_pac_t;
+
+// Pointer encoding (see `pac.h`): 0=off, 1=weak (software keyed encoding), 2=on (use arm64 pointer authentication
+// if enabled by the OS, otherwise as weak), 3=required (arm64 pointer authentication must be supported).
+// Only on 64-bit systems (and not on CHERI); `on` and `required` only on arm64 with GCC or clang.
+#if !defined(MI_PAC) || MI_CHERI || (MI_INTPTR_SIZE != 8)
+#undef  MI_PAC
+#define MI_PAC  0
+#elif (MI_PAC >= 2) && !(MI_ARCH_ARM64 && defined(__GNUC__))
+#if (MI_PAC >= 3)
+#error "pointer authentication (MI_PAC=REQUIRED) is only supported on arm64 with GCC or clang"
+#endif
+#undef  MI_PAC
+#define MI_PAC  1
+#endif
+
+// With `MI_PAC>=2` the page map uses either the generic key (`pacga`) on Apple (as the IB key is only enabled
+// for arm64e processes), or the IB key (`pacib`) otherwise. A process key is used with weak, and with on for the IB key
+// (as the IB hint instructions may be a no-op).
+#if (MI_PAC >= 2) && !defined(MI_PAC_GA) && !defined(MI_PAC_IB)
+#if defined(__APPLE__)
+#define MI_PAC_GA  1
+#else
+#define MI_PAC_IB  1
+#endif
+#endif
+#ifndef MI_PAC_GA
+#define MI_PAC_GA  0
+#endif
+#ifndef MI_PAC_IB
+#define MI_PAC_IB  0
+#endif
+#define MI_PAC_KEY  ((MI_PAC == 1) || ((MI_PAC == 2) && MI_PAC_IB))
+
 
 
 /* --------------------------------------------------------------------------------

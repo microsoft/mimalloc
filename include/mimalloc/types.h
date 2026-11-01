@@ -72,15 +72,15 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_SECURE 5  // + guard page at the end of each mimalloc page (expensive!), and byte-precise buffer overflow checks (`-DMI_SECURE=FULL`)
 
 #if !defined(MI_SECURE)
-#if MI_MTE
+#if MI_MTE || MI_PAC
 #define MI_SECURE 2
 #else
 #define MI_SECURE 0
 #endif
 #endif
 
-// MTE or secure level 2 and higher always check for invalid pointers in `mi_free`
-#if (MI_MTE || MI_SECURE>=2) && !MI_FREE_IS_CHECKED
+// MTE, PAC, or secure level 2 and higher always check for invalid pointers in `mi_free`
+#if (MI_MTE || MI_PAC || MI_SECURE>=2) && !MI_FREE_IS_CHECKED
 #undef  MI_FREE_IS_CHECKED
 #define MI_FREE_IS_CHECKED 1
 #endif
