@@ -86,7 +86,7 @@ jobs:
 
       - name: Release, Asm
         if: matrix.tests == 'basic' && runner.os == 'Linux' && matrix.c_or_cxx == 'c'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.os }}-${{ matrix.c_or_cxx }}-asm
           path: out/release-${{ matrix.c_or_cxx }}/CMakeFiles/mimalloc-static.dir/src/*.s
@@ -217,7 +217,7 @@ jobs:
 
       - name: Release, C++, clang++, Asm
         if: matrix.tests == 'extra' && runner.os == 'Linux'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.os }}-clang-cxx-asm
           path: out/release-clang-cxx/CMakeFiles/mimalloc-static.dir/src/*.s
@@ -322,7 +322,7 @@ jobs:
       # VM: FreeBSD (arm64 and x64)
       - name: FreeBSD arm64, Setup
         if: matrix.tests == 'freebsd-arm64'
-        uses: vmactions/freebsd-vm@a2f9a41fa97f6848b8c3b791087dfcdaa5b473ff # v1.5.8
+        uses: vmactions/freebsd-vm@c46abacb49f09938ca4e1702d15d836285d694cc # v1.5.9
         with:
           arch: arm64
           custom-shell-name: freebsd-arm64
@@ -361,7 +361,7 @@ jobs:
 
       - name: FreeBSD x64, Setup
         if: matrix.tests == 'freebsd-x64'
-        uses: vmactions/freebsd-vm@f0552d3b69211736abd97f02ff3d4674c56b73b1 # v1.5.5
+        uses: vmactions/freebsd-vm@c46abacb49f09938ca4e1702d15d836285d694cc # v1.5.9
         with:
           arch: x86_64
           usesh: true
@@ -419,7 +419,7 @@ jobs:
 
       - name: Alpine risc64, Asm clang
         if: matrix.tests == 'alpine-riscv64'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: alpine-riscv64-clang-asm
           path: out/release-riscv64-clang/CMakeFiles/mimalloc-static.dir/src/*.s
@@ -434,7 +434,7 @@ jobs:
 
       - name: Alpine risc64, Asm
         if: matrix.tests == 'alpine-riscv64'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: alpine-riscv64-asm
           path: out/release-riscv64/CMakeFiles/mimalloc-static.dir/src/*.s
@@ -523,7 +523,7 @@ jobs:
 
       - name: Alpine arm32, Asm
         if: matrix.tests == 'alpine-arm32'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: alpine-arm32-c-asm
           path: out/release-arm32/CMakeFiles/mimalloc-static.dir/src/*.s
