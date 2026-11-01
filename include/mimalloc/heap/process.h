@@ -68,11 +68,22 @@ typedef struct mi_process_metadata_s {
   mi_process_metadata_fields(mi_process_metadata_field_decl)
 } mi_process_metadata_t;
 
-// Sealed process data that is read-only after process initialization in secure mode
-// (see `heap/process.c:_mi_process_unseal` for writing).
-typedef struct mi_process_sealed_s {
-  // page map
+// Sealed process data that is only written during process initialization (see `heap/process.c:_mi_process_unseal_once`).
+// In secure mode it is read-only after initialization (and immutable if the OS supports it, see `MI_PROTECT_READ_SEALED`).
+typedef struct mi_process_sealed_once_s {
   _Atomic(struct mi_page_map_s*)  page_map;     // the page map without memory tag (`NULL` before initialization) (see `heap/page-map.h:mi_page_map`); must be the first entry for better code-gen in secure mode
+  mi_process_metadata_t* metadata;              // process meta data without memory tag (`NULL` before initialization) (see `mi_process_metadata`)
+  mi_os_mem_config_t  os_mem_config;            // OS memory configuration (see `prim/os.c`)
+  mi_msecs_t          clock_process_start;      // clock at process initialization (see `util/stats.c`)
+  mi_msecs_t          clock_overhead;           // measured overhead of reading the clock (subtracted in `_mi_clock_end`)
+  int64_t             clock_ticks_per_msec;     // performance counter ticks per millisecond (on Windows)
+  bool                is_sealed;                // `true` after process initialization (and no further writes are allowed)
+  bool                is_protected;             // `true` if the sealed pages are read-only (see `_mi_process_unseal`)
+} mi_process_sealed_once_t;
+
+// Sealed process data that can be updated at runtime (see `heap/process.c:_mi_process_unseal` for writing).
+// In secure mode it is read-only except during a (locked) update.
+typedef struct mi_process_sealed_s {
   _Atomic(size_t)     page_map_committed;       // committed entries in the page map
 
   // user callbacks
@@ -83,34 +94,28 @@ typedef struct mi_process_sealed_s {
   _Atomic(void*)      error_handler;            // is `mi_error_fun*`
   _Atomic(void*)      error_arg;                // argument to the error function
 
-  mi_process_metadata_t* metadata;              // process meta data without memory tag (`NULL` before initialization) (see `mi_process_metadata`)
   mi_subproc_t*       subprocs;                 // list of all sub-processes without memory tag (written under `_mi_process.subprocs_lock`)
   mi_bitmap_t*        thread_locals_free;       // bitmap of free thread local slots (1=free, 0=in-use) without memory tag (written under `_mi_process.thread_locals_lock`)
   mi_memid_t          thread_locals_memid;      // provenance of `thread_locals_free` (a malloc base is stored without memory tag)
   mi_profiler_t*      profile_env_profiler;     // the pprof profiler if `MIMALLOC_PROFILE` was set, without memory tag (see `profile/pprof.c`)
-
-  mi_os_mem_config_t  os_mem_config;            // OS memory configuration (see `prim/os.c`)
-  mi_msecs_t          clock_process_start;      // clock at process initialization (see `util/stats.c`)
-  mi_msecs_t          clock_overhead;           // measured overhead of reading the clock (subtracted in `_mi_clock_end`)
-  int64_t             clock_ticks_per_msec;     // performance counter ticks per millisecond (on Windows)
-  bool                is_protected;             // `true` if the sealed page is read-only (see `_mi_process_unseal`)
 } mi_process_sealed_t;
 
 
 // In secure mode, guard static process data such that guard pages fit in secure mode (twice the maximal OS page size)
-// the front guard area also has a read-only page (preceded by a guard page) that contains mi_process_sealed_t.
+// the front guard area also has two read-only pages (preceded by a guard page) that contain
+// `mi_process_sealed_once_t` and `mi_process_sealed_t` respectively.
 #if MI_SECURE && MI_OS_HAS_GUARD_PAGES
   #define MI_SECURE_STATIC_GUARD    (2*MI_OS_PROBABLE_PAGE_SIZE)  // checked at runtime
   #define MI_SECURE_SEALED_PAGE     (1)
-  #define MI_SECURE_SEALED_GUARD    (MI_SECURE_STATIC_GUARD + MI_OS_PROBABLE_PAGE_SIZE)
+  #define MI_SECURE_SEALED_GUARD    (MI_SECURE_STATIC_GUARD + 2*MI_OS_PROBABLE_PAGE_SIZE)
 #else
   #define MI_SECURE_STATIC_GUARD    (MI_CACHE_LINE_SIZE)          // no guard pages; just a cache line
   #define MI_SECURE_SEALED_PAGE     (0)
   #define MI_SECURE_SEALED_GUARD    (MI_SECURE_STATIC_GUARD)
 #endif
 
-// With a sealed page, we page align the process data (if the toolchain and loader support it) such that the
-// address of the sealed page is a link-time constant and `mi_process_get_sealed` is fast (as used on the free path).
+// With sealed pages, we page align the process data (if the toolchain and loader support it) such that the
+// address of the sealed pages are link-time constants and `mi_process_get_sealed_once` is fast (as used on the free path).
 // (Windows toolchains cannot align beyond 8 KiB, and older ELF loaders may not honor alignments beyond the OS page size)
 #if MI_SECURE_SEALED_PAGE && defined(__GNUC__) && !defined(_WIN32) && (MI_OS_PROBABLE_PAGE_SIZE <= 16*MI_KiB)
   #define MI_SECURE_SEALED_ALIGNED  (1)
@@ -121,7 +126,7 @@ typedef struct mi_process_sealed_s {
 #endif
 
 #if MI_SECURE_SEALED_ALIGNED && (MI_SECURE_SEALED_GUARD % MI_OS_PROBABLE_PAGE_SIZE) != 0
-#error "the sealed page must be page aligned"
+#error "the sealed pages must be page aligned"
 #endif
 
 // Output before an output function is registered (or the C runtime is initialized) is buffered (see `util/options.c`)
@@ -132,9 +137,10 @@ typedef struct mi_process_sealed_s {
 // Statically allocated process data. This is zero initialized and padded such that
 // in secure mode it is surrounded by guard pages (see `heap/process.c:mi_process_guard_init`)
 typedef struct mi_process_s {
-  uint8_t             guard_front[MI_SECURE_SEALED_GUARD];  // in secure mode, contains the sealed page (see `mi_process_get_sealed`)
+  uint8_t             guard_front[MI_SECURE_SEALED_GUARD];  // in secure mode, contains the sealed pages (see `mi_process_get_sealed_once`)
   #if !MI_SECURE_SEALED_PAGE
-  mi_process_sealed_t sealed;                   // sealed data (unprotected)
+  mi_process_sealed_once_t sealed_once;         // sealed data (unprotected)
+  mi_process_sealed_t sealed;
   #endif
 
   bool                process_is_initialized;   // set to `true` in `mi_process_init`
@@ -165,13 +171,23 @@ typedef struct mi_process_s {
 
 extern mi_decl_hidden mi_decl_process_align mi_process_t _mi_process;
 
-// Get the sealed process data (for reading only).
-// In secure mode, this is the last full OS page within `guard_front` (just before the page where the process data starts).
-static inline mi_process_sealed_t* mi_process_get_sealed(void) {
+// Get the sealed-once process data (for reading only).
+// In secure mode, this is the second to last full OS page within `guard_front`.
+static inline mi_process_sealed_once_t* mi_process_get_sealed_once(void) {
   #if MI_SECURE_SEALED_ALIGNED
-  return (mi_process_sealed_t*)((uint8_t*)&_mi_process + MI_SECURE_SEALED_GUARD - MI_OS_PROBABLE_PAGE_SIZE);
+  return (mi_process_sealed_once_t*)((uint8_t*)&_mi_process + MI_SECURE_SEALED_GUARD - 2*MI_OS_PROBABLE_PAGE_SIZE);
   #elif MI_SECURE_SEALED_PAGE
-  return (mi_process_sealed_t*)mi_align_down_ptr((uint8_t*)&_mi_process + MI_SECURE_SEALED_GUARD - MI_OS_PROBABLE_PAGE_SIZE, MI_OS_PROBABLE_PAGE_SIZE);
+  return (mi_process_sealed_once_t*)mi_align_down_ptr((uint8_t*)&_mi_process + MI_SECURE_SEALED_GUARD - 2*MI_OS_PROBABLE_PAGE_SIZE, MI_OS_PROBABLE_PAGE_SIZE);
+  #else
+  return &_mi_process.sealed_once;
+  #endif
+}
+
+// Get the sealed process data (for reading only).
+// In secure mode, this is the OS page just after the sealed-once page (and just before the page where the process data starts).
+static inline mi_process_sealed_t* mi_process_get_sealed(void) {
+  #if MI_SECURE_SEALED_PAGE
+  return (mi_process_sealed_t*)((uint8_t*)mi_process_get_sealed_once() + MI_OS_PROBABLE_PAGE_SIZE);
   #else
   return &_mi_process.sealed;
   #endif
@@ -187,7 +203,7 @@ static inline void* mi_meta_load(void* p) {
   return mi_memtag_load(p);  // the CPU supports MTE and tagging is enabled at runtime (`-DMI_MTE=REQUIRED`)
   #else
   #if MI_MTE
-  if (mi_process_get_sealed()->os_mem_config.has_memtag) { return mi_memtag_load(p); }
+  if (mi_process_get_sealed_once()->os_mem_config.has_memtag) { return mi_memtag_load(p); }
   #endif
   return p;
   #endif
@@ -203,7 +219,7 @@ mi_process_metadata_t* _mi_process_metadata_init(void);
 // Get the process meta data without memory tag (allocated at process initialization, or lazily on first access).
 // Do not access fields through this pointer directly but use `mi_process_metadata_field` instead.
 static inline mi_process_metadata_t* mi_process_metadata(void) {
-  mi_process_metadata_t* const metadata = mi_process_get_sealed()->metadata;  // stored without memory tag
+  mi_process_metadata_t* const metadata = mi_process_get_sealed_once()->metadata;  // stored without memory tag
   return (metadata != NULL ? metadata : _mi_process_metadata_init());
 }
 
@@ -213,5 +229,10 @@ static inline mi_process_metadata_t* mi_process_metadata(void) {
 // Make the sealed process data writable (and take a lock); must be followed by `_mi_process_seal`.
 mi_process_sealed_t* _mi_process_unseal(void);
 void                 _mi_process_seal(void);
+
+// Write the sealed-once process data (and take a lock); must be followed by `_mi_process_seal_once`.
+// This is only allowed during process initialization (and is a fatal error afterwards).
+mi_process_sealed_once_t* _mi_process_unseal_once(void);
+void                      _mi_process_seal_once(void);
 
 #endif

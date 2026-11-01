@@ -65,7 +65,7 @@ void _mi_os_stats_bootstrap_merge(mi_subproc_t* subproc) {
 }
 
 static inline const mi_os_mem_config_t* mi_os_mem_config(void) {
-  const mi_os_mem_config_t* const config = &mi_process_get_sealed()->os_mem_config;
+  const mi_os_mem_config_t* const config = &mi_process_get_sealed_once()->os_mem_config;
   return (config->page_size != 0 ? config : &mi_os_mem_config_default);
 }
 
@@ -107,7 +107,7 @@ static bool mi_os_detect_elevated(void) {
 // Before `_mi_os_init` has published the OS configuration (e.g. when reading options during the
 // initialization in `_mi_prim_mem_init`) we use a direct (system call) check.
 bool _mi_os_is_elevated(void) {
-  const mi_os_mem_config_t* const config = &mi_process_get_sealed()->os_mem_config;
+  const mi_os_mem_config_t* const config = &mi_process_get_sealed_once()->os_mem_config;
   return (config->page_size != 0 ? config->is_elevated : mi_os_detect_elevated());
 }
 
@@ -199,9 +199,9 @@ void _mi_os_init(void) {
                     "  (on macOS the program needs the MTE entitlement, and the `mte` option must not be disabled)\n");
   }
   #endif
-  mi_process_sealed_t* const sealed = _mi_process_unseal();
-  sealed->os_mem_config = config;  // publish at once
-  _mi_process_seal();
+  mi_process_sealed_once_t* const once = _mi_process_unseal_once();
+  once->os_mem_config = config;  // publish at once
+  _mi_process_seal_once();
   if (_mi_os_page_size() > MI_ARENA_SLICE_SIZE) {
     _mi_error_message(ENOTSUP, "the OS page size (%zu KiB) is larger than the arena slice size (%zu KiB); increase MI_ARENA_SLICE_SHIFT\n", _mi_os_page_size()/MI_KiB, (size_t)(MI_ARENA_SLICE_SIZE/MI_KiB));
   }

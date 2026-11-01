@@ -101,7 +101,7 @@ mi_subproc_t* _mi_subproc_main(void) {
 }
 
 bool _mi_subproc_is_main(mi_subproc_t* subproc) {
-  const mi_process_metadata_t* const metadata = mi_process_get_sealed()->metadata;
+  const mi_process_metadata_t* const metadata = mi_process_get_sealed_once()->metadata;
   return (metadata != NULL && mi_addr(subproc) == mi_addr(&metadata->subproc_main));  // `metadata` has no memory tag
 }
 

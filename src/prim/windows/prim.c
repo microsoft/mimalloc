@@ -450,7 +450,7 @@ int _mi_prim_reuse(void* addr, size_t size) {
 }
 
 int _mi_prim_protect(void* addr, size_t size, mi_protect_t protect) {
-  const ULONG prot = (protect == MI_PROTECT_NONE ? PAGE_NOACCESS : (protect == MI_PROTECT_READ ? PAGE_READONLY : PAGE_READWRITE));
+  const ULONG prot = (protect == MI_PROTECT_NONE ? PAGE_NOACCESS : (protect == MI_PROTECT_READWRITE ? PAGE_READWRITE : PAGE_READONLY));
   #if !MI_WIN_DESKTOP && WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP)
   ULONG oldprotect = 0;
   BOOL ok = VirtualProtectFromApp(addr, size, prot, &oldprotect);
@@ -588,14 +588,14 @@ size_t _mi_prim_numa_node_count(void) {
 //----------------------------------------------------------------
 
 static mi_msecs_t mi_to_msecs(LARGE_INTEGER t) {
-  int64_t ticks_per_msec = mi_process_get_sealed()->clock_ticks_per_msec;
+  int64_t ticks_per_msec = mi_process_get_sealed_once()->clock_ticks_per_msec;
   if (ticks_per_msec == 0) {
     LARGE_INTEGER f;
     if (QueryPerformanceFrequency(&f)) {
       ticks_per_msec = f.QuadPart/1000LL;
     }
     if (ticks_per_msec == 0) { ticks_per_msec = 1; }
-    mi_process_get_sealed()->clock_ticks_per_msec = ticks_per_msec;
+    mi_process_get_sealed_once()->clock_ticks_per_msec = ticks_per_msec;
   }
   return (mi_msecs_t)(t.QuadPart / ticks_per_msec);
 }

@@ -85,11 +85,13 @@ int _mi_prim_guard(void* addr, size_t size, bool set_guard, bool is_committed);
 typedef enum mi_protect_e {
   MI_PROTECT_NONE,       // inaccessible
   MI_PROTECT_READ,       // read-only
-  MI_PROTECT_READWRITE   // readable and writable
+  MI_PROTECT_READWRITE,  // readable and writable
+  MI_PROTECT_READ_SEALED // read-only, and if the OS supports it, immutable (the protection can no longer be changed)
 } mi_protect_t;
 
 // Set the access protection of a committed range. Returns error code or 0 on success
-// (and on platforms that have no memory protection, return 0 as well)
+// (and on platforms that have no memory protection, return 0 as well).
+// With `MI_PROTECT_READ_SEALED`, sealing is best effort (and only failing to make the range read-only is an error).
 int _mi_prim_protect(void* addr, size_t size, mi_protect_t protect);
 
 // Allocate huge (1GiB) pages possibly associated with a NUMA node.

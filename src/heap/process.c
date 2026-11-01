@@ -182,7 +182,7 @@ static mi_lock_t mi_sealed_lock = MI_LOCK_INITIALIZER;
 mi_process_sealed_t* _mi_process_unseal(void) {
   mi_lock_acquire(&mi_sealed_lock);
   mi_process_sealed_t* const sealed = mi_process_get_sealed();
-  if (sealed->is_protected) {
+  if (mi_process_get_sealed_once()->is_protected) {
     _mi_prim_protect(sealed, MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READWRITE);  // on failure we fault on the first write
   }
   return sealed;
@@ -191,14 +191,30 @@ mi_process_sealed_t* _mi_process_unseal(void) {
 // Make the sealed process data read-only again and release the sealed lock.
 void _mi_process_seal(void) {
   mi_process_sealed_t* const sealed = mi_process_get_sealed();
-  const int err = (sealed->is_protected ? _mi_prim_protect(sealed, MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READ) : 0);
+  const int err = (mi_process_get_sealed_once()->is_protected ? _mi_prim_protect(sealed, MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READ) : 0);
   mi_lock_release(&mi_sealed_lock);
   if (err != 0) {
     _mi_error_message(EINVAL, "unable to seal the process data (error: %d)\n", err);
   }
 }
 
-// Initialize the sealed process data and, in secure mode, make it read-only.
+// Write the sealed-once process data; this takes the sealed lock until `_mi_process_seal_once`.
+// This is only allowed before `mi_process_sealed_init` (as the data is never made writable again).
+mi_process_sealed_once_t* _mi_process_unseal_once(void) {
+  mi_lock_acquire(&mi_sealed_lock);
+  mi_process_sealed_once_t* const once = mi_process_get_sealed_once();
+  if mi_unlikely(once->is_sealed) {
+    mi_lock_release(&mi_sealed_lock);
+    _mi_fatal_error("attempt to write sealed process data after process initialization\n");
+  }
+  return once;
+}
+
+void _mi_process_seal_once(void) {
+  mi_lock_release(&mi_sealed_lock);
+}
+
+// Seal the process data and, in secure mode, make it read-only (and the sealed-once data immutable if possible).
 // With memory tagging, secure level > 1, or in debug mode, failing to seal is a fatal error.
 #if MI_MTE || (MI_SECURE > 1) || MI_DEBUG
 #define MI_SEALED_REQUIRED  (1)
@@ -208,6 +224,7 @@ void _mi_process_seal(void) {
 static void mi_process_sealed_init(void) {
   bool protect = false;
   #if MI_SECURE_SEALED_PAGE
+  mi_assert_internal(sizeof(mi_process_sealed_once_t) <= MI_OS_PROBABLE_PAGE_SIZE);
   mi_assert_internal(sizeof(mi_process_sealed_t) <= MI_OS_PROBABLE_PAGE_SIZE);
   if ((MI_OS_PROBABLE_PAGE_SIZE % _mi_os_page_size()) == 0) {
     protect = true;
@@ -219,15 +236,25 @@ static void mi_process_sealed_init(void) {
     _mi_warning_message("unable to seal the process data as the OS page size (%zu KiB) is too large (rebuild with `-DMI_OS_PROBABLE_PAGE_SIZE=%zu`?)\n", _mi_os_page_size() / MI_KiB, _mi_os_page_size());
   }
   #endif
-  mi_process_sealed_t* const sealed = _mi_process_unseal();
-  sealed->is_protected = protect;
-  _mi_process_seal();
+  mi_process_sealed_once_t* const once = _mi_process_unseal_once();
+  once->is_sealed = true;
+  once->is_protected = protect;
+  int err = 0;
+  if (protect) {
+    err = _mi_prim_protect(mi_process_get_sealed(), MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READ);
+    if (err == 0) { err = _mi_prim_protect(once, MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READ_SEALED); }
+  }
+  _mi_process_seal_once();
+  if (err != 0) {
+    if (MI_SEALED_REQUIRED) { _mi_fatal_error("unable to seal the process data (error: %d)\n", err); }
+    _mi_error_message(EINVAL, "unable to seal the process data (error: %d)\n", err);
+  }
 }
 
 // In secure mode, surround the process data with guard pages to protect against overflows of adjacent static data.
-// The front guard page is placed just before the sealed page.
+// The front guard page is placed just before the sealed pages.
 static void mi_process_guard_init(void) {
-  const size_t front = (size_t)((uint8_t*)mi_process_get_sealed() - (uint8_t*)&_mi_process);
+  const size_t front = (size_t)((uint8_t*)mi_process_get_sealed_once() - (uint8_t*)&_mi_process);
   const size_t size  = offsetof(mi_process_t, guard_end) - front;
   _mi_os_secure_guard_pages_set_within(&_mi_process, sizeof(_mi_process), front, size);
 }
@@ -239,7 +266,7 @@ static void mi_process_guard_init(void) {
 // lazily if the main subprocess is accessed before process initialization.
 mi_decl_noinline mi_process_metadata_t* _mi_process_metadata_init(void) {
   mi_atomic_do_once {
-    if (mi_process_get_sealed()->os_mem_config.page_size == 0) { _mi_os_init(); }  // accessed before process initialization
+    if (mi_process_get_sealed_once()->os_mem_config.page_size == 0) { _mi_os_init(); }  // accessed before process initialization
     mi_memid_t memid;
     mi_process_metadata_t* metadata = (mi_process_metadata_t*)_mi_os_alloc_with_guards(NULL /* bootstrap stats */, sizeof(mi_process_metadata_t), true /* commit */, false /* allow large */, &memid);
     if (metadata == NULL) {
@@ -257,11 +284,11 @@ mi_decl_noinline mi_process_metadata_t* _mi_process_metadata_init(void) {
       }
     }
     *((mi_memid_t*)mi_meta_load(&metadata->memid)) = memid;
-    mi_process_sealed_t* const sealed = _mi_process_unseal();
-    sealed->metadata = metadata;  // stored without memory tag (see `mi_process_metadata`)
-    _mi_process_seal();
+    mi_process_sealed_once_t* const once = _mi_process_unseal_once();
+    once->metadata = metadata;  // stored without memory tag (see `mi_process_metadata`)
+    _mi_process_seal_once();
   }
-  mi_process_metadata_t* const metadata = mi_process_get_sealed()->metadata;
+  mi_process_metadata_t* const metadata = mi_process_get_sealed_once()->metadata;
   mi_assert(metadata != NULL);  // fails on a recursive invocation during initialization
   return metadata;
 }
@@ -344,7 +371,7 @@ mi_heap_t* _mi_subproc_heap_main(mi_subproc_t* subproc) {
 
 mi_theap_t* _mi_theap_main(void) {
   // All subprocess main heaps share this slot; do not follow a possibly deleted default theap.
-  mi_process_metadata_t* const metadata = mi_process_get_sealed()->metadata;
+  mi_process_metadata_t* const metadata = mi_process_get_sealed_once()->metadata;
   if (metadata==NULL) return NULL;
   const mi_thread_local_t key = ((mi_heap_t*)mi_meta_load(&metadata->heap_main))->theap;
   return (key==0 ? NULL : (mi_theap_t*)_mi_thread_local_get(key));
@@ -676,7 +703,7 @@ static void mi_process_init_once(void) {
   mi_process_guard_init();   // after os_init so the OS page size is known
   mi_heap_main_init();       // before page_map_init so stats are working
   _mi_page_map_init();       // todo: this could fail.. should we abort in that case?
-  mi_process_sealed_init();  // after page_map_init so the page map is stored before sealing
+  mi_process_sealed_init();  // after page_map_init so the page map is stored before sealing (no sealed-once writes are allowed after this)
   mi_thread_init();
 
   // the following can potentially allocate (on freeBSD for pthread keys)

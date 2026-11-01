@@ -810,11 +810,27 @@ int _mi_prim_reset(void* start, size_t size) {
   return err;
 }
 
+#if defined(__OpenBSD__)
+#include <sys/param.h>  // OpenBSD version
+#endif
+
+// Make a read-only range immutable (best effort)
+static void unix_mseal(void* addr, size_t size) {
+  #if defined(MI_HAS_SYSCALL_H) && defined(SYS_mseal)
+  syscall(SYS_mseal, addr, size, 0UL);  // Linux 6.10+
+  #elif defined(__OpenBSD__) && defined(OpenBSD) && (OpenBSD >= 202304)
+  mimmutable(addr, size);               // OpenBSD 7.3+
+  #else
+  MI_UNUSED(addr); MI_UNUSED(size);
+  #endif
+}
+
 int _mi_prim_protect(void* addr, size_t size, mi_protect_t protect) {
-  const int prot = (protect == MI_PROTECT_NONE ? PROT_NONE : (protect == MI_PROTECT_READ ? PROT_READ : (PROT_READ | PROT_WRITE)));
+  const int prot = (protect == MI_PROTECT_NONE ? PROT_NONE : (protect == MI_PROTECT_READWRITE ? (PROT_READ | PROT_WRITE) : PROT_READ));
   int err = mprotect(addr, size, prot);
   if (err != 0) { err = errno; }
   unix_mprotect_hint(err);
+  if (err == 0 && protect == MI_PROTECT_READ_SEALED) { unix_mseal(addr, size); }
   return err;
 }
 
@@ -1302,7 +1318,7 @@ void _mi_prim_thread_init(void) {
   if (_mi_os_has_memtag()) {
     const int ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
     if (ctrl >= 0 && ((ctrl & PR_TAGGED_ADDR_ENABLE) == 0 || (ctrl & PR_MTE_TCF_MASK) == 0)) {
-      if (!unix_memtag_thread_enable((unsigned long)ctrl, (unsigned long)mi_process_get_sealed()->os_mem_config.memtag_mode)) {
+      if (!unix_memtag_thread_enable((unsigned long)ctrl, (unsigned long)mi_process_get_sealed_once()->os_mem_config.memtag_mode)) {
         unix_memtag_thread_error("unable to enable memory tagging on thread 0x%zx (error %d)\n", _mi_thread_id(), errno);
       }
     }
