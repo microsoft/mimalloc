@@ -5,8 +5,8 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef MI_INTERNAL_PRIM_MTE_H
-#define MI_INTERNAL_PRIM_MTE_H
+#ifndef MI_PRIM_MTE_H
+#define MI_PRIM_MTE_H
 
 #include "../decl.h"
 #include "../arch.h"
@@ -299,4 +299,4 @@ static inline void* mi_memtag_meta_init(void* p, size_t size, size_t idx) {
 }
 #endif
 
-#endif // MI_INTERNAL_PRIM_MTE_H
+#endif // MI_PRIM_MTE_H

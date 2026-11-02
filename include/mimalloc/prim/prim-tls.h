@@ -5,8 +5,8 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef MI_INTERNAL_PRIM_TLS_H
-#define MI_INTERNAL_PRIM_TLS_H
+#ifndef MI_PRIM_TLS_H
+#define MI_PRIM_TLS_H
 
 #include "../types.h"
 #include "../heap/process.h"
