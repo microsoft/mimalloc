@@ -9,6 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_INTERNAL_THEAP_H
 
 #include "../types.h"
+#include "heap.h"           // mi_heap_subproc
 
 size_t        _mi_theap_random_next(mi_theap_t* theap);
 void          _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld);
@@ -48,7 +49,7 @@ static inline bool mi_theap_is_initialized(const mi_theap_t* theap) {
 
 static inline mi_subproc_t* mi_theap_subproc(const mi_theap_t* theap) {
   mi_subproc_t* const subproc = mi_atomic_load_ptr_relaxed(mi_subproc_t,&theap->subproc);
-  mi_assert_internal(!mi_theap_is_initialized(theap) || mi_theap_heap(theap)->subproc == subproc);
+  mi_assert_internal(!mi_theap_is_initialized(theap) || mi_heap_subproc(mi_theap_heap(theap)) == subproc);
   return subproc;
 }
 

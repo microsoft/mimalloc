@@ -14,9 +14,9 @@ terms of the MIT license. A copy of the license can be found in the file
 /* -----------------------------------------------------------------------------
 Signed pointers (`MI_PAC`, see `arch.h`)
 
-Some internal pointers (the page map entries, the arena pointers, and the custom commit function)
-are stored as a signed `mi_ptr_signed(tp)` (a `mi_ptr_signed_t`) that is bound to the address of the
-slot it is stored in (the `salt`); use `mi_ptr_sign_at` and `mi_ptr_auth_at` (and the atomic variants)
+Some internal pointers (the page map entries, the arena pointers and bitmaps, the custom commit function,
+and ownership pointers like the heap of a page or the sub-process of a heap) are stored as a signed
+`mi_ptr_signed(tp)` (a `mi_ptr_signed_t`) that is bound to the address of the slot it is stored in (the `salt`); use `mi_ptr_sign_at` and `mi_ptr_auth_at` (and the atomic variants)
 to store and load such fields. Values that are copied (like the arena in a `mi_memid_t`) use a salt
 derived from the other fields instead.
 `NULL` is always signed as 0 (so zero initialized memory authenticates as `NULL`).

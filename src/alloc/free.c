@@ -667,7 +667,7 @@ static mi_decl_noinline bool mi_abandoned_page_try_reclaim(mi_page_t* page, long
   else if (reclaim_on_free == 1 &&               // if cross-thread is allowed
             !theap->tld->is_in_threadpool &&     // and we are not part of a threadpool
             !mi_page_is_used_at_frac(page,4) &&  // and at least 1/4th of the page is free
-            _mi_arena_memid_is_suitable(page->memid, mi_theap_heap(theap)->exclusive_arena)) {   // and it fits our memory
+            _mi_arena_memid_is_suitable(page->memid, mi_heap_exclusive_arena(mi_theap_heap(theap)))) {   // and it fits our memory
     // across threads
     max_reclaim = _mi_option_get_fast(mi_option_page_cross_thread_max_reclaim);
   }
@@ -977,7 +977,7 @@ static void mi_stat_free(const mi_page_t* page, const mi_block_t* block) {
   mi_theap_t* theap = _mi_theap_default();
   mi_lock_t* lock = NULL;
   mi_subproc_t* const subproc = mi_page_subproc(page);
-  mi_theap_t* const theap_meta = subproc->theap_meta;
+  mi_theap_t* const theap_meta = mi_subproc_theap_meta(subproc);
   if mi_unlikely(!mi_theap_is_initialized(theap) || // can happen if free'd after thread_done was called (usually a thread cleanup call by the OS)
                   // page->theap == subproc->theap_meta  .. but we cannot read `theap` if we don't own the page
                   (theap_meta != NULL && mi_page_thread_id(page) == theap_meta->tld->thread_id)) {

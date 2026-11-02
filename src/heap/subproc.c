@@ -31,32 +31,32 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 
 void* _mi_meta_zalloc( mi_subproc_t* subproc, size_t size, mi_memid_t* memid ) {
-  mi_assert_internal(subproc->theap_meta != NULL);
+  mi_assert_internal(mi_subproc_theap_meta(subproc) != NULL);
   void* p = NULL;
   mi_lock(&subproc->theap_meta_lock) {
-    p = mi_theap_zalloc(subproc->theap_meta, size);
+    p = mi_theap_zalloc(mi_subproc_theap_meta(subproc), size);
     if (memid != NULL) { *memid = (p==NULL ? _mi_memid_none() : _mi_memid_create_malloc(p,size,true) ); }
   }
   return p;
 }
 
 void* _mi_meta_zalloc_aligned( mi_subproc_t* subproc, size_t size, size_t aligned, mi_memid_t* memid ) {
-  mi_assert_internal(subproc->theap_meta != NULL);
+  mi_assert_internal(mi_subproc_theap_meta(subproc) != NULL);
   void* p = NULL;
   mi_lock(&subproc->theap_meta_lock) {
-    p = mi_theap_zalloc_aligned(subproc->theap_meta, size, aligned);
+    p = mi_theap_zalloc_aligned(mi_subproc_theap_meta(subproc), size, aligned);
     if (memid != NULL) { *memid = (p==NULL ? _mi_memid_none() : _mi_memid_create_malloc(p,size,true) ); }
   }
   return p;
 }
 
 void* _mi_meta_rezalloc( mi_subproc_t* subproc, void* oldp, size_t newsize, mi_memid_t* memid ) {
-  mi_assert_internal(subproc->theap_meta != NULL);
+  mi_assert_internal(mi_subproc_theap_meta(subproc) != NULL);
   // note: since we take a meta lock we cannot use `mi_theap_rezalloc` as that could call `mi_free` which
   // can call `mi_stat_free` which would try to take the meta lock again. See issue #1358.
   void* p = NULL;
   mi_lock(&subproc->theap_meta_lock) {
-    p = mi_theap_zalloc(subproc->theap_meta, newsize);
+    p = mi_theap_zalloc(mi_subproc_theap_meta(subproc), newsize);
   }
   if (p!=NULL) {
     if (oldp!=NULL) {
@@ -88,7 +88,7 @@ void _mi_meta_free(mi_subproc_t* subproc, void* p, mi_memid_t memid) {
 bool _mi_meta_is_meta_page(const mi_subproc_t* subproc, const mi_page_t* page) {
   if (page==NULL) return false;
   mi_theap_t* theap = page->theap;
-  return (theap != NULL && theap == subproc->theap_meta);
+  return (theap != NULL && theap == mi_subproc_theap_meta(subproc));
 }
 
 
@@ -107,11 +107,11 @@ bool _mi_subproc_is_main(mi_subproc_t* subproc) {
 
 mi_subproc_t* _mi_subproc(void) {
   mi_theap_t* theap = _mi_theap_default();
-  if (theap == NULL || theap->tld == NULL || theap->tld->subproc == NULL) {  // see issue #1289 and #1391
+  if (theap == NULL || theap->tld == NULL || mi_tld_subproc(theap->tld) == NULL) {  // see issue #1289 and #1391
     return _mi_subproc_main();
   }
   else {
-    return theap->tld->subproc;
+    return mi_tld_subproc(theap->tld);
   }
 }
 
@@ -188,14 +188,14 @@ mi_subproc_id_t mi_subproc_new(void) {
     mi_subproc_destroy(_mi_subproc_to_id(subproc));
     return _mi_subproc_to_id(NULL);
   }
-  mi_assert_internal(subproc->heap_main == heap_main);
+  mi_assert_internal(mi_subproc_heap_main_peek(subproc) == heap_main);
 
   // init meta theap
-  mi_assert_internal(parent->theap_meta!=NULL);
-  mi_assert_internal(parent->theap_meta->tld!=NULL);
-  mi_assert_internal(parent->theap_meta->tld->thread_id == MI_THREAD_ID_DETACHED);
-  _mi_theap_meta_init(theap_meta,heap_main,parent->theap_meta->tld /* detached tld */);
-  subproc->theap_meta = theap_meta;
+  mi_assert_internal(mi_subproc_theap_meta(parent)!=NULL);
+  mi_assert_internal(mi_subproc_theap_meta(parent)->tld!=NULL);
+  mi_assert_internal(mi_subproc_theap_meta(parent)->tld->thread_id == MI_THREAD_ID_DETACHED);
+  _mi_theap_meta_init(theap_meta,heap_main,mi_subproc_theap_meta(parent)->tld /* detached tld */);
+  mi_ptr_sign_at(&subproc->theap_meta, theap_meta);
 
   return _mi_subproc_to_id(subproc);
 }
@@ -228,20 +228,20 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
     mi_heap_t* heap = subproc->heaps;
     while (heap != NULL) {
       mi_heap_t* next = heap->next;
-      if (heap!=subproc->heap_main) { _mi_heap_force_destroy(heap, false /* don't re-acquire the heaps_lock */); }
+      if (heap!=mi_subproc_heap_main_peek(subproc)) { _mi_heap_force_destroy(heap, false /* don't re-acquire the heaps_lock */); }
       heap = next;
     }
-    mi_assert_internal(subproc->heap_main==NULL || subproc->heaps == subproc->heap_main);
-    if (subproc->heap_main!=NULL) {
+    mi_assert_internal(mi_subproc_heap_main_peek(subproc)==NULL || subproc->heaps == mi_subproc_heap_main_peek(subproc));
+    if (mi_subproc_heap_main_peek(subproc)!=NULL) {
       _mi_thread_locals_thread_done(); // release thread locals that may have been allocated (safe as the main heap uses the fast key)
       if (_mi_subproc_is_main(subproc)) {
         _mi_thread_locals_done();
       }
-      _mi_heap_force_destroy(subproc->heap_main, false /* don't re-acquire the heaps_lock */);  // no warning if destroying the main heap
+      _mi_heap_force_destroy(mi_subproc_heap_main_peek(subproc), false /* don't re-acquire the heaps_lock */);  // no warning if destroying the main heap
     }
   }
 
-  subproc->theap_meta = NULL;     // theap meta stats are merged during heap_destroy of the main heap
+  mi_ptr_sign_at(&subproc->theap_meta, NULL);     // theap meta stats are merged during heap_destroy of the main heap
 
   if (!_mi_subproc_is_main(subproc)) {
     // merge stats back into the main subproc
@@ -298,18 +298,18 @@ void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
   mi_assert_internal(subproc!=NULL);
   if (subproc==NULL) return;
-  mi_assert_internal(subproc->heap_main!=NULL);
-  if (subproc->heap_main==NULL) return;
+  mi_assert_internal(mi_subproc_heap_main_peek(subproc)!=NULL);
+  if (mi_subproc_heap_main_peek(subproc)==NULL) return;
   mi_theap_t* theap = _mi_theap_default();
   if (mi_theap_is_initialized(theap)) {
-    if (theap->tld!=NULL && theap->tld->subproc != subproc) {
-      _mi_warning_message("unable to add thread to the subprocess as it was already in another subprocess (at %p)\n", theap->tld->subproc);
+    if (theap->tld!=NULL && mi_tld_subproc(theap->tld) != subproc) {
+      _mi_warning_message("unable to add thread to the subprocess as it was already in another subprocess (at %p)\n", mi_tld_subproc(theap->tld));
     }
     return;
   }
 
   // initialize this thread tld & theap
-  _mi_thread_init_with_heap(subproc->heap_main);
+  _mi_thread_init_with_heap(mi_subproc_heap_main_peek(subproc));
 }
 
 

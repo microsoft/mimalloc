@@ -27,7 +27,7 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 #include "arena.h"
 
 mi_heap_t* _mi_arena_heap_main(const mi_arena_t* arena) {
-  return _mi_subproc_heap_main(arena->subproc);
+  return _mi_subproc_heap_main(mi_arena_subproc(arena));
 }
 
 /* -----------------------------------------------------------
@@ -216,7 +216,7 @@ static bool mi_arena_is_suitable_ex(mi_arena_t* arena, mi_arena_t* req_arena, bo
 static inline size_t mi_arena_start_idx(mi_heap_t* heap, size_t tseq, size_t arena_cycle)
 {
   const size_t hseq   = heap->heap_seq;
-  const size_t hcount = mi_atomic_load_relaxed(&heap->subproc->heap_count);
+  const size_t hcount = mi_atomic_load_relaxed(&mi_heap_subproc(heap)->heap_count);
   if (arena_cycle <= 1)     return 0;
   if (hseq==0 || hcount<=1 || arena_cycle > 0x8FF) return (tseq % arena_cycle); // common for single heap programs
 
@@ -242,7 +242,7 @@ static inline size_t mi_arena_start_idx(mi_heap_t* heap, size_t tseq, size_t are
 mi_decl_forceinline bool mi_forall_arenas(mi_heap_t* heap, mi_arena_t* req_arena, size_t tseq, mi_forall_arena_fun_t* visit, const void* arg, void** result)
 {
   if (result != NULL) *result = NULL;
-  const size_t arena_count = mi_arenas_get_count(heap->subproc);
+  const size_t arena_count = mi_arenas_get_count(mi_heap_subproc(heap));
   const size_t arena_cycle = (arena_count == 0 ? 0 : arena_count - 1); /* first search the arenas below the last one */
   /* always start searching in the arena's below the max */
   const size_t start = (req_arena==NULL ? mi_arena_start_idx(heap,tseq,arena_cycle) : req_arena->arena_idx);
@@ -256,7 +256,7 @@ mi_decl_forceinline bool mi_forall_arenas(mi_heap_t* heap, mi_arena_t* req_arena
     else {
       idx = i; /* remaining arena's after the cycle */
     }
-    mi_arena_t* arena = mi_arena_from_index(heap->subproc,idx);
+    mi_arena_t* arena = mi_arena_from_index(mi_heap_subproc(heap),idx);
     if (req_arena != NULL && arena != req_arena &&
         (arena == NULL || mi_arena_parent(arena) != req_arena)) continue; /* only the requested arena or its children */
 
@@ -478,7 +478,7 @@ static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_
     if (mi_atomic_cas_strong_relaxed(&subproc->arena_count, &count, count+1)) {
       arena->arena_idx = count;
       if (mi_atomic_ptr_sign_cas_release(&subproc->arenas[count], NULL, arena)) {
-        mi_subproc_stat_counter_increase(arena->subproc, arena_count, 1);
+        mi_subproc_stat_counter_increase(mi_arena_subproc(arena), arena_count, 1);
         if (arena_id != NULL) { *arena_id = mi_arena_id_from_arena(arena); }
         return true;
       }
@@ -487,7 +487,7 @@ static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_
 
   // failed
   arena->arena_idx = 0;
-  arena->subproc = NULL;
+  mi_ptr_sign_at(&arena->subproc, NULL);
   return false;
 }
 
@@ -531,6 +531,11 @@ static mi_bbitmap_t* mi_arena_bbitmap_init(mi_subproc_t* subproc, size_t slice_c
   return (mi_bbitmap_t*)mi_ptr_bounded_data(bbitmap, size);
 }
 
+// Retag the meta data pointed to by the signed pointer in `slot` (and update the signed pointer with the new tag)
+static void mi_arena_memtag_meta_init_at(mi_ptr_signed(void)* slot, size_t size, size_t idx) {
+  mi_ptr_sign_at(slot, mi_memtag_meta_init(mi_ptr_auth_at(void, slot), size, idx));
+}
+
 // With memory tagging, each part of the arena meta data gets its own random tag: the arena info, each bitmap,
 // and each separate page meta entry. We tag in reverse address order such that adjacent parts have a different
 // tag class (where the page meta entries use the tag class of `mi_page_meta_memtag_idx`).
@@ -539,22 +544,22 @@ static mi_arena_t* mi_arena_memtag_init(mi_arena_t* arena) {
   if (!mi_memtag_use_for_meta(arena->memid.is_memtag)) return arena;
   const size_t slice_count = arena->slice_count;
   size_t idx = 0;
-  if (arena->pages_meta != NULL) {
+  if (mi_arena_pages_meta(arena) != NULL) {
     for (size_t i = 0; i < slice_count; i++) {
-      mi_page_t* const page = &arena->pages_meta[i];
+      mi_page_t* const page = &mi_arena_pages_meta(arena)[i];
       mi_memtag_meta_init(page, sizeof(mi_page_t), mi_page_meta_memtag_idx(page));
     }
-    idx = mi_page_meta_memtag_idx(arena->pages_meta) + 1;
+    idx = mi_page_meta_memtag_idx(mi_arena_pages_meta(arena)) + 1;
   }
   const size_t bitmap_size = mi_bitmap_size(slice_count, NULL);
   for (size_t i = MI_ARENA_BIN_COUNT; i > 0; i--) {
-    arena->pages_main.pages_abandoned[i-1] = (mi_bitmap_t*)mi_memtag_meta_init(arena->pages_main.pages_abandoned[i-1], bitmap_size, idx++);
+    mi_arena_memtag_meta_init_at(&arena->pages_main.pages_abandoned[i-1], bitmap_size, idx++);
   }
-  arena->pages_main.pages = (mi_bitmap_t*)mi_memtag_meta_init(arena->pages_main.pages, bitmap_size, idx++);
-  arena->slices_purge     = (mi_bitmap_t*)mi_memtag_meta_init(arena->slices_purge, bitmap_size, idx++);
-  arena->slices_dirty     = (mi_bitmap_t*)mi_memtag_meta_init(arena->slices_dirty, bitmap_size, idx++);
-  arena->slices_committed = (mi_bitmap_t*)mi_memtag_meta_init(arena->slices_committed, bitmap_size, idx++);
-  arena->slices_free      = (mi_bbitmap_t*)mi_memtag_meta_init(arena->slices_free, mi_bbitmap_size(slice_count, NULL), idx++);
+  mi_arena_memtag_meta_init_at(&arena->pages_main.pages, bitmap_size, idx++);
+  mi_arena_memtag_meta_init_at(&arena->slices_purge, bitmap_size, idx++);
+  mi_arena_memtag_meta_init_at(&arena->slices_dirty, bitmap_size, idx++);
+  mi_arena_memtag_meta_init_at(&arena->slices_committed, bitmap_size, idx++);
+  mi_arena_memtag_meta_init_at(&arena->slices_free, mi_bbitmap_size(slice_count, NULL), idx++);
   return (mi_arena_t*)mi_memtag_meta_init(arena, mi_align_up(sizeof(mi_arena_t), MI_BCHUNK_SIZE), idx);
 }
 
@@ -614,7 +619,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
   // init
   mi_arena_t* arena = mi_arena_info(start);
   mi_ptr_sign_at(&arena->start, start);
-  arena->subproc = subproc;
+  mi_ptr_sign_at(&arena->subproc, subproc);
   arena->memid = memid;
   arena->is_exclusive = exclusive;
   arena->slice_count = slice_count;
@@ -633,19 +638,19 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
 
   // init bitmaps
   uint8_t* base = mi_arena_start(arena) + bitmap_base;
-  arena->slices_free = mi_arena_bbitmap_init(subproc, slice_count, &base);
-  arena->slices_committed = mi_arena_bitmap_init(slice_count, &base);
-  arena->slices_dirty = mi_arena_bitmap_init(slice_count, &base);
-  arena->slices_purge = mi_arena_bitmap_init(slice_count, &base);
-  arena->pages_main.pages = mi_arena_bitmap_init(slice_count, &base);
+  mi_ptr_sign_at(&arena->slices_free, mi_arena_bbitmap_init(subproc, slice_count, &base));
+  mi_ptr_sign_at(&arena->slices_committed, mi_arena_bitmap_init(slice_count, &base));
+  mi_ptr_sign_at(&arena->slices_dirty, mi_arena_bitmap_init(slice_count, &base));
+  mi_ptr_sign_at(&arena->slices_purge, mi_arena_bitmap_init(slice_count, &base));
+  mi_ptr_sign_at(&arena->pages_main.pages, mi_arena_bitmap_init(slice_count, &base));
   for (size_t i = 0; i < MI_ARENA_BIN_COUNT; i++) {
-    arena->pages_main.pages_abandoned[i] = mi_arena_bitmap_init(slice_count, &base);
+    mi_ptr_sign_at(&arena->pages_main.pages_abandoned[i], mi_arena_bitmap_init(slice_count, &base));
   }
   #if MI_PAGE_META_IS_SEPARATED && !MI_PAGE_META_IS_ALIGNED
-  arena->pages_meta = (mi_page_t*)mi_ptr_bounded_data(base, slice_count * sizeof(mi_page_t));
+  mi_ptr_sign_at(&arena->pages_meta, (mi_page_t*)mi_ptr_bounded_data(base, slice_count * sizeof(mi_page_t)));
   base += (slice_count * sizeof(mi_page_t));
   #else
-  arena->pages_meta = NULL;
+  mi_ptr_sign_at(&arena->pages_meta, NULL);
   #endif
   mi_assert_internal(_mi_size_of_slices(info_slices) >= (size_t)(base - mi_arena_start(arena)));
 
@@ -661,7 +666,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
         count = arena->slice_count - start_idx;
         mi_assert_internal(count > 0);
       }
-      mi_bbitmap_unsafe_setN(arena->slices_free, start_idx, count);
+      mi_bbitmap_unsafe_setN(mi_arena_slices_free(arena), start_idx, count);
     }
     #if MI_ARENA_GUARD_SLICES > 0
     // guard the page meta data of the other aligned areas (if not committed, the guard slices are never committed)
@@ -672,13 +677,13 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
     #endif
   }
   #else
-  mi_bbitmap_unsafe_setN(arena->slices_free, info_slices /* start */, arena->slice_count - info_slices);
+  mi_bbitmap_unsafe_setN(mi_arena_slices_free(arena), info_slices /* start */, arena->slice_count - info_slices);
   #endif
   if (memid.initially_committed) {
-    mi_bitmap_unsafe_setN(arena->slices_committed, 0, arena->slice_count);
+    mi_bitmap_unsafe_setN(mi_arena_slices_committed(arena), 0, arena->slice_count);
   }
   if (!memid.initially_zero) {
-    mi_bitmap_unsafe_setN(arena->slices_dirty, 0, arena->slice_count);
+    mi_bitmap_unsafe_setN(mi_arena_slices_dirty(arena), 0, arena->slice_count);
   }
 
   arena = mi_arena_memtag_init(arena);
@@ -829,7 +834,7 @@ int mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noe
 // Return idx of the slice past the last used slice
 static size_t mi_arena_used_slices(mi_arena_t* arena) {
   size_t idx;
-  if (mi_bbitmap_bsr_inv(arena->slices_free, &idx)) {
+  if (mi_bbitmap_bsr_inv(mi_arena_slices_free(arena), &idx)) {
     return (idx + 1);
   }
   else {
@@ -892,7 +897,7 @@ static size_t mi_debug_show_page_bfield(char* buf, size_t* k, mi_arena_t* arena,
       bit_set_count++;
       c = 'p';
       color = MI_GRAY;
-      if (_mi_meta_is_meta_page(arena->subproc,page))  { c = 'm'; }
+      if (_mi_meta_is_meta_page(mi_arena_subproc(arena),page))  { c = 'm'; }
       else if (mi_page_is_singleton(page)) { c = 's'; }
       else if (mi_page_is_full(page)) { c = 'f'; }
       if (!mi_page_is_abandoned(page)) { c = _mi_toupper(c); }
@@ -914,9 +919,9 @@ static size_t mi_debug_show_page_bfield(char* buf, size_t* k, mi_arena_t* arena,
       }
       #endif
       // else if (mi_bitmap_is_setN(arena->pages_purge, slice_index + bit, NULL)) { c = '*'; }
-      else if (mi_bbitmap_is_setN(arena->slices_free, slice_index+bit,1)) {
-        if (mi_bitmap_is_set(arena->slices_purge, slice_index + bit)) { c = '~'; color = MI_ORANGE; }
-        else if (mi_bitmap_is_set(arena->slices_committed, slice_index + bit)) { c = '_'; color = MI_GRAY; }
+      else if (mi_bbitmap_is_setN(mi_arena_slices_free(arena), slice_index+bit,1)) {
+        if (mi_bitmap_is_set(mi_arena_slices_purge(arena), slice_index + bit)) { c = '~'; color = MI_ORANGE; }
+        else if (mi_bitmap_is_set(mi_arena_slices_committed(arena), slice_index + bit)) { c = '_'; color = MI_GRAY; }
         else { c = '.'; color = MI_GRAY; }
       }
       if (bit==MI_BFIELD_BITS-1 && bit_of_page > 1) { c = '>'; }
@@ -1011,7 +1016,7 @@ static size_t mi_debug_show_chunks(const char* header1, const char* header2, con
 //}
 
 static void mi_debug_show_arenas_ex(mi_heap_t* heap, bool show_pages, bool narrow) mi_attr_noexcept {
-  mi_subproc_t* subproc = heap->subproc;
+  mi_subproc_t* subproc = mi_heap_subproc(heap);
   size_t max_arenas = mi_arenas_get_count(subproc);
   //size_t free_total = 0;
   //size_t slice_total = 0;
@@ -1020,12 +1025,12 @@ static void mi_debug_show_arenas_ex(mi_heap_t* heap, bool show_pages, bool narro
   for (size_t i = 0; i < max_arenas; i++) {
     mi_arena_t* arena = mi_arena_from_index(subproc, i);
     if (arena == NULL) continue;
-    mi_assert(arena->subproc == subproc);
+    mi_assert(mi_arena_subproc(arena) == subproc);
     // slice_total += arena->slice_count;
     _mi_raw_message("%sarena %zu at %p: %zu slices (%zu MiB)%s%s, subproc: %zu, numa: %i\n",
         (mi_arena_parent(arena)==NULL ? "" : "(sub)"), i, arena, arena->slice_count, (size_t)(_mi_size_of_slices(arena->slice_count)/MI_MiB),
         (arena->memid.is_pinned ? ", pinned" : ""), (arena->is_exclusive ? ", exclusive" : ""),
-        arena->subproc->subproc_seq, arena->numa_node);
+        mi_arena_subproc(arena)->subproc_seq, arena->numa_node);
     //if (show_inuse) {
     //  free_total += mi_debug_show_bbitmap("in-use slices", arena->slice_count, arena->slices_free, true, NULL);
     //}
@@ -1044,8 +1049,8 @@ static void mi_debug_show_arenas_ex(mi_heap_t* heap, bool show_pages, bool narro
         const char* header2 = (narrow ? "\n       " : " ");
         const char* header3 = "(chunk bin: S:small, M : medium, L : large, X : other)";
         page_total += mi_debug_show_chunks(header1, header2, header3, arena->slice_count,
-                                           mi_bbitmap_chunk_count(arena->slices_free), NULL,
-                                           arena->slices_free->chunkmap_bins, false, arena, narrow);
+                                           mi_bbitmap_chunk_count(mi_arena_slices_free(arena)), NULL,
+                                           mi_arena_slices_free(arena)->chunkmap_bins, false, arena, narrow);
       }
     }
   }

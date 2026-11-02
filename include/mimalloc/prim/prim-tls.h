@@ -436,7 +436,7 @@ static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
 // Find the associated theap or NULL if it does not exist (during shutdown)
 // Should be fast as it is called in `alloc/free.c:mi_free_try_collect`.
 static inline mi_theap_t* _mi_page_associated_theap_peek(const mi_page_t* page) {
-  mi_heap_t* const heap = page->heap;
+  mi_heap_t* const heap = mi_ptr_auth_at(mi_heap_t, &page->heap);
   mi_theap_t* const theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
   if (theap==NULL || theap->tld==NULL /* heap destroy */) return NULL;
   if (theap->heap != heap) return NULL; // should never happen, but can happen for a free across subprocesses, which can happen during pthread tls storage deallocation

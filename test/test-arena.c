@@ -4,8 +4,8 @@
 #include "mimalloc/prim/prim.h"
 #include "testhelper.h"
 
-static mi_subproc_t test_subproc;
-static mi_heap_t test_heap;
+static mi_decl_cache_align mi_subproc_t test_subproc;
+static mi_decl_cache_align mi_heap_t test_heap;
 static mi_arena_t test_arenas[6];
 
 typedef struct arena_visit_s {
@@ -19,7 +19,7 @@ typedef struct arena_visit_info_s {
 } arena_visit_info_t;
 
 static void arena_setup(size_t count) {
-  test_heap.subproc = &test_subproc;
+  mi_ptr_sign_at(&test_heap.subproc, &test_subproc);
   test_heap.heap_seq = 0;
   mi_atomic_store_relaxed(&test_subproc.heap_count, 1);
   mi_atomic_store_relaxed(&test_subproc.arena_count, count);
@@ -445,15 +445,15 @@ static bool test_heap_visit_thread_exit(void) {
 
 static bool test_theap_collect_detached(void) {
   mi_theap_t* const theap = mi_theap_get_default();
-  mi_subproc_t* const subproc = theap->tld->subproc;
+  mi_subproc_t* const subproc = mi_tld_subproc(theap->tld);
   int* p = NULL;
   bool result = false;
   mi_lock(&subproc->theap_meta_lock) {
-    p = (int*)mi_theap_malloc(subproc->theap_meta, sizeof(int));
+    p = (int*)mi_theap_malloc(mi_subproc_theap_meta(subproc), sizeof(int));
     if (p != NULL) {
       *p = 42;
-      mi_theap_collect(subproc->theap_meta, false);
-      mi_theap_collect(subproc->theap_meta, true);
+      mi_theap_collect(mi_subproc_theap_meta(subproc), false);
+      mi_theap_collect(mi_subproc_theap_meta(subproc), true);
       result = (*p == 42 && mi_thread_id_of(p) == 0);
     }
   }

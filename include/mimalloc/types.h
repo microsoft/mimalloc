@@ -367,8 +367,6 @@ static inline bool mi_memkind_needs_no_free(mi_memkind_t memkind) {
   return (memkind <= MI_MEM_STATIC);
 }
 
-typedef struct mi_meta_page_s mi_meta_page_t;
-
 typedef struct mi_memid_os_info {
   void*         base;               // actual base address of the block (used for offset aligned allocations)
   size_t        size;               // allocated full size
@@ -547,7 +545,7 @@ typedef struct mi_decl_memtag_unit_align mi_page_s {
   // next cache line
   _Atomic(mi_thread_free_t) xthread_free;      // list of deferred free blocks freed by other threads (= `mi_block_t* | (1 if owned)`)
   mi_theap_t*               theap;             // the theap owning this page (may not be valid or NULL for abandoned pages)
-  mi_heap_t*                heap;              // const: the heap owning this page
+  mi_ptr_signed(mi_heap_t) heap;              // const: the heap owning this page (see `mi_page_heap`)
 
   struct mi_page_s*         next;              // next page owned by the theap with the same `block_size`
   struct mi_page_s*         prev;              // previous page owned by the theap with the same `block_size`
@@ -767,13 +765,13 @@ typedef struct mi_arena_pages_s mi_arena_pages_t;
 typedef size_t mi_thread_local_t;
 
 typedef struct mi_heap_s {
-  mi_subproc_t*         subproc;                        // a heap belongs to a subprocess
+  mi_ptr_signed(mi_subproc_t) subproc;               // a heap belongs to a subprocess (see `mi_heap_subproc`)
   size_t                heap_seq;                       // unique sequence number for heaps in this subprocess
   mi_heap_t*            next;                           // list of heaps in this subprocess
   mi_heap_t*            prev;
   mi_thread_local_t     theap;                          // dynamic thread local for the thread-local theaps of this heap
 
-  mi_arena_t*           exclusive_arena;                // if the heap should only allocate from a specific arena (or NULL)
+  mi_ptr_signed(mi_arena_t) exclusive_arena;           // if the heap should only allocate from a specific arena (or NULL) (see `mi_heap_exclusive_arena`)
   long                  reclaim_on_free;                // reclaim policy captured at heap initialization
   int                   numa_node;                      // if >=0, prefer this numa node for allocations
   #if MI_QSBR
@@ -813,7 +811,6 @@ struct mi_subproc_s {
   size_t                subproc_seq;                    // unique id for sub-processes
   mi_subproc_t*         next;                           // list of all sub-processes
   mi_subproc_t*         prev;
-  _Atomic(mi_meta_page_t*) meta_pages;                  // meta data pages
 
   _Atomic(size_t)       arena_count;                    // current count of arena's
   _Atomic(mi_ptr_signed(mi_arena_t)) arenas[MI_MAX_ARENAS]; // arena's of this sub-process
@@ -821,11 +818,11 @@ struct mi_subproc_s {
   mi_decl_align(8)                                      // needed on some 32-bit platforms
   _Atomic(int64_t)      purge_expire;                   // expiration is set if any arenas can be purged
 
-  _Atomic(mi_heap_t*)   heap_main;                      // main heap for this sub process
+  _Atomic(mi_ptr_signed(mi_heap_t)) heap_main;         // main heap for this sub process (see `mi_subproc_heap_main_peek`)
   mi_heap_t*            heaps;                          // heaps belonging to this sub-process
   mi_lock_t             heaps_lock;
 
-  mi_theap_t*           theap_meta;                     // detached theap for allocating meta-data
+  mi_ptr_signed(mi_theap_t) theap_meta;                // detached theap for allocating meta-data (see `mi_subproc_theap_meta`)
   mi_lock_t             theap_meta_lock;                // all allocations in theap_meta need a lock
 
   _Atomic(size_t)       thread_count;                   // current threads associated with this sub-process
@@ -856,7 +853,7 @@ struct mi_tld_s {
   size_t                thread_seq;           // thread sequence id (linear count of created threads)
   size_t                fork_epoch;           // fork epoch at creation; an older epoch means the thread does not exist in a forked child
   int                   numa_node;            // thread preferred numa node
-  mi_subproc_t*         subproc;              // sub-process this thread belongs to.
+  mi_ptr_signed(mi_subproc_t) subproc;       // sub-process this thread belongs to (see `mi_tld_subproc`)
   mi_theap_t*           theaps;               // list of theaps in this thread (so we can abandon all when the thread terminates)
   mi_lock_t             theaps_lock;          // lock as the theaps list is sometimes accessed from another thread (on `mi_heap_free`)
   bool                  recurse;              // true if deferred was called; used to prevent infinite recursion.
@@ -886,8 +883,8 @@ typedef struct mi_bitmap_s  mi_bitmap_t;    // atomic bitmap  (defined in `src/a
 typedef struct mi_bbitmap_s mi_bbitmap_t;   // atomic binned bitmap (defined in `src/arena/bitmap.h`)
 
 struct mi_arena_pages_s {
-  mi_bitmap_t* pages;                // all registered pages (abandoned and owned)
-  mi_bitmap_t* pages_abandoned[MI_ARENA_BIN_COUNT];  // abandoned pages per size bin (a set bit means the start of the page)
+  mi_ptr_signed(mi_bitmap_t) pages;                // all registered pages (abandoned and owned) (see `mi_arena_pages_registered`)
+  mi_ptr_signed(mi_bitmap_t) pages_abandoned[MI_ARENA_BIN_COUNT];  // abandoned pages per size bin (a set bit means the start of the page)
   // followed by the bitmaps (whose siz`es depend on the arena size)
 };
 
@@ -895,7 +892,7 @@ struct mi_arena_pages_s {
 // A memory arena
 typedef struct mi_arena_s {
   mi_memid_t          memid;                // provenance of the memory area
-  mi_subproc_t*       subproc;              // subprocess this arena belongs to (`this 'element-of' this->subproc->arenas`)
+  mi_ptr_signed(mi_subproc_t) subproc;      // subprocess this arena belongs to (`this 'element-of' this->subproc->arenas`)
   size_t              arena_idx;            // index in the arenas array
   mi_ptr_signed(void) start;                // actual start of the arena area (the arena_s info may come later due to guard pages etc.)
 
@@ -911,11 +908,12 @@ typedef struct mi_arena_s {
   size_t              total_size;           // for (user given) memory more than MI_ARENA_MAX_SIZE, we use N arena's to cover it. The first (parent) has the total size (and the other sub-arena's 0).
   mi_ptr_signed(mi_arena_t) parent;         // if this is a sub arena, this points to the first one in the memory area.
 
-  mi_bbitmap_t*       slices_free;          // is the slice free? (a binned bitmap with size classes)
-  mi_bitmap_t*        slices_committed;     // is the slice committed? (i.e. accessible)
-  mi_bitmap_t*        slices_dirty;         // is the slice potentially non-zero?
-  mi_bitmap_t*        slices_purge;         // slices that can be purged
-  mi_page_t*          pages_meta;           // pre-allocated `slice_count` page meta info -- only used if `MI_PAGE_META_IS_SEPARATED!=0`
+  // the bitmaps are signed pointers as they are written through (see `mi_arena_slices_free` etc.)
+  mi_ptr_signed(mi_bbitmap_t) slices_free;  // is the slice free? (a binned bitmap with size classes)
+  mi_ptr_signed(mi_bitmap_t) slices_committed; // is the slice committed? (i.e. accessible)
+  mi_ptr_signed(mi_bitmap_t) slices_dirty;  // is the slice potentially non-zero?
+  mi_ptr_signed(mi_bitmap_t) slices_purge;  // slices that can be purged
+  mi_ptr_signed(mi_page_t) pages_meta;               // pre-allocated `slice_count` page meta info -- only used if `MI_PAGE_META_IS_SEPARATED!=0`
   mi_decl_align(16)                         // signed pointers must be 16-byte aligned with memory tagging (`MI_MTE`)
   mi_arena_pages_t    pages_main;           // arena page bitmaps for the main heap are allocated up front as well
 
