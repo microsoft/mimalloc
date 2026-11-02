@@ -14,8 +14,11 @@ terms of the MIT license. A copy of the license can be found in the file
 /* -----------------------------------------------------------------------------
 Signed pointers (`MI_PAC`, see `arch.h`)
 
-Some internal pointers (currently the page map entries) are stored as a signed
-`mi_ptr_signed_t` that is bound to the address of the slot it is stored in (the `salt`).
+Some internal pointers (the page map entries, the arena pointers, and the custom commit function)
+are stored as a signed `mi_ptr_signed(tp)` (a `mi_ptr_signed_t`) that is bound to the address of the
+slot it is stored in (the `salt`); use `mi_ptr_sign_at` and `mi_ptr_auth_at` (and the atomic variants)
+to store and load such fields. Values that are copied (like the arena in a `mi_memid_t`) use a salt
+derived from the other fields instead.
 `NULL` is always signed as 0 (so zero initialized memory authenticates as `NULL`).
 
 With memory tagging (`MI_MTE`) a signed pointer `p` must be `NULL` or aligned to
@@ -54,6 +57,11 @@ static inline void* mi_ptr_auth_valid(mi_ptr_signed_t x, mi_addr_t salt, bool* v
 
 // Authenticate a value `x` stored at address `salt`; returns NULL (and reports `EFAULT`) if `x` is not validly signed
 static inline void* mi_ptr_auth(mi_ptr_signed_t x, mi_addr_t salt);
+
+// Sign and authenticate an address without a memory tag (like a code pointer); this has no alignment requirement.
+static inline mi_ptr_signed_t mi_addr_sign(mi_addr_t q, mi_addr_t salt);
+static inline mi_addr_t mi_addr_auth_valid(mi_ptr_signed_t x, mi_addr_t salt, bool* valid);
+static inline mi_addr_t mi_addr_auth(mi_ptr_signed_t x, mi_addr_t salt);
 
 // Keyed MAC of a `value` bound to a `salt` for free list links (see `alloc/page.h:mi_ptr_mac`); uses the
 // hardware key (`pacga`) or the process key. Only the high 32 bits are used (and with memory tagging also bits 24 to 31).
@@ -115,9 +123,8 @@ static inline mi_addr_t mi_pac_ga(mi_addr_t x, mi_addr_t modifier) {
 }
 #endif
 
-static inline mi_ptr_signed_t mi_ptr_sign(const void* p, mi_addr_t salt) {
-  if (p==NULL) return 0;
-  const mi_addr_t q = mi_ptr_pac_untag(p);
+static inline mi_ptr_signed_t mi_addr_sign(mi_addr_t q, mi_addr_t salt) {
+  if (q==0) return 0;
   #if MI_PAC >= 2
   return (mi_ptr_signed_t)(q | (mi_pac_ga(q, salt) & MI_PAC_HI_MASK));
   #else
@@ -125,7 +132,7 @@ static inline mi_ptr_signed_t mi_ptr_sign(const void* p, mi_addr_t salt) {
   #endif
 }
 
-static inline void* mi_ptr_auth_valid(mi_ptr_signed_t x, mi_addr_t salt, bool* valid) {
+static inline mi_addr_t mi_addr_auth_valid(mi_ptr_signed_t x, mi_addr_t salt, bool* valid) {
   #if MI_PAC >= 2
   // no special case for 0: it either fails the authentication, or authenticates as NULL
   const mi_addr_t q = (mi_addr_t)x & ~MI_PAC_HI_MASK;
@@ -134,7 +141,15 @@ static inline void* mi_ptr_auth_valid(mi_ptr_signed_t x, mi_addr_t salt, bool* v
   const mi_addr_t q = (mi_addr_t)x ^ mi_pac_process_slot_key(salt);
   *valid = ((q & MI_PAC_HI_MASK) == 0);
   #endif
-  return mi_ptr_pac_retag(q);
+  return q;
+}
+
+static inline mi_ptr_signed_t mi_ptr_sign(const void* p, mi_addr_t salt) {
+  return mi_addr_sign(mi_ptr_pac_untag(p), salt);
+}
+
+static inline void* mi_ptr_auth_valid(mi_ptr_signed_t x, mi_addr_t salt, bool* valid) {
+  return mi_ptr_pac_retag(mi_addr_auth_valid(x, salt, valid));
 }
 
 static inline mi_addr_t mi_keyed_mac(mi_addr_t value, mi_addr_t salt) {
@@ -147,6 +162,17 @@ static inline mi_addr_t mi_keyed_mac(mi_addr_t value, mi_addr_t salt) {
 }
 
 #else // !MI_PAC
+
+static inline mi_ptr_signed_t mi_addr_sign(mi_addr_t q, mi_addr_t salt) {
+  MI_UNUSED(salt);
+  return (mi_ptr_signed_t)q;
+}
+
+static inline mi_addr_t mi_addr_auth_valid(mi_ptr_signed_t x, mi_addr_t salt, bool* valid) {
+  MI_UNUSED(salt);
+  *valid = true;
+  return (mi_addr_t)x;
+}
 
 static inline mi_ptr_signed_t mi_ptr_sign(const void* p, mi_addr_t salt) {
   MI_UNUSED(salt);
@@ -170,6 +196,44 @@ static inline void* mi_ptr_auth(mi_ptr_signed_t x, mi_addr_t salt) {
   void* const p = mi_ptr_auth_valid(x, salt, &valid);
   if mi_unlikely(!valid) return _mi_ptr_auth_failed(x, salt);
   return p;
+}
+
+static inline mi_addr_t mi_addr_auth(mi_ptr_signed_t x, mi_addr_t salt) {
+  bool valid;
+  const mi_addr_t q = mi_addr_auth_valid(x, salt, &valid);
+  if mi_unlikely(!valid) return mi_addr(_mi_ptr_auth_failed(x, salt));
+  return q;
+}
+
+// Derive a salt from a value (salts must be 8-byte aligned)
+static inline mi_addr_t mi_salt_of(size_t v) {
+  return ((mi_addr_t)v << 3);
+}
+
+
+/* -----------------------------------------------------------------------------
+Typed signed pointer fields salted with their slot address. A field is declared as
+`mi_ptr_signed(tp) field` (or `_Atomic(mi_ptr_signed(tp))`), and stored and loaded using
+`mi_ptr_sign_at(&field,p)` and `mi_ptr_auth_at(tp,&field)` (or the atomic variants).
+Code pointers use `mi_fun_sign_at` and `mi_fun_auth_at` (as these have no memory tag or alignment).
+Note: the `slot` argument is evaluated twice.
+----------------------------------------------------------------------------- */
+
+#define mi_ptr_sign_at(slot,p)                (*(slot) = mi_ptr_sign(p, mi_addr(slot)))
+#define mi_ptr_auth_at(tp,slot)               ((tp*)mi_ptr_auth(*(slot), mi_addr(slot)))
+
+#define mi_fun_sign_at(slot,f)                (*(slot) = mi_addr_sign((mi_addr_t)(uintptr_t)(f), mi_addr(slot)))
+#define mi_fun_auth_at(tp,slot)               ((tp*)(uintptr_t)mi_addr_auth(*(slot), mi_addr(slot)))
+
+#define mi_atomic_ptr_sign_release(slot,p)    mi_atomic_store_release(slot, mi_ptr_sign(p, mi_addr(slot)))
+#define mi_atomic_ptr_sign_relaxed(slot,p)    mi_atomic_store_relaxed(slot, mi_ptr_sign(p, mi_addr(slot)))
+#define mi_atomic_ptr_auth_acquire(tp,slot)   ((tp*)mi_ptr_auth(mi_atomic_load_acquire(slot), mi_addr(slot)))
+#define mi_atomic_ptr_auth_relaxed(tp,slot)   ((tp*)mi_ptr_auth(mi_atomic_load_relaxed(slot), mi_addr(slot)))
+
+// Atomically replace the (unsigned) `expected` pointer value with `desired` (no update of `expected` on failure)
+static inline bool mi_atomic_ptr_sign_cas_release(_Atomic(mi_ptr_signed_t)* slot, const void* expected, const void* desired) {
+  mi_ptr_signed_t x = mi_ptr_sign(expected, mi_addr(slot));
+  return mi_atomic_cas_strong_release(slot, &x, mi_ptr_sign(desired, mi_addr(slot)));
 }
 
 #endif // MI_PRIM_PAC_H

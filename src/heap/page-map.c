@@ -21,8 +21,7 @@ static void mi_page_map_cannot_commit(void) {
 
 // Set a (signed) sub map pointer in the page map
 static void mi_page_map_set_at(mi_page_map_t* pmap, size_t idx, mi_submap_t sub) {
-  _Atomic(mi_ptr_signed_t)* const entry = &pmap->submaps[idx];
-  mi_atomic_store_release(entry, mi_ptr_sign(sub, mi_addr(entry)));
+  mi_atomic_ptr_sign_release(&pmap->submaps[idx], sub);
 }
 
 static size_t mi_page_map_count_of_size(size_t size) {
@@ -288,7 +287,7 @@ static bool mi_page_map_set_range_prim(mi_page_map_t* pmap, mi_page_t* page, siz
     mi_assert_internal(sub!=NULL);
     // set the offsets for the page
     while (slice_count > 0 && sub_idx < MI_PAGE_MAP_SUB_COUNT) {
-      sub[sub_idx] = mi_ptr_sign(page, mi_addr(&sub[sub_idx]));
+      mi_ptr_sign_at(&sub[sub_idx], page);
       slice_count--;
       sub_idx++;
     }

@@ -376,7 +376,7 @@ typedef struct mi_memid_os_info {
 } mi_memid_os_info_t;
 
 typedef struct mi_memid_arena_info {
-  mi_arena_t*   arena;              // arena that contains this memory
+  mi_ptr_signed(mi_arena_t) arena;  // arena that contains this memory (signed with the `slice_index` as salt, see `mi_memid_arena`)
   uint32_t      slice_index;        // slice index in the arena
   uint32_t      slice_count;        // allocated slices
 } mi_memid_arena_info_t;
@@ -410,10 +410,6 @@ static inline bool mi_memid_is_os(mi_memid_t memid) {
 
 static inline bool mi_memid_needs_no_free(mi_memid_t memid) {
   return mi_memkind_needs_no_free(memid.memkind);
-}
-
-static inline mi_arena_t* mi_memid_arena(mi_memid_t memid) {
-  return (memid.memkind == MI_MEM_ARENA ? memid.mem.arena.arena : NULL);
 }
 
 // defined in arena.c
@@ -794,7 +790,7 @@ typedef struct mi_heap_s {
   mi_page_t*            os_abandoned_pages;             // list of pages that are OS allocated and not in an arena
   mi_lock_t             os_abandoned_pages_lock;        // lock for the os abandoned pages list (this lock protects list operations)
 
-  _Atomic(mi_arena_pages_t*) arena_pages[MI_MAX_ARENAS]; // track owned and abandoned pages in the arenas (entries can be NULL)
+  _Atomic(mi_ptr_signed(mi_arena_pages_t)) arena_pages[MI_MAX_ARENAS]; // track owned and abandoned pages in the arenas (entries can be NULL)
   mi_lock_t             arena_pages_lock;                // lock to update the arena_pages array
   mi_memid_t            memid;                           // provenance of the heap memory
   mi_stats_t            stats;                           // statistics for this heap; periodically updated by merging from each theap
@@ -820,7 +816,7 @@ struct mi_subproc_s {
   _Atomic(mi_meta_page_t*) meta_pages;                  // meta data pages
 
   _Atomic(size_t)       arena_count;                    // current count of arena's
-  _Atomic(mi_arena_t*)  arenas[MI_MAX_ARENAS];          // arena's of this sub-process
+  _Atomic(mi_ptr_signed(mi_arena_t)) arenas[MI_MAX_ARENAS]; // arena's of this sub-process
   mi_lock_t             arena_reserve_lock;             // lock to ensure arena's get reserved one at a time
   mi_decl_align(8)                                      // needed on some 32-bit platforms
   _Atomic(int64_t)      purge_expire;                   // expiration is set if any arenas can be purged
@@ -901,7 +897,7 @@ typedef struct mi_arena_s {
   mi_memid_t          memid;                // provenance of the memory area
   mi_subproc_t*       subproc;              // subprocess this arena belongs to (`this 'element-of' this->subproc->arenas`)
   size_t              arena_idx;            // index in the arenas array
-  void*               start;                // actual start of the arena area (the arena_s info may come later due to guard pages etc.)
+  mi_ptr_signed(void) start;                // actual start of the arena area (the arena_s info may come later due to guard pages etc.)
 
   size_t              slice_count;          // total size of the area in arena slices (of `MI_ARENA_SLICE_SIZE`)
   size_t              info_slices;          // initial slices reserved for the arena bitmaps
@@ -909,17 +905,18 @@ typedef struct mi_arena_s {
   bool                is_exclusive;         // only allow allocations if specifically for this arena
   mi_decl_align(8)                          // needed on some 32-bit platforms
   _Atomic(mi_msecs_t) purge_expire;         // expiration time when slices can be purged from `slices_purge`.
-  mi_commit_fun_t*    commit_fun;           // custom commit/decommit memory
+  mi_ptr_signed(mi_commit_fun_t) commit_fun; // custom commit/decommit memory
   void*               commit_fun_arg;       // user argument for a custom commit function
 
   size_t              total_size;           // for (user given) memory more than MI_ARENA_MAX_SIZE, we use N arena's to cover it. The first (parent) has the total size (and the other sub-arena's 0).
-  mi_arena_t*         parent;               // if this is a sub arena, this points to the first one in the memory area.
+  mi_ptr_signed(mi_arena_t) parent;         // if this is a sub arena, this points to the first one in the memory area.
 
   mi_bbitmap_t*       slices_free;          // is the slice free? (a binned bitmap with size classes)
   mi_bitmap_t*        slices_committed;     // is the slice committed? (i.e. accessible)
   mi_bitmap_t*        slices_dirty;         // is the slice potentially non-zero?
   mi_bitmap_t*        slices_purge;         // slices that can be purged
   mi_page_t*          pages_meta;           // pre-allocated `slice_count` page meta info -- only used if `MI_PAGE_META_IS_SEPARATED!=0`
+  mi_decl_align(16)                         // signed pointers must be 16-byte aligned with memory tagging (`MI_MTE`)
   mi_arena_pages_t    pages_main;           // arena page bitmaps for the main heap are allocated up front as well
 
   // followed by the bitmaps (whose sizes depend on the arena size)

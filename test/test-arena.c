@@ -25,11 +25,11 @@ static void arena_setup(size_t count) {
   mi_atomic_store_relaxed(&test_subproc.arena_count, count);
   for (size_t i = 0; i < 6; i++) {
     test_arenas[i].arena_idx = i;
-    test_arenas[i].parent = NULL;
+    mi_ptr_sign_at(&test_arenas[i].parent, NULL);
     test_arenas[i].is_exclusive = false;
     test_arenas[i].memid.is_pinned = false;
     test_arenas[i].numa_node = 0;
-    mi_atomic_store_ptr_release(mi_arena_t, &test_subproc.arenas[i], &test_arenas[i]);
+    mi_atomic_ptr_sign_release(&test_subproc.arenas[i], &test_arenas[i]);
   }
 }
 
@@ -76,7 +76,7 @@ static bool test_arena_order(void) {
 
 static bool test_arena_filter(void) {
   arena_setup(6);
-  mi_atomic_store_ptr_release(mi_arena_t, &test_subproc.arenas[1], NULL);
+  mi_atomic_ptr_sign_release(&test_subproc.arenas[1], NULL);
   test_arenas[2].memid.is_pinned = true;
   test_arenas[2].numa_node = 1;
   test_arenas[3].is_exclusive = true;
@@ -106,8 +106,8 @@ static bool test_arena_filter(void) {
   visit.count = 0;
   if (!mi_forall_suitable_arenas(&test_heap, NULL, 0, false, -1, true, &arena_record, &info, NULL) || visit.count != 0) return false;
 
-  test_arenas[4].parent = &test_arenas[3];
-  test_arenas[5].parent = &test_arenas[3];
+  mi_ptr_sign_at(&test_arenas[4].parent, &test_arenas[3]);
+  mi_ptr_sign_at(&test_arenas[5].parent, &test_arenas[3]);
   test_arenas[4].is_exclusive = true;
   test_arenas[5].is_exclusive = true;
   const size_t family[] = { 3, 4, 5 };
@@ -121,7 +121,7 @@ static bool test_arena_filter(void) {
       !arena_matches(&visit, children, 2)) return false;
 
   visit.count = 0;
-  test_arenas[5].parent = NULL;
+  mi_ptr_sign_at(&test_arenas[5].parent, NULL);
   const size_t last[] = { 5 };
   if (!mi_forall_arenas(&test_heap, &test_arenas[5], 0, &arena_record, &info, NULL)) return false;
   return arena_matches(&visit, last, 1);

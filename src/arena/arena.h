@@ -23,7 +23,8 @@ static inline bool mi_arena_is_suitable(mi_arena_t* arena, mi_arena_t* req_arena
   if (arena == req_arena) return true;                         // they match
   if (arena == NULL) return false;
   if (req_arena == NULL && !arena->is_exclusive) return true;  // or the arena is not exclusive, and we didn't request a specific one
-  if (arena->parent != NULL && arena->parent == req_arena) return true;  // sub-arena? (note that req_arena is never a sub arena)
+  mi_arena_t* const parent = mi_arena_parent(arena);
+  if (parent != NULL && parent == req_arena) return true;  // sub-arena? (note that req_arena is never a sub arena)
   return false;
 }
 
@@ -34,7 +35,7 @@ static inline size_t mi_arenas_get_count(mi_subproc_t* subproc) {
 
 static inline mi_arena_t* mi_arena_from_index(mi_subproc_t* subproc, size_t idx) {
   mi_assert_internal(idx < mi_arenas_get_count(subproc));
-  return mi_atomic_load_ptr_acquire(mi_arena_t, &subproc->arenas[idx]);
+  return mi_atomic_ptr_auth_acquire(mi_arena_t, &subproc->arenas[idx]);
 }
 
 static inline size_t mi_arena_info_slices(mi_arena_t* arena) {
@@ -59,11 +60,6 @@ static inline size_t mi_arena_page_meta_aligned_slice_count(void) {
   #endif
 }
 
-// Start of the arena memory area
-static inline uint8_t* mi_arena_start(mi_arena_t* arena) {
-  return ((uint8_t*)arena->start);
-}
-
 // Start of a slice
 static inline uint8_t* mi_arena_slice_start(mi_arena_t* arena, size_t slice_index) {
   mi_assert_internal(slice_index < arena->slice_count);
@@ -73,7 +69,7 @@ static inline uint8_t* mi_arena_slice_start(mi_arena_t* arena, size_t slice_inde
 // get the arena and slice span
 static inline mi_arena_t* mi_arena_from_memid(mi_memid_t memid, size_t* slice_index, size_t* slice_count) {
   mi_assert_internal(memid.memkind == MI_MEM_ARENA);
-  mi_arena_t* arena = memid.mem.arena.arena;
+  mi_arena_t* arena = mi_memid_arena(memid);
   if (slice_index!=NULL) { *slice_index = memid.mem.arena.slice_index; }
   if (slice_count!=NULL) { *slice_count = memid.mem.arena.slice_count; }
   return arena;

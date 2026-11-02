@@ -13,6 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "../heap/heap.h"
 #include "../heap/page-map.h"
 #include "../prim/prim-pac.h"
+#include "../arena/arena.h"
 #include "../track.h"
 
 mi_decl_restrict void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, mi_page_t** ppage) mi_attr_noexcept mi_attr_malloc;
@@ -144,8 +145,7 @@ static inline uint8_t* mi_page_slice_start(const mi_page_t* page) {
   #if MI_CHERI
   // derive from the arena or OS memory as both the page meta data and the page start are bounded
   if (page->memid.memkind == MI_MEM_ARENA) {
-    const mi_memid_arena_info_t* const ainfo = &page->memid.mem.arena;
-    return (uint8_t*)ainfo->arena->start + ((size_t)ainfo->slice_index * MI_ARENA_SLICE_SIZE);
+    return mi_arena_start(mi_memid_arena(page->memid)) + ((size_t)page->memid.mem.arena.slice_index * MI_ARENA_SLICE_SIZE);
   }
   else {
     void* const slice_start = (mi_page_meta_is_separated(page) ? mi_align_down_ptr(mi_page_start(page), MI_ARENA_SLICE_ALIGN) : (void*)page);

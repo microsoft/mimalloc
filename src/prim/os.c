@@ -14,6 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim/os.h"
 #include "mimalloc/util/random.h"
 #include "mimalloc/prim/prim-pac.h"
+#include "mimalloc/arena/arena.h"   // mi_memid_arena
 
 #if !defined(_WIN32) && MI_HAS_UNISTDH
 #include <unistd.h>   // issetugid, getuid, geteuid, getgid, getegid
@@ -307,9 +308,10 @@ static bool mi_os_secure_guard_page(void* addr, mi_memid_t memid, bool set) {
   mi_assert_internal(mi_is_aligned(addr, _mi_os_page_size()));
   bool ok;
   mi_arena_t* const arena = mi_memid_arena(memid);
-  if (arena != NULL && arena->commit_fun != NULL) {
+  mi_commit_fun_t* const commit_fun = (arena != NULL ? mi_fun_auth_at(mi_commit_fun_t, &arena->commit_fun) : NULL);
+  if (commit_fun != NULL) {
     // decommit on a set, and only recommit on a reset if accounted as committed
-    ok = (set || memid.initially_committed ? (*(arena->commit_fun))(!set /* commit */, addr, size, NULL, arena->commit_fun_arg) : true);
+    ok = (set || memid.initially_committed ? (*commit_fun)(!set /* commit */, addr, size, NULL, arena->commit_fun_arg) : true);
   }
   else {
     ok = (set ? _mi_os_guard(addr, size, memid.initially_committed) : _mi_os_unguard(addr, size, memid.initially_committed));

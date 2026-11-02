@@ -240,9 +240,9 @@ static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
   if (!is_main) {  // pages for the main heap are pre-allocated in the arenas
     mi_lock(&heap->arena_pages_lock) {
       for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
-        mi_arena_pages_t* arena_pages = mi_atomic_load_ptr_relaxed(mi_arena_pages_t, &heap->arena_pages[i]);
+        mi_arena_pages_t* arena_pages = mi_atomic_ptr_auth_relaxed(mi_arena_pages_t, &heap->arena_pages[i]);
         if (arena_pages!=NULL) {
-          mi_atomic_store_ptr_relaxed(mi_arena_pages_t, &heap->arena_pages[i], NULL);
+          mi_atomic_ptr_sign_relaxed(&heap->arena_pages[i], NULL);
           _mi_free_subproc_safe(arena_pages);
         }
       }

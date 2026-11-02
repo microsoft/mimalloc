@@ -21,9 +21,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #if MI_DEBUG > 1
 static bool mi_heap_has_page(mi_heap_t* heap, mi_arena_t* arena, mi_page_t* page) {
   mi_assert(arena->arena_idx < MI_MAX_ARENAS);
-  mi_arena_pages_t* arena_pages = heap->arena_pages[arena->arena_idx];
+  mi_arena_pages_t* arena_pages = mi_atomic_ptr_auth_relaxed(mi_arena_pages_t, &heap->arena_pages[arena->arena_idx]);
   return (page->memid.memkind == MI_MEM_ARENA &&
-          page->memid.mem.arena.arena == arena &&
+          mi_memid_arena(page->memid) == arena &&
           arena_pages != NULL &&
           mi_bitmap_is_setN(arena_pages->pages, page->memid.mem.arena.slice_index, 1));
 }
@@ -80,7 +80,7 @@ static mi_arena_pages_t* mi_heap_arena_pages(mi_heap_t* heap, mi_arena_t* arena)
   mi_assert_internal(arena!=NULL);
   mi_assert_internal(heap!=NULL);
   mi_assert(arena->arena_idx < MI_MAX_ARENAS);
-  return mi_atomic_load_ptr_acquire(mi_arena_pages_t, &heap->arena_pages[arena->arena_idx]);
+  return mi_atomic_ptr_auth_acquire(mi_arena_pages_t, &heap->arena_pages[arena->arena_idx]);
 }
 
 
@@ -137,7 +137,7 @@ static mi_arena_pages_t* mi_heap_ensure_arena_pages(mi_heap_t* heap, mi_arena_t*
   mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena);
   if (arena_pages==NULL) {
     mi_lock(&heap->arena_pages_lock) {
-      arena_pages = mi_atomic_load_ptr_acquire(mi_arena_pages_t, &heap->arena_pages[arena->arena_idx]);
+      arena_pages = mi_atomic_ptr_auth_acquire(mi_arena_pages_t, &heap->arena_pages[arena->arena_idx]);
       if (arena_pages == NULL) {  // still NULL?
         if (mi_is_heap_main(heap)) {
           // the page info for the main heap is always allocated as part of an arena
@@ -148,7 +148,7 @@ static mi_arena_pages_t* mi_heap_ensure_arena_pages(mi_heap_t* heap, mi_arena_t*
           // todo: allocate into the current arena?
           arena_pages = mi_arena_pages_alloc(arena);
         }
-        mi_atomic_store_ptr_release(mi_arena_pages_t, &heap->arena_pages[arena->arena_idx], arena_pages);
+        mi_atomic_ptr_sign_release(&heap->arena_pages[arena->arena_idx], arena_pages);
       }
     }
   }
@@ -448,7 +448,7 @@ static uint8_t* mi_arenas_page_alloc_from_slices(mi_theap_t* theap, size_t slice
 
   uint8_t* const start = (uint8_t*)_mi_arenas_try_alloc(heap, slice_count, MI_ARENA_SLICE_ALIGN, commit, allow_large, heap->exclusive_arena, tld->thread_seq, numa_node, memid);
   if (start == NULL) return NULL;
-  mi_arena_t* const arena = memid->mem.arena.arena;
+  mi_arena_t* const arena = mi_memid_arena(*memid);
 
   // ensure the arena pages (and the aligned page meta data)
   mi_arena_pages_t* const arena_pages = mi_heap_ensure_arena_pages(heap, arena);
@@ -1483,7 +1483,7 @@ static void mi_heap_delete_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
   #if MI_DEBUG>1
   // no more arena pages?
   for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
-    mi_arena_pages_t* const arena_pages = mi_atomic_load_ptr_relaxed(mi_arena_pages_t, &heap->arena_pages[i]);
+    mi_arena_pages_t* const arena_pages = mi_atomic_ptr_auth_relaxed(mi_arena_pages_t, &heap->arena_pages[i]);
     if (arena_pages!=NULL) {
       mi_assert_internal(mi_bitmap_is_all_clear(arena_pages->pages));
     }

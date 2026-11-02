@@ -16,8 +16,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 mi_decl_nodiscard bool _mi_arena_commit(mi_subproc_t* subproc, mi_arena_t* arena, void* start, size_t size, bool* is_zero, size_t stat_already_committed) {
   mi_assert_internal(subproc!=NULL);
-  if (arena != NULL && arena->commit_fun != NULL) {
-    return (*arena->commit_fun)(true, start, size, is_zero, arena->commit_fun_arg);
+  mi_commit_fun_t* const commit_fun = (arena != NULL ? mi_fun_auth_at(mi_commit_fun_t, &arena->commit_fun) : NULL);
+  if (commit_fun != NULL) {
+    return (*commit_fun)(true, start, size, is_zero, arena->commit_fun_arg);
   }
   else if (stat_already_committed > 0) {
     return _mi_os_commit_ex(subproc, start, size, is_zero, stat_already_committed);
@@ -34,9 +35,9 @@ static mi_memid_t mi_memid_create_arena(mi_arena_t* arena, size_t slice_index, s
   mi_assert_internal(slice_count > 0);
   mi_assert_internal(slice_index < arena->slice_count);
   mi_memid_t memid = _mi_memid_create(MI_MEM_ARENA);
-  memid.mem.arena.arena = arena;
   memid.mem.arena.slice_index = (uint32_t)slice_index;
   memid.mem.arena.slice_count = (uint32_t)slice_count;
+  memid.mem.arena.arena = mi_ptr_sign(arena, mi_memid_arena_salt(&memid.mem.arena));
   return memid;
 }
 
@@ -380,7 +381,7 @@ static bool mi_arena_purge(mi_arena_t* arena, size_t slice_index, size_t slice_c
   size_t already_committed;
   mi_bitmap_setN(arena->slices_committed, slice_index, slice_count, &already_committed); // pretend all committed.. (as we lack a clearN call that counts the already set bits..)
   const bool all_committed = (already_committed == slice_count);
-  const bool needs_recommit = _mi_os_purge_ex(arena->subproc, p, size, all_committed /* allow reset? */, _mi_size_of_slices(already_committed), arena->commit_fun, arena->commit_fun_arg);
+  const bool needs_recommit = _mi_os_purge_ex(arena->subproc, p, size, all_committed /* allow reset? */, _mi_size_of_slices(already_committed), mi_fun_auth_at(mi_commit_fun_t, &arena->commit_fun), arena->commit_fun_arg);
 
   if (needs_recommit) {
     // no longer committed

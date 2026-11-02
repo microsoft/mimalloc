@@ -125,19 +125,19 @@ mi_arena_t* _mi_arena_from_id(mi_arena_id_t id) {
   #else
   mi_arena_t* const arena = (mi_arena_t*)mi_meta_load_maybe(id);  // id's are untagged (see `mi_arena_memtag_init`)
   #endif
-  mi_assert_internal(arena==NULL || arena->parent==NULL); // id's should never point to sub-arena's
+  mi_assert_internal(arena==NULL || mi_arena_parent(arena)==NULL); // id's should never point to sub-arena's
   return arena;
 }
 
 mi_arena_id_t mi_arena_id_from_arena(mi_arena_t* arena) {
-  mi_assert_internal(arena==NULL || arena->parent==NULL);
+  mi_assert_internal(arena==NULL || mi_arena_parent(arena)==NULL);
   return (arena==NULL ? _mi_arena_id_none() : (mi_arena_id_t)mi_ptr_from_addr(mi_addr(arena)));  // don't expose the arena capability
 }
 
 
 bool _mi_arena_memid_is_suitable(mi_memid_t memid, mi_arena_t* request_arena) {
   if (memid.memkind == MI_MEM_ARENA) {
-    return mi_arena_is_suitable(memid.mem.arena.arena, request_arena);
+    return mi_arena_is_suitable(mi_memid_arena(memid), request_arena);
   }
   else {
     return mi_arena_is_suitable(NULL, request_arena);
@@ -258,7 +258,7 @@ mi_decl_forceinline bool mi_forall_arenas(mi_heap_t* heap, mi_arena_t* req_arena
     }
     mi_arena_t* arena = mi_arena_from_index(heap->subproc,idx);
     if (req_arena != NULL && arena != req_arena &&
-        (arena == NULL || arena->parent != req_arena)) continue; /* only the requested arena or its children */
+        (arena == NULL || mi_arena_parent(arena) != req_arena)) continue; /* only the requested arena or its children */
 
     // call the visitor
     if (arena != NULL) {
@@ -391,9 +391,9 @@ static bool mi_arenas_contain_ex(const void* p, mi_arena_t* parent) {
   mi_subproc_t* subproc = _mi_subproc();
   const size_t max_arena = mi_arenas_get_count(subproc);
   for (size_t i = 0; i < max_arena; i++) {
-    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &subproc->arenas[i]);
+    mi_arena_t* arena = mi_arena_from_index(subproc, i);
     if (arena != NULL) {
-      if (parent==NULL || arena==parent || arena->parent==parent) {
+      if (parent==NULL || arena==parent || mi_arena_parent(arena)==parent) {
         if (mi_arena_strictly_contains(arena, p)) {
           return true;
         }
@@ -427,10 +427,10 @@ static void mi_arenas_unsafe_destroy(mi_subproc_t* subproc) {
   mi_assert_internal(subproc != NULL);
   const size_t arena_count = mi_arenas_get_count(subproc);
   for (size_t i = 0; i < arena_count; i++) {
-    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &subproc->arenas[i]);
+    mi_arena_t* arena = mi_arena_from_index(subproc, i);
     if (arena != NULL) {
       // mi_lock_done(&arena->abandoned_visit_lock);
-      mi_atomic_store_ptr_release(mi_arena_t, &subproc->arenas[i], NULL);
+      mi_atomic_ptr_sign_release(&subproc->arenas[i], NULL);
       if (mi_memkind_is_os(arena->memid.memkind)) {
         _mi_os_free_ex(subproc, mi_arena_start(arena), mi_arena_size(arena), true, arena->memid);
       }
@@ -461,13 +461,11 @@ static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_
   if (arena_id != NULL) { *arena_id = _mi_arena_id_none(); }
 
   // try to find a NULL entry
-  mi_arena_t* expected;
   size_t count = mi_arenas_get_count(subproc);
   for( size_t i = 0; i < count; i++) {
     if (mi_arena_from_index(subproc,i) == NULL) {
       arena->arena_idx = i;
-      expected = NULL;
-      if (mi_atomic_cas_ptr_strong_release(mi_arena_t, &subproc->arenas[i], &expected, arena)) {
+      if (mi_atomic_ptr_sign_cas_release(&subproc->arenas[i], NULL, arena)) {
         // success
         if (arena_id != NULL) { *arena_id = mi_arena_id_from_arena(arena); }
         return true;
@@ -479,8 +477,7 @@ static bool mi_arenas_add(mi_subproc_t* subproc, mi_arena_t* arena, mi_arena_id_
   while(count<MI_MAX_ARENAS) {
     if (mi_atomic_cas_strong_relaxed(&subproc->arena_count, &count, count+1)) {
       arena->arena_idx = count;
-      expected = NULL;
-      if (mi_atomic_cas_ptr_strong_release(mi_arena_t, &subproc->arenas[count], &expected, arena)) {
+      if (mi_atomic_ptr_sign_cas_release(&subproc->arenas[count], NULL, arena)) {
         mi_subproc_stat_counter_increase(arena->subproc, arena_count, 1);
         if (arena_id != NULL) { *arena_id = mi_arena_id_from_arena(arena); }
         return true;
@@ -616,7 +613,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
 
   // init
   mi_arena_t* arena = mi_arena_info(start);
-  arena->start = start;
+  mi_ptr_sign_at(&arena->start, start);
   arena->subproc = subproc;
   arena->memid = memid;
   arena->is_exclusive = exclusive;
@@ -629,9 +626,9 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
     arena->numa_node = numa_node;
   }
   arena->purge_expire = 0;
-  arena->commit_fun = commit_fun;
+  mi_fun_sign_at(&arena->commit_fun, commit_fun);
   arena->commit_fun_arg = commit_fun_arg;
-  arena->parent = parent;
+  mi_ptr_sign_at(&arena->parent, parent);
   arena->total_size = total_size;
 
   // init bitmaps
@@ -1021,12 +1018,12 @@ static void mi_debug_show_arenas_ex(mi_heap_t* heap, bool show_pages, bool narro
   //size_t abandoned_total = 0;
   size_t page_total = 0;
   for (size_t i = 0; i < max_arenas; i++) {
-    mi_arena_t* arena = mi_atomic_load_ptr_acquire(mi_arena_t, &subproc->arenas[i]);
+    mi_arena_t* arena = mi_arena_from_index(subproc, i);
     if (arena == NULL) continue;
     mi_assert(arena->subproc == subproc);
     // slice_total += arena->slice_count;
     _mi_raw_message("%sarena %zu at %p: %zu slices (%zu MiB)%s%s, subproc: %zu, numa: %i\n",
-        (arena->parent==NULL ? "" : "(sub)"), i, arena, arena->slice_count, (size_t)(_mi_size_of_slices(arena->slice_count)/MI_MiB),
+        (mi_arena_parent(arena)==NULL ? "" : "(sub)"), i, arena, arena->slice_count, (size_t)(_mi_size_of_slices(arena->slice_count)/MI_MiB),
         (arena->memid.is_pinned ? ", pinned" : ""), (arena->is_exclusive ? ", exclusive" : ""),
         arena->subproc->subproc_seq, arena->numa_node);
     //if (show_inuse) {
@@ -1143,7 +1140,7 @@ static bool mi_arena_page_register(size_t slice_index, size_t slice_count, mi_ar
   MI_UNUSED(arg); MI_UNUSED(slice_count);
   mi_assert_internal(slice_count == 1);
   mi_page_t* page = mi_arena_page_at_slice(arena, slice_index);
-  mi_assert_internal(mi_bitmap_is_setN(page->memid.mem.arena.arena->pages, page->memid.mem.arena.slice_index, 1));
+  mi_assert_internal(mi_bitmap_is_setN(mi_memid_arena(page->memid)->pages, page->memid.mem.arena.slice_index, 1));
   if (!_mi_page_map_register(page)) return false; // break
   mi_assert_internal(mi_ptr_page(page)==page);
   return true;
@@ -1187,7 +1184,7 @@ mi_decl_export bool mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t*
   const size_t count = mi_arenas_get_count(subproc);
   for(size_t i = 0; i < count; i++) {
     if (mi_arena_from_index(subproc, i) == arena) {
-      mi_atomic_store_ptr_release(mi_arena_t, &subproc->arenas[i], NULL);
+      mi_atomic_ptr_sign_release(&subproc->arenas[i], NULL);
       if (i + 1 == count) { // try adjust the count?
         size_t expected = count;
         mi_atomic_cas_strong_acq_rel(&subproc->arena_count, &expected, count-1);
@@ -1223,7 +1220,7 @@ mi_decl_export bool mi_arena_reload(void* start, size_t size, mi_commit_fun_t* c
 
   // re-initialize
   arena->is_exclusive = true;
-  arena->commit_fun = commit_fun;
+  mi_fun_sign_at(&arena->commit_fun, commit_fun);
   arena->commit_fun_arg = commit_fun_arg;
   arena->subproc = _mi_subproc();
   if (!mi_arenas_add(arena->subproc, arena, arena_id)) {

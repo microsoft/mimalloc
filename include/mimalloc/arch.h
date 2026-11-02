@@ -374,6 +374,7 @@ static inline size_t mi_ptr_bounds_limit(const void* p, size_t size) {
 // ------------------------------------------------------
 
 typedef uintptr_t  mi_ptr_signed_t;
+#define mi_ptr_signed(tp)   mi_ptr_signed_t     // a signed `tp*` (only documents the pointer type)
 
 // Pointer signing (see `prim/prim-pac.h`): 0=off, 1=weak (using a software process key), 2=required (using the
 // arm64 generic pointer authentication key (`pacga`), which must be supported at runtime).
