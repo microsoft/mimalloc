@@ -133,8 +133,8 @@ static inline size_t mi_page_block_index(const mi_page_t* page, size_t diff) {
   #if MI_FREE_IS_CHECKED
   // `floor(diff * ceil(2^64/block_size) / 2^64) == diff / block_size` if both `diff` and `block_size`
   // are below 2^32 (Lemire, Kaser, and Kurz, "Faster remainder by direct computation", 2019).
-  // Pages with a single block have `block_recip == 0` as the block index is always 0.
-  mi_assert_internal(page->block_recip==0 || diff <= UINT32_MAX);
+  // Pages with a single block have `block_recip == 1` as the block index is always 0.
+  mi_assert_internal(page->block_recip==1 || diff <= UINT32_MAX);
   const size_t idx = (size_t)mi_mul_hi64_32((uint32_t)diff, page->block_recip);
   mi_assert_internal(idx == diff / mi_page_block_size(page));
   return idx;
@@ -148,14 +148,14 @@ static inline mi_block_t* mi_page_ptr_unalign_ex(const mi_page_t* page, const vo
 
   const size_t diff = mi_addr(p) - mi_addr(mi_page_start(page));
   const size_t block_size = mi_page_block_size(page);
-  #if MI_FREE_IS_CHECKED
-  const size_t adjust = diff - (mi_page_block_index(page, diff) * block_size);
-  #else
   size_t adjust = diff & (block_size - 1);
   if mi_unlikely(!mi_is_power_of_two(block_size)) {
+    #if MI_FREE_IS_CHECKED
+    adjust = diff - (mi_page_block_index(page, diff) * block_size);  // avoid a (slow) division
+    #else
     adjust = diff % block_size;
+    #endif
   }
-  #endif
   if (poffset!=NULL) { *poffset = adjust; }
   void* const block = mi_ptr_rederive(mi_page_start(page), p);
   return (mi_block_t*)mi_ptr_with_addr(block, mi_addr(p) - adjust);
@@ -176,13 +176,19 @@ void* _mi_memtag_canonical(void* p) {
   return mi_ptr_with_memtag(p, MI_MEMTAG_META);
 }
 
-static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, const void* p ) {
+// Get the block from a pointer `p` that is known to point to the start of a block
+static inline mi_block_t* mi_block_from_ptr( const mi_page_t* page, const void* p ) {
   mi_assert(_mi_page_ptr_unalign(page,p) == (mi_block_t*)p); // should never be an interior pointer
+  return (mi_block_t*)mi_ptr_rederive(mi_page_start(page), p);
+}
+
+static inline mi_block_t* mi_validate_block_from_ptr( const mi_page_t* page, const void* p ) {
   #if MI_SECURE>=2
+  mi_assert(_mi_page_ptr_unalign(page,p) == (mi_block_t*)p); // should never be an interior pointer
   // in secure mode we always unalign to guard against free-ing interior pointers
   return _mi_page_ptr_unalign(page,p);
   #else
-  return (mi_block_t*)mi_ptr_rederive(mi_page_start(page), p);
+  return mi_block_from_ptr(page,p);
   #endif
 }
 
@@ -212,7 +218,7 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
       { /* nothing */ }
     }
     #endif
-    if (mi_page_is_memtag(page) && !*was_guarded && mi_ptr_memtag(block)==MI_MEMTAG_META) {  // a canonical block (see `_mi_memtag_canonical`)
+    if mi_unlikely(mi_page_is_memtag(page) && !*was_guarded && mi_ptr_memtag(block)==MI_MEMTAG_META) {  // a canonical block (see `_mi_memtag_canonical`)
       const size_t bsize = mi_page_block_size(page);
       block = (mi_block_t*)mi_memtag_block_uncanonical(block, bsize, mi_page_block_index(page, mi_addr(block) - mi_addr(mi_page_start(page))));
     }
@@ -340,22 +346,44 @@ static mi_decl_forceinline mi_page_t* mi_ptr_page_validate(const void* p, const 
   return (mi_ptr_page_is_valid(p,msg,&page) ? page : NULL);
 }
 
+#if MI_SECURE>=2
+// Is `p` at the start of a block? `diff` is a multiple of `block_size` iff `diff * ceil(2^64/block_size) mod 2^64 < ceil(2^64/block_size)`
+// (for `diff < 2^32`) (Lemire, Kaser, and Kurz, "Faster remainder by direct computation", 2019).
+// With a single block in the page, `block_recip == 1` and this checks `diff == 0`.
+static inline bool mi_page_is_block_start(const mi_page_t* page, const void* p) {
+  const uint64_t diff = mi_addr(p) - mi_addr(mi_page_start(page));
+  return (diff * page->block_recip < page->block_recip);
+}
+
+// Free a pointer that is not at the start of a block: either an interior pointer
+// (that we unalign to guard against free-ing interior pointers), or a pointer in a page with interior pointers (aligned allocations)
+static mi_decl_noinline void mi_free_unaligned(mi_page_t* page, void* p, bool allow_reclaim) mi_attr_noexcept {
+  void* const q = (mi_page_has_interior_pointers(page) ? p : (void*)_mi_page_ptr_unalign(page,p));
+  if (mi_page_thread_id(page) == _mi_thread_id()) { mi_free_generic_local(page, q); }
+                                             else { mi_free_generic_mt(page, q, allow_reclaim); }
+}
+#endif
+
 // Free a block
 // Fast path written carefully to prevent register spilling on the stack
 static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t* pblock_size, bool allow_reclaim)
 {
   mi_assert_internal(p!=NULL && page!=NULL);
   if (pblock_size!=NULL) { *pblock_size = mi_page_block_size(page); }
+  #if MI_SECURE>=2
+  // in secure mode we guard against free-ing interior pointers (without needing to unalign in the fast path)
+  if mi_unlikely(!mi_page_is_block_start(page,p)) { mi_free_unaligned(page, p, allow_reclaim); return; }
+  #endif
 
   const mi_thread_id_t ptid = mi_page_xthread_id(page);
   const mi_thread_id_t xtid = (_mi_prim_thread_id() ^ ptid);
   if mi_likely(xtid == 0) {                        // `tid == mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // thread-local, aligned, and not a full page
-    mi_block_t* const block = mi_validate_block_from_ptr(page,p);
+    mi_block_t* const block = mi_block_from_ptr(page,p);
     mi_free_block_local(page, block, false /* was guarded */, false /* no need to check if the page is full */, false /* memtag */);
   }
   else if (MI_PAGE_IS_MEMTAG != 0 && xtid == MI_PAGE_IS_MEMTAG) {  // as the first case but memory tagged
-    mi_block_t* const block = mi_validate_block_from_ptr(page,p);
+    mi_block_t* const block = mi_block_from_ptr(page,p);
     mi_free_block_local(page, block, false /* was guarded */, false /* no need to check if the page is full */, true /* memtag */);
   }
   else if (xtid <= MI_PAGE_FLAG_MASK) {            // `tid == mi_page_thread_id(page) && mi_page_flags(page) != 0`
@@ -365,11 +393,11 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
   // free-ing in a page owned by a theap in another thread, or an abandoned page (not belonging to a theap)
   else if ((xtid & MI_PAGE_FLAG_MASK) == 0) {      // `tid != mi_page_thread_id(page) && mi_page_flags(page) == 0`
     // blocks are aligned (and not a full page); push on the thread_free list
-    mi_block_t* const block = mi_validate_block_from_ptr(page,p);
+    mi_block_t* const block = mi_block_from_ptr(page,p);
     mi_free_block_mt(page,block,false /* was_guarded */, allow_reclaim, false /* memtag */);
   }
   else if (MI_PAGE_IS_MEMTAG != 0 && (xtid & MI_PAGE_FLAG_MASK) == MI_PAGE_IS_MEMTAG) {  // as the previous case but memory tagged
-    mi_block_t* const block = mi_validate_block_from_ptr(page,p);
+    mi_block_t* const block = mi_block_from_ptr(page,p);
     mi_free_block_mt(page,block,false /* was_guarded */, allow_reclaim, true /* memtag */);
   }
   else {

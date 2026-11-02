@@ -696,7 +696,7 @@ static void mi_arenas_page_init_meta(mi_theap_t* theap, mi_page_t* page, uint8_t
   #if MI_FREE_IS_CHECKED
   // exact for offsets and block sizes below 2^32 (see `alloc/free.c:mi_page_block_index`)
   mi_assert_internal(reserved==1 || (uint64_t)reserved * block_size <= UINT32_MAX);
-  page->block_recip = (reserved > 1 ? (UINT64_MAX / block_size) + 1 : 0);
+  page->block_recip = (reserved > 1 ? (UINT64_MAX / block_size) + 1 : 1);
   #endif
   page->memid = memid;
   page->free_is_zero = memid.initially_zero;

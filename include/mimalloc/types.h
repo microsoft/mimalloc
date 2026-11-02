@@ -561,7 +561,7 @@ typedef struct mi_decl_memtag_unit_align mi_page_s {
   mi_addr_t                 keys[2];           // const: random keys to encode the free lists and padding canary (see `alloc/page.h`)
   #endif
   #if MI_FREE_IS_CHECKED
-  uint64_t                  block_recip;       // const: `ceil(2^64/block_size)` for division by `block_size` (or 0 if the page has a single block) (see `alloc/free.c`)
+  uint64_t                  block_recip;       // const: `ceil(2^64/block_size)` for division by `block_size` (or 1 if the page has a single block) (see `alloc/free.c`)
   #endif
   #if MI_QSBR
   _Atomic(mi_thread_id_t)   qsbr_xthread_id;   // thread id of the last owning thread (`theap->tld->thread_id`) | `MI_PAGE_QSBR_IN_QUEUE` (written only by the owning thread)
