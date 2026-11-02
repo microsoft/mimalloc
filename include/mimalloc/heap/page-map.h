@@ -12,7 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "../util/libc.h"
 #include "../util/options.h"
 #include "process.h"
-#include "../pac.h"
+#include "../prim/prim-pac.h"
 
 bool          _mi_page_map_init(void);
 mi_decl_nodiscard bool _mi_page_map_register(mi_page_t* page);
@@ -40,7 +40,7 @@ mi_page_t*    _mi_safe_ptr_page(const void* p);
 // The page map pointer is stored in the sealed-once process data (see `mi_process_get_sealed_once`), and
 // the committed entry count in the sealed process data (see `mi_process_get_sealed`).
 // Both are zero before initialization so `mi_checked_ptr_page` returns NULL for any pointer (issue #1341).
-// The sub map pointers and the page pointers in a sub map are signed with the address of their entry (see `pac.h`).
+// The sub map pointers and the page pointers in a sub map are signed with the address of their entry (see `prim/prim-pac.h`).
 typedef mi_ptr_signed_t* mi_submap_t;
 typedef struct mi_page_map_s {
   size_t               reserved_size;    // full reserved size (mi_page_map_t + submaps)

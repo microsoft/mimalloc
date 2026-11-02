@@ -13,7 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/util/stats.h"
 #include "mimalloc/prim/os.h"
 #include "mimalloc/util/random.h"
-#include "mimalloc/pac.h"
+#include "mimalloc/prim/prim-pac.h"
 
 #if !defined(_WIN32) && MI_HAS_UNISTDH
 #include <unistd.h>   // issetugid, getuid, geteuid, getgid, getegid
@@ -181,7 +181,7 @@ size_t _mi_os_good_alloc_size(size_t size) {
 }
 
 #if MI_PAC == 1
-// Create a fresh random process key for encoded pointers (see `pac.h`)
+// Create a fresh random process key for encoded pointers (see `prim/prim-pac.h`)
 static mi_addr_t mi_ptr_pac_key_new(void) {
   mi_random_ctx_t ctx;
   _mi_random_init(&ctx);

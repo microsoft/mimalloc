@@ -73,7 +73,7 @@ typedef struct mi_process_metadata_s {
 typedef struct mi_process_sealed_once_s {
   _Atomic(struct mi_page_map_s*)  page_map;     // the page map without memory tag (`NULL` before initialization) (see `heap/page-map.h:mi_page_map`); must be the first entry for better code-gen in secure mode
   #if MI_PAC==1
-  mi_addr_t           ptr_pac_key;              // key for encoded pointers (see `pac.h`); next to `page_map` as it is used for page map lookups
+  mi_addr_t           ptr_pac_key;              // key for encoded pointers (see `prim/prim-pac.h`); next to `page_map` as it is used for page map lookups
   #endif
   mi_process_metadata_t* metadata;              // process meta data without memory tag (`NULL` before initialization) (see `mi_process_metadata`)
   mi_os_mem_config_t  os_mem_config;            // OS memory configuration (see `prim/os.c`)

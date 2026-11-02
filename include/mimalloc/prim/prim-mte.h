@@ -5,11 +5,11 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef MI_MEMTAG_H
-#define MI_MEMTAG_H
+#ifndef MI_INTERNAL_PRIM_MTE_H
+#define MI_INTERNAL_PRIM_MTE_H
 
-#include "decl.h"
-#include "arch.h"
+#include "../decl.h"
+#include "../arch.h"
 
 /* ----------------------------------------------------------------------------
 Memory tagging
@@ -299,4 +299,4 @@ static inline void* mi_memtag_meta_init(void* p, size_t size, size_t idx) {
 }
 #endif
 
-#endif // MI_MEMTAG_H
+#endif // MI_INTERNAL_PRIM_MTE_H

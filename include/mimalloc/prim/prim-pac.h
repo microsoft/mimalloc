@@ -5,11 +5,11 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef MI_PAC_H
-#define MI_PAC_H
+#ifndef MI_INTERNAL_PRIM_PAC_H
+#define MI_INTERNAL_PRIM_PAC_H
 
-#include "types.h"
-#include "heap/process.h"   // mi_process_get_sealed_once
+#include "../types.h"
+#include "../heap/process.h"   // mi_process_get_sealed_once
 
 /* -----------------------------------------------------------------------------
 Signed pointers (`MI_PAC`, see `arch.h`)
@@ -172,4 +172,4 @@ static inline void* mi_ptr_auth(mi_ptr_signed_t x, mi_addr_t salt) {
   return p;
 }
 
-#endif // MI_PAC_H
+#endif // MI_INTERNAL_PRIM_PAC_H

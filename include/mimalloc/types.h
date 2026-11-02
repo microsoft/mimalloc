@@ -33,7 +33,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "decl.h"     // compiler dependent definitions
 #include "arch.h"     // size defines (MI_SIZE_SIZE etc), bit operations
-#include "memtag.h"   // memory tagging (MTE)
+#include "prim/prim-mte.h"   // memory tagging (MTE)
 #include "atomic.h"   // _Atomic primitives
 #include "qsbr.h"     // quiescent state-based reclamation (qsbr) primitives (for runtime systems like CPython)
 

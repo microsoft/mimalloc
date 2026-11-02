@@ -105,7 +105,7 @@ typedef uintptr_t             mi_addr_t;
 #endif
 #define MI_ADDR(x)            ((mi_addr_t)(x))
 
-// With memory tagging (MTE), pointers carry a 4-bit tag starting at bit `MI_PTR_MEMTAG_SHIFT` (see `memtag.h`).
+// With memory tagging (MTE), pointers carry a 4-bit tag starting at bit `MI_PTR_MEMTAG_SHIFT` (see `prim/prim-mte.h`).
 // The address mask removes all top bits ignored by the hardware, not just the logical memory tag:
 // on ARM it is the full top byte as this gives better codegen (e.g. `p & 0x00FFFFFFF0000000`).
 // (For a future x86 ChkTag the tag would use bits 57-60, with LAM ignoring bits 57-62, but bit 56 is part of the address.)
@@ -369,13 +369,13 @@ static inline size_t mi_ptr_bounds_limit(const void* p, size_t size) {
 
 
 // ------------------------------------------------------
-// Signed pointers (see `pac.h`): with `MI_PAC` some internal pointers are stored signed
+// Signed pointers (see `prim/prim-pac.h`): with `MI_PAC` some internal pointers are stored signed
 // (using ARM pointer authentication or a software keyed encoding); this is a `uintptr_t` so it can be atomic.
 // ------------------------------------------------------
 
 typedef uintptr_t  mi_ptr_signed_t;
 
-// Pointer signing (see `pac.h`): 0=off, 1=weak (using a software process key), 2=required (using the
+// Pointer signing (see `prim/prim-pac.h`): 0=off, 1=weak (using a software process key), 2=required (using the
 // arm64 generic pointer authentication key (`pacga`), which must be supported at runtime).
 // Only on 64-bit systems (and not on CHERI); `required` only on arm64 with GCC or clang.
 #if !defined(MI_PAC) || MI_CHERI || (MI_INTPTR_SIZE != 8)

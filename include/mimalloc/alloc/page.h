@@ -12,7 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "../prim/os.h"
 #include "../heap/heap.h"
 #include "../heap/page-map.h"
-#include "../pac.h"
+#include "../prim/prim-pac.h"
 #include "../track.h"
 
 mi_decl_restrict void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, mi_page_t** ppage) mi_attr_noexcept mi_attr_malloc;
@@ -597,7 +597,7 @@ cannot be copied). We use one of three encodings:
    probability 2^-32, and it is difficult to recover the keys
    from known `(b,v,x)` triples (except for `m`), leaving ~96 bits of key.
    With `MI_PAC=WEAK` the process key `K` is also mixed in as
-   `mulxor64(v ^ keys[0], b ^ keys[1] ^ K)` (see `pac.h:mi_keyed_mac`).
+   `mulxor64(v ^ keys[0], b ^ keys[1] ^ K)` (see `prim/prim-pac.h:mi_keyed_mac`).
 
 2. Authenticated offsets (with `MI_PAC=REQUIRED`).
    As the tagged offsets, but the tag is computed with the (unreadable)
