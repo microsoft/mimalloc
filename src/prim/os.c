@@ -181,16 +181,14 @@ size_t _mi_os_good_alloc_size(size_t size) {
   return mi_align_up(size, align_size);
 }
 
-#if MI_PAC == 1
-// Create a fresh random process key for encoded pointers (see `prim/prim-pac.h`)
-static mi_addr_t mi_ptr_pac_key_new(void) {
+// Create a fresh random process key (for encoded pointers and heap cookies)
+static mi_addr_t mi_random_key_new(void) {
   mi_random_ctx_t ctx;
   _mi_random_init(&ctx);
-  const mi_addr_t key = (mi_addr_t)_mi_random_next(&ctx) | MI_PAC_KEY_ALWAYS;
+  const mi_addr_t key = (mi_addr_t)_mi_random_next(&ctx);
   mi_memzero(&ctx, sizeof(ctx));
   return key;
 }
-#endif
 
 void _mi_os_init(void) {
   mi_os_mem_config_t config = mi_os_mem_config_default;
@@ -215,9 +213,13 @@ void _mi_os_init(void) {
   #endif
   mi_process_sealed_once_t* const once = _mi_process_unseal_once();
   once->os_mem_config = config;  // publish at once
-  #if MI_PAC == 1
-  if (once->ptr_pac_key == 0) { once->ptr_pac_key = mi_ptr_pac_key_new(); }  // `_mi_os_init` may be called twice; the key never changes
-  #endif
+  if (once->process_key == 0) {  // `_mi_os_init` may be called twice; the key never changes
+    #if MI_PAC == 1
+    once->process_key = mi_random_key_new() | MI_PAC_KEY_ALWAYS;
+    #else
+    once->process_key = mi_random_key_new() | 1;   // never 0
+    #endif
+  }
   _mi_process_seal_once();
   if (_mi_os_page_size() > MI_ARENA_SLICE_SIZE) {
     _mi_error_message(ENOTSUP, "the OS page size (%zu KiB) is larger than the arena slice size (%zu KiB); increase MI_ARENA_SLICE_SHIFT\n", _mi_os_page_size()/MI_KiB, (size_t)(MI_ARENA_SLICE_SIZE/MI_KiB));

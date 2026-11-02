@@ -102,8 +102,8 @@ static inline void* mi_ptr_pac_retag(mi_addr_t q) {
 #define MI_PAC_KEY_ALWAYS   (MI_ADDR(1) << MI_PAC_ADDR_BITS)    // always set in the key so 0 never decodes as canonical
 
 static inline mi_addr_t mi_pac_process_key(void) {
-  mi_assert_internal(mi_process_get_sealed_once()->ptr_pac_key != 0);  // initialized in `_mi_os_init`
-  return mi_process_get_sealed_once()->ptr_pac_key;
+  mi_assert_internal(mi_process_get_sealed_once()->process_key != 0);  // initialized in `_mi_os_init`
+  return mi_process_get_sealed_once()->process_key;
 }
 
 // the combined key for a slot: the process key xor-ed with the rotated slot address

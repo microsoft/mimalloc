@@ -765,6 +765,7 @@ typedef struct mi_arena_pages_s mi_arena_pages_t;
 typedef size_t mi_thread_local_t;
 
 typedef struct mi_heap_s {
+  mi_addr_t             cookie;                         // keyed MAC of the heap address to validate heap handles (see `heap/heap.h:mi_heap_is_valid`)
   mi_subproc_t*         subproc;                        // a heap belongs to a subprocess
   size_t                heap_seq;                       // unique sequence number for heaps in this subprocess
   mi_heap_t*            next;                           // list of heaps in this subprocess
