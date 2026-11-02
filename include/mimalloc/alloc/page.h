@@ -334,7 +334,7 @@ static inline void mi_page_set_has_interior_pointers(mi_page_t* page, bool has_a
 
 // Are the blocks in this page memory tagged? (always false without `MI_MTE`)
 static inline bool mi_page_is_memtag(const mi_page_t* page) {
-  return ((mi_page_flags(page) & MI_PAGE_IS_MEMTAG) != 0);
+  return ((mi_page_flags(page) & MI_PAGE_IS_MEMTAGGED) != 0);
 }
 
 // Are freed blocks in this page zeroed (except for the free list link)? This holds for small memory tagged blocks

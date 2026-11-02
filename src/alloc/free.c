@@ -382,10 +382,12 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
     mi_block_t* const block = mi_block_from_ptr(page,p);
     mi_free_block_local(page, block, false /* was guarded */, false /* no need to check if the page is full */, false /* memtag */);
   }
-  else if (MI_PAGE_IS_MEMTAG != 0 && xtid == MI_PAGE_IS_MEMTAG) {  // as the first case but memory tagged
+  #if MI_MTE
+  else if (xtid == MI_PAGE_IS_MEMTAGGED) {  // as the first case but memory tagged
     mi_block_t* const block = mi_block_from_ptr(page,p);
     mi_free_block_local(page, block, false /* was guarded */, false /* no need to check if the page is full */, true /* memtag */);
   }
+  #endif
   else if (xtid <= MI_PAGE_FLAG_MASK) {            // `tid == mi_page_thread_id(page) && mi_page_flags(page) != 0`
     // page is local, but is full or contains (inner) aligned blocks; use generic path
     mi_free_generic_local(page, p);
@@ -396,10 +398,12 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
     mi_block_t* const block = mi_block_from_ptr(page,p);
     mi_free_block_mt(page,block,false /* was_guarded */, allow_reclaim, false /* memtag */);
   }
-  else if (MI_PAGE_IS_MEMTAG != 0 && (xtid & MI_PAGE_FLAG_MASK) == MI_PAGE_IS_MEMTAG) {  // as the previous case but memory tagged
+  #if MI_MTE
+  else if ((xtid & MI_PAGE_FLAG_MASK) == MI_PAGE_IS_MEMTAGGED) {  // as the previous case but memory tagged
     mi_block_t* const block = mi_block_from_ptr(page,p);
     mi_free_block_mt(page,block,false /* was_guarded */, allow_reclaim, true /* memtag */);
   }
+  #endif
   else {
     // page is full or contains (inner) aligned blocks; use generic multi-thread path
     mi_free_generic_mt(page, p, allow_reclaim);
@@ -454,7 +458,7 @@ static mi_decl_forceinline void mi_free_small_local_ex(void* p, bool check_p_for
   if mi_likely(mi_ptr_page_is_valid_ex(p,"mi_free_small_local_ex", true /* is_small? */, check_p_for_null /*check p for null*/, &page)) {
     mi_assert_internal(mi_page_thread_id(page) == _mi_thread_id());
     const mi_page_flags_t flags = mi_page_flags(page);
-    if mi_likely(flags == 0 || (MI_PAGE_IS_MEMTAG != 0 && flags == MI_PAGE_IS_MEMTAG)) {
+    if mi_likely(flags == 0 || (MI_PAGE_IS_MEMTAGGED != 0 && flags == MI_PAGE_IS_MEMTAGGED)) {
       // thread-local, aligned, and not a full page
       mi_block_t* const block = mi_validate_block_from_ptr(page,p);
       mi_free_block_local(page, block, false /* was guarded */, false /* no need to check if the page is full */, flags != 0 /* memtag */);

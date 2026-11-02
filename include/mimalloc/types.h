@@ -449,10 +449,10 @@ typedef struct mi_block_s {
 #define MI_PAGE_IN_FULL_QUEUE           MI_ZU(0x01)
 #define MI_PAGE_HAS_INTERIOR_POINTERS   MI_ZU(0x02)
 #if MI_MTE
-#define MI_PAGE_IS_MEMTAG               MI_ZU(0x04)
+#define MI_PAGE_IS_MEMTAGGED            MI_ZU(0x04)
 #define MI_PAGE_FLAG_BITS               (3)
 #else
-#define MI_PAGE_IS_MEMTAG               MI_ZU(0)
+#define MI_PAGE_IS_MEMTAGGED            MI_ZU(0)
 #define MI_PAGE_FLAG_BITS               (2)
 #endif
 #define MI_PAGE_FLAG_MASK               ((MI_ZU(1) << MI_PAGE_FLAG_BITS) - 1)
