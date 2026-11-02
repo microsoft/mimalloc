@@ -144,7 +144,8 @@ void _mi_prim_thread_init_auto_done(void);
 // Called on process exit and may take action to clean up resources associated with the thread auto done.
 void _mi_prim_thread_done_auto_done(void);
 
-// Called when the default theap for a thread changes
+// Called when the default theap for a thread changes; the (opaque) `theap` value is passed
+// to `_mi_thread_done` at thread termination (and is signed with `MI_PAC`).
 void _mi_prim_thread_associate_default_theap(mi_theap_t* theap);
 
 // Called once on each thread initialization (before the first allocation in that thread)

@@ -42,29 +42,31 @@ static const mi_thread_locals_t mi_thread_locals_empty = mi_init_struct_zero;
   a C thread local declaration or using pthread keys.
   - mi_thread_locals: points to an array of thread locals for most keys
   - mi_slot_fast: a single dedicated thread local for slightly faster access. (used for the main heap's theap)
+  The values are signed with `MI_PAC` (see `mi_tls_sign` in `prim/prim-tls.h`) and are
+  initially `NULL` (where `name_get` returns the `initval` instead).
 ----------------------------------------------------------- */
 
 #if MI_TLS_MODEL_PTHREADS || defined(__APPLE__)   // macOS has fast pthreads
 // Use pthreads
-#define mi_define_thread_local(tp,name,initval) \
+#define mi_define_thread_local(tp,name,initval,tag) \
   static pthread_key_t __##name##_key = MI_PTHREAD_KEY_INVALID; \
-  static inline tp   name##_peek(void)    { return (tp)mi_pthread_key_get(__##name##_key); } \
+  static inline tp   name##_peek(void)    { return (tp)mi_tls_auth(mi_pthread_key_get(__##name##_key),tag); } \
   static inline tp   name##_get(void)     { tp result = name##_peek(); return (result!=NULL ? result : initval); } \
-  static inline bool name##_set(tp val)   { return mi_pthread_key_set(&__##name##_key,val); } \
+  static inline bool name##_set(tp val)   { return mi_pthread_key_set(&__##name##_key,mi_tls_sign(val,tag)); } \
   static inline void name##_delete(void)  { mi_pthread_key_delete(&__##name##_key); }
 
 #else
 // Direct thread locals
-#define mi_define_thread_local(tp,name,initval) \
-  static mi_decl_thread tp __##name = initval; \
-  static inline tp   name##_peek(void)    { return __##name; } \
-  static inline tp   name##_get(void)     { tp result = __##name; return (result!=NULL ? result : initval); } \
-  static inline bool name##_set(tp val)   { __##name = val; return true; } \
+#define mi_define_thread_local(tp,name,initval,tag) \
+  static mi_decl_thread void* __##name = NULL; \
+  static inline tp   name##_peek(void)    { return (tp)mi_tls_auth(__##name,tag); } \
+  static inline tp   name##_get(void)     { tp result = name##_peek(); return (result!=NULL ? result : initval); } \
+  static inline bool name##_set(tp val)   { __##name = mi_tls_sign(val,tag); return true; } \
   static inline void name##_delete(void)  {  }
 #endif
 
-mi_define_thread_local(mi_thread_locals_t*, mi_thread_locals, (mi_thread_locals_t*)&mi_thread_locals_empty)
-mi_define_thread_local(void*, mi_slot_fast, NULL)
+mi_define_thread_local(mi_thread_locals_t*, mi_thread_locals, (mi_thread_locals_t*)&mi_thread_locals_empty, MI_TLS_TAG_THREAD_LOCALS)
+mi_define_thread_local(void*, mi_slot_fast, NULL, MI_TLS_TAG_SLOT_FAST)
 
 
 /* -----------------------------------------------------------

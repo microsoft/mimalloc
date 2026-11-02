@@ -461,6 +461,7 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
   // if the theap_default is already set we have already initialized
   mi_theap_t* theap = _mi_theap_default();
   if (mi_theap_is_initialized(theap)) return theap;
+  _mi_theap_tls_check();  // report if the thread local theap was overwritten
   _mi_prim_thread_init();
 
   // initialize the default theap
@@ -609,11 +610,16 @@ void mi_thread_done(void) mi_attr_noexcept {
   _mi_thread_done(NULL);
 }
 
+// `_theap_main` is NULL or the (signed) theap associated with the thread (see `_mi_prim_thread_associate_default_theap`)
 void _mi_thread_done(mi_theap_t* _theap_main)
 {
   // NULL can be passed on some platforms
   if (_theap_main==NULL) {
     _theap_main = _mi_theap_default();
+  }
+  else {
+    _theap_main = mi_theap_thread_done_auth(_theap_main);
+    if (_theap_main==NULL) return;
   }
 
   // prevent re-entrancy through theap_done/theap_set_default_direct (issue #699)

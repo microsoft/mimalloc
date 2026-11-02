@@ -100,6 +100,7 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
 mi_decl_cold mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
 {
   mi_assert_internal(heap->theap != 0);
+  _mi_theap_tls_check();  // report if the cached theap was overwritten
   mi_theap_t* theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
   if mi_unlikely(theap==NULL) {
     theap = mi_heap_init_theap(heap);
