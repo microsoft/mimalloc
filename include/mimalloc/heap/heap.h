@@ -44,7 +44,7 @@ static inline mi_addr_t mi_heap_cookie(const mi_heap_t* heap) {
 }
 
 static inline bool mi_heap_handle_is_valid(const mi_heap_t* heap) {
-  return (mi_likely(heap->cookie == mi_heap_cookie(heap)) || _mi_heap_invalid(heap));
+  return ((heap->cookie == mi_heap_cookie(heap)) || _mi_heap_invalid(heap));
 }
 
 static inline mi_addr_t mi_theap_cookie(const mi_theap_t* theap) {
@@ -57,7 +57,7 @@ static inline bool mi_theap_has_valid_cookie(const mi_theap_t* theap) {
 
 // Check an initialized theap (uninitialized (empty) theaps have no valid cookie)
 static inline bool mi_theap_handle_is_valid(const mi_theap_t* theap) {
-  return (mi_likely(mi_theap_has_valid_cookie(theap)) || _mi_theap_invalid(theap));
+  return ((mi_theap_has_valid_cookie(theap)) || _mi_theap_invalid(theap));
 }
 
 static inline bool mi_heap_qsbr_is_enabled(const mi_heap_t* heap) {
