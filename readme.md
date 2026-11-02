@@ -442,7 +442,7 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
 
 - All internal mimalloc meta data (including the page map and static data) is surrounded by guard pages
   (so a buffer overflow/underflow exploit cannot reach into the allocator's meta data).
-  However, free lists are not encoded at this level (only from `CHECKED` on), and a heap block overflow can still corrupt a free list.
+  All static pointers into metadata are put in a sealed read-only area (like the page map).
 - The start address of OS allocated memory is randomized
   (if possible), and mimalloc aborts on corrupted meta data detection.
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
@@ -532,13 +532,38 @@ very similar but stronger guarantees as `-DMI_SECURE=ON` with hardware support.
 [MTE]: https://support.arm.com/documentation/108035/0100/How-does-MTE-work-
 
 
-## Pointer Authentication
+## Pointer Authentication (PAC)
 
-On recent arm64 hardware with _pointer authentication_ ([POC]), _mimalloc_ can be built with `-DMI_PAC=ON`.
-The PAC extension provides a secret hardware key that _mimalloc_ uses to sign root pointers. On access these
-are validated and prevent tampering. Together with MTE, the options `-DMI_MTE=ON -DMI_PAC=ON` offer very
+On recent arm64 hardware with _pointer authentication_ ([PAC]), _mimalloc_ can be built with `-DMI_PAC=ON`.
+The PAC extension provides secret hardware keys that _mimalloc_ uses to sign root pointers. On access these
+are validated and prevent tampering. Together with MTE, the combined options `-DMI_MTE=ON -DMI_PAC=ON` offer very
 strong security mitigation. On an M5, the overhead is usually ~10% but can be up to 3x slower.
+The following are signed:
+- The free list links, such that a heap block overflow or use-after-free write cannot forge a free list pointer
+  (even when the per-page keys are known).
+- The page map entries, the thread local theap pointers, and a few other root pointers,
+  that might be reachable by a regular buffer overflow.
 
+Any authentication failure aborts the program. Building with PAC also enables `-DMI_SECURE=CHECKED` by default (just like MTE).
+When building with `-DMI_PAC=ON`, _mimalloc_ requires that the CPU and OS support PAC and aborts at initialization otherwise.
+On other platforms (or with MSVC) you can build with `-DMI_PAC=WEAK` instead, which signs the same pointers using a
+random process key in software. This is weaker (an attacker who can read memory may recover the key) but still
+prevents forging pointers with blind overwrites.
+
+PAC is part of Armv8.3-A and later, and is supported, for example, by:
+- Apple: A12 and M1 (and later processors), on macOS and iOS.
+- Linux (5.0+) and Android: Arm Cortex-A710/X2 and later (all Armv9 cores, like the Google Tensor G3 in the Pixel 8),
+  Arm Neoverse V1/V2/N2 (like AWS Graviton3 and Graviton4), AmpereOne, and Qualcomm Oryon (Snapdragon X).
+  Check for support with `grep pacg /proc/cpuinfo`.
+- Not supported: older cores (Armv8.2-A and earlier) like the Cortex-A76/A78/X1, AWS Graviton2, Ampere Altra,
+  and the Raspberry Pi 4 and 5.
+
+```
+> cmake -DMI_PAC=ON ../..
+> make -j
+```
+
+[PAC]: https://developer.arm.com/documentation/102433/0200/Return-oriented-programming
 
 
 
