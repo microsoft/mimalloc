@@ -220,7 +220,7 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
     #endif
     if mi_unlikely(mi_page_is_memtag(page) && !*was_guarded && mi_ptr_memtag(block)==MI_MEMTAG_META) {  // a canonical block (see `_mi_memtag_canonical`)
       const size_t bsize = mi_page_block_size(page);
-      block = (mi_block_t*)mi_memtag_block_uncanonical(block, bsize, mi_page_block_index(page, mi_addr(block) - mi_addr(mi_page_start(page))));
+      block = (mi_block_t*)mi_memtag_block_uncanonical(block, bsize, mi_page_block_index(page, mi_addr(block) - mi_addr(mi_page_start(page))) + mi_page_memtag_parity(page));
     }
     return block;
   }

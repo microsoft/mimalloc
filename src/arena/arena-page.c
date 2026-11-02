@@ -881,7 +881,14 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_theap_t* theap, size_t block
   // determine the guard pages based on the page size without guard pages
   const size_t size = info_size + cache_offset_size + block_size;
   const mi_page_guards_t guards = mi_theap_page_guards(theap, _mi_size_of_slices(_mi_slice_count_of_size(size)), true, os_align);
-  const size_t slice_count = _mi_slice_count_of_size(mi_page_guard_front_block_start(guards.front, block_size) + size + guards.end);
+  // with memory tagging, a singleton without cache offset or end guard page may fill its slices exactly and share its
+  // tag class with the first block of an adjacent page; reserve a tag 0 unit at the end (see `mi_page_memtag_parity`)
+  #if MI_MTE
+  const size_t memtag_slack = (cache_offset_size == 0 && guards.end == 0 ? MI_MEMTAG_UNIT_SIZE : 0);
+  #else
+  const size_t memtag_slack = 0;
+  #endif
+  const size_t slice_count = _mi_slice_count_of_size(mi_page_guard_front_block_start(guards.front, block_size) + size + memtag_slack + guards.end);
 
   mi_page_t* page = mi_arenas_page_alloc_fresh(theap, slice_count, block_size, block_alignment, true /* commit singletons always */, guards);
   if (page == NULL) return NULL;

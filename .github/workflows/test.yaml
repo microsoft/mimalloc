@@ -303,6 +303,21 @@ jobs:
           cmake --build out/release-secure-full --parallel 8 --config Release
           ctest --test-dir out/release-secure-full --verbose --timeout 240 -C Release
 
+      - name: Release, Secure, PAC weak
+        if: matrix.tests == 'extra' && runner.os != 'macOS'
+        run: |
+          cmake . -B out/release-secure-pac-weak -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_SECURE=ON -DMI_PAC=WEAK
+          cmake --build out/release-secure-pac-weak --parallel 8 --config Release
+          ctest --test-dir out/release-secure-pac-weak --verbose --timeout 240 -C Release
+
+      - name: Debug, Secure, PAC weak
+        if: matrix.tests == 'extra' && runner.os != 'macOS'
+        run: |
+          cmake . -B out/debug-secure-pac-weak -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_SECURE=ON -DMI_PAC=WEAK
+          cmake --build out/debug-secure-pac-weak --parallel 8 --config Debug
+          ctest --test-dir out/debug-secure-pac-weak --verbose --timeout 240 -C Debug
+
+
       # MTE on macOS/arm64 (only actually supported on M5 and later)
       - name: Debug, MTE prefer
         if: matrix.tests == 'extra' && runner.os == 'macOS' && runner.arch == 'ARM64'

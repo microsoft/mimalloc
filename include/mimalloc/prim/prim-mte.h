@@ -20,7 +20,9 @@ Every 16-byte unit of tagged memory has a 4-bit tag, and each access must use a
 pointer with a matching tag in the top bits (56-59 on ARM, see `MI_PTR_MEMTAG_SHIFT`).
 Blocks in tagged pages get a random tag where blocks at even and odd indices use
 disjoint tag sets (tags 1 to 7, and 8 to 15), such that adjacent blocks always have
-different tags. Tag 0 is never used for blocks and is reserved for free arena memory
+different tags. Across page boundaries this holds as well since every page starts with
+an even block and ends with an odd block, or with a tag 0 gap (see `mi_page_memtag_parity`).
+Tag 0 is never used for blocks and is reserved for free arena memory
 and untagged meta data. Most meta data (like the page meta data, the page map, and the
 process meta data) gets a random tag as well (see `mi_memtag_meta_init`).
 
@@ -234,7 +236,7 @@ static inline size_t __mi_memtag_class_exclude(size_t idx) {
   return ((idx&1)==0 ? MI_MEMTAG_EXCLUDE_EVEN : MI_MEMTAG_EXCLUDE_ODD);
 }
 
-// Tag `count` fresh blocks of size `bsize` at `start` where the first block has index `idx` in its page.
+// Tag `count` fresh blocks of size `bsize` at `start` where the first block has class index `idx` (its index in the page plus the page parity).
 static inline void mi_memtag_blocks_init(void* start, size_t bsize, size_t idx, size_t count) {
   uint8_t* p = (uint8_t*)start;
   for (size_t i = idx; i < idx + count; i++, p += bsize) {
@@ -253,7 +255,7 @@ static inline void* mi_memtag_block_free(void* block, size_t bsize) {
   return tblock;
 }
 
-// Retag a canonical block (with the meta tag, see `_mi_memtag_canonical`) at index `idx` with a fresh tag of its class;
+// Retag a canonical block (with the meta tag, see `_mi_memtag_canonical`) with class index `idx` with a fresh tag of its class;
 // returns the block with its new tag. The first read uses the meta tag so a stale pointer faults.
 static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_t idx) {
   mi_memtag_check(block);

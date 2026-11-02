@@ -337,6 +337,17 @@ static inline bool mi_page_is_memtag(const mi_page_t* page) {
   return ((mi_page_flags(page) & MI_PAGE_IS_MEMTAGGED) != 0);
 }
 
+// The tag class parity of the blocks in a memory tagged page: block `i` has the class of `i + parity` (see `prim-mte.h`).
+// Adjacent pages must not share a tag class across their boundary, so a page starts with an even block (or a tag 0 gap)
+// and ends with an odd block (or a tag 0 gap). When there is a (tag 0) cache offset gap in front of an odd number of
+// blocks, we flip the parity such that the last block is odd. (A page without a front gap and an odd number of blocks
+// that fills its slices exactly can only be a singleton (as regular page sizes are a power of two), which gets a tag 0
+// unit at the end, see `mi_arenas_page_singleton_alloc`.)
+// (note: with page meta data in front of the slices, which happens only for OS-allocated pages, the meta data has the odd class)
+static inline size_t mi_page_memtag_parity(const mi_page_t* page) {
+  return ((page->reserved & 1) != 0 && mi_page_meta_is_separated(page) && mi_page_start(page) != mi_page_slice_start(page) ? 1 : 0);
+}
+
 // Are freed blocks in this page zeroed (except for the free list link)? This holds for small memory tagged blocks
 // (always false without `MI_MTE` or in debug mode as freed blocks are filled then)
 static inline bool mi_page_is_zero_on_free(const mi_page_t* page) {
