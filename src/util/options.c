@@ -302,6 +302,9 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
   if (mi_memtag_is_enabled()) { _mi_fprintf(out, arg, "mem tagging : enabled\n"); }
   else { _mi_fprintf(out, arg, "mem tagging : disabled\n"); }
   #endif
+  #if MI_PAC
+  _mi_fprintf(out, arg, "ptr signing : %s\n", (MI_PAC>=2 ? "enabled (pacga)" : "weak (process key)"));
+  #endif
   _mi_fprintf(out, arg, "mem tracking: %s\n", MI_TRACK_TOOL);
   _mi_fprintf(out, arg, "debug level : %d\n", MI_DEBUG );
   _mi_fprintf(out, arg, "secure level: %d\n", MI_SECURE );

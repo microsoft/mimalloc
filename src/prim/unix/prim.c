@@ -380,7 +380,7 @@ static bool unix_detect_memtag_cpu(void) {
 #endif
 
 #if MI_PAC >= 2
-// Does the CPU (and OS) support generic pointer authentication (`pacga`)? (checked with `-DMI_PAC=ON`)
+// Does the CPU (and OS) support generic pointer authentication (`pacga`)? (only detected with `-DMI_PAC=ON`)
 static bool unix_detect_pac_cpu(void) {
   #if MI_UNIX_LINUX_PAC
   return ((getauxval(AT_HWCAP) & HWCAP_PACG) != 0);
@@ -451,9 +451,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   #endif
   config->has_memtag = (mi_option_is_enabled(mi_option_mte) && unix_detect_memtag(config));
   #if MI_PAC >= 2
-  if (!unix_detect_pac_cpu()) {
-    _mi_fatal_error("built with MI_PAC=ON but the CPU does not support pointer authentication (PAC)\n");
-  }
+  config->has_pac = unix_detect_pac_cpu();
   #endif
 
   // disable transparent huge pages for this process?

@@ -35,7 +35,8 @@ typedef struct mi_os_mem_config_s {
   bool    has_virtual_reserve;    // supports virtual address space reservation? (if true we can reserve virtual address space without using commit or physical memory)
   bool    has_transparent_huge_pages;  // true if transparent huge pages are enabled (on Linux)
   bool    is_elevated;            // running with elevated privileges (e.g. setuid)? (set in `_mi_os_init`)
-  uint8_t has_memtag;             // non-zero if memory tagging (MTE) is enabled; all non-large OS memory then supports tagging (not a `bool` as clang tests those with `cmp #1` instead of `cbz`)
+  bool    has_pac;                // true if generic pointer authentication (`pacga`) is supported (only detected with `MI_PAC=ON`)
+  bool    has_memtag;             // true if memory tagging (MTE) is enabled; all non-large OS memory then supports tagging
 } mi_os_mem_config_t;
 
 // Initialize

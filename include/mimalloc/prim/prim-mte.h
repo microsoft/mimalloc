@@ -59,7 +59,9 @@ size_t _mi_os_memtag_line_size(void);   // cache line size tagged by `dc gva`
 #define MI_MEMTAG_MODE_PREFERRED  (4)
 
 static inline bool mi_memtag_is_enabled(void) {
-  #if MI_MTE
+  #if MI_MTE >= 2
+  return true;   // checked at startup in `_mi_os_init`
+  #elif MI_MTE
   return _mi_os_has_memtag();
   #else
   return false;

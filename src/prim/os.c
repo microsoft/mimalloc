@@ -45,6 +45,7 @@ static const mi_os_mem_config_t mi_os_mem_config_default = {
   true,     // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
   false,    // has transparent huge pages? (if true we purge in (aligned) large page size chunks only to not fragment such pages)
   false,    // is elevated? (set in `_mi_os_init`)
+  false,    // has pointer authentication? (only detected with `MI_PAC=ON`)
   false     // has memory tagging? (if true, all non-large OS memory supports memory tagging)
 };
 
@@ -211,6 +212,11 @@ void _mi_os_init(void) {
                     "  (on macOS the program needs the MTE entitlement, and the `mte` option must not be disabled)\n");
   }
   #endif
+  #if MI_PAC >= 2
+  if (!config.has_pac) {
+    _mi_fatal_error("built with MI_PAC=ON but the CPU (or OS) does not support pointer authentication (PAC)\n");
+  }
+  #endif
   mi_process_sealed_once_t* const once = _mi_process_unseal_once();
   once->os_mem_config = config;  // publish at once
   if (once->process_key == 0) {  // `_mi_os_init` may be called twice; the key never changes
@@ -225,6 +231,9 @@ void _mi_os_init(void) {
     _mi_error_message(ENOTSUP, "the OS page size (%zu KiB) is larger than the arena slice size (%zu KiB); increase MI_ARENA_SLICE_SHIFT\n", _mi_os_page_size()/MI_KiB, (size_t)(MI_ARENA_SLICE_SIZE/MI_KiB));
   }
   if (config.has_memtag) { _mi_verbose_message("memory tagging is enabled (for blocks up to %zu KiB)\n", (size_t)(MI_LARGE_MAX_OBJ_SIZE / MI_KiB)); }
+  #if MI_PAC
+  _mi_verbose_message("signing is enabled (%s)\n", (config.has_pac && MI_PAC>=2 ? "hardware supported" : "weak, using a process key"));
+  #endif
 }
 
 
