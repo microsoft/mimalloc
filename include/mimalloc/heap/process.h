@@ -107,7 +107,7 @@ typedef struct mi_process_sealed_s {
 // In secure mode, guard static process data such that guard pages fit in secure mode (twice the maximal OS page size)
 // the front guard area also has two read-only pages (preceded by a guard page) that contain
 // `mi_process_sealed_once_t` and `mi_process_sealed_t` respectively.
-#if MI_SECURE && MI_OS_HAS_GUARD_PAGES
+#if MI_SECURE && MI_OS_HAS_GUARD_PAGES && !MI_SECURE_NO_STATIC_GUARD
   #define MI_SECURE_STATIC_GUARD    (2*MI_OS_PROBABLE_PAGE_SIZE)  // checked at runtime
   #define MI_SECURE_SEALED_PAGE     (1)
   #define MI_SECURE_SEALED_GUARD    (MI_SECURE_STATIC_GUARD + 2*MI_OS_PROBABLE_PAGE_SIZE)

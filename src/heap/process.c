@@ -257,9 +257,11 @@ static void mi_process_sealed_init(void) {
 // In secure mode, surround the process data with guard pages to protect against overflows of adjacent static data.
 // The front guard page is placed just before the sealed pages.
 static void mi_process_guard_init(void) {
+  #if MI_SECURE && MI_OS_HAS_GUARD_PAGES && !MI_SECURE_NO_STATIC_GUARD
   const size_t front = (size_t)((uint8_t*)mi_process_get_sealed_once() - (uint8_t*)&_mi_process);
   const size_t size  = offsetof(mi_process_t, guard_end) - front;
   _mi_os_secure_guard_pages_set_within(&_mi_process, sizeof(_mi_process), front, size);
+  #endif
 }
 
 

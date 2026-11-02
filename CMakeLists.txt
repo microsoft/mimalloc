@@ -67,6 +67,7 @@ option(MI_MTE               "Use memory tagging (MTE) if available at runtime (a
 option(MI_PAC               "Sign critical internal pointers (page map and free lists): OFF, WEAK, or REQUIRED. Use WEAK for a software process key, and REQUIRED to use arm64 pointer authentication (PAC) which must be supported at runtime (arm64 with GCC or clang only)" OFF)
 option(MI_EXTRA_CPPDEFS     "Extra pre-processor definitions (use as `-DMI_EXTRA_CPPDEFS=\"opt1=val1;opt2=val2\"`)" "")
 option(MI_SEE_ASM           "Generate assembly files" OFF)
+option(MI_SECURE_NO_STATIC_GUARD "Disable guard pages in static data (mi_process_t) in secure mode (use this if using for example the Boehm-weiser GC)" OFF)
 
 # negated options for vcpkg features
 option(MI_NO_USE_CXX        "Use plain C compilation (has priority over MI_USE_CXX)" OFF)
@@ -541,6 +542,11 @@ else()
     message(STATUS "Enable explicit padding of heap blocks (MI_PADDING=ON)")
     list(APPEND mi_defines MI_PADDING=1)
   endif()
+endif()
+
+if(MI_SECURE_NO_STATIC_GUARD)
+  message(STATUS "Disable guard pages in static data (mi_process_t) (MI_SECURE_NO_STATIC_GUARD=ON)")
+  list(APPEND mi_defines MI_SECURE_NO_STATIC_GUARD=1)
 endif()
 
 if(MI_FREE_IS_CHECKED STREQUAL "DEFAULT")
