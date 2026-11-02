@@ -30,20 +30,20 @@ mi_theap_t* mi_heap_theap(mi_heap_t* heap) {
 
 void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node) {
   if (heap==NULL) { heap = mi_heap_main(); }
-  if (!mi_heap_is_valid(heap)) return;
+  if (!mi_heap_handle_is_valid(heap)) return;
   heap->numa_node = (numa_node < 0 ? -1 : numa_node % _mi_os_numa_node_count());
 }
 
 void mi_heap_set_debug_fill_preserve(mi_heap_t* heap, size_t preserve) {
   if (heap==NULL) { heap = mi_heap_main(); }
-  if (!mi_heap_is_valid(heap)) return;
+  if (!mi_heap_handle_is_valid(heap)) return;
   if (preserve > MI_MiB) { preserve = MI_MiB; }  // fills are limited to 1 MiB anyway
   mi_atomic_store_relaxed(&heap->debug_fill_preserve, preserve);
 }
 
 void mi_heap_stats_merge_to_subproc(mi_heap_t* heap) {
   if (heap==NULL) { heap = mi_heap_main(); }
-  if (!mi_heap_is_valid(heap)) return;
+  if (!mi_heap_handle_is_valid(heap)) return;
   _mi_stats_merge_into(&heap->subproc->stats, &heap->stats);
 }
 
@@ -107,7 +107,7 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
 // get (and possibly create) the theap belonging to a heap
 mi_decl_cold mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
 {
-  if (!mi_heap_is_valid(heap)) { return mi_process_metadata_field(mi_theap_t, theap_empty_wrong); }  // allocation returns NULL
+  if (!mi_heap_handle_is_valid(heap)) { return mi_process_metadata_field(mi_theap_t, theap_empty_wrong); }  // allocation returns NULL
   mi_assert_internal(heap->theap != 0);
   _mi_theap_tls_check();  // report if the cached theap was overwritten
   mi_theap_t* theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
@@ -287,7 +287,7 @@ static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
 }
 
 void mi_heap_delete(mi_heap_t* heap) {
-  if (heap==NULL || !mi_heap_is_valid(heap)) return;
+  if (heap==NULL || !mi_heap_handle_is_valid(heap)) return;
   mi_heap_t* heap_main = mi_heap_get_heap_main(heap);
   if (heap == heap_main) {
     _mi_warning_message("cannot delete the main heap\n");
@@ -316,7 +316,7 @@ void _mi_heap_force_destroy(mi_heap_t* heap, bool acquire_heaps_lock) {
 }
 
 void mi_heap_destroy(mi_heap_t* heap) {
-  if (heap==NULL || !mi_heap_is_valid(heap)) return;
+  if (heap==NULL || !mi_heap_handle_is_valid(heap)) return;
   if (mi_is_heap_main(heap)) {
     _mi_warning_message("cannot destroy the main heap\n");
     return;

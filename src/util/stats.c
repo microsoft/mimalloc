@@ -469,13 +469,14 @@ static const mi_stats_t* mi_stats_merge_theap_to_heap(mi_theap_t* theap) mi_attr
 
 static const mi_stats_t* mi_heap_get_stats(mi_heap_t* heap) {
   if (heap==NULL) { heap = mi_heap_main(); }
-  if (!mi_heap_is_valid(heap)) return NULL;
+  if (!mi_heap_handle_is_valid(heap)) return NULL;
   mi_theap_t* theap = _mi_heap_theap_peek(heap);
   if (theap==NULL) return &heap->stats;
               else return mi_stats_merge_theap_to_heap(theap);
 }
 
 static const mi_stats_t* mi_theap_get_stats(mi_theap_t* theap) {
+  if (theap==NULL || !mi_theap_is_initialized(theap) || !mi_theap_handle_is_valid(theap)) return NULL;
   return &theap->stats;
 }
 
@@ -490,7 +491,7 @@ void mi_stats_reset(void) mi_attr_noexcept {
 
 void mi_heap_stats_print_out(mi_heap_t* heap, mi_output_fun* out, void* arg) mi_attr_noexcept {
   if (heap==NULL) { heap = mi_heap_main(); }
-  if (!mi_heap_is_valid(heap)) return;
+  if (!mi_heap_handle_is_valid(heap)) return;
   _mi_stats_print("heap", heap->heap_seq, mi_heap_get_stats(heap), out, arg);
 }
 
@@ -638,7 +639,7 @@ bool mi_theap_stats_get(mi_theap_t* theap, mi_stats_t* stats) mi_attr_noexcept {
 }
 
 void mi_theap_stats_merge_to_heap(mi_theap_t* theap) mi_attr_noexcept {
-  if (theap == NULL) return;
+  if (theap==NULL || !mi_theap_is_initialized(theap) || !mi_theap_handle_is_valid(theap)) return;
   _mi_theap_merge_stats(theap);
 }
 

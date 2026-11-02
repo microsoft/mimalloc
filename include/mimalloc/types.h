@@ -696,6 +696,7 @@ struct mi_theap_s {
   _Atomic(mi_heap_t*)   heap;                                // the heap this theap belongs to.
   _Atomic(mi_subproc_t*)subproc;                             // subproc this belongs too (always `subproc == heap->subproc` but needed for safe destruction)
   _Atomic(size_t)       refcount;                            // reference count (needed for safe heap destroy)
+  mi_addr_t             cookie;                              // keyed MAC of the theap address to validate theap handles (see `heap/heap.h:mi_theap_handle_is_valid`)
 
   // config
   long                  page_full_retain;                    // how many full pages can be retained per queue (before abandoning them)
@@ -765,7 +766,7 @@ typedef struct mi_arena_pages_s mi_arena_pages_t;
 typedef size_t mi_thread_local_t;
 
 typedef struct mi_heap_s {
-  mi_addr_t             cookie;                         // keyed MAC of the heap address to validate heap handles (see `heap/heap.h:mi_heap_is_valid`)
+  mi_addr_t             cookie;                         // keyed MAC of the heap address to validate heap handles (see `heap/heap.h:mi_heap_handle_is_valid`)
   mi_subproc_t*         subproc;                        // a heap belongs to a subprocess
   size_t                heap_seq;                       // unique sequence number for heaps in this subprocess
   mi_heap_t*            next;                           // list of heaps in this subprocess

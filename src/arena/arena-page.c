@@ -1324,7 +1324,7 @@ bool _mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_bloc
   mi_assert(visitor!=NULL);
   if (visitor==NULL) return false;
   if (heap==NULL) { heap = mi_heap_main(); }
-  if (!mi_heap_is_valid(heap)) return false;
+  if (!mi_heap_handle_is_valid(heap)) return false;
   bool ok = false;
   mi_lock(&heap->theaps_lock) {
     ok = mi_heap_visit_blocks_locked(heap, abandoned_only, visit_blocks, visitor, arg);

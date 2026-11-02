@@ -144,6 +144,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   MI_ATOMIC_VAR_INIT(NULL), // heap
   MI_ATOMIC_VAR_INIT(NULL), // subproc
   MI_ATOMIC_VAR_INIT(1),  // refcount
+  0,                      // cookie (never valid; empty theaps are uninitialized)
   0,                      // full page retain
   false,                  // allow reclaim
   true,                   // allow abandon

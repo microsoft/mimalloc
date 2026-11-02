@@ -315,7 +315,9 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
   Admin
 ----------------------------------------------------------- */
 static mi_theap_t* mi_theap_init(mi_theap_t* theap) {
-  if mi_likely(mi_theap_is_initialized(theap)) return theap;
+  if mi_likely(mi_theap_is_initialized(theap)) {
+    return (mi_theap_handle_is_valid(theap) ? theap : NULL);  // validate the theap handle (see `heap/heap.h:mi_theap_handle_is_valid`)
+  }
   if (mi_addr(theap) == mi_addr(&mi_process_metadata()->theap_empty_wrong)) {
     // we were unable to allocate a theap for a first-class heap
     return NULL;
@@ -484,7 +486,7 @@ mi_decl_restrict void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t
   mi_page_t* page = NULL;
 
   // fast path objects that fit in a small page
-  if mi_likely(mi_theap_is_initialized(theap) && ++theap->generic_count < 1000 && huge_alignment==0) {
+  if mi_likely(mi_theap_is_initialized(theap) && mi_theap_has_valid_cookie(theap) && ++theap->generic_count < 1000 && huge_alignment==0) {  // invalid handles are reported in the fallback
     const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
     if (req_size < MI_SMALL_MAX_OBJ_SIZE)
     {

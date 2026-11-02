@@ -130,7 +130,7 @@ void _mi_theap_merge_stats(mi_theap_t* theap) {
 
 static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
 {
-  if (theap==NULL || !mi_theap_is_initialized(theap)) return;
+  if (theap==NULL || !mi_theap_is_initialized(theap) || !mi_theap_handle_is_valid(theap)) return;
   mi_assert_expensive(mi_theap_is_valid(theap));
 
   const bool force = (collect >= MI_FORCE);
@@ -210,9 +210,14 @@ mi_theap_t* mi_theap_get_default(void) {
   return theap;
 }
 
+mi_decl_cold bool _mi_theap_invalid(const mi_theap_t* theap) {
+  _mi_error_message(EFAULT, "invalid theap handle %p (the theap was deleted or the handle was corrupted)\n", theap);
+  return false;
+}
+
 mi_theap_t* mi_theap_set_default(mi_theap_t* theap) {
   mi_theap_t* const previous = mi_theap_get_default();
-  if (mi_theap_is_initialized(theap)) {
+  if (mi_theap_is_initialized(theap) && mi_theap_handle_is_valid(theap)) {
     _mi_theap_default_set(theap);
   }
   return previous;
@@ -235,6 +240,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   mi_memid_t memid = theap->memid;
   mi_memcpy_aligned(theap, &_mi_theap_empty, sizeof(mi_theap_t));
   theap->memid = memid;
+  theap->cookie = mi_theap_cookie(theap);
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
   theap->profile_never = false;  // only set for the empty and meta theaps (see `mi_theap_profile_never`)
   mi_atomic_store_release(&theap->refcount,1);
@@ -365,6 +371,7 @@ static void mi_theap_free_mem(mi_theap_t* theap) {
     if (!theap->is_detached) {
       mi_subproc_stat_decrease(subproc,theaps,1);
     }
+    theap->cookie = 0;  // invalidate the handle
     _mi_meta_free(subproc, theap, theap->memid);
   }
 }
@@ -529,7 +536,7 @@ void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept {
 
 
 void mi_theap_quiescent_abandon(mi_theap_t* theap) mi_attr_noexcept {
-  if (theap==NULL || !mi_theap_is_initialized(theap)) return;
+  if (theap==NULL || !mi_theap_is_initialized(theap) || !mi_theap_handle_is_valid(theap)) return;
   mi_tld_t* const tld = theap->tld;
   mi_heap_t* const heap = mi_theap_heap(theap);
   mi_lock_maybe(&tld->theaps_lock, tld!=NULL) {
@@ -589,6 +596,7 @@ bool mi_theap_reload(mi_theap_t* theap, mi_arena_id_t arena_id) {
 
   // re-associate with the current thread-local and static state
   theap->tld = mi_theap_get_default()->tld;
+  theap->cookie = mi_theap_cookie(theap);  // the process key may differ
 
   // reinit direct pages (as we may be in a different process)
   mi_assert_internal(theap->page_count == 0);
@@ -786,6 +794,7 @@ static bool mi_theap_visit_areas_page(mi_theap_t* theap, mi_page_queue_t* pq, mi
 // Visit all theap pages as areas
 static bool mi_theap_visit_areas(const mi_theap_t* theap, mi_theap_area_visit_fun* visitor, void* arg) {
   if (visitor == NULL) return false;
+  if (theap==NULL || !mi_theap_is_initialized(theap) || !mi_theap_handle_is_valid(theap)) return false;
   return mi_theap_visit_pages((mi_theap_t*)theap, &mi_theap_visit_areas_page, true, (void*)(visitor), arg); // note: function pointer to void* :-{
 }
 

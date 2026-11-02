@@ -111,8 +111,9 @@ mi_arena_id_t _mi_arena_id_none(void) {
 }
 
 mi_arena_t* _mi_arena_from_id(mi_arena_id_t id) {
-  #if MI_CHERI
-  // id's are just addresses (without provenance) so we look up the arena in the current subprocess
+  #if MI_CHERI || MI_SECURE
+  // with CHERI, id's are just addresses (without provenance), and in secure mode we validate the id;
+  // in both cases we look up the arena in the current subprocess
   mi_arena_t* arena = NULL;
   if (id != NULL) {
     mi_subproc_t* const subproc = _mi_subproc();
@@ -120,6 +121,9 @@ mi_arena_t* _mi_arena_from_id(mi_arena_id_t id) {
     for (size_t i = 0; i < count && arena == NULL; i++) {
       mi_arena_t* const candidate = mi_arena_from_index(subproc, i);
       if (candidate != NULL && mi_addr(candidate) == mi_addr(id)) { arena = candidate; }
+    }
+    if (arena == NULL) {
+      _mi_error_message(EFAULT, "invalid arena id %p (the arena does not exist in the current subprocess)\n", id);
     }
   }
   #else
