@@ -434,6 +434,135 @@ OS will copy the entire 1GiB huge page (or 2MiB large page) which can cause the 
 [linux-huge]: https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/5/html/tuning_and_optimizing_red_hat_enterprise_linux_for_oracle_9i_and_10g_databases/sect-oracle_9i_and_10g_tuning_guide-large_memory_optimization_big_pages_and_huge_pages-configuring_huge_pages_in_red_hat_enterprise_linux_4_or_5
 [windows-huge]: https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/enable-the-lock-pages-in-memory-option-windows?view=sql-server-2017
 
+## Debug Mode
+
+When _mimalloc_ is built using debug mode, (`-DCMAKE_BUILD_TYPE=Debug`) (or when using `-DMI_DEBUG=ON` explicitly),
+various checks are done at runtime to catch development errors.
+
+- All objects have padding at the end to detect (byte precise) heap block overflows.
+- Double free's, and freeing invalid heap pointers are detected.
+- Corrupted free-lists and some forms of use-after-free are detected.
+
+
+
+# Overriding Standard Malloc
+
+Overriding the standard `malloc` (and `new`) can be done either _dynamically_ or _statically_.
+
+
+## Static override
+
+On Unix like systems, you can statically link with _mimalloc_ to override the standard
+malloc interface. The recommended way is to link the final program with the
+_mimalloc_ single object file (`mimalloc.o`). We use
+an object file instead of a library file as linkers give preference to
+that over archives to resolve symbols. To ensure that the standard
+malloc interface resolves to the _mimalloc_ library, link it as the first
+object file. For example:
+
+```
+> gcc -o myprogram mimalloc.o  myfile1.c ...
+```
+
+Another way to override statically that works on all platforms, is to
+link statically to mimalloc (as shown in the introduction) and include a
+header file in each source file that re-defines `malloc` etc. to `mi_malloc`.
+This is provided by [`mimalloc-override.h`](include/mimalloc-override.h). This only works
+reliably though if all sources are
+under your control or otherwise mixing of pointers from different heaps may occur!
+
+Note: recently we also enabled static overloading on Windows. In that case you need
+to link with the static CRT _release_ runtime (`/MT`) and link with the static
+`mimalloc(-debug).obj` (to take precendence over the definitions in the CRT library).
+The debug CRT (`/MTd`) is not supported. The static override covers the `malloc` family,
+`_aligned_*`, `_expand`, `_msize`, `_strdup`, and `_wcsdup`.
+Unfortunately, some other CRT functions that return
+allocated memory, namely `_dupenv_s`, `_getcwd(NULL,..)`, `_fullpath(NULL,..)`, and `_tempnam`,
+still allocate from the CRT heap and cannot be freed with `free`. Use the dynamic override
+in that case (or the `mi_` equivalents like `mi_dupenv_s` where available).
+
+
+## Dynamic override
+
+This is the recommended way to override the standard malloc interface.
+
+### Dynamic Override on Linux, BSD
+
+On these ELF-based systems we preload the mimalloc shared
+library so all calls to the standard `malloc` interface are
+resolved to the _mimalloc_ library.
+```
+> env LD_PRELOAD=/usr/lib/libmimalloc.so myprogram
+```
+
+You can set extra environment variables to check that mimalloc is running,
+like:
+```
+> env MIMALLOC_VERBOSE=1 LD_PRELOAD=/usr/lib/libmimalloc.so myprogram
+```
+or run with the debug version to get detailed statistics:
+```
+> env MIMALLOC_SHOW_STATS=1 LD_PRELOAD=/usr/lib/libmimalloc-debug.so myprogram
+```
+
+### Dynamic Override on MacOS
+
+On macOS we can also preload the mimalloc shared
+library so all calls to the standard `malloc` interface are
+resolved to the _mimalloc_ library.
+```
+> env DYLD_INSERT_LIBRARIES=/usr/lib/libmimalloc.dylib myprogram
+```
+
+Note that certain security restrictions may apply when doing this from
+the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).
+
+
+### Dynamic Override on Windows
+
+<span id="override_on_windows">We use a separate redirection DLL to override mimalloc on Windows</span>
+such that we redirect all malloc/free calls that go through the (dynamic) C runtime allocator,
+including those from other DLL's or libraries. As it intercepts all allocation calls on a low level,
+it can be used on large programs that include other 3rd party components.
+There are four requirements to make the overriding work well:
+
+1. Use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
+
+2. Link your program explicitly with the `mimalloc.dll.lib` export library for the `mimalloc.dll`.
+   (which must be compiled with `-DMI_OVERRIDE=ON`, which is the default though).
+   To ensure the `mimalloc.dll` is actually loaded at run-time it is easiest
+   to insert some call to the mimalloc API in the `main` function, like `mi_version()`
+   (or use the `/include:mi_version` switch on the linker command, or
+   similarly, `#pragma comment(linker, "/include:mi_version")` in some source file).
+   See the `mimalloc-test-override` project for an example on how to use this.
+
+3. The `mimalloc-redirect.dll` must be put in the same directory as the main
+   `mimalloc.dll` at runtime (as it is a dependency of that DLL).
+   The redirection DLL ensures that all calls to the C runtime malloc API get
+   redirected to mimalloc functions (which reside in `mimalloc.dll`).
+
+4. Ensure the `mimalloc.dll` comes as early as possible in the import
+   list of the final executable (so it can intercept all potential allocations).
+   You can use `minject -l <exe>` to check this if needed.
+
+For best performance on Windows with C++, it is also recommended to also override
+the `new`/`delete` operations (by including [`mimalloc-new-delete.h`](include/mimalloc-new-delete.h)
+a single(!) source file in your project).
+
+The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
+overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully
+redirected.
+
+For different platforms than x64, you may need a specific [redirection dll](bin).
+Furthermore, we cannot always re-link an executable or ensure `mimalloc.dll` comes
+first in the import table. In such cases the [`minject`](bin) tool can be used
+to patch the executable's import tables.
+
+
+# Security
+
+There are various build options to make mimalloc more secure.
+
 ## Secure Mode
 
 _mimalloc_ can be build in secure mode by using the `-DMI_SECURE=OFF|MINIMAL|CHECKED|ON|FULL` flags in `cmake`. This build mode
@@ -567,163 +696,18 @@ PAC is part of Armv8.3-A and later, and is supported, for example, by:
 > make -j
 ```
 
+**Note:**
+MTE + PAC offers strong hardware security mitigation. If you are in security research, it would be nice
+to see if we can improve the current design. At this point, mimalloc separates all meta data from user
+space with guard pages and readonly pages (in the .bss), and MTE tagging (the free blocks etc.), and other
+entry points we validate with PAC (the free list, the default theap, the page-map etc.).
+Are there any futher obvious (or not so obvious)
+things that could improve security further with a reasonable performance trade-off?
+There is also still a real performance overhead in practice -- what could we do to improve
+performance more without weakening the current mitigations?
+
 [PAC]: https://developer.arm.com/documentation/102433/0200/Return-oriented-programming
 
-
-
-## Debug Mode
-
-When _mimalloc_ is built using debug mode, (`-DCMAKE_BUILD_TYPE=Debug`) (or when using `-DMI_DEBUG=ON` explicitly),
-various checks are done at runtime to catch development errors.
-
-- All objects have padding at the end to detect (byte precise) heap block overflows.
-- Double free's, and freeing invalid heap pointers are detected.
-- Corrupted free-lists and some forms of use-after-free are detected.
-
-
-## Guarded Mode
-
-<span id="guarded">_mimalloc_ can be build in guarded mode using the `-DMI_GUARDED=ON` flags in `cmake`.</span>
-This is `ON` by default when building a debug version of mimalloc.
-Guarded mode enables placing OS guard pages behind certain object allocations to catch buffer overflows as they occur.
-This can be invaluable to catch buffer-overflow bugs in large programs. However, it also means that any object
-allocated with a guard page takes at least 8 KiB memory for the guard page and its alignment. As such, allocating
-a guard page for every allocation may be too expensive both in terms of memory, and in terms of performance with
-many system calls. Therefore, there are various environment variables (and options) to tune this:
-
-- `MIMALLOC_GUARDED_SAMPLE_RATE=N`: Set the sample rate to `N` (by default 0). This mode places a guard page
-  behind a suitable object about every `N` requested bytes (per thread). Since the performance in guarded mode without placing
-  guard pages is close to release mode, this can be used to enable guard pages even in production to catch latent
-  buffer overflow bugs (for example, by setting it to `16KiB` or higher where the performance impact will be minimal).
-  Set the sample rate to `1` to guard every object, and to `0` to place no guard pages at all.
-
-- `MIMALLOC_GUARDED_SAMPLE_SEED=N`: Start sampling at `N` (by default random). Can be used to reproduce a buffer
-  overflow if needed.
-
-- `MIMALLOC_GUARDED_MIN=N`, `MIMALLOC_GUARDED_MAX=N`: Minimal and maximal _rounded_ object sizes for which a guard
-  page is considered (`0` and `1GiB` respectively). If you suspect a buffer overflow occurs with an object of size
-  141, set the minimum and maximum to `148` and the sample rate to `1` to have all of those guarded.
-
-<!--
-- `MIMALLOC_UNSAFE_GUARDED_PRECISE=1`: If we have an object of size 13, we would usually place it an aligned 16 bytes in
-  front of the guard page. Using `MIMALLOC_UNSAFE_GUARDED_PRECISE` places it exactly 13 bytes before a page so that even
-  a 1 byte overflow is detected. This violates the C/C++ minimal alignment guarantees, and can cause
-  aligned allocations to be un-aligned so use with care.
--->
-
-
-# Overriding Standard Malloc
-
-Overriding the standard `malloc` (and `new`) can be done either _dynamically_ or _statically_.
-
-
-## Static override
-
-On Unix like systems, you can statically link with _mimalloc_ to override the standard
-malloc interface. The recommended way is to link the final program with the
-_mimalloc_ single object file (`mimalloc.o`). We use
-an object file instead of a library file as linkers give preference to
-that over archives to resolve symbols. To ensure that the standard
-malloc interface resolves to the _mimalloc_ library, link it as the first
-object file. For example:
-
-```
-> gcc -o myprogram mimalloc.o  myfile1.c ...
-```
-
-Another way to override statically that works on all platforms, is to
-link statically to mimalloc (as shown in the introduction) and include a
-header file in each source file that re-defines `malloc` etc. to `mi_malloc`.
-This is provided by [`mimalloc-override.h`](include/mimalloc-override.h). This only works
-reliably though if all sources are
-under your control or otherwise mixing of pointers from different heaps may occur!
-
-Note: recently we also enabled static overloading on Windows. In that case you need
-to link with the static CRT _release_ runtime (`/MT`) and link with the static
-`mimalloc(-debug).obj` (to take precendence over the definitions in the CRT library).
-The debug CRT (`/MTd`) is not supported. The static override covers the `malloc` family,
-`_aligned_*`, `_expand`, `_msize`, `_strdup`, and `_wcsdup`.
-Unfortunately, some other CRT functions that return
-allocated memory, namely `_dupenv_s`, `_getcwd(NULL,..)`, `_fullpath(NULL,..)`, and `_tempnam`,
-still allocate from the CRT heap and cannot be freed with `free`. Use the dynamic override
-in that case (or the `mi_` equivalents like `mi_dupenv_s` where available).
-
-
-## Dynamic override
-
-This is the recommended way to override the standard malloc interface.
-
-### Dynamic Override on Linux, BSD
-
-On these ELF-based systems we preload the mimalloc shared
-library so all calls to the standard `malloc` interface are
-resolved to the _mimalloc_ library.
-```
-> env LD_PRELOAD=/usr/lib/libmimalloc.so myprogram
-```
-
-You can set extra environment variables to check that mimalloc is running,
-like:
-```
-> env MIMALLOC_VERBOSE=1 LD_PRELOAD=/usr/lib/libmimalloc.so myprogram
-```
-or run with the debug version to get detailed statistics:
-```
-> env MIMALLOC_SHOW_STATS=1 LD_PRELOAD=/usr/lib/libmimalloc-debug.so myprogram
-```
-
-### Dynamic Override on MacOS
-
-On macOS we can also preload the mimalloc shared
-library so all calls to the standard `malloc` interface are
-resolved to the _mimalloc_ library.
-```
-> env DYLD_INSERT_LIBRARIES=/usr/lib/libmimalloc.dylib myprogram
-```
-
-Note that certain security restrictions may apply when doing this from
-the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).
-
-
-### Dynamic Override on Windows
-
-<span id="override_on_windows">We use a separate redirection DLL to override mimalloc on Windows</span>
-such that we redirect all malloc/free calls that go through the (dynamic) C runtime allocator,
-including those from other DLL's or libraries. As it intercepts all allocation calls on a low level,
-it can be used on large programs that include other 3rd party components.
-There are four requirements to make the overriding work well:
-
-1. Use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
-
-2. Link your program explicitly with the `mimalloc.dll.lib` export library for the `mimalloc.dll`.
-   (which must be compiled with `-DMI_OVERRIDE=ON`, which is the default though).
-   To ensure the `mimalloc.dll` is actually loaded at run-time it is easiest
-   to insert some call to the mimalloc API in the `main` function, like `mi_version()`
-   (or use the `/include:mi_version` switch on the linker command, or
-   similarly, `#pragma comment(linker, "/include:mi_version")` in some source file).
-   See the `mimalloc-test-override` project for an example on how to use this.
-
-3. The `mimalloc-redirect.dll` must be put in the same directory as the main
-   `mimalloc.dll` at runtime (as it is a dependency of that DLL).
-   The redirection DLL ensures that all calls to the C runtime malloc API get
-   redirected to mimalloc functions (which reside in `mimalloc.dll`).
-
-4. Ensure the `mimalloc.dll` comes as early as possible in the import
-   list of the final executable (so it can intercept all potential allocations).
-   You can use `minject -l <exe>` to check this if needed.
-
-For best performance on Windows with C++, it is also recommended to also override
-the `new`/`delete` operations (by including [`mimalloc-new-delete.h`](include/mimalloc-new-delete.h)
-a single(!) source file in your project).
-
-The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
-overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully
-redirected.
-
-For different platforms than x64, you may need a specific [redirection dll](bin).
-Furthermore, we cannot always re-link an executable or ensure `mimalloc.dll` comes
-first in the import table. In such cases the [`minject`](bin) tool can be used
-to patch the executable's import tables.
 
 
 # Getting the best performance
@@ -765,7 +749,7 @@ In the source code:
 - Use `mi_free_small` when the pointer was returned from `mi_malloc_small` (and guaranteed to have a
   size of less than `MI_SMALL_SIZE_MAX`). Use `mi_free_small_nonnull` when the pointer is guaranteed to be not `NULL` as well.
 
-For run-time systems and compilers (like Koka, Lean, Rust (?) etc.), we can do slightly better still.
+For run-time systems and compilers (like Koka, Lean, Rust etc.), we can do slightly better still.
 
 - If the allocation size is statically known, use `mi_malloc_csize` and `mi_free_csize` etc. when possible.
   (or directly `mi_malloc_small`/`mi_free_small`).
@@ -775,6 +759,33 @@ For run-time systems and compilers (like Koka, Lean, Rust (?) etc.), we can do s
   This avoids having mimalloc look up the thread local pointer all the time and
   skips a theap `NULL` check. Whether this is
   faster depends a bit on the OS implementation of thread local variables.
+
+# Guarded Mode
+
+<span id="guarded">_mimalloc_ can be build in guarded mode using the `-DMI_GUARDED=ON` flags in `cmake`.</span>
+This is `ON` by default when building a debug version of mimalloc.
+Guarded mode enables placing OS guard pages behind certain object allocations to catch buffer overflows as they occur
+(and of course, you never need this if you have
+MTE enabled hardware since an MTE catches all overflows
+much more efficiently).
+
+This can be invaluable to catch buffer-overflow bugs in large programs. However, it also means that any object
+allocated with a guard page takes at least 8 KiB memory for the guard page and its alignment. As such, allocating
+a guard page for every allocation may be too expensive both in terms of memory, and in terms of performance with
+many system calls. Therefore, there are various environment variables (and options) to tune this:
+
+- `MIMALLOC_GUARDED_SAMPLE_RATE=N`: Set the sample rate to `N` (by default 0). This mode places a guard page
+  behind a suitable object about every `N` requested bytes (per thread). Since the performance in guarded mode without placing
+  guard pages is close to release mode, this can be used to enable guard pages even in production to catch latent
+  buffer overflow bugs (for example, by setting it to `16KiB` or higher where the performance impact will be minimal).
+  Set the sample rate to `1` to guard every object, and to `0` to place no guard pages at all.
+
+- `MIMALLOC_GUARDED_SAMPLE_SEED=N`: Start sampling at `N` (by default random). Can be used to reproduce a buffer
+  overflow if needed.
+
+- `MIMALLOC_GUARDED_MIN=N`, `MIMALLOC_GUARDED_MAX=N`: Minimal and maximal _rounded_ object sizes for which a guard
+  page is considered (`0` and `1GiB` respectively). If you suspect a buffer overflow occurs with an object of size
+  141, set the minimum and maximum to `148` and the sample rate to `1` to have all of those guarded.
 
 
 # Profiling
