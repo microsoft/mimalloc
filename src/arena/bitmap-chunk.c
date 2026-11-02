@@ -10,7 +10,7 @@ Concurrent bitmap that can set/reset sequences of bits atomically
 ---------------------------------------------------------------------------- */
 
 #include "mimalloc.h"
-#include "mimalloc/prim.h"  // _mi_prim_thread_yield
+#include "mimalloc/prim/prim.h"  // _mi_prim_thread_yield
 #include "mimalloc/util/libc.h"
 #include "mimalloc/util/stats.h"
 #include "bitmap-chunk.h"

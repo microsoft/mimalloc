@@ -1,6 +1,6 @@
 # Sources
 
-[`prim`](/include/mimalloc/prim.h) &rarr; [`os`](/include/mimalloc/prim/os.h) &rarr; [`arena`](/include/mimalloc/arena/arena-page.h`) &rarr; [`page`](/include/mimalloc/alloc/page.h) &rarr; [`alloc`](alloc/alloc.c)
+[`prim`](/include/mimalloc/prim/prim.h) &rarr; [`os`](/include/mimalloc/prim/os.h) &rarr; [`arena`](/include/mimalloc/arena/arena-page.h`) &rarr; [`page`](/include/mimalloc/alloc/page.h) &rarr; [`alloc`](alloc/alloc.c)
 
 * [`alloc`](alloc): "front-end": main allocation and free functions.
 

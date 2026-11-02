@@ -1,7 +1,7 @@
 #include "../src/arena/arena.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/heap/theap.h"
-#include "mimalloc/prim.h"
+#include "mimalloc/prim/prim.h"
 #include "testhelper.h"
 
 static mi_subproc_t test_subproc;

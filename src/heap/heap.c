@@ -20,7 +20,7 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 
 mi_theap_t* mi_heap_theap(mi_heap_t* heap) {
-  return _mi_heap_theap(heap);  // in prim.h
+  return _mi_heap_theap(heap);  // in prim/prim.h
 }
 
 void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node) {

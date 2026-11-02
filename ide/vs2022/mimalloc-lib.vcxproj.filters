@@ -192,7 +192,7 @@
     <ClInclude Include="..\..\include\mimalloc\types.h">
       <Filter>Headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\include\mimalloc\prim.h">
+    <ClInclude Include="..\..\include\mimalloc\prim\prim.h">
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\mimalloc\arch.h">

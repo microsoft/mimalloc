@@ -9,7 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_INTERNAL_PROCESS_H
 
 #include "../types.h"
-#include "../prim.h"          // mi_os_mem_config_t
+#include "../prim/prim.h"          // mi_os_mem_config_t
 #include "../util/options.h"
 #include "../util/libc.h"     // mi_align_down_ptr
 

@@ -6,7 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc.h"
-#include "mimalloc/prim.h"           // _mi_prim_thread_yield
+#include "mimalloc/prim/prim.h"           // _mi_prim_thread_yield
 #include "mimalloc/prim/prim-tls.h"  // _mi_theap_default
 #include "mimalloc/util/random.h"
 #include "mimalloc/util/stats.h"

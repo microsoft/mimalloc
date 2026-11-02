@@ -524,7 +524,7 @@
     <ClInclude Include="..\..\include\mimalloc\profile\sample-guarded.h" />
     <ClInclude Include="..\..\include\mimalloc\profile\sample-profile.h" />
     <ClInclude Include="..\..\include\mimalloc\profile\pprof.h" />
-    <ClInclude Include="..\..\include\mimalloc\prim.h" />
+    <ClInclude Include="..\..\include\mimalloc\prim\prim.h" />
     <ClInclude Include="..\..\include\mimalloc\track.h" />
     <ClInclude Include="..\..\include\mimalloc\types.h" />
     <ClInclude Include="..\..\src\arena\bitmap.h" />
