@@ -566,7 +566,7 @@ There are various build options to make mimalloc more secure.
 ## Secure Mode
 
 _mimalloc_ can be build in secure mode by using the `-DMI_SECURE=OFF|MINIMAL|CHECKED|ON|FULL` flags in `cmake`. This build mode
-enables various mitigations to make mimalloc more robust against exploits.
+enables various software mitigations to make mimalloc more robust against exploits.
 With `MINIMAL` only security mitigations are added that have minimal impact on performance (usually 1-3%):
 
 - All internal mimalloc meta data (including the page map and static data) is surrounded by guard pages
@@ -578,9 +578,9 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
   mitigate against attacks that rely on a predictable allocation order.
 - Large blocks (> 512 KiB) are followed by a guard page.
 
-With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance impact is still small (usually less than 10%, but can be upto 2x slower):
+With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance impact is still small (usually less than 10%, but can be 2x slower):
 
-- All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
+- (v3) All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
   are ignored. Interior pointers are adjusted to the start of their block.
 - All free list pointers are
   [encoded](include/mimalloc/alloc/page.h#L570)
@@ -589,10 +589,8 @@ With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance impa
 With `ON`, performance is impacted a bit more (usually less than 25%, but can be upto 2x slower):
 
 - Double free's are detected (and ignored).
-- Padding is added at the end of each heap block to detect heap block overflows (once the block is freed).
+- Padding is added at the end of each heap block to detect heap block overflows (detected once the block is freed).
 - Some use-after-free accesses are detected (if these modify the first word in the block).
-- (v3) All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
-  are ignored.
 - The mimalloc library is build as `mimalloc-secure`.
 
 The `FULL` mode also adds:
@@ -609,19 +607,21 @@ As always, evaluate with care as part of an overall security strategy as all of 
 (v3 only, experimental)\
 On recent arm64 hardware with the memory tagging extensions ([MTE]), _mimalloc_ can be built with `-DMI_MTE=ON`
 to give every heap block a randomized memory tag that can only be accessed with a matching pointer that has the same
-tag. Adjacent blocks always get different tags (and all linear block overflows fault), and blocks are retagged when freed (so (most) double-free and use-after-free accesses fault).
+tag. Adjacent blocks always get different tags (and all linear block overflows fault), and blocks are retagged when freed
+(so (most) double-free and use-after-free accesses fault).
 All blocks up to 512KiB are tagged, but larger blocks get a guard page
 at the end so overflows still fault (this is done as tagging memory is linear in the size of the block).
 
-It depends on the hardware, but on an M5 an MTE build is usually within about 15% of a release build (but can be 2 to 3x slower).
+It depends on the hardware and workload,
+but on an M5 an MTE build is usually within about 15% of a release build (but can be 2 to 3x slower).
 When building with `-DMI_MTE=ON`, _mimalloc_ requires that the CPU and OS support MTE at runtime otherwise aborts at initialization (and, on Linux, if tag checking cannot be enabled for all threads).
 You can also build with `-DMI_MTE=PREFER` which uses MTE when both the hardware and OS support it, and
-otherwise _mimalloc_ runs untagged. An MTE build running untagged is very close in performance to a regular release build.
+otherwise runs untagged. An MTE build running untagged is very close in performance to a regular release build.
 Every MTE build gets the `-mte` suffixed to the library name (e.g. `mimalloc-mte.o`).
 
 Building with MTE also enables `-DMI_SECURE=CHECKED` by default (including encoded free lists).
 Since MTE catches (most) use-after-free, double-free, and heap block overflows, an MTE build gives
-similar and often stronger guarantees as `-DMI_SECURE=ON`.
+similar and often stronger guarantees as `-DMI_SECURE=ON` (and there is no need to use them together).
 
 - macOS: requires an Apple M5 (or later) with macOS 26+. MTE is only enabled for executables signed with
   the hardened-process entitlements (the tests are signed automatically):
