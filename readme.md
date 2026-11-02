@@ -477,22 +477,22 @@ As always, evaluate with care as part of an overall security strategy as all of 
 
 ## Memory Tagging (MTE)
 
+(v3 only, experimental)\
 On recent arm64 hardware with the memory tagging extensions ([MTE]), _mimalloc_ can be built with `-DMI_MTE=ON`
 to give every heap block a randomized memory tag that can only be accessed with a matching pointer that has the same
-tag. Adjacent blocks always get different tags, and blocks are retagged when freed, so linear buffer overflows and
-(most) use-after-free accesses fault immediately. All blocks up to 512KiB are tagged, but larger blocks get a guard page
+tag. Adjacent blocks always get different tags (and all linear block overflows fault), and blocks are retagged when freed (so (most) double-free and use-after-free accesses fault).
+All blocks up to 512KiB are tagged, but larger blocks get a guard page
 at the end so overflows still fault (this is done as tagging memory is linear in the size of the block).
 
-It depends on the hardware, but on an M5 an MTE build is usually within about 10% of a release build (but can be up to 2x slower).
-When building with `-DMI_MTE=ON`, _mimalloc_ requires the CPU supports MTE and aborts at initialization if MTE
-is not enabled at runtime (and, on Linux, if tag checking cannot be enabled for all threads).
+It depends on the hardware, but on an M5 an MTE build is usually within about 10% of a release build (but can be 2 to 3x slower).
+When building with `-DMI_MTE=ON`, _mimalloc_ requires that the CPU and OS support MTE at runtime otherwise aborts at initialization (and, on Linux, if tag checking cannot be enabled for all threads).
 You can also build with `-DMI_MTE=PREFER` which uses MTE when both the hardware and OS support it, and
 otherwise _mimalloc_ runs untagged. An MTE build running untagged is very close in performance to a regular release build.
 Every MTE build gets the `-mte` suffixed to the library name (e.g. `mimalloc-mte.o`).
 
 Building with MTE also enables `-DMI_SECURE=CHECKED` by default (including encoded free lists).
 Since MTE catches (most) use-after-free, double-free, and heap block overflows, an MTE build gives
-very similar but stronger guarantees as `-DMI_SECURE=ON` with hardware support.
+similar and often stronger guarantees as `-DMI_SECURE=ON`.
 
 - macOS: requires an Apple M5 (or later) with macOS 26+. MTE is only enabled for executables signed with
   the hardened-process entitlements (the tests are signed automatically):
@@ -534,15 +534,19 @@ very similar but stronger guarantees as `-DMI_SECURE=ON` with hardware support.
 
 ## Pointer Authentication (PAC)
 
+(v3 only, experimental)\
 On recent arm64 hardware with _pointer authentication_ ([PAC]), _mimalloc_ can be built with `-DMI_PAC=ON`.
 The PAC extension provides secret hardware keys that _mimalloc_ uses to sign root pointers. On access these
-are validated and prevent tampering. Together with MTE, the combined options `-DMI_MTE=ON -DMI_PAC=ON` offer very
-strong security mitigation. On an M5, the overhead is usually ~10% but can be up to 3x slower.
+are validated and prevent tampering. On an M5, the overhead is usually ~10% but can be up to 2x slower.
+
+_This is most effective together with MTE, and the combined options `-DMI_MTE=ON -DMI_PAC=ON` offer very strong security mitigation_.
+The performance combined is usually within 5% of just MTE.
+
 The following are signed:
 - The free list links, such that a heap block overflow or use-after-free write cannot forge a free list pointer
   (even when the per-page keys are known).
-- The page map entries, the thread local theap pointers, and a few other root pointers,
-  that might be reachable by a regular buffer overflow.
+- The page map entries, the thread local theap pointers, and other root pointers that might reside
+  adjacent to user memory.
 
 Any authentication failure aborts the program. Building with PAC also enables `-DMI_SECURE=CHECKED` by default (just like MTE).
 When building with `-DMI_PAC=ON`, _mimalloc_ requires that the CPU and OS support PAC and aborts at initialization otherwise.

@@ -57,11 +57,13 @@ let heap = Heap::new_in_arena(arena);
 | `win_direct_tls`    | Use direct TLS slots on Windows |
 | `no_thp`            | Disable transparent huge pages by default on Linux |
 | `opt_arch`          | Architecture specific optimizations (as `-DMI_OPT_ARCH=ON`) |
-| `mte`               | Memory tagging if available at runtime (aarch64 only, experimental; as `-DMI_MTE=PREFER`) |
+| `mte`               | Memory tagging; requires MTE support at runtime (aarch64 Linux, Android, and Apple only (where macOS also needs the MTE entitlement); as `-DMI_MTE=ON`) |
+| `pac`               | Sign internal pointers with pointer authentication; requires PAC support at runtime (aarch64 Linux, Android, and Apple only; as `-DMI_PAC=ON`) |
 | `nightly`           | `Allocator` support on nightly compilers before Rust 1.100 (`mimalloc` only) |
 
 All features except `nightly` are build options of the C library in `mimalloc-sys`
-(and are forwarded by `mimalloc`).
+(and are forwarded by `mimalloc`). Feature `mte` does not a separate `secure` (but encompasses it).
+The combination `mte` and `pac` offers strong hardware supported security mitigation.
 
 Architecture optimizations are also enabled automatically if the Rust target features
 already imply them (e.g. `-C target-cpu=native`).

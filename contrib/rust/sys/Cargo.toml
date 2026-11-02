@@ -36,8 +36,10 @@ win_direct_tls = []
 no_thp = []
 # use architecture specific optimizations (as cmake `-DMI_OPT_ARCH=ON`)
 opt_arch = []
-# use memory tagging (MTE) if available at runtime (aarch64 only, experimental; as cmake `-DMI_MTE=PREFER`)
+# use memory tagging (MTE) and require it at runtime (aarch64 Linux, Android, and macOS only; as cmake `-DMI_MTE=ON`)
 mte = []
+# sign internal pointers with pointer authentication (PAC) and require it at runtime (aarch64 Linux, Android, and macOS only; as cmake `-DMI_PAC=ON`)
+pac = []
 
 [build-dependencies]
 cc = "1.2"

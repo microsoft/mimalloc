@@ -57,13 +57,14 @@ fn reserve_from_os_arena() {
     let heap = Heap::new_in_arena(arena);
     check_heap_uses_arena(&heap, arena);
 
-    // alignments above 64 KiB are allocated from the OS, which an arena heap never does
+    // alignments above the arena slice size (64 KiB, or up to 256 KiB in secure builds) are allocated
+    // from the OS, which an arena heap never does
     let layout = Layout::from_size_align(64, 64 << 10).unwrap();
     let p = heap.alloc(layout);
     assert!(!p.is_null() && p as usize % (64 << 10) == 0 && arena.contains(p));
     unsafe { heap.dealloc(p, layout) };
     assert!(
-        heap.alloc(Layout::from_size_align(64, 128 << 10).unwrap())
+        heap.alloc(Layout::from_size_align(64, 1 << 20).unwrap())
             .is_null()
     );
 

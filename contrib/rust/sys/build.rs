@@ -110,15 +110,24 @@ fn main() {
         define("MI_DEBUG", "0");
         define("NDEBUG", "1");
     }
-    let mte = feature("mte") && target_arch == "aarch64";
-    if mte {
-        define("MI_MTE", "1");
+    // `mte` and `pac` require hardware and OS support at runtime (and fail at startup otherwise)
+    let hw_os = target_arch == "aarch64"
+        && (is_apple || target_os == "linux" || target_os == "android");
+    if feature("mte") {
+        if !hw_os {
+            panic!("the `mte` feature is only supported on aarch64 Linux, Android, and macOS targets");
+        }
+        define("MI_MTE", "2"); // ON
+    }
+    if feature("pac") {
+        if !hw_os || is_msvc {
+            panic!("the `pac` feature is only supported on aarch64 Linux, Android, and macOS targets with GCC or clang");
+        }
+        define("MI_PAC", "2"); // ON
     }
     if feature("secure") {
-        define("MI_SECURE", "4");
-    } else if mte {
-        define("MI_SECURE", "1"); // guard pages after huge blocks (which are not tagged)
-    }
+        define("MI_SECURE", "4"); // ON
+    } // (`mte` and `pac` default to `MI_SECURE=2` in `types.h`)
     let is_override = feature("override") && !is_windows;
     if is_override {
         define("MI_MALLOC_OVERRIDE", "1");
