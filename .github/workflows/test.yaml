@@ -304,28 +304,28 @@ jobs:
           ctest --test-dir out/release-secure-full --verbose --timeout 240 -C Release
 
       # MTE on macOS/arm64 (only actually supported on M5 and later)
-      - name: Debug, MTE
+      - name: Debug, MTE prefer
         if: matrix.tests == 'extra' && runner.os == 'macOS' && runner.arch == 'ARM64'
         run: |
           cmake . -B out/debug-mte -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_MTE=PREFER
           cmake --build out/debug-mte --parallel 8 --config Debug
           ctest --test-dir out/debug-mte --verbose --timeout 240 -C Debug
 
-      - name: Release, MTE
+      - name: Release, MTE prefer, PAC
         if: matrix.tests == 'extra' && runner.os == 'macOS' && runner.arch == 'ARM64'
         run: |
           cmake . -B out/release-mte -DCMAKE_BUILD_TYPE=Release -DMI_MTE=PREFER -DMI_PAC=ON
           cmake --build out/release-mte --parallel 8 --config Release
           ctest --test-dir out/release-mte --verbose --timeout 240 -C Release
 
-      - name: Debug, Secure, MTE
+      - name: Debug, Secure, MTE prefer
         if: matrix.tests == 'extra' && runner.os == 'macOS' && runner.arch == 'ARM64'
         run: |
           cmake . -B out/debug-secure-mte -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_SECURE=ON -DMI_MTE=PREFER
           cmake --build out/debug-secure-mte --parallel 8 --config Debug
           ctest --test-dir out/debug-secure-mte --verbose --timeout 240 -C Debug
 
-      - name: Release, Secure, MTE
+      - name: Release, Secure, MTE prefer, PAC
         if: matrix.tests == 'extra' && runner.os == 'macOS' && runner.arch == 'ARM64'
         run: |
           cmake . -B out/release-secure-mte -DCMAKE_BUILD_TYPE=Release -DMI_SECURE=ON -DMI_MTE=PREFER -DMI_PAC=ON
@@ -615,17 +615,17 @@ jobs:
           echo "QEMU_CPU=max" >> $GITHUB_ENV
           echo "MI_TEST_LIGHT=1" >> $GITHUB_ENV
           echo "MI_TEST_REQUIRE_MTE=1" >> $GITHUB_ENV
-          echo "MI_CMAKE_ARM64_MTE=-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64-static -DMI_MTE=PREFER" >> $GITHUB_ENV
+          echo "MI_CMAKE_ARM64_MTE=-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64-static" >> $GITHUB_ENV
 
-      - name: Linux arm64, Release, MTE
+      - name: Linux arm64, Release, MTE, PAC
         if: matrix.tests == 'linux-arm64-mte'
         run: |
-          cmake . -B out/release-arm64-mte -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_PAC=ON $MI_CMAKE_ARM64_MTE
+          cmake . -B out/release-arm64-mte -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_MTE=ON -DMI_PAC=ON $MI_CMAKE_ARM64_MTE
           cmake --build out/release-arm64-mte --parallel 4 --config Release
           MIMALLOC_VERBOSE=1 qemu-aarch64-static out/release-arm64-mte/mimalloc-test-mte
           ctest --test-dir out/release-arm64-mte -E test-fork --verbose --timeout 600 -C Release
 
-      - name: Linux arm64, Release, Async, MTE
+      - name: Linux arm64, Release, Async, MTE, PAC
         if: matrix.tests == 'linux-arm64-mte'
         env:
           MIMALLOC_MTE: async
@@ -635,12 +635,12 @@ jobs:
       - name: Linux arm64, Debug, MTE
         if: matrix.tests == 'linux-arm64-mte'
         run: |
-          cmake . -B out/debug-arm64-mte -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL $MI_CMAKE_ARM64_MTE
+          cmake . -B out/debug-arm64-mte -DCMAKE_BUILD_TYPE=Debug -DMI_DEBUG=FULL -DMI_MTE=PREFER $MI_CMAKE_ARM64_MTE
           cmake --build out/debug-arm64-mte --parallel 4 --config Debug
           ctest --test-dir out/debug-arm64-mte -E test-fork --verbose --timeout 600 -C Debug
 
       # Native MTE build on the arm64 runner (test-mte is skipped if the hardware has no MTE)
-      - name: Linux arm64, Release, MTE
+      - name: Linux arm64, Release, MTE prefer, PAC
         if: matrix.os == 'ubuntu-22.04-arm' && matrix.tests == 'basic' && matrix.c_or_cxx == 'c'
         run: |
           if grep -qw mte /proc/cpuinfo; then echo "::notice::native MTE is available"; else echo "::notice::native MTE is not available"; fi
@@ -712,7 +712,7 @@ jobs:
           cmake --build out/secure-android --parallel 4 --config Release
           ctest --test-dir out/secure-android -E test-fork --verbose --timeout 600 -C Release
 
-      - name: Android arm64, Debug, MTE
+      - name: Android arm64, Debug, MTE prefer
         if: matrix.tests == 'android-arm64'
         env:
           MI_TEST_REQUIRE_MTE: 1
@@ -721,12 +721,12 @@ jobs:
           cmake --build out/debug-android-mte --parallel 4 --config Debug
           ctest --test-dir out/debug-android-mte -E test-fork --verbose --timeout 600 -C Debug
 
-      - name: Android arm64, Release, MTE
+      - name: Android arm64, Release, MTE, PAC
         if: matrix.tests == 'android-arm64'
         env:
           MI_TEST_REQUIRE_MTE: 1
         run: |
-          cmake . -B out/release-android-mte -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_MTE=PREFER -DMI_PAC=ON $MI_CMAKE_ANDROID
+          cmake . -B out/release-android-mte -DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_MTE=ON -DMI_PAC=ON $MI_CMAKE_ANDROID
           cmake --build out/release-android-mte --parallel 4 --config Release
           MIMALLOC_VERBOSE=1 qemu-aarch64-static out/release-android-mte/mimalloc-test-mte
           ctest --test-dir out/release-android-mte -E test-fork --verbose --timeout 600 -C Release
