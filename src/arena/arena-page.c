@@ -1202,6 +1202,7 @@ void _mi_arenas_page_unabandon(mi_page_t* page, mi_theap_t* current_theapx) {
     // if not an arena page, remove from the subproc os pages list
     if (page->memid.memkind != MI_MEM_ARENA) {
       mi_lock(&heap->os_abandoned_pages_lock) {
+        mi_list_unlink_check(page, prev, next, heap->os_abandoned_pages, NULL);
         if (page->prev != NULL) { page->prev->next = page->next; }
         if (page->next != NULL) { page->next->prev = page->prev; }
         if (heap->os_abandoned_pages == page) { heap->os_abandoned_pages = page->next; }

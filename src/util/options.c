@@ -683,6 +683,10 @@ mi_decl_noinline mi_decl_cold void* _mi_ptr_auth_failed(mi_ptr_signed_t x, mi_ad
   return p;
 }
 
+mi_decl_noinline mi_decl_noreturn mi_decl_cold void _mi_list_corrupted(const void* node) {
+  _mi_fatal_error("corrupted list links detected at %p\n", node);
+}
+
 mi_decl_noinline mi_decl_cold void _mi_ptr_pac_unaligned(const void* p) {
   _mi_fatal_error("internal error: signed pointers must be aligned with memory tagging (%p)\n", p);
 }

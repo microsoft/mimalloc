@@ -212,6 +212,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
 
   // remove from the subproc list
   mi_lock_maybe(&_mi_process.subprocs_lock, acquire_subprocs_lock) {
+    mi_list_unlink_check(subproc, prev, next, mi_process_get_sealed()->subprocs, NULL);
     if (subproc->next!=NULL) { subproc->next->prev = subproc->prev;  }
     if (subproc->prev!=NULL) { subproc->prev->next = subproc->next;  }
     else {
@@ -385,6 +386,7 @@ static bool mi_fork_heap_abandon_dead(mi_heap_t* heap) {
   while (theap != NULL) {
     mi_theap_t* const next = theap->hnext;
     if (mi_fork_theap_is_dead(theap)) {
+      mi_list_unlink_check(theap, hprev, hnext, heap->theaps, NULL);
       if (theap->hnext != NULL) { theap->hnext->hprev = theap->hprev; }
       if (theap->hprev != NULL) { theap->hprev->hnext = theap->hnext; }
                            else { heap->theaps = theap->hnext; }

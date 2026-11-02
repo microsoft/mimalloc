@@ -229,6 +229,7 @@ void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
                       (mi_page_is_huge(page) && mi_page_queue_is_huge(queue)) ||
                         (mi_page_is_in_full(page) && mi_page_queue_is_full(queue)));
   mi_theap_t* theap = mi_page_theap(page);
+  mi_list_unlink_check(page, prev, next, queue->first, queue->last);
   if (page->prev != NULL) page->prev->next = page->next;
   if (page->next != NULL) page->next->prev = page->prev;
   if (page == queue->last)  queue->last = page->prev;
@@ -326,6 +327,7 @@ static void mi_page_queue_enqueue_from_ex(mi_page_queue_t* to, mi_page_queue_t* 
   mi_theap_t* theap = mi_page_theap(page);
 
   // delete from `from`
+  mi_list_unlink_check(page, prev, next, from->first, from->last);
   if (page->prev != NULL) page->prev->next = page->next;
   if (page->next != NULL) page->next->prev = page->prev;
   if (page == from->last)  from->last = page->prev;

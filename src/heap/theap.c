@@ -395,6 +395,7 @@ void _mi_theap_decref(mi_theap_t* theap) {
 // Both the heap and tld list locks must be held.
 static void mi_theap_detach_from_tld(mi_theap_t* theap) {
   mi_tld_t* const tld = theap->tld;
+  mi_list_unlink_check(theap, tprev, tnext, tld->theaps, NULL);
   if (theap->tnext != NULL) { theap->tnext->tprev = theap->tprev; }
   if (theap->tprev != NULL) { theap->tprev->tnext = theap->tnext; }
                       else { mi_assert_internal(tld->theaps == theap); tld->theaps = theap->tnext; }
@@ -404,6 +405,7 @@ static void mi_theap_detach_from_tld(mi_theap_t* theap) {
 
 static void mi_theap_detach_from_heap(mi_theap_t* theap) {
   mi_heap_t* const heap = mi_theap_heap(theap);
+  mi_list_unlink_check(theap, hprev, hnext, heap->theaps, NULL);
   if (theap->hnext != NULL) { theap->hnext->hprev = theap->hprev; }
   if (theap->hprev != NULL) { theap->hprev->hnext = theap->hnext; }
                       else { mi_assert_internal(heap->theaps == theap); heap->theaps = theap->hnext; }
@@ -595,8 +597,12 @@ bool mi_theap_reload(mi_theap_t* theap, mi_arena_id_t arena_id) {
   }
 
   // push on the thread local theaps list
-  theap->tnext = theap->tld->theaps;
-  theap->tld->theaps = theap;
+  mi_lock(&theap->tld->theaps_lock) {
+    theap->tprev = NULL;
+    theap->tnext = theap->tld->theaps;
+    if (theap->tnext != NULL) { theap->tnext->tprev = theap; }
+    theap->tld->theaps = theap;
+  }
   return true;
 }
 */

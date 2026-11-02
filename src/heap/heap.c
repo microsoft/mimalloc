@@ -259,6 +259,7 @@ static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
   mi_atomic_decrement_relaxed(&heap->subproc->heap_count);
   mi_subproc_stat_decrease(heap->subproc, heaps, 1);
   mi_lock_maybe(&heap->subproc->heaps_lock, acquire_heaps_lock) {
+    mi_list_unlink_check(heap, prev, next, heap->subproc->heaps, NULL);
     if (heap->next!=NULL) { heap->next->prev = heap->prev; }
     if (heap->prev!=NULL) { heap->prev->next = heap->next; }
                      else { heap->subproc->heaps = heap->next; }
