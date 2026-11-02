@@ -599,7 +599,7 @@ cannot be copied). We use one of three encodings:
    With `MI_PAC=WEAK` the process key `K` is also mixed in as
    `mulxor64(v ^ keys[0], b ^ keys[1] ^ K)` (see `prim/prim-pac.h:mi_keyed_mac`).
 
-2. Authenticated offsets (with `MI_PAC=REQUIRED`).
+2. Authenticated offsets (with `MI_PAC=ON`).
    As the tagged offsets, but the tag is computed with the (unreadable)
    hardware pointer authentication key:
 

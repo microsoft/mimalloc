@@ -449,7 +449,7 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
   mitigate against attacks that rely on a predictable allocation order.
 - Large blocks (> 512 KiB) are followed by a guard page.
 
-With `CHECKED` (the default with `-DMI_MTE=ON`), the performance impact is still small (usually less than 10%, but can be upto 2x slower):
+With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance impact is still small (usually less than 10%, but can be upto 2x slower):
 
 - All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
   are ignored. Interior pointers are adjusted to the start of their block.
@@ -479,21 +479,20 @@ As always, evaluate with care as part of an overall security strategy as all of 
 
 On recent arm64 hardware with the memory tagging extensions ([MTE]), _mimalloc_ can be built with `-DMI_MTE=ON`
 to give every heap block a randomized memory tag that can only be accessed with a matching pointer that has the same
-tag. Adjacent blocks always get different tags, and blocks are retagged when freed, so buffer overflows and
+tag. Adjacent blocks always get different tags, and blocks are retagged when freed, so linear buffer overflows and
 (most) use-after-free accesses fault immediately. All blocks up to 512KiB are tagged, but larger blocks get a guard page
 at the end so overflows still fault (this is done as tagging memory is linear in the size of the block).
 
-Tagging is only enabled at runtime if both the hardware and OS support it -- and otherwise _mimalloc_ runs untagged.
-An MTE build running untagged is very close in performance to a regular release build. When using tagging, it depends
-on the hardware, but on an M5 it is usually within about 10% of a release build (but can be up to 2x slower).
-When building with `-DMI_MTE=REQUIRED`, _mimalloc_ requires the CPU supports MTE (which avoids some runtime checks),
-and aborts at initialization if MTE is not enabled at runtime (and, on Linux, if tag checking cannot be enabled
-for all threads).
+It depends on the hardware, but on an M5 an MTE build is usually within about 10% of a release build (but can be up to 2x slower).
+When building with `-DMI_MTE=ON`, _mimalloc_ requires the CPU supports MTE and aborts at initialization if MTE
+is not enabled at runtime (and, on Linux, if tag checking cannot be enabled for all threads).
+You can also build with `-DMI_MTE=PREFER` which uses MTE when both the hardware and OS support it, and
+otherwise _mimalloc_ runs untagged. An MTE build running untagged is very close in performance to a regular release build.
+Every MTE build gets the `-mte` suffixed to the library name (e.g. `mimalloc-mte.o`).
 
 Building with MTE also enables `-DMI_SECURE=CHECKED` by default (including encoded free lists).
 Since MTE catches (most) use-after-free, double-free, and heap block overflows, an MTE build gives
-similar (and stronger) guarantees as `-DMI_SECURE=ON` but with hardware support. MTE enabled builds have
-the suffix `-mte` (e.g. `mimalloc-mte.o`).
+similar (and stronger) guarantees as `-DMI_SECURE=ON` but with hardware support.
 
 - macOS: requires an Apple M5 (or later) with macOS 26+. MTE is only enabled for executables signed with
   the hardened-process entitlements (the tests are signed automatically):
@@ -507,7 +506,7 @@ the suffix `-mte` (e.g. `mimalloc-mte.o`).
   test using QEMU emulation (e.g. `QEMU_CPU=max qemu-aarch64 ./myprogram`).
   On Linux, tag checking is enabled per thread and inherited by threads created afterwards; _mimalloc_ should therefore be
   initialized before other threads are created (which is the case when it is dynamically linked or preloaded). Otherwise
-  a warning is given (or a fatal error with `-DMI_MTE=REQUIRED`) as those threads may not use tag checking (until they allocate),
+  it is a fatal error (or a warning with `-DMI_MTE=PREFER`) as those threads may not use tag checking (until they allocate),
   and system calls with tagged pointers may fail in threads that never call _mimalloc_.
   ```
   > cmake -DMI_MTE=ON ../..
@@ -532,6 +531,7 @@ the suffix `-mte` (e.g. `mimalloc-mte.o`).
 
 [MTE]: https://support.arm.com/documentation/108035/0100/How-does-MTE-work-
 
+
 ## Debug Mode
 
 When _mimalloc_ is built using debug mode, (`-DCMAKE_BUILD_TYPE=Debug`) (or when using `-DMI_DEBUG=ON` explicitly),
@@ -540,6 +540,7 @@ various checks are done at runtime to catch development errors.
 - All objects have padding at the end to detect (byte precise) heap block overflows.
 - Double free's, and freeing invalid heap pointers are detected.
 - Corrupted free-lists and some forms of use-after-free are detected.
+
 
 ## Guarded Mode
 

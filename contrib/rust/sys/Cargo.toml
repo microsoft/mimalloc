@@ -36,7 +36,7 @@ win_direct_tls = []
 no_thp = []
 # use architecture specific optimizations (as cmake `-DMI_OPT_ARCH=ON`)
 opt_arch = []
-# use memory tagging (MTE) if available at runtime (aarch64 only, experimental; as cmake `-DMI_MTE=ON`)
+# use memory tagging (MTE) if available at runtime (aarch64 only, experimental; as cmake `-DMI_MTE=PREFER`)
 mte = []
 
 [build-dependencies]

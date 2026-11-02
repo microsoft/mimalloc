@@ -324,7 +324,7 @@ static size_t unix_detect_virtual_address_bits(void) {
 }
 
 #if MI_UNIX_LINUX_MTE
-// With `-DMI_MTE=REQUIRED` it is a fatal error if tag checking cannot be enabled for all threads
+// With `-DMI_MTE=ON` it is a fatal error if tag checking cannot be enabled for all threads
 #if MI_MTE >= 2
 #define unix_memtag_thread_error(...)   _mi_fatal_error(__VA_ARGS__)
 #else
@@ -364,7 +364,7 @@ static size_t unix_thread_count(void) {
 #endif
 
 #if MI_MTE >= 2
-// Does the CPU support the memory tagging (MTE) instructions? (only checked with `-DMI_MTE=REQUIRED`;
+// Does the CPU support the memory tagging (MTE) instructions? (only checked with `-DMI_MTE=ON`;
 // on other systems we assume it does and fault on the first use of a tag instruction otherwise)
 static bool unix_detect_memtag_cpu(void) {
   #if MI_UNIX_LINUX_MTE
@@ -380,7 +380,7 @@ static bool unix_detect_memtag_cpu(void) {
 #endif
 
 #if MI_PAC >= 2
-// Does the CPU (and OS) support generic pointer authentication (`pacga`)? (checked with `-DMI_PAC=REQUIRED`)
+// Does the CPU (and OS) support generic pointer authentication (`pacga`)? (checked with `-DMI_PAC=ON`)
 static bool unix_detect_pac_cpu(void) {
   #if MI_UNIX_LINUX_PAC
   return ((getauxval(AT_HWCAP) & HWCAP_PACG) != 0);
@@ -446,13 +446,13 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   config->virtual_address_bits = unix_detect_virtual_address_bits();
   #if MI_MTE >= 2
   if (!unix_detect_memtag_cpu()) {
-    _mi_fatal_error("built with MI_MTE=REQUIRED but the CPU does not support memory tagging (MTE)\n");
+    _mi_fatal_error("built with MI_MTE=ON but the CPU does not support memory tagging (MTE)\n");
   }
   #endif
   config->has_memtag = (mi_option_is_enabled(mi_option_mte) && unix_detect_memtag(config));
   #if MI_PAC >= 2
   if (!unix_detect_pac_cpu()) {
-    _mi_fatal_error("built with MI_PAC=REQUIRED but the CPU does not support pointer authentication (PAC)\n");
+    _mi_fatal_error("built with MI_PAC=ON but the CPU does not support pointer authentication (PAC)\n");
   }
   #endif
 

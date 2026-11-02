@@ -382,7 +382,7 @@ typedef uintptr_t  mi_ptr_signed_t;
 #undef  MI_PAC
 #define MI_PAC  0
 #elif (MI_PAC >= 2) && !(MI_ARCH_ARM64 && defined(__GNUC__))
-#error "pointer authentication (MI_PAC=REQUIRED) is only supported on arm64 with GCC or clang"
+#error "pointer authentication (MI_PAC=ON) is only supported on arm64 with GCC or clang"
 #endif
 
 

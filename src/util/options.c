@@ -184,7 +184,7 @@ static const mi_option_desc_t mi_option_descs[_mi_option_last] =
   { 512*MI_KiB, MI_OPTION(profile_sample_rate) }, // sample rate in bytes for the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`) (=512 KiB)
   { MI_DEFAULT_STATS_MERGE_THRESHOLD, MI_OPTION(stats_merge_threshold) },    // on a page stats update, merge theap stats into the heap if N bytes were freed/allocated; 0 disables (=4 MiB)
   { MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE, MI_OPTION(arena_purge_immediate_size) }, // ranges above this size are purged immediately
-  { 1, MI_OPTION(mte) },                      // use memory tagging (MTE) if available (and built with `MI_MTE=ON`); on Linux the tag check mode can be set as well (sync, async, preferred)
+  { 1, MI_OPTION(mte) },                      // use memory tagging (MTE) if available (and built with `MI_MTE=PREFER` or `ON`); on Linux the tag check mode can be set as well (sync, async, preferred)
 
 };
 

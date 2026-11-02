@@ -20,7 +20,7 @@ and configuration options.
 - [`prim`](prim): Higher-level OS memory operations and primitive thread-local access.
   * [`prim/prim.h`](prim/prim.h): Primitive and minimal portability API needed from a host system.
   * [`prim/prim-tls.h`](prim/prim-tls.h): Fast thread-local access (for the default theap).
-  * [`prim/prim-mte.h`](prim/prim-mte.h): Primitives for memory-tagging ([MTE] or MIE); this is enabled when building with `-DMI_MTE=ON`.
+  * [`prim/prim-mte.h`](prim/prim-mte.h): Primitives for memory-tagging ([MTE] or MIE); this is enabled when building with `-DMI_MTE=PREFER` or `-DMI_MTE=ON`.
   * [`prim/prim-pac.h`](prim/prim-pac.h): Pointer authentication and signing (PAC); enabled when building with `-DMI_PAC=ON`.
 
 

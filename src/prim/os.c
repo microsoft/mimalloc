@@ -208,7 +208,7 @@ void _mi_os_init(void) {
   }
   #if MI_MTE >= 2
   if (!config.has_memtag) {
-    _mi_fatal_error("built with MI_MTE=REQUIRED but memory tagging is not enabled at runtime\n"
+    _mi_fatal_error("built with MI_MTE=ON but memory tagging is not enabled at runtime\n"
                     "  (on macOS the program needs the MTE entitlement, and the `mte` option must not be disabled)\n");
   }
   #endif
