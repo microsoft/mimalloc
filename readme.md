@@ -613,7 +613,7 @@ tag. Adjacent blocks always get different tags (and all linear block overflows f
 All blocks up to 512KiB are tagged, but larger blocks get a guard page
 at the end so overflows still fault (this is done as tagging memory is linear in the size of the block).
 
-It depends on the hardware, but on an M5 an MTE build is usually within about 10% of a release build (but can be 2 to 3x slower).
+It depends on the hardware, but on an M5 an MTE build is usually within about 15% of a release build (but can be 2 to 3x slower).
 When building with `-DMI_MTE=ON`, _mimalloc_ requires that the CPU and OS support MTE at runtime otherwise aborts at initialization (and, on Linux, if tag checking cannot be enabled for all threads).
 You can also build with `-DMI_MTE=PREFER` which uses MTE when both the hardware and OS support it, and
 otherwise _mimalloc_ runs untagged. An MTE build running untagged is very close in performance to a regular release build.
@@ -697,14 +697,14 @@ PAC is part of Armv8.3-A and later, and is supported, for example, by:
 ```
 
 **Note:**
-MTE + PAC offers strong hardware security mitigation. If you are in security research, it would be nice
-to see if we can improve the current design. At this point, mimalloc separates all meta data from user
+MTE+PAC offers strong hardware security mitigation. If you are in security research, it would be nice
+to see if we can improve the current design further. At this point, mimalloc separates all meta data from user
 space with guard pages and readonly pages (in the .bss), and MTE tagging (the free blocks etc.), and other
 entry points we validate with PAC (the free list, the default theap, the page-map etc.).
 Are there any futher obvious (or not so obvious)
 things that could improve security further with a reasonable performance trade-off?
-There is also still a real performance overhead in practice -- what could we do to improve
-performance more without weakening the current mitigations?
+There is also still a real performance overhead in practice even with hardware support -- what could we
+do to improve performance more without weakening the current mitigations too much?
 
 [PAC]: https://developer.arm.com/documentation/102433/0200/Return-oriented-programming
 
