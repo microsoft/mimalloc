@@ -9,7 +9,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_INTERNAL_SUBPROC_H
 
 #include "../types.h"
-#include "../prim/prim-pac.h"
 
 mi_subproc_t* _mi_subproc_main_init(void);
 void          _mi_subproc_main_done(void);
@@ -30,20 +29,5 @@ void*         _mi_meta_rezalloc( mi_subproc_t* subproc, void* p, size_t newsize,
 void*         _mi_meta_zalloc_aligned( mi_subproc_t* subproc, size_t size, size_t alignment, mi_memid_t* memid );
 void          _mi_meta_free(mi_subproc_t* subproc, void* p, mi_memid_t memid);
 bool          _mi_meta_is_meta_page(const mi_subproc_t* subproc, const mi_page_t* p);
-
-// The main heap of a sub-process (or NULL if not yet initialized, see `_mi_subproc_heap_main`)
-static inline mi_heap_t* mi_subproc_heap_main_peek(const mi_subproc_t* subproc) {
-  return mi_atomic_ptr_auth_acquire(mi_heap_t, (_Atomic(mi_ptr_signed_t)*)&subproc->heap_main);
-}
-
-// The detached theap of a sub-process used for allocating meta data
-static inline mi_theap_t* mi_subproc_theap_meta(const mi_subproc_t* subproc) {
-  return mi_ptr_auth_at(mi_theap_t, &subproc->theap_meta);
-}
-
-// The sub-process of a thread
-static inline mi_subproc_t* mi_tld_subproc(const mi_tld_t* tld) {
-  return mi_ptr_auth_at(mi_subproc_t, &tld->subproc);
-}
 
 #endif

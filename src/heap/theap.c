@@ -64,7 +64,7 @@ static bool mi_theap_page_is_valid(mi_theap_t* theap, mi_page_queue_t* pq, mi_pa
   MI_UNUSED(arg2);
   MI_UNUSED(pq);
   mi_assert_internal(mi_page_theap(page) == theap);
-  mi_theap_t* const page_theap = _mi_heap_theap_peek(mi_page_heap(page));
+  mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
   mi_assert_internal(page_theap == NULL || theap == page_theap || mi_theap_is_detached(theap));
   mi_assert_expensive(_mi_page_is_valid(page));
   return true;
@@ -238,7 +238,7 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
   theap->profile_never = false;  // only set for the empty and meta theaps (see `mi_theap_profile_never`)
   mi_atomic_store_release(&theap->refcount,1);
-  mi_atomic_store_ptr_release(mi_subproc_t,&theap->subproc,mi_heap_subproc(heap));
+  mi_atomic_store_ptr_release(mi_subproc_t,&theap->subproc,heap->subproc);
   mi_assert_internal(theap->stats.size == sizeof(mi_stats_t));
   mi_theap_options_init(theap, heap);
   theap->guard_front = false;
@@ -327,14 +327,14 @@ mi_theap_t* _mi_theap_alloc(mi_heap_t* heap, mi_tld_t* tld) {
   mi_memid_t memid;
   mi_theap_t* theap;
 
-  if (mi_heap_exclusive_arena(heap) == NULL) {
-    theap = (mi_theap_t*)_mi_meta_zalloc(mi_heap_subproc(heap), sizeof(mi_theap_t), &memid);
+  if (heap->exclusive_arena == NULL) {
+    theap = (mi_theap_t*)_mi_meta_zalloc(heap->subproc, sizeof(mi_theap_t), &memid);
   }
   else {
     // theaps associated with a specific arena are allocated in that arena
     // note: takes up at least one slice which is quite wasteful...
     const size_t size = mi_align_up(sizeof(mi_theap_t),MI_ARENA_MIN_OBJ_SIZE);
-    theap = (mi_theap_t*)_mi_arenas_alloc(heap, size, true, true, mi_heap_exclusive_arena(heap), tld->thread_seq, tld->numa_node, &memid);
+    theap = (mi_theap_t*)_mi_arenas_alloc(heap, size, true, true, heap->exclusive_arena, tld->thread_seq, tld->numa_node, &memid);
   }
   if (theap==NULL) {
     _mi_error_message(ENOMEM, "unable to allocate theap meta-data\n");
@@ -436,7 +436,7 @@ void _mi_heap_detach_theaps( mi_heap_t* heap ) {
       }
     }
     if (!all_detached) {
-      mi_subproc_stat_counter_increase(mi_heap_subproc(heap),heaps_delete_wait,1);
+      mi_subproc_stat_counter_increase(heap->subproc,heaps_delete_wait,1);
       _mi_prim_thread_yield();
     }
   } while (!all_detached);
@@ -468,7 +468,7 @@ void _mi_tld_detach_theaps( mi_tld_t* tld ) {
       }
     }
     if (!all_detached) {
-      mi_subproc_stat_counter_increase(mi_tld_subproc(tld),heaps_delete_wait,1);
+      mi_subproc_stat_counter_increase(tld->subproc,heaps_delete_wait,1);
       _mi_prim_thread_yield();
     }
   } while (!all_detached);
@@ -551,7 +551,7 @@ void mi_theap_unload(mi_theap_t* theap) {
   mi_assert(mi_theap_is_initialized(theap));
   mi_assert_expensive(mi_theap_is_valid(theap));
   if (theap==NULL || !mi_theap_is_initialized(theap)) return;
-  if (mi_heap_exclusive_arena(mi_theap_heap(theap)) == NULL) {
+  if (mi_theap_heap(theap)->exclusive_arena == NULL) {
     _mi_warning_message("cannot unload theaps that are not associated with an exclusive arena\n");
     return;
   }
@@ -571,7 +571,7 @@ void mi_theap_unload(mi_theap_t* theap) {
 bool mi_theap_reload(mi_theap_t* theap, mi_arena_id_t arena_id) {
   mi_assert(mi_theap_is_initialized(theap));
   if (theap==NULL || !mi_theap_is_initialized(theap)) return false;
-  if (mi_heap_exclusive_arena(mi_theap_heap(theap)) == NULL) {
+  if (mi_theap_heap(theap)->exclusive_arena == NULL) {
     _mi_warning_message("cannot reload theaps that were not associated with an exclusive arena\n");
     return false;
   }
@@ -580,8 +580,8 @@ bool mi_theap_reload(mi_theap_t* theap, mi_arena_id_t arena_id) {
     return false;
   }
   mi_arena_t* arena = _mi_arena_from_id(arena_id);
-  if (mi_heap_exclusive_arena(mi_theap_heap(theap)) != arena) {
-    _mi_warning_message("trying to reload a theap at a different arena address: %p vs %p\n", mi_heap_exclusive_arena(mi_theap_heap(theap)), arena);
+  if (mi_theap_heap(theap)->exclusive_arena != arena) {
+    _mi_warning_message("trying to reload a theap at a different arena address: %p vs %p\n", mi_theap_heap(theap)->exclusive_arena, arena);
     return false;
   }
 

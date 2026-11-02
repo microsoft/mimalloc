@@ -11,7 +11,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "../types.h"
 #include "process.h"
 #include "subproc.h"
-#include "../prim/prim-pac.h"
 
 void          _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap, mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool use_qsbr);
 mi_decl_cold  mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap);  // get (and possible create) the theap belonging to a heap
@@ -32,16 +31,8 @@ static inline long mi_heap_reclaim_on_free(mi_heap_t* heap) {
   return heap->reclaim_on_free;
 }
 
-static inline mi_subproc_t* mi_heap_subproc(const mi_heap_t* heap) {
-  return mi_ptr_auth_at(mi_subproc_t, &heap->subproc);
-}
-
-static inline mi_arena_t* mi_heap_exclusive_arena(const mi_heap_t* heap) {
-  return mi_ptr_auth_at(mi_arena_t, &heap->exclusive_arena);
-}
-
 static inline mi_heap_t* mi_heap_get_heap_main(const mi_heap_t* heap) {
-  return _mi_subproc_heap_main(mi_heap_subproc(heap));
+  return _mi_subproc_heap_main(heap->subproc);
 }
 
 static inline bool mi_is_heap_main(const mi_heap_t* heap) {
@@ -51,7 +42,7 @@ static inline bool mi_is_heap_main(const mi_heap_t* heap) {
 
 static inline bool mi_is_process_heap_main(const mi_heap_t* heap) {
   mi_assert_internal(heap!=NULL);
-  return (mi_subproc_heap_main_peek(_mi_subproc_main()) == heap);
+  return (_mi_subproc_main()->heap_main == heap);
 }
 
 #endif

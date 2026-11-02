@@ -32,49 +32,12 @@ static inline mi_arena_t* mi_memid_arena(mi_memid_t memid) {
 
 // Start of the arena memory area
 static inline uint8_t* mi_arena_start(mi_arena_t* arena) {
-  return (uint8_t*)mi_ptr_auth_at(void, &arena->start);
+  return (uint8_t*)arena->start;
 }
 
 // The parent of a sub-arena (or NULL)
 static inline mi_arena_t* mi_arena_parent(mi_arena_t* arena) {
-  return mi_ptr_auth_at(mi_arena_t, &arena->parent);
-}
-
-// The sub-process of an arena
-static inline mi_subproc_t* mi_arena_subproc(const mi_arena_t* arena) {
-  return mi_ptr_auth_at(mi_subproc_t, &arena->subproc);
-}
-
-// The arena bitmaps
-static inline mi_bbitmap_t* mi_arena_slices_free(const mi_arena_t* arena) {
-  return mi_ptr_auth_at(mi_bbitmap_t, &arena->slices_free);
-}
-
-static inline mi_bitmap_t* mi_arena_slices_committed(const mi_arena_t* arena) {
-  return mi_ptr_auth_at(mi_bitmap_t, &arena->slices_committed);
-}
-
-static inline mi_bitmap_t* mi_arena_slices_dirty(const mi_arena_t* arena) {
-  return mi_ptr_auth_at(mi_bitmap_t, &arena->slices_dirty);
-}
-
-static inline mi_bitmap_t* mi_arena_slices_purge(const mi_arena_t* arena) {
-  return mi_ptr_auth_at(mi_bitmap_t, &arena->slices_purge);
-}
-
-// The separated page meta info of an arena (or NULL)
-static inline mi_page_t* mi_arena_pages_meta(const mi_arena_t* arena) {
-  return mi_ptr_auth_at(mi_page_t, &arena->pages_meta);
-}
-
-// The bitmap of all registered pages of a heap in an arena
-static inline mi_bitmap_t* mi_arena_pages_registered(const mi_arena_pages_t* arena_pages) {
-  return mi_ptr_auth_at(mi_bitmap_t, &arena_pages->pages);
-}
-
-// The bitmap of abandoned pages of a heap in an arena for a size bin
-static inline mi_bitmap_t* mi_arena_pages_abandoned(const mi_arena_pages_t* arena_pages, size_t bin) {
-  return mi_ptr_auth_at(mi_bitmap_t, &arena_pages->pages_abandoned[bin]);
+  return arena->parent;
 }
 
 #endif

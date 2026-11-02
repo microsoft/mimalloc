@@ -4,8 +4,8 @@
 #include "mimalloc/prim/prim.h"
 #include "testhelper.h"
 
-static mi_decl_cache_align mi_subproc_t test_subproc;
-static mi_decl_cache_align mi_heap_t test_heap;
+static mi_subproc_t test_subproc;
+static mi_heap_t test_heap;
 static mi_arena_t test_arenas[6];
 
 typedef struct arena_visit_s {
@@ -19,17 +19,17 @@ typedef struct arena_visit_info_s {
 } arena_visit_info_t;
 
 static void arena_setup(size_t count) {
-  mi_ptr_sign_at(&test_heap.subproc, &test_subproc);
+  test_heap.subproc = &test_subproc;
   test_heap.heap_seq = 0;
   mi_atomic_store_relaxed(&test_subproc.heap_count, 1);
   mi_atomic_store_relaxed(&test_subproc.arena_count, count);
   for (size_t i = 0; i < 6; i++) {
     test_arenas[i].arena_idx = i;
-    mi_ptr_sign_at(&test_arenas[i].parent, NULL);
+    test_arenas[i].parent = NULL;
     test_arenas[i].is_exclusive = false;
     test_arenas[i].memid.is_pinned = false;
     test_arenas[i].numa_node = 0;
-    mi_atomic_ptr_sign_release(&test_subproc.arenas[i], &test_arenas[i]);
+    mi_atomic_store_ptr_release(mi_arena_t, &test_subproc.arenas[i], &test_arenas[i]);
   }
 }
 
@@ -76,7 +76,7 @@ static bool test_arena_order(void) {
 
 static bool test_arena_filter(void) {
   arena_setup(6);
-  mi_atomic_ptr_sign_release(&test_subproc.arenas[1], NULL);
+  mi_atomic_store_ptr_release(mi_arena_t, &test_subproc.arenas[1], NULL);
   test_arenas[2].memid.is_pinned = true;
   test_arenas[2].numa_node = 1;
   test_arenas[3].is_exclusive = true;
@@ -106,8 +106,8 @@ static bool test_arena_filter(void) {
   visit.count = 0;
   if (!mi_forall_suitable_arenas(&test_heap, NULL, 0, false, -1, true, &arena_record, &info, NULL) || visit.count != 0) return false;
 
-  mi_ptr_sign_at(&test_arenas[4].parent, &test_arenas[3]);
-  mi_ptr_sign_at(&test_arenas[5].parent, &test_arenas[3]);
+  test_arenas[4].parent = &test_arenas[3];
+  test_arenas[5].parent = &test_arenas[3];
   test_arenas[4].is_exclusive = true;
   test_arenas[5].is_exclusive = true;
   const size_t family[] = { 3, 4, 5 };
@@ -121,7 +121,7 @@ static bool test_arena_filter(void) {
       !arena_matches(&visit, children, 2)) return false;
 
   visit.count = 0;
-  mi_ptr_sign_at(&test_arenas[5].parent, NULL);
+  test_arenas[5].parent = NULL;
   const size_t last[] = { 5 };
   if (!mi_forall_arenas(&test_heap, &test_arenas[5], 0, &arena_record, &info, NULL)) return false;
   return arena_matches(&visit, last, 1);
@@ -445,15 +445,15 @@ static bool test_heap_visit_thread_exit(void) {
 
 static bool test_theap_collect_detached(void) {
   mi_theap_t* const theap = mi_theap_get_default();
-  mi_subproc_t* const subproc = mi_tld_subproc(theap->tld);
+  mi_subproc_t* const subproc = theap->tld->subproc;
   int* p = NULL;
   bool result = false;
   mi_lock(&subproc->theap_meta_lock) {
-    p = (int*)mi_theap_malloc(mi_subproc_theap_meta(subproc), sizeof(int));
+    p = (int*)mi_theap_malloc(subproc->theap_meta, sizeof(int));
     if (p != NULL) {
       *p = 42;
-      mi_theap_collect(mi_subproc_theap_meta(subproc), false);
-      mi_theap_collect(mi_subproc_theap_meta(subproc), true);
+      mi_theap_collect(subproc->theap_meta, false);
+      mi_theap_collect(subproc->theap_meta, true);
       result = (*p == 42 && mi_thread_id_of(p) == 0);
     }
   }

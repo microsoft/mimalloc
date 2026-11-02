@@ -51,7 +51,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
   mi_assert_internal(arena!=NULL);
   mi_assert_internal(slice_count>0);
   size_t slice_index;
-  if (!mi_bbitmap_try_find_and_clearN(mi_arena_slices_free(arena), tseq, slice_count, &slice_index)) return NULL;
+  if (!mi_bbitmap_try_find_and_clearN(arena->slices_free, tseq, slice_count, &slice_index)) return NULL;
 
   // claimed it!
   void* p = mi_arena_slice_start(arena, slice_index);
@@ -63,7 +63,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
   size_t touched_slices = slice_count;
   if (arena->memid.initially_zero) {
     size_t already_dirty = 0;
-    memid->initially_zero = mi_bitmap_setN(mi_arena_slices_dirty(arena), slice_index, slice_count, &already_dirty);
+    memid->initially_zero = mi_bitmap_setN(arena->slices_dirty, slice_index, slice_count, &already_dirty);
     mi_assert_internal(already_dirty <= touched_slices);
     touched_slices -= already_dirty;
   }
@@ -75,14 +75,14 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
   // set commit state
   if (commit) {
     // commit requested, but the range may not be committed as a whole: ensure it is committed now
-    const size_t already_committed = mi_bitmap_popcountN(mi_arena_slices_committed(arena), slice_index, slice_count);
+    const size_t already_committed = mi_bitmap_popcountN(arena->slices_committed, slice_index, slice_count);
     if (already_committed < slice_count) {
       // not all committed, try to commit now
       bool commit_zero = false;
-      if (!_mi_arena_commit(mi_arena_subproc(arena), arena, p, _mi_size_of_slices(slice_count), &commit_zero, _mi_size_of_slices(already_committed))) {
+      if (!_mi_arena_commit(arena->subproc, arena, p, _mi_size_of_slices(slice_count), &commit_zero, _mi_size_of_slices(already_committed))) {
         // if the commit fails, release ownership, and return NULL;
         // note: this does not roll back dirty bits but that is ok.
-        mi_bbitmap_setN(mi_arena_slices_free(arena), slice_index, slice_count);
+        mi_bbitmap_setN(arena->slices_free, slice_index, slice_count);
         return NULL;
       }
       if (commit_zero) {
@@ -90,7 +90,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
       }
 
       // set the commit bits
-      mi_bitmap_setN(mi_arena_slices_committed(arena), slice_index, slice_count, NULL);
+      mi_bitmap_setN(arena->slices_committed, slice_index, slice_count, NULL);
 
       // committed
       #if MI_DEBUG > 1
@@ -104,15 +104,15 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
     }
     else {
       // already fully committed.
-      _mi_os_reuse(mi_arena_subproc(arena), p, _mi_size_of_slices(slice_count));
+      _mi_os_reuse(arena->subproc, p, _mi_size_of_slices(slice_count));
       // if the OS has overcommit, and this is the first time we access these pages, then
       // count the commit now (as at arena reserve we didn't count those commits as these are on-demand)
       if (_mi_os_has_overcommit() && touched_slices > 0 && !arena->memid.is_pinned /* huge pages, issue #1236 */) {
-        mi_subproc_stat_increase( mi_arena_subproc(arena), committed, _mi_size_of_slices(touched_slices));
+        mi_subproc_stat_increase( arena->subproc, committed, _mi_size_of_slices(touched_slices));
       }
     }
 
-    mi_assert_internal(mi_bitmap_is_setN(mi_arena_slices_committed(arena), slice_index, slice_count));
+    mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
     memid->initially_committed = true;
 
     // tool support
@@ -125,20 +125,20 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
   }
   else {
     // no need to commit, but check if it is already fully committed
-    memid->initially_committed = mi_bitmap_is_setN(mi_arena_slices_committed(arena), slice_index, slice_count);
+    memid->initially_committed = mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count);
     if (!memid->initially_committed) {
       // partly committed.. adjust stats
       size_t already_committed_count = 0;
-      mi_bitmap_setN(mi_arena_slices_committed(arena), slice_index, slice_count, &already_committed_count);
-      mi_bitmap_clearN(mi_arena_slices_committed(arena), slice_index, slice_count);
-      mi_subproc_stat_decrease(mi_arena_subproc(arena), committed, _mi_size_of_slices(already_committed_count));
+      mi_bitmap_setN(arena->slices_committed, slice_index, slice_count, &already_committed_count);
+      mi_bitmap_clearN(arena->slices_committed, slice_index, slice_count);
+      mi_subproc_stat_decrease(arena->subproc, committed, _mi_size_of_slices(already_committed_count));
     }
   }
 
-  mi_assert_internal(mi_bbitmap_is_clearN(mi_arena_slices_free(arena), slice_index, slice_count));
-  if (commit) { mi_assert_internal(mi_bitmap_is_setN(mi_arena_slices_committed(arena), slice_index, slice_count)); }
+  mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
+  if (commit) { mi_assert_internal(mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count)); }
   if (commit) { mi_assert_internal(memid->initially_committed); }
-  mi_assert_internal(mi_bitmap_is_setN(mi_arena_slices_dirty(arena), slice_index, slice_count));
+  mi_assert_internal(mi_bitmap_is_setN(arena->slices_dirty, slice_index, slice_count));
 
   return p;
 }
@@ -209,7 +209,7 @@ mi_decl_noinline void* _mi_arenas_try_alloc(
   if (mi_option_is_enabled(mi_option_disallow_os_alloc)) return NULL;
 
   // otherwise, try to reserve a new arena -- but one thread at a time.. (todo: allow 2 or 4 to reduce contention?)
-  mi_subproc_t* const subproc = mi_heap_subproc(heap);
+  mi_subproc_t* const subproc = heap->subproc;
   const size_t arena_count = mi_arenas_get_count(subproc);
   mi_lock(&subproc->arena_reserve_lock) {
     if (arena_count == mi_arenas_get_count(subproc)) {
@@ -271,7 +271,7 @@ void* _mi_arenas_alloc_aligned( mi_heap_t* heap,
   }
 
   // fall back to the OS
-  void* p = _mi_arena_os_alloc_aligned(mi_heap_subproc(heap), size, alignment, align_offset, commit, allow_large, req_arena, memid);
+  void* p = _mi_arena_os_alloc_aligned(heap->subproc, size, alignment, align_offset, commit, allow_large, req_arena, memid);
   return p;
 }
 
@@ -303,7 +303,7 @@ void _mi_arenas_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t mem
     size_t slice_index;
     mi_arena_t* arena = mi_arena_from_memid(memid, &slice_index, &slice_count);
     mi_assert_internal(arena!=NULL);
-    mi_assert_internal(mi_arena_subproc(arena) == subproc);
+    mi_assert_internal(arena->subproc == subproc);
     mi_assert_internal((size%MI_ARENA_SLICE_SIZE)==0);
     mi_assert_internal((slice_count*MI_ARENA_SLICE_SIZE)==size);
     mi_assert_internal(mi_arena_slice_start(arena,slice_index) <= (uint8_t*)p);
@@ -327,7 +327,7 @@ void _mi_arenas_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t mem
     }
 
     // and make it available to others again
-    bool all_inuse = mi_bbitmap_setN(mi_arena_slices_free(arena), slice_index, slice_count);
+    bool all_inuse = mi_bbitmap_setN(arena->slices_free, slice_index, slice_count);
     if (!all_inuse) {
       _mi_error_message(EAGAIN, "trying to free an already freed arena block: %p, size %zu\n", mi_arena_slice_start(arena,slice_index), _mi_size_of_slices(slice_count));
       return;
@@ -349,7 +349,7 @@ void _mi_arenas_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t mem
 
 // Purge the arenas; if `force_purge` is true, amenable parts are purged even if not yet expired
 void _mi_arenas_collect(bool force_purge, bool visit_all, mi_tld_t* tld) {
-  mi_arenas_try_purge(force_purge, visit_all, mi_tld_subproc(tld), tld->thread_seq);
+  mi_arenas_try_purge(force_purge, visit_all, tld->subproc, tld->thread_seq);
 }
 
 /* -----------------------------------------------------------
@@ -373,25 +373,25 @@ static long mi_arena_purge_delay(void) {
 // returns if the memory is no longer committed (versus reset which keeps the commit)
 static bool mi_arena_purge(mi_arena_t* arena, size_t slice_index, size_t slice_count) {
   mi_assert_internal(!arena->memid.is_pinned);
-  mi_assert_internal(mi_bbitmap_is_clearN(mi_arena_slices_free(arena), slice_index, slice_count));
+  mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
 
   const size_t size = _mi_size_of_slices(slice_count);
   void* const p = mi_arena_slice_start(arena, slice_index);
   //const bool all_committed = mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count);
   size_t already_committed;
-  mi_bitmap_setN(mi_arena_slices_committed(arena), slice_index, slice_count, &already_committed); // pretend all committed.. (as we lack a clearN call that counts the already set bits..)
+  mi_bitmap_setN(arena->slices_committed, slice_index, slice_count, &already_committed); // pretend all committed.. (as we lack a clearN call that counts the already set bits..)
   const bool all_committed = (already_committed == slice_count);
-  const bool needs_recommit = _mi_os_purge_ex(mi_arena_subproc(arena), p, size, all_committed /* allow reset? */, _mi_size_of_slices(already_committed), mi_fun_auth_at(mi_commit_fun_t, &arena->commit_fun), arena->commit_fun_arg);
+  const bool needs_recommit = _mi_os_purge_ex(arena->subproc, p, size, all_committed /* allow reset? */, _mi_size_of_slices(already_committed), mi_fun_auth_at(mi_commit_fun_t, &arena->commit_fun), arena->commit_fun_arg);
 
   if (needs_recommit) {
     // no longer committed
-    mi_bitmap_clearN(mi_arena_slices_committed(arena), slice_index, slice_count);
+    mi_bitmap_clearN(arena->slices_committed, slice_index, slice_count);
     // we just counted in the purge to decommit all, but the some part was not committed so adjust that here
     // mi_subproc_stat_decrease(arena->subproc, committed, _mi_size_of_slices(slice_count - already_committed));
   }
   else if (!all_committed) {
     // we cannot assume any of these are committed any longer (even with reset since we did setN and may have marked uncommitted slices as committed)
-    mi_bitmap_clearN(mi_arena_slices_committed(arena), slice_index, slice_count);
+    mi_bitmap_clearN(arena->slices_committed, slice_index, slice_count);
     // we adjust the commit count as parts will be re-committed
     // mi_subproc_stat_decrease(arena->subproc, committed, _mi_size_of_slices(already_committed));
   }
@@ -406,7 +406,7 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_
   const long delay = mi_arena_purge_delay();
   if (arena->memid.is_pinned || delay < 0 || _mi_preloading()) return;  // is purging allowed at all?
 
-  mi_assert_internal(mi_bbitmap_is_clearN(mi_arena_slices_free(arena), slice_index, slice_count));
+  mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
   if (delay == 0 || _mi_size_of_slices(slice_count) >= mi_option_get_size(mi_option_arena_purge_immediate_size)) {
     // purge directly
     mi_arena_purge(arena, slice_index, slice_count);
@@ -419,12 +419,12 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_
       // expiration was not yet set
       // maybe set the global arenas expire as well (if it wasn't set already)
       mi_assert_internal(expire0==0);
-      mi_atomic_casi64_strong_release(&mi_arena_subproc(arena)->purge_expire, &expire0, expire);
+      mi_atomic_casi64_strong_release(&arena->subproc->purge_expire, &expire0, expire);
     }
     else {
       // already an expiration was set
     }
-    mi_bitmap_setN(mi_arena_slices_purge(arena), slice_index, slice_count, NULL);
+    mi_bitmap_setN(arena->slices_purge, slice_index, slice_count, NULL);
   }
 }
 
@@ -437,12 +437,12 @@ typedef struct mi_purge_visit_info_s {
 
 static bool mi_arena_try_purge_range(mi_arena_t* arena, size_t slice_index, size_t slice_count) {
   mi_assert(slice_count < MI_BCHUNK_BITS);
-  if (mi_bbitmap_try_clearNC(mi_arena_slices_free(arena), slice_index, slice_count)) {
+  if (mi_bbitmap_try_clearNC(arena->slices_free, slice_index, slice_count)) {
     // purge
     bool decommitted = mi_arena_purge(arena, slice_index, slice_count); MI_UNUSED(decommitted);
-    mi_assert_internal(!decommitted || mi_bitmap_is_clearN(mi_arena_slices_committed(arena), slice_index, slice_count));
+    mi_assert_internal(!decommitted || mi_bitmap_is_clearN(arena->slices_committed, slice_index, slice_count));
     // and reset the free range
-    mi_bbitmap_setN(mi_arena_slices_free(arena), slice_index, slice_count);
+    mi_bbitmap_setN(arena->slices_free, slice_index, slice_count);
     return true;
   }
   else {
@@ -488,7 +488,7 @@ static int mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
 
   // reset expire
   mi_atomic_storei64_release(&arena->purge_expire, (mi_msecs_t)0);
-  mi_subproc_stat_counter_increase(mi_arena_subproc(arena), arena_purges, 1);
+  mi_subproc_stat_counter_increase(arena->subproc, arena_purges, 1);
 
   // go through all purge info's  (with max MI_BFIELD_BITS ranges at a time)
   // this also clears those ranges atomically (so any newly freed blocks will get purged next
@@ -497,7 +497,7 @@ static int mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
 
   // we purge by at least `minslices` to not fragment transparent huge pages for example
   const size_t minslices = _mi_slice_count_of_size(_mi_os_minimal_purge_size());
-  _mi_bitmap_forall_setc_rangesn(mi_arena_slices_purge(arena), minslices, &mi_arena_try_purge_visitor, arena, &vinfo);
+  _mi_bitmap_forall_setc_rangesn(arena->slices_purge, minslices, &mi_arena_try_purge_visitor, arena, &vinfo);
 
   return (vinfo.any_purged ? 1 : -1);
 }

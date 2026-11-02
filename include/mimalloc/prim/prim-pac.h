@@ -14,9 +14,9 @@ terms of the MIT license. A copy of the license can be found in the file
 /* -----------------------------------------------------------------------------
 Signed pointers (`MI_PAC`, see `arch.h`)
 
-Some internal pointers (the page map entries, the arena pointers and bitmaps, the custom commit function,
-and ownership pointers like the heap of a page or the sub-process of a heap) are stored as a signed
-`mi_ptr_signed(tp)` (a `mi_ptr_signed_t`) that is bound to the address of the slot it is stored in (the `salt`); use `mi_ptr_sign_at` and `mi_ptr_auth_at` (and the atomic variants)
+Some internal pointers (the page map entries, the arena of a memid, and the custom commit function)
+are stored as a signed `mi_ptr_signed(tp)` (a `mi_ptr_signed_t`) that is bound to the address of the
+slot it is stored in (the `salt`); use `mi_ptr_sign_at` and `mi_ptr_auth_at` (and the atomic variants)
 to store and load such fields. Values that are copied (like the arena in a `mi_memid_t`) use a salt
 derived from the other fields instead.
 `NULL` is always signed as 0 (so zero initialized memory authenticates as `NULL`).
@@ -226,14 +226,6 @@ Note: the `slot` argument is evaluated twice.
 #define mi_fun_auth_at(tp,slot)               ((tp*)(uintptr_t)mi_addr_auth(*(slot), mi_addr(slot)))
 
 #define mi_atomic_ptr_sign_release(slot,p)    mi_atomic_store_release(slot, mi_ptr_sign(p, mi_addr(slot)))
-#define mi_atomic_ptr_sign_relaxed(slot,p)    mi_atomic_store_relaxed(slot, mi_ptr_sign(p, mi_addr(slot)))
 #define mi_atomic_ptr_auth_acquire(tp,slot)   ((tp*)mi_ptr_auth(mi_atomic_load_acquire(slot), mi_addr(slot)))
-#define mi_atomic_ptr_auth_relaxed(tp,slot)   ((tp*)mi_ptr_auth(mi_atomic_load_relaxed(slot), mi_addr(slot)))
-
-// Atomically replace the (unsigned) `expected` pointer value with `desired` (no update of `expected` on failure)
-static inline bool mi_atomic_ptr_sign_cas_release(_Atomic(mi_ptr_signed_t)* slot, const void* expected, const void* desired) {
-  mi_ptr_signed_t x = mi_ptr_sign(expected, mi_addr(slot));
-  return mi_atomic_cas_strong_release(slot, &x, mi_ptr_sign(desired, mi_addr(slot)));
-}
 
 #endif // MI_PRIM_PAC_H

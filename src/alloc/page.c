@@ -87,8 +87,8 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   MI_UNUSED(capacity_size);
   #endif
 
-  mi_assert_internal(mi_page_heap(page)!=NULL);
-  mi_theap_t* const page_theap = _mi_heap_theap_peek(mi_page_heap(page));
+  mi_assert_internal(page->heap!=NULL);
+  mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
   mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap ||
                      mi_page_theap(page)->tld == NULL || mi_page_theap(page)->tld->thread_id == MI_THREAD_ID_DETACHED);
 
@@ -129,8 +129,8 @@ bool _mi_page_is_valid(mi_page_t* page) {
   #endif
   if (!mi_page_is_abandoned(page)) {
     //mi_assert_internal(!_mi_process.process_is_initialized);
-    mi_assert_internal(mi_page_heap(page)!=NULL);
-    mi_theap_t* const page_theap = _mi_heap_theap_peek(mi_page_heap(page));
+    mi_assert_internal(page->heap!=NULL);
+    mi_theap_t* const page_theap = _mi_heap_theap_peek(page->heap);
     mi_assert_internal(page_theap == NULL || mi_page_theap(page)==page_theap ||
                        mi_page_theap(page)->tld == NULL || mi_page_theap(page)->tld->thread_id == MI_THREAD_ID_DETACHED);
     {
@@ -959,8 +959,8 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   }
   #endif
 
-  mi_assert_internal(mi_page_heap(page) != NULL);
-  mi_assert_internal(mi_page_heap(page) == mi_theap_heap(theap));
+  mi_assert_internal(page->heap != NULL);
+  mi_assert_internal(page->heap == mi_theap_heap(theap));
   mi_assert_internal(page->theap!=NULL);
   mi_assert_internal(page->theap == mi_page_theap(page));
   mi_assert_internal(page->capacity == 0);

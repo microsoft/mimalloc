@@ -419,7 +419,7 @@ static bool test_reclaim_delayed_empty(size_t size, bool os) {
   }
   mi_free(worker_blocks[0]);
   require(!mi_page_is_abandoned(worker_page) && mi_page_theap(worker_page) == theap);
-  require(mi_page_heap(worker_page) == worker_heap && mi_page_all_free(worker_page));
+  require(worker_page->heap == worker_heap && mi_page_all_free(worker_page));
   require(worker_page->retire_expire == 0 && !mi_page_is_in_full(worker_page));
   require(qsbr_count(theap) == 1 && page_count(worker_heap) == 1);
   const uint64_t goal = worker_page->qsbr.goal;

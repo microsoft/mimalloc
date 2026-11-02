@@ -434,13 +434,14 @@ static inline mi_tld_t* mi_page_tld(const mi_page_t* page) {
 
 
 static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
-  mi_heap_t* const heap = mi_ptr_auth_at(mi_heap_t, &page->heap);
+  mi_heap_t* heap = page->heap;
   mi_assert_internal(heap != NULL);
   return heap;
 }
 
 static inline mi_subproc_t* mi_page_subproc(const mi_page_t* page) {
-  return mi_heap_subproc(mi_page_heap(page));
+  mi_heap_t* const heap = mi_page_heap(page);
+  return heap->subproc;
 }
 
 //-----------------------------------------------------------

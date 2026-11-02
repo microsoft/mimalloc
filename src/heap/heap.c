@@ -36,7 +36,7 @@ void mi_heap_set_debug_fill_preserve(mi_heap_t* heap, size_t preserve) {
 
 void mi_heap_stats_merge_to_subproc(mi_heap_t* heap) {
   if (heap==NULL) { heap = mi_heap_main(); }
-  _mi_stats_merge_into(&mi_heap_subproc(heap)->stats, &heap->stats);
+  _mi_stats_merge_into(&heap->subproc->stats, &heap->stats);
 }
 
 void mi_heap_stats_merge_to_main(mi_heap_t* heap) {
@@ -113,9 +113,9 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
 {
   // init fields
   heap->theap = theap_slot;
-  mi_ptr_sign_at(&heap->subproc, subproc);
+  heap->subproc = subproc;
   heap->heap_seq = mi_atomic_increment_relaxed(&subproc->heap_total_count);
-  mi_ptr_sign_at(&heap->exclusive_arena, _mi_arena_from_id(exclusive_arena_id));
+  heap->exclusive_arena = _mi_arena_from_id(exclusive_arena_id);
   heap->reclaim_on_free = mi_option_get(mi_option_page_reclaim_on_free);
   heap->numa_node = -1; // no initial affinity
   #if MI_QSBR
@@ -135,12 +135,12 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
   mi_lock_init(&heap->arena_pages_lock);
 
   // push onto the subproc heaps
-  mi_lock(&mi_heap_subproc(heap)->heaps_lock) {
-    mi_heap_t* head = mi_heap_subproc(heap)->heaps;
+  mi_lock(&heap->subproc->heaps_lock) {
+    mi_heap_t* head = heap->subproc->heaps;
     heap->prev = NULL;
     heap->next = head;
     if (head!=NULL) { head->prev = heap;  }
-    mi_heap_subproc(heap)->heaps = heap;
+    heap->subproc->heaps = heap;
   }
   mi_atomic_increment_relaxed(&subproc->heap_count);
   mi_subproc_stat_increase(subproc, heaps, 1);
@@ -148,14 +148,14 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
 }
 
 mi_heap_t* _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool is_main_heap, bool use_qsbr) {
-  mi_assert_internal(is_main_heap ? (mi_subproc_heap_main_peek(subproc) == NULL && subproc->parent != NULL) : mi_subproc_heap_main_peek(subproc) != NULL);
+  mi_assert_internal(is_main_heap ? (subproc->heap_main == NULL && subproc->parent != NULL) : subproc->heap_main != NULL);
   // heap data is allocated in the current subproc (or the parent for a main heap)
   mi_subproc_t* const owner = (is_main_heap ? subproc->parent : subproc);
   #if MI_SECURE
   // in secure mode, keep heap data separate from user data (at the cost of taking a lock)
   mi_heap_t* const heap = (mi_heap_t*)_mi_meta_zalloc(owner, sizeof(mi_heap_t), NULL);
   #else
-  mi_heap_t* const heap = (mi_heap_t*)mi_heap_zalloc(mi_subproc_heap_main_peek(owner), sizeof(mi_heap_t));
+  mi_heap_t* const heap = (mi_heap_t*)mi_heap_zalloc(owner->heap_main, sizeof(mi_heap_t));
   #endif
   if (heap==NULL) return NULL;
   // reserve a thread local slot for this heap (see also issue #1230)
@@ -166,8 +166,8 @@ mi_heap_t* _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusi
     return NULL;
   }
   if (is_main_heap) {
-    mi_assert_internal(mi_subproc_heap_main_peek(subproc) == NULL);
-    mi_atomic_ptr_sign_release(&subproc->heap_main, heap);
+    mi_assert_internal(subproc->heap_main == NULL);
+    subproc->heap_main = heap;
   }
   _mi_heap_init(heap, theap_slot, subproc, exclusive_arena_id, use_qsbr);
   return heap;
@@ -240,9 +240,9 @@ static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
   if (!is_main) {  // pages for the main heap are pre-allocated in the arenas
     mi_lock(&heap->arena_pages_lock) {
       for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
-        mi_arena_pages_t* arena_pages = mi_atomic_ptr_auth_relaxed(mi_arena_pages_t, &heap->arena_pages[i]);
+        mi_arena_pages_t* arena_pages = mi_atomic_load_ptr_relaxed(mi_arena_pages_t, &heap->arena_pages[i]);
         if (arena_pages!=NULL) {
-          mi_atomic_ptr_sign_relaxed(&heap->arena_pages[i], NULL);
+          mi_atomic_store_ptr_relaxed(mi_arena_pages_t, &heap->arena_pages[i], NULL);
           _mi_free_subproc_safe(arena_pages);
         }
       }
@@ -254,15 +254,15 @@ static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
     mi_heap_stats_merge_to_main(heap);
   }
   else {
-    _mi_stats_merge_into(&mi_heap_subproc(heap)->stats,&heap->stats);
+    _mi_stats_merge_into(&heap->subproc->stats,&heap->stats);
   }
-  mi_atomic_decrement_relaxed(&mi_heap_subproc(heap)->heap_count);
-  mi_subproc_stat_decrease(mi_heap_subproc(heap), heaps, 1);
-  mi_lock_maybe(&mi_heap_subproc(heap)->heaps_lock, acquire_heaps_lock) {
-    mi_list_unlink_check(heap, prev, next, mi_heap_subproc(heap)->heaps, NULL);
+  mi_atomic_decrement_relaxed(&heap->subproc->heap_count);
+  mi_subproc_stat_decrease(heap->subproc, heaps, 1);
+  mi_lock_maybe(&heap->subproc->heaps_lock, acquire_heaps_lock) {
+    mi_list_unlink_check(heap, prev, next, heap->subproc->heaps, NULL);
     if (heap->next!=NULL) { heap->next->prev = heap->prev; }
     if (heap->prev!=NULL) { heap->prev->next = heap->next; }
-                     else { mi_heap_subproc(heap)->heaps = heap->next; }
+                     else { heap->subproc->heaps = heap->next; }
   }
 
   mi_lock_done(&heap->theaps_lock);
