@@ -617,8 +617,7 @@ bool test_pprof_concurrent_threads(void) {
 #if defined(__linux__)
 
 #define PPROF_OOM_BASE_NAME       "profile/test-pprof-oom"
-#define PPROF_OOM_MAX_BLOCKS      (20000)
-#define PPROF_OOM_BLOCK_SIZE      (64 * 1024)
+#define PPROF_OOM_MAX_BLOCKS      (60000)
 #define PPROF_OOM_RECURSION_DEPTH (120)
 #define PPROF_OOM_RECURSION_REPS  (4)
 
@@ -673,13 +672,16 @@ bool test_pprof_snapshot_oom(void) {
 
       // 1. exhaust the arenas: from now on no new pages can be allocated
       mi_option_set(mi_option_disallow_os_alloc, 1);
+      //    (with decreasing block sizes as the remaining fragments may still fit smaller pages)
       size_t block_count = 0;
-      while (block_count < PPROF_OOM_MAX_BLOCKS) {
-        void* b = mi_malloc(PPROF_OOM_BLOCK_SIZE);
-        if (b == NULL) break;
-        pprof_oom_blocks[block_count++] = b;
+      for (size_t block_size = 64 * 1024; block_size >= 1024; block_size /= 4) {
+        while (block_count < PPROF_OOM_MAX_BLOCKS) {
+          void* b = mi_malloc(block_size);
+          if (b == NULL) break;
+          pprof_oom_blocks[block_count++] = b;
+        }
       }
-      result = (block_count > 0);
+      result = (block_count > 0 && block_count < PPROF_OOM_MAX_BLOCKS);
 
       // 2. drain the profiler heap's remaining free space: these allocations
       //    still fit in its current pages, so they keep creating locations
