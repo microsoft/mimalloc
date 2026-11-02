@@ -10,8 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/profile/sample-guarded.h"
 
-mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed) {
-  if (theap==NULL || !mi_theap_is_initialized(theap) || !mi_theap_handle_is_valid(theap)) return;
+static void mi_theap_guarded_set_sample_rate_ex(mi_theap_t* theap, size_t sample_rate, size_t seed) {
   theap->guarded_sample_rate  = (sample_rate > MI_SAMPLE_RATE_MAX ? MI_SAMPLE_RATE_MAX : sample_rate);
   if (theap->guarded_sample_rate > 1) {
     if (seed == 0) {
@@ -25,22 +24,31 @@ mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t s
   _mi_theap_update_sample_rate(theap);
 }
 
-mi_decl_export void mi_theap_guarded_set_size_bound(mi_theap_t* theap, size_t min, size_t max) {
-  if (theap==NULL || !mi_theap_is_initialized(theap) || !mi_theap_handle_is_valid(theap)) return;
+static void mi_theap_guarded_set_size_bound_ex(mi_theap_t* theap, size_t min, size_t max) {
   theap->guarded_size_min = min;
   theap->guarded_size_max = (min > max ? min : max);
 }
 
+mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed) {
+  if (theap==NULL || !mi_theap_is_initialized(theap) || !mi_theap_handle_is_valid(theap)) return;
+  mi_theap_guarded_set_sample_rate_ex(theap, sample_rate, seed);
+}
+
+mi_decl_export void mi_theap_guarded_set_size_bound(mi_theap_t* theap, size_t min, size_t max) {
+  if (theap==NULL || !mi_theap_is_initialized(theap) || !mi_theap_handle_is_valid(theap)) return;
+  mi_theap_guarded_set_size_bound_ex(theap, min, max);
+}
+
 void _mi_theap_guarded_init(mi_theap_t* theap) {
   #if MI_GUARDED
-  mi_theap_guarded_set_sample_rate(theap,
+  mi_theap_guarded_set_sample_rate_ex(theap,
     (size_t)mi_option_get_clamp(mi_option_guarded_sample_rate, 0, LONG_MAX),
     (size_t)mi_option_get(mi_option_guarded_sample_seed));
-  mi_theap_guarded_set_size_bound(theap,
+  mi_theap_guarded_set_size_bound_ex(theap,
     (size_t)mi_option_get_clamp(mi_option_guarded_min, 0, LONG_MAX),
     (size_t)mi_option_get_clamp(mi_option_guarded_max, 0, LONG_MAX) );
   #else
-  mi_theap_guarded_set_sample_rate(theap,0,0);
+  mi_theap_guarded_set_sample_rate_ex(theap,0,0);
   #endif
 }
 

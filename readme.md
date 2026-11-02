@@ -492,7 +492,7 @@ Every MTE build gets the `-mte` suffixed to the library name (e.g. `mimalloc-mte
 
 Building with MTE also enables `-DMI_SECURE=CHECKED` by default (including encoded free lists).
 Since MTE catches (most) use-after-free, double-free, and heap block overflows, an MTE build gives
-similar (and stronger) guarantees as `-DMI_SECURE=ON` but with hardware support.
+very similar but stronger guarantees as `-DMI_SECURE=ON` with hardware support.
 
 - macOS: requires an Apple M5 (or later) with macOS 26+. MTE is only enabled for executables signed with
   the hardened-process entitlements (the tests are signed automatically):
@@ -530,6 +530,16 @@ similar (and stronger) guarantees as `-DMI_SECURE=ON` but with hardware support.
   and link `libmimalloc-mte.a` into the app.
 
 [MTE]: https://support.arm.com/documentation/108035/0100/How-does-MTE-work-
+
+
+## Pointer Authentication
+
+On recent arm64 hardware with _pointer authentication_ ([POC]), _mimalloc_ can be built with `-DMI_PAC=ON`.
+The PAC extension provides a secret hardware key that _mimalloc_ uses to sign root pointers. On access these
+are validated and prevent tampering. Together with MTE, the options `-DMI_MTE=ON -DMI_PAC=ON` offer very
+strong security mitigation. On an M5, the overhead is usually ~10% but can be up to 3x slower.
+
+
 
 
 ## Debug Mode
