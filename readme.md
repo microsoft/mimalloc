@@ -708,7 +708,34 @@ do to improve performance more without weakening the current mitigations too muc
 
 [PAC]: https://developer.arm.com/documentation/102433/0200/Return-oriented-programming
 
-## CHERI -- hardware assisted pointer provenance
+
+## CHERI -- hardware supported capabilities
+
+(v3 only, experimental)\
+[CHERI] extends an architecture with _capabilities_: every pointer is a 128-bit capability that carries its bounds,
+permissions, and an unforgeable validity tag (so integers cannot be turned into pointers).
+_mimalloc_ supports the pure-capability ABI (detected automatically through `__CHERI_PURE_CAPABILITY__`):
+
+- Every returned pointer is bounded to the requested size (so overflows into an adjacent block always fault),
+  and has only data permissions (no execute, seal, or virtual memory permissions).
+- Pointers passed to `mi_free` (and others) must be unsealed, have load/store permissions, and be within their bounds.
+- Internal metadata is never reachable through user capabilities, and free list links are stored as plain addresses
+  (never as capabilities) so a stale pointer cannot be used to obtain or forge a capability.
+- The default secure level is 3 (`CHECKED` plus zeroing the first 1KiB of each block on free and double-free detection),
+  as the capabilities already provide spatial safety. Use `-DMI_SECURE=OFF` to opt out.
+
+Note that CHERI does not prevent use-after-free by itself (as that requires capability revocation).
+
+CHERI is available, for example, on the Arm [Morello] research platform, and on CHERI-RISC-V cores (like the Codasip X730),
+running [CheriBSD].
+When building natively on a pure-capability CheriBSD, just use `cmake ../.. && make -j`.
+When cross-compiling with the CHERI LLVM toolchain, add the pure-capability flags
+(e.g. `-DCMAKE_C_FLAGS="-march=morello -mabi=purecap"` for Morello, or
+`-DCMAKE_C_FLAGS="-march=rv64imafdcxcheri -mabi=l64pc128d"` for CHERI-RISC-V).
+
+[CHERI]: https://www.cl.cam.ac.uk/research/security/ctsrd/cheri/
+[Morello]: https://www.arm.com/architecture/cpu/morello
+[CheriBSD]: https://www.cheribsd.org
 
 
 
