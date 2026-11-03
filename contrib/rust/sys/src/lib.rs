@@ -438,6 +438,7 @@ unsafe extern "C" {
 
     // thread-local heaps
     pub fn mi_heap_theap(heap: *mut mi_heap_t) -> *mut mi_theap_t;
+    pub fn mi_theap_heap(heap: *const mi_theap_t) -> *mut mi_heap_t;
     pub fn mi_theap_set_default(theap: *mut mi_theap_t) -> *mut mi_theap_t;
     pub safe fn mi_theap_get_default() -> *mut mi_theap_t;
     pub fn mi_theap_collect(theap: *mut mi_theap_t, force: bool);

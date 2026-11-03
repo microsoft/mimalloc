@@ -36,7 +36,7 @@ static inline mi_heap_t* mi_theap_heap_peek(const mi_theap_t* theap) {
   return mi_atomic_load_ptr_relaxed(mi_heap_t,&theap->heap);
 }
 
-static inline mi_heap_t* mi_theap_heap(const mi_theap_t* theap) {
+static inline mi_heap_t* _mi_theap_heap(const mi_theap_t* theap) {
   mi_heap_t* const heap = mi_theap_heap_peek(theap);
   mi_assert_internal(heap!=NULL);
   return heap;
@@ -48,7 +48,7 @@ static inline bool mi_theap_is_initialized(const mi_theap_t* theap) {
 
 static inline mi_subproc_t* mi_theap_subproc(const mi_theap_t* theap) {
   mi_subproc_t* const subproc = mi_atomic_load_ptr_relaxed(mi_subproc_t,&theap->subproc);
-  mi_assert_internal(!mi_theap_is_initialized(theap) || mi_theap_heap(theap)->subproc == subproc);
+  mi_assert_internal(!mi_theap_is_initialized(theap) || _mi_theap_heap(theap)->subproc == subproc);
   return subproc;
 }
 
