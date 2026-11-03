@@ -858,9 +858,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
 #endif
 
 #if defined(MI_WIN_INIT_USE_CRT_TLS)
-  #if !defined(__MINGW32__) || defined(MI_MINGW_UCRT64)  // on mingw without UCRT use the constructor attribute (in `src/prim/prim.c`)
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
-  #endif
 
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) {}
@@ -869,7 +867,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     MI_UNUSED(theap);
   }
 
-  static bool mi_module_is_dll(PVOID mod) {
+  static mi_decl_noinline bool mi_module_is_dll(PVOID mod) {
     if (mod==NULL) return false;
     PIMAGE_DOS_HEADER imageDosHeader = (PIMAGE_DOS_HEADER)mod;
     PIMAGE_NT_HEADERS imageNtHeaders = (PIMAGE_NT_HEADERS)((unsigned char*)imageDosHeader + imageDosHeader->e_lfanew);

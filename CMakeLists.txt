@@ -744,12 +744,15 @@ if(MI_TLS_RECURSE_GUARD)
   list(APPEND mi_defines MI_TLS_RECURSE_GUARD=1)
 endif()
 
-if("$ENV{MSYSTEM}" STREQUAL "UCRT64")
-  message(STATUS "Detected MSYS2 UCRT64 environment")
-  set(MI_MINGW_UCRT64 "ON")
-  list(APPEND mi_defines MI_MINGW_UCRT64=1)
-elseif("$ENV{MSYSTEM}" STREQUAL "MSYS")
-  message(STATUS "Detected MSYS2 MSYS/Cygwin environment")
+if(MINGW)
+  # mingw-w64 defines `_UCRT` in `_mingw.h` when targeting the UCRT (instead of msvcrt)
+  include(CheckSymbolExists)
+  check_symbol_exists(_UCRT "stdio.h" MI_MINGW_UCRT)
+  if(MI_MINGW_UCRT)
+    message(STATUS "Detected MinGW with UCRT")
+  endif()
+elseif(CMAKE_C_PLATFORM_ID MATCHES "^(Cygwin|MSYS)$")  # based on __CYGWIN__ or __MSYS__
+  message(STATUS "Detected Cygwin/MSYS environment")
   set(MI_CYGWIN "ON")
 endif()
 
@@ -1365,7 +1368,7 @@ if (MI_BUILD_TESTS)
     if(WIN32)
       target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE "MI_LINK_VERSION=1")  # link mi_version
       target_link_libraries(mimalloc-test-stress-dynamic PRIVATE mimalloc ${mi_libraries})  # link mi_version
-      if(MI_MINGW_UCRT64)
+      if(MINGW AND MI_MINGW_UCRT AND MI_WIN_REDIRECT AND CMAKE_HOST_WIN32)
         # mingw always links mimalloc after system libraries.
         # post-process with `minject` to make sure mimalloc is the first dll in the load order.
         add_custom_command(TARGET mimalloc-test-stress-dynamic POST_BUILD COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/bin/minject${MINJECT_SUFFIX} --postfix=${mi_libsuffix} -f -i $<TARGET_FILE:mimalloc-test-stress-dynamic>)

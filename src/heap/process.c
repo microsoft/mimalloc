@@ -667,8 +667,7 @@ mi_decl_nodiscard bool mi_is_redirected(void) mi_attr_noexcept {
   return _mi_is_redirected();
 }
 
-// Called once by the process loader from `src/prim/prim.c` before `main` is called.
-void _mi_auto_process_init(void) {
+static void mi_auto_process_init_once(void) {
   _mi_process.libc_is_initialized = true;
 
   mi_process_init();
@@ -697,6 +696,13 @@ void _mi_auto_process_init(void) {
 
   // check if we should start the pprof profiler
   _mi_pprof_profiler_init();
+}
+
+// Called by the process loader from `src/prim/prim.c` before `main` is called.
+void _mi_auto_process_init(void) {
+  mi_atomic_do_once {
+    mi_auto_process_init_once();
+  }
 }
 
 
