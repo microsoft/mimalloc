@@ -732,8 +732,8 @@ _mimalloc_ supports the pure-capability ABI:
 
 Note that CHERI does not prevent use-after-free by itself (as that requires capability revocation).
 
-CHERI is available, for example, on the Arm [Morello] research platform, and on CHERI-RISC-V cores (like the Codasip X730),
-running [CheriBSD].
+CHERI is rare; it can be found on the Arm [Morello] research platform, and on
+some CHERI RISC-V cores (like the Codasip X730), running [CheriBSD].
 When building natively on a pure-capability CheriBSD, just use `cmake ../.. && make -j`.
 When cross-compiling with the CHERI LLVM toolchain, add the pure-capability flags
 (e.g. `-DCMAKE_C_FLAGS="-march=morello -mabi=purecap"` for Morello, or
