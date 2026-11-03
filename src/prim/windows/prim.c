@@ -867,7 +867,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     MI_UNUSED(theap);
   }
 
-  static bool mi_module_is_dll(PVOID mod) {
+  static mi_decl_noinline bool mi_module_is_dll(PVOID mod) {
     if (mod==NULL) return false;
     PIMAGE_DOS_HEADER imageDosHeader = (PIMAGE_DOS_HEADER)mod;
     PIMAGE_NT_HEADERS imageNtHeaders = (PIMAGE_NT_HEADERS)((unsigned char*)imageDosHeader + imageDosHeader->e_lfanew);
