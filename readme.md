@@ -670,7 +670,8 @@ On recent arm64 hardware with _pointer authentication_ ([PAC]), _mimalloc_ can b
 The PAC extension provides secret hardware keys that _mimalloc_ uses to sign root pointers. On access these
 are validated and prevent tampering. On an M5, the overhead is usually ~10% but can be up to 2x slower.
 
-_This is most effective together with MTE, and the combined options_ `-DMI_MTE=ON -DMI_PAC=ON` _offer strong security mitigation_.
+_This is most effective together with MTE, and the combined options_ `-DMI_MTE=ON -DMI_PAC=ON` _provides strong security mitigation against
+common heap explotation techniques_.
 The performance combined is usually within 5% of just MTE.
 
 The following are signed:
@@ -699,7 +700,8 @@ PAC is part of Armv8.3-A and later, and is supported, for example, by:
 ```
 
 **Note:**
-MTE+PAC offers strong hardware security mitigation. If you are in security research, it would be nice
+MTE+PAC provide strong hardware security mitigation -- common heap explotation techniques, like linear overflow into a neighbour or metadata, use-after-free, double free, free-list poisoning, forging a page-map or theap pointer, all fault or abort. However, tag checks are probabilistic and cannot prevent all attacks.
+If you are in security research, it would be nice
 to see if we can improve the current design further. At this point, mimalloc separates all meta data from user
 space with guard pages and readonly pages (in the .bss), and MTE tagging (the free blocks etc.), and other
 entry points we validate with PAC (the free list, the default theap, the page-map etc.).
