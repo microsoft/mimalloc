@@ -379,7 +379,7 @@ static void* mi_theap_realloc_aligned_at(mi_theap_t* theap, void* p, size_t news
   return mi_theap_realloc_zero_aligned_at(theap,p,newsize,alignment,offset,false);
 }
 
-static void* mi_theap_realloc_aligned(mi_theap_t* theap, void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
+mi_decl_nodiscard void* mi_theap_realloc_aligned(mi_theap_t* theap, void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
   return mi_theap_realloc_zero_aligned(theap,p,newsize,alignment,false);
 }
 
@@ -387,7 +387,7 @@ static void* mi_theap_rezalloc_aligned_at(mi_theap_t* theap, void* p, size_t new
   return mi_theap_realloc_zero_aligned_at(theap, p, newsize, alignment, offset, true);
 }
 
-static void* mi_theap_rezalloc_aligned(mi_theap_t* theap, void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
+mi_decl_nodiscard void* mi_theap_rezalloc_aligned(mi_theap_t* theap, void* p, size_t newsize, size_t alignment) mi_attr_noexcept {
   return mi_theap_realloc_zero_aligned(theap, p, newsize, alignment, true);
 }
 
