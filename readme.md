@@ -572,6 +572,8 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
 - All internal mimalloc meta data (including the page map and static data) is surrounded by guard pages
   (so a buffer overflow/underflow exploit cannot reach into the allocator's meta data).
   All static pointers into metadata are put in a sealed read-only area (like the page map).
+  (However, free list entries are not encoded and can be
+  corrupted through a heap block buffer overflow).
 - The start address of OS allocated memory is randomized
   (if possible), and mimalloc aborts on corrupted meta data detection.
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
@@ -580,19 +582,19 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
 
 With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance impact is still small (usually less than 10%, but can be 2x slower):
 
-- (v3) All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
-  are ignored. Interior pointers are adjusted to the start of their block.
 - All free list pointers are
   [encoded](include/mimalloc/alloc/page.h#L582)
   with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption (and with [PAC](#pointer-authentication-pac),
   the encoding uses hardware keys).
-- On free, the first 1KiB of a block is zero'd.
+- All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
+  are ignored. Interior pointers are adjusted to the start of their block.
 
-With `ON`, performance is impacted a bit more (usually less than 25%, but can be upto 2x slower):
+With `ON`, performance is impacted a bit more (usually less than 25%, but can be 2x slower):
 
-- Double free's are detected (and ignored).
-- Padding is added at the end of each heap block to detect heap block overflows (detected once the block is freed).
+- Padding (8 bytes) is added at the end of each heap block to detect heap block overflows (detected once the block is freed),
+and double free's.
 - Some use-after-free accesses are detected (if these modify the first word in the block).
+- On free, the first 1KiB of a block is zero'd.
 - The mimalloc library is build as `mimalloc-secure`.
 
 The `FULL` mode also adds:
@@ -628,8 +630,7 @@ similar and often stronger guarantees as `-DMI_SECURE=ON` (and there is no need 
 - __macOS__: requires an Apple M5 (or later) with macOS 26+. MTE is only enabled for executables signed with
   the hardened-process entitlements (the tests are signed automatically):
   ```
-  > cmake -DMI_MTE=ON ../..
-  > make -j
+  > cmake -DMI_MTE=ON ../.. && make -j
   > codesign -s - -f --entitlements ../../cmake/mte-entitlements.plist myprogram
   ```
 - __Linux__: requires an arm64 kernel with MTE support (check with `grep mte /proc/cpuinfo`). The tag check mode
@@ -639,16 +640,11 @@ similar and often stronger guarantees as `-DMI_SECURE=ON` (and there is no need 
   initialized before other threads are created (which is the case when it is dynamically linked or preloaded). Otherwise
   it is a fatal error (or a warning with `-DMI_MTE=PREFER`) as those threads may not use tag checking (until they allocate),
   and system calls with tagged pointers may fail in threads that never call _mimalloc_.
-  ```
-  > cmake -DMI_MTE=ON ../..
-  > make -j
-  ```
 - __Android__: requires an MTE capable device (like the Pixel 8 or later) with MTE enabled in
   _Developer options_ / _Memory Tagging Extension_. Build with the Android NDK as:
   ```
   > cmake -DMI_MTE=ON -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
           -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 ../..
-  > make -j
   ```
 - __iOS__ (experimental, untested): requires an A19 (or later) with iOS 26+, and an app with the _Enhanced Security_
   capability that enables hardware memory tagging (the same hardened-process entitlements as on macOS).
@@ -656,7 +652,6 @@ similar and often stronger guarantees as `-DMI_SECURE=ON` (and there is no need 
   ```
   > cmake -DMI_MTE=ON -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=26.0 \
           -DMI_BUILD_SHARED=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF ../..
-  > make -j
   ```
   and link `libmimalloc-mte.a` into the app.
 
@@ -668,12 +663,11 @@ similar and often stronger guarantees as `-DMI_SECURE=ON` (and there is no need 
 (v3 only, experimental)\
 On recent arm64 hardware with _pointer authentication_ ([PAC]), _mimalloc_ can be built with `-DMI_PAC=ON`.
 The PAC extension provides secret hardware keys that _mimalloc_ uses to sign root pointers. On access these
-are validated and prevent tampering. On an M5, the overhead is usually ~10% but can be up to 2x slower.
+are validated and prevent tampering. On an M5, the overhead is usually ~10% but can be 1 to 2x slower.
 
 _This is most effective together with MTE, and the combined options_ `-DMI_MTE=ON -DMI_PAC=ON`
-_provide a strong security mitigation against common heap explotation techniques_.
+_provide a strong mitigation against common heap explotation techniques_.
 The performance combined is usually within 5% of just MTE.
-
 The following are signed:
 - The free list links, such that a heap block overflow or use-after-free write cannot forge a free list pointer
   (even when the per-page keys are known).
@@ -685,7 +679,6 @@ When building with `-DMI_PAC=ON`, _mimalloc_ requires that the CPU and OS suppor
 On other platforms (or with MSVC) you can build with `-DMI_PAC=WEAK` instead, which signs the same pointers using a
 random process key in software. This is weaker (an attacker who can read memory may recover the key) but still
 prevents forging pointers with blind overwrites.
-
 PAC is part of Armv8.3-A and later, and is supported, for example, by:
 - Apple: A12 and M1 (and later processors), on macOS and iOS.
 - Linux (5.0+) and Android: Arm Cortex-A710/X2 and later (all Armv9 cores, like the Google Tensor G3 in the Pixel 8),
@@ -694,11 +687,8 @@ PAC is part of Armv8.3-A and later, and is supported, for example, by:
 - Not supported: older cores (Armv8.2-A and earlier) like the Cortex-A76/A78/X1, AWS Graviton2, Ampere Altra,
   and the Raspberry Pi 4 and 5.
 
-```
-> cmake -DMI_PAC=ON ../..
-> make -j
-```
 
+<!--
 **Note:**
 MTE+PAC provide strong hardware security mitigation -- common heap explotation techniques, like linear overflow
 into a neighbour or metadata, use-after-free, double free, free-list poisoning, forging a page-map or theap pointer,
@@ -709,31 +699,26 @@ space with guard pages and readonly pages (in the .bss), and MTE tagging (the fr
 entry points we validate with PAC (the free list, the default theap, the page-map etc.).
 Are there any futher obvious (or not so obvious)
 things that could improve security further with a reasonable performance trade-off?
-There is also still a real [performance overhead](https://arxiv.org/abs/2601.11786) in practice even with hardware
+There is also still a real [performance overhead][MTE-overhead] in practice even with hardware
 support -- what could we do to improve performance more without weakening the current mitigations too much?
+-->
 
 [PAC]: https://developer.arm.com/documentation/102433/0200/Return-oriented-programming
 
+[MTE-overhead]: https://arxiv.org/abs/2601.11786
 
 ## Pointer Capabilities (CHERI)
 
 (v3 only, experimental)\
 [CHERI] extends an architecture with _capabilities_: every pointer is a 128-bit capability that carries its bounds,
 permissions, and an unforgeable validity tag (so integers cannot be turned into pointers).
-_mimalloc_ supports the pure-capability ABI:
+_mimalloc_ supports the pure-capability ABI so all allocated blocks are bounded, and where internal metadate
+is not reachable through user capabilities. The default secure level is 3 (`CHECKED` plus zeroing the first 1KiB of
+each block on free and double-free detection), as the capabilities already provide spatial safety.
+Note that unlike MTE, CHERI does not prevent use-after-free by itself (as that requires capability revocation).
 
-- Every returned pointer is bounded to the requested size (so overflows into an adjacent block always fault),
-  and has only data permissions (no execute, seal, or virtual memory permissions).
-- Pointers passed to `mi_free` (and others) must be unsealed, have load/store permissions, and be within their bounds.
-- Internal metadata is never reachable through user capabilities, and free list links are stored as plain addresses
-  (never as capabilities) so a stale pointer cannot be used to obtain or forge a capability.
-- The default secure level is 3 (`CHECKED` plus zeroing the first 1KiB of each block on free and double-free detection),
-  as the capabilities already provide spatial safety. Use `-DMI_SECURE=OFF` to opt out.
-
-Note that CHERI does not prevent use-after-free by itself (as that requires capability revocation).
-
-CHERI is rare; it can be found on the Arm [Morello] research platform, and on
-some CHERI RISC-V cores (like the Codasip X730), running [CheriBSD].
+CHERI can be found on the Arm [Morello] research platform, and on
+some CHERI RISC-V cores (like the Codasip X730) running [CheriBSD].
 When building natively on a pure-capability CheriBSD, just use `cmake ../.. && make -j`.
 When cross-compiling with the CHERI LLVM toolchain, add the pure-capability flags
 (e.g. `-DCMAKE_C_FLAGS="-march=morello -mabi=purecap"` for Morello, or
@@ -805,7 +790,7 @@ For run-time systems and compilers (like Koka, Lean, Rust etc.), we can do sligh
 This is `ON` by default when building a debug version of mimalloc.
 Guarded mode enables placing OS guard pages behind certain object allocations to catch buffer overflows as they occur
 (and of course, you never need this if you have
-MTE enabled hardware since an MTE catches all overflows
+MTE enabled hardware since [MTE](#memory-tagging-mte) catches all these overflows
 much more efficiently).
 
 This can be invaluable to catch buffer-overflow bugs in large programs. However, it also means that any object
