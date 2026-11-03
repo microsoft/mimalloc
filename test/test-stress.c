@@ -285,7 +285,7 @@ static void test_stress(mi_subproc_id_t subproc) {
   #ifdef MI_USE_HEAPS
   mi_heap_t* prev_heaps[MI_USE_HEAPS] = { NULL };
   #endif
-  uintptr_t r = rand();
+  size_t r = rand();
   for (int n = 0; n < ITER; n++) {
 
     #ifdef MI_USE_HEAPS
@@ -387,7 +387,7 @@ static void test_stress_subprocs(void) {
 
 #if TEST_LEAK
 static void leak(intptr_t tid) {
-  uintptr_t r = rand();
+  size_t r = rand();
   void* p = alloc_items(1 /*pick(&r)%128*/, &r);
   if (chance(50, &r)) {
     intptr_t i = (pick(&r) % TRANSFERS);
