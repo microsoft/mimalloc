@@ -102,28 +102,50 @@ typedef struct mi_process_sealed_s {
 } mi_process_sealed_t;
 
 
-// In secure mode, guard static process data such that guard pages fit in secure mode (twice the maximal OS page size)
-// the front guard area also has two read-only pages (preceded by a guard page) that contain
-// `mi_process_sealed_once_t` and `mi_process_sealed_t` respectively.
-#if MI_SECURE && MI_OS_HAS_GUARD_PAGES && !MI_SECURE_NO_STATIC_GUARD
+// On CHERI we cannot modify access to the .bss section
+#if MI_CHERI && !defined(MI_SECURE_NO_STATIC_SEALED)
+#define MI_SECURE_NO_STATIC_SEALED (1)
+#endif
+#if MI_CHERI && !defined(MI_SECURE_NO_STATIC_GUARD)
+#define MI_SECURE_NO_STATIC_GUARD (1)
+#endif
+
+// In secure mode, the front area of the static process data ends with two read-only pages that contain
+// `mi_process_sealed_once_t` and `mi_process_sealed_t` respectively. These are preceded by a guard page, and the
+// process data is followed by a guard page (with guard areas of twice the maximal OS page size to fit them).
+// With `MI_SECURE_NO_STATIC_GUARD` only the guard pages are omitted (as some garbage collectors scan the static data),
+// but the sealed pages are still read-only.
+#if MI_SECURE && MI_OS_HAS_GUARD_PAGES && !MI_SECURE_NO_STATIC_SEALED
+  #define MI_SECURE_STATIC_SEALED     (1)
+#else
+  #define MI_SECURE_STATIC_SEALED     (0)
+#endif
+#if MI_SECURE_STATIC_SEALED && !MI_SECURE_NO_STATIC_GUARD
   #define MI_SECURE_STATIC_GUARD    (2*MI_OS_PROBABLE_PAGE_SIZE)  // checked at runtime
-  #define MI_SECURE_SEALED_PAGE     (1)
-  #define MI_SECURE_SEALED_GUARD    (MI_SECURE_STATIC_GUARD + 2*MI_OS_PROBABLE_PAGE_SIZE)
 #else
   #define MI_SECURE_STATIC_GUARD    (MI_CACHE_LINE_SIZE)          // no guard pages; just a cache line
-  #define MI_SECURE_SEALED_PAGE     (0)
-  #define MI_SECURE_SEALED_GUARD    (MI_SECURE_STATIC_GUARD)
 #endif
 
 // With sealed pages, we page align the process data (if the toolchain and loader support it) such that the
 // address of the sealed pages are link-time constants and `mi_process_get_sealed_once` is fast (as used on the free path).
 // (Windows toolchains cannot align beyond 8 KiB, and older ELF loaders may not honor alignments beyond the OS page size)
-#if MI_SECURE_SEALED_PAGE && defined(__GNUC__) && !defined(_WIN32) && (MI_OS_PROBABLE_PAGE_SIZE <= 16*MI_KiB)
+#if MI_SECURE_STATIC_SEALED && defined(__GNUC__) && !defined(_WIN32) && (MI_OS_PROBABLE_PAGE_SIZE <= 16*MI_KiB)
   #define MI_SECURE_SEALED_ALIGNED  (1)
   #define mi_decl_process_align     mi_decl_align(MI_OS_PROBABLE_PAGE_SIZE)
 #else
   #define MI_SECURE_SEALED_ALIGNED  (0)
   #define mi_decl_process_align     mi_decl_cache_align
+#endif
+
+// The size of the front area (that contains the sealed pages in secure mode)
+#if !MI_SECURE_STATIC_SEALED
+  #define MI_SECURE_SEALED_GUARD    (MI_SECURE_STATIC_GUARD)
+#elif !MI_SECURE_NO_STATIC_GUARD
+  #define MI_SECURE_SEALED_GUARD    (MI_SECURE_STATIC_GUARD + 2*MI_OS_PROBABLE_PAGE_SIZE)
+#elif MI_SECURE_SEALED_ALIGNED
+  #define MI_SECURE_SEALED_GUARD    (2*MI_OS_PROBABLE_PAGE_SIZE)
+#else
+  #define MI_SECURE_SEALED_GUARD    (3*MI_OS_PROBABLE_PAGE_SIZE)  // with room to align the sealed pages
 #endif
 
 #if MI_SECURE_SEALED_ALIGNED && (MI_SECURE_SEALED_GUARD % MI_OS_PROBABLE_PAGE_SIZE) != 0
@@ -139,7 +161,7 @@ typedef struct mi_process_sealed_s {
 // in secure mode it is surrounded by guard pages (see `heap/process.c:mi_process_guard_init`)
 typedef struct mi_process_s {
   uint8_t             guard_front[MI_SECURE_SEALED_GUARD];  // in secure mode, contains the sealed pages (see `mi_process_get_sealed_once`)
-  #if !MI_SECURE_SEALED_PAGE
+  #if !MI_SECURE_STATIC_SEALED
   mi_process_sealed_once_t sealed_once;         // sealed data (unprotected)
   mi_process_sealed_t sealed;
   #endif
@@ -177,7 +199,7 @@ extern mi_decl_hidden mi_decl_process_align mi_process_t _mi_process;
 static inline mi_process_sealed_once_t* mi_process_get_sealed_once(void) {
   #if MI_SECURE_SEALED_ALIGNED
   return (mi_process_sealed_once_t*)((uint8_t*)&_mi_process + MI_SECURE_SEALED_GUARD - 2*MI_OS_PROBABLE_PAGE_SIZE);
-  #elif MI_SECURE_SEALED_PAGE
+  #elif MI_SECURE_STATIC_SEALED
   return (mi_process_sealed_once_t*)mi_align_down_ptr((uint8_t*)&_mi_process + MI_SECURE_SEALED_GUARD - 2*MI_OS_PROBABLE_PAGE_SIZE, MI_OS_PROBABLE_PAGE_SIZE);
   #else
   return &_mi_process.sealed_once;
@@ -187,7 +209,7 @@ static inline mi_process_sealed_once_t* mi_process_get_sealed_once(void) {
 // Get the sealed process data (for reading only).
 // In secure mode, this is the OS page just after the sealed-once page (and just before the page where the process data starts).
 static inline mi_process_sealed_t* mi_process_get_sealed(void) {
-  #if MI_SECURE_SEALED_PAGE
+  #if MI_SECURE_STATIC_SEALED
   return (mi_process_sealed_t*)((uint8_t*)mi_process_get_sealed_once() + MI_OS_PROBABLE_PAGE_SIZE);
   #else
   return &_mi_process.sealed;
