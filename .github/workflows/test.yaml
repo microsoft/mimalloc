@@ -15,7 +15,7 @@ permissions:
   contents: read
 jobs:
   build:
-    name: Test
+    name: ${{ format('Test ({0})', matrix.label || join(matrix.*, ', ')) }}
     runs-on: ${{ matrix.os }}
     env:
       MIMALLOC_SHOW_ERRORS: 1
@@ -37,18 +37,25 @@ jobs:
             tests: tsan
           - os: ubuntu-latest
             tests: freebsd-x64
+            label: qemu, freebsd-x64
           - os: ubuntu-latest
             tests: alpine-x64
+            label: qemu, alpine-x64
           - os: ubuntu-latest
             tests: alpine-riscv64   # qemu
+            label: qemu, alpine-riscv64
           - os: ubuntu-latest
             tests: alpine-arm32     # qemu
+            label: qemu, alpine-arm32
           - os: windows-latest
             tests: mingw-ucrt64
+            label: mingw-ucrt64
           - os: windows-latest
             tests: mingw-mingw64    # gcc + msvcrt
+            label: mingw-mingw64
           - os: windows-latest
             tests: mingw-clang64    # clang + ucrt
+            label: mingw-clang64
           - os: windows-latest      # clang-cl and clang
             tests: clang
           - os: windows-11-arm      # clang-cl and clang
@@ -57,10 +64,13 @@ jobs:
             tests: cheri-sim        # simulated CHERI
           - os: ubuntu-latest
             tests: emscripten       # wasm32 on node
+            label: emscripten
           - os: ubuntu-latest
             tests: linux-arm64-mte  # qemu
+            label: qemu, linux-arm64-mte
           - os: ubuntu-latest
             tests: android-arm64    # qemu
+            label: qemu, android-arm64
           # - os: ubuntu-latest       # slow, so disable by default
           #   tests: freebsd-arm64    # qemu
 
