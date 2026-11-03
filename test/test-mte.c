@@ -24,6 +24,10 @@ int main(void) {
 #else
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/resource.h>
+#if defined(__linux__)
+#include <sys/prctl.h>
+#endif
 
 static size_t ptr_tag(const void* p) {
   return (((uintptr_t)p >> 56) & 0x0F);
@@ -35,6 +39,12 @@ static bool faults(void (*fun)(void)) {
   pid_t pid = fork();
   if (pid < 0) return false;
   if (pid == 0) {
+    // the fault is expected, so avoid an (expensive) core dump (QEMU only checks the rlimit)
+    const struct rlimit nocore = { 0, 0 };
+    setrlimit(RLIMIT_CORE, &nocore);
+    #if defined(__linux__)
+    prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
+    #endif
     fun();
     _exit(0);  // the syscall also delivers a pending asynchronous tag fault
   }
