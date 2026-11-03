@@ -584,7 +584,7 @@ With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance impa
   are ignored. Interior pointers are adjusted to the start of their block.
 - All free list pointers are
   [encoded](include/mimalloc/alloc/page.h#L582)
-  with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption (and with [PAC],
+  with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption (and with [PAC](#pointer-authentication-pac),
   the encoding uses hardware keys).
 - On free, the first 1KiB of a block is zero'd.
 
@@ -625,14 +625,14 @@ Building with MTE also enables `-DMI_SECURE=CHECKED` by default (including encod
 Since MTE catches (most) use-after-free, double-free, and heap block overflows, an MTE build gives
 similar and often stronger guarantees as `-DMI_SECURE=ON` (and there is no need to use them together).
 
-- macOS: requires an Apple M5 (or later) with macOS 26+. MTE is only enabled for executables signed with
+- __macOS__: requires an Apple M5 (or later) with macOS 26+. MTE is only enabled for executables signed with
   the hardened-process entitlements (the tests are signed automatically):
   ```
   > cmake -DMI_MTE=ON ../..
   > make -j
   > codesign -s - -f --entitlements ../../cmake/mte-entitlements.plist myprogram
   ```
-- Linux: requires an arm64 kernel with MTE support (check with `grep mte /proc/cpuinfo`). The tag check mode
+- __Linux__: requires an arm64 kernel with MTE support (check with `grep mte /proc/cpuinfo`). The tag check mode
   can be set with `MIMALLOC_MTE=sync` (default), `async`, or `preferred`. Without MTE hardware you can still
   test using QEMU emulation (e.g. `QEMU_CPU=max qemu-aarch64 ./myprogram`).
   On Linux, tag checking is enabled per thread and inherited by threads created afterwards; _mimalloc_ should therefore be
@@ -643,14 +643,14 @@ similar and often stronger guarantees as `-DMI_SECURE=ON` (and there is no need 
   > cmake -DMI_MTE=ON ../..
   > make -j
   ```
-- Android: requires an MTE capable device (like the Pixel 8 or later) with MTE enabled in
+- __Android__: requires an MTE capable device (like the Pixel 8 or later) with MTE enabled in
   _Developer options_ / _Memory Tagging Extension_. Build with the Android NDK as:
   ```
   > cmake -DMI_MTE=ON -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
           -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 ../..
   > make -j
   ```
-- iOS (experimental, untested): requires an A19 (or later) with iOS 26+, and an app with the _Enhanced Security_
+- __iOS__ (experimental, untested): requires an A19 (or later) with iOS 26+, and an app with the _Enhanced Security_
   capability that enables hardware memory tagging (the same hardened-process entitlements as on macOS).
   Build a static library with the iOS SDK as:
   ```
@@ -670,7 +670,7 @@ On recent arm64 hardware with _pointer authentication_ ([PAC]), _mimalloc_ can b
 The PAC extension provides secret hardware keys that _mimalloc_ uses to sign root pointers. On access these
 are validated and prevent tampering. On an M5, the overhead is usually ~10% but can be up to 2x slower.
 
-_This is most effective together with MTE, and the combined options `-DMI_MTE=ON -DMI_PAC=ON` offer very strong security mitigation_.
+_This is most effective together with MTE, and the combined options_ `-DMI_MTE=ON -DMI_PAC=ON` _offer strong security mitigation_.
 The performance combined is usually within 5% of just MTE.
 
 The following are signed:
