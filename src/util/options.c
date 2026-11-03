@@ -670,27 +670,23 @@ mi_decl_noreturn mi_decl_cold void _mi_fatal_error(const char* fmt, ...) {
   abort();
 }
 
-mi_decl_noinline mi_block_t* _mi_block_next_is_corrupted(const mi_page_t* page, const mi_block_t* block, mi_encoded_t x) {
+mi_decl_noinline mi_block_t* _mi_error_block_next_is_corrupted(const mi_page_t* page, const mi_block_t* block, mi_encoded_t x) {
   _mi_error_message(EFAULT, "corrupted free list entry of size %zub at %p: value 0x%zx\n", mi_page_block_size(page), block, (size_t)x);
   return NULL;
 }
 
-mi_decl_noinline mi_decl_cold void* _mi_ptr_auth_failed(mi_ptr_signed_t x, mi_addr_t salt) {
+mi_decl_noinline void* _mi_error_ptr_auth_failed(mi_ptr_signed_t x, mi_addr_t salt) {
   if (x != 0) {
     _mi_error_message(EFAULT, "pointer authentication failed at 0x%zx: value 0x%zx\n", (size_t)salt, (size_t)x);
   }
-  void* p = NULL;
-  #if defined(__GNUC__)
-  __asm__ ("" : "+r"(p));  // hide that the result is always NULL so calls are compiled as tail calls (and avoid a stack frame at the call site)
-  #endif
-  return p;
+  return NULL;
 }
 
-mi_decl_noinline mi_decl_noreturn mi_decl_cold void _mi_list_corrupted(const void* node) {
+mi_decl_noinline mi_decl_noreturn void _mi_error_list_corrupted(const void* node) {
   _mi_fatal_error("corrupted list links detected at %p\n", node);
 }
 
-mi_decl_noinline mi_decl_cold void _mi_ptr_pac_unaligned(const void* p) {
+mi_decl_noinline void _mi_error_ptr_pac_unaligned(const void* p) {
   _mi_fatal_error("internal error: signed pointers must be aligned with memory tagging (%p)\n", p);
 }
 

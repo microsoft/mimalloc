@@ -776,7 +776,7 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
   bool valid;
   mi_block_t* const next = mi_block_decode(page, block, x, &valid);
   if mi_unlikely(!valid) {
-    return _mi_block_next_is_corrupted(page, block, x); // returns NULL
+    return _mi_error_block_next_is_corrupted(page, block, x); // returns NULL
   }
   return next;
 }

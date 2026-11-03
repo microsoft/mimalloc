@@ -188,7 +188,7 @@ extern mi_decl_restrict void* _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t*
 // truncate the free list after that block, and allocate again.
 static mi_decl_noinline mi_decl_cold void* _mi_page_malloc_corrupted(mi_theap_t* theap, mi_page_t* page, size_t size, bool zero) mi_attr_noexcept {
   mi_block_t* const block = page->free;
-  _mi_block_next_is_corrupted(page, block, mi_block_link(block));
+  _mi_error_block_next_is_corrupted(page, block, mi_block_link(block));
   mi_block_set_next(page, block, NULL);
   return _mi_page_malloc_zero(theap, page, size, zero);
 }

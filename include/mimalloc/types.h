@@ -977,7 +977,7 @@ typedef struct mi_arena_s {
   A corrupted list is a fatal error.
 ----------------------------------------------------------- */
 
-mi_decl_noreturn mi_decl_cold void _mi_list_corrupted(const void* node);
+mi_decl_noreturn void _mi_error_list_corrupted(const void* node);
 
 static inline bool mi_list_link_is(const void* link, const void* node) {
   return (mi_addr(link) == mi_addr(node));  // ignore memory tags
@@ -988,7 +988,7 @@ static inline bool mi_list_link_is(const void* link, const void* node) {
   do { \
     if mi_unlikely(!((node)->prev==NULL ? mi_list_link_is(first,node) : mi_list_link_is((node)->prev->next,node)) || \
                    !((node)->next==NULL ? ((last)==NULL || mi_list_link_is(last,node)) : mi_list_link_is((node)->next->prev,node))) \
-    { _mi_list_corrupted(node); } \
+    { _mi_error_list_corrupted(node); } \
   } while(0)
 #else
 #define mi_list_unlink_check(node,prev,next,first,last)  do { } while(0)

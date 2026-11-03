@@ -42,17 +42,17 @@ The free list links are always encoded with a MAC using per-page keys (see `allo
 by `mi_keyed_mac`. With `MI_PAC=1` the MAC also uses the process key `K` such that the free list cannot
 be forged from just reading the page keys. With `MI_PAC=2` the MAC is `pacga(v, b ^ keys[0])` instead,
 and the page offset is stored unmasked (as the page keys need not be secret).
-Authentication failures report `EFAULT` and return `NULL` (see `_mi_ptr_auth_failed`).
+Authentication failures report `EFAULT` and return `NULL` (see `_mi_error_ptr_auth_failed`).
 ----------------------------------------------------------------------------- */
 
-mi_decl_cold void* _mi_ptr_auth_failed(mi_ptr_signed_t x, mi_addr_t salt);  // slow path: returns NULL for x==0, and reports EFAULT otherwise
-mi_decl_cold void  _mi_ptr_pac_unaligned(const void* p);                    // fatal error for an unaligned pointer with memory tagging
+void* _mi_error_ptr_auth_failed(mi_ptr_signed_t x, mi_addr_t salt);               // slow path: returns NULL for x==0, and reports EFAULT otherwise
+void  _mi_error_ptr_pac_unaligned(const void* p);                                 // fatal error for an unaligned pointer with memory tagging
 
 // Sign a pointer `p` to be stored at address `salt`
 static inline mi_ptr_signed_t mi_ptr_sign(const void* p, mi_addr_t salt);
 
 // Authenticate a value `x` stored at address `salt`; `valid` is false if `x` is 0 or not validly signed
-// (in which case `_mi_ptr_auth_failed` should be called)
+// (in which case `_mi_error_ptr_auth_failed` should be called)
 static inline void* mi_ptr_auth_valid(mi_ptr_signed_t x, mi_addr_t salt, bool* valid);
 
 // Authenticate a value `x` stored at address `salt`; returns NULL (and reports `EFAULT`) if `x` is not validly signed
@@ -82,7 +82,7 @@ static inline mi_addr_t mi_keyed_mac(mi_addr_t value, mi_addr_t salt);
 static inline mi_addr_t mi_ptr_pac_untag(const void* p) {
   #if MI_MTE
   const mi_addr_t u = (mi_addr_t)(uintptr_t)p;
-  if mi_unlikely((u % MI_MEMTAG_UNIT_SIZE) != 0) { _mi_ptr_pac_unaligned(p); }
+  if mi_unlikely((u % MI_MEMTAG_UNIT_SIZE) != 0) { _mi_error_ptr_pac_unaligned(p); }
   return ((u & MI_PTR_ADDR_MASK) | ((u & MI_PTR_MEMTAG_MASK) >> MI_PTR_MEMTAG_SHIFT));
   #else
   return (mi_addr_t)(uintptr_t)p;
@@ -194,14 +194,14 @@ static inline mi_addr_t mi_keyed_mac(mi_addr_t value, mi_addr_t salt) {
 static inline void* mi_ptr_auth(mi_ptr_signed_t x, mi_addr_t salt) {
   bool valid;
   void* const p = mi_ptr_auth_valid(x, salt, &valid);
-  if mi_unlikely(!valid) return _mi_ptr_auth_failed(x, salt);
+  if mi_unlikely(!valid) return _mi_error_ptr_auth_failed(x, salt);
   return p;
 }
 
 static inline mi_addr_t mi_addr_auth(mi_ptr_signed_t x, mi_addr_t salt) {
   bool valid;
   const mi_addr_t q = mi_addr_auth_valid(x, salt, &valid);
-  if mi_unlikely(!valid) return mi_addr(_mi_ptr_auth_failed(x, salt));
+  if mi_unlikely(!valid) return mi_addr(_mi_error_ptr_auth_failed(x, salt));
   return q;
 }
 
