@@ -15,7 +15,7 @@ permissions:
   contents: read
 jobs:
   build:
-    name: ${{ format('Test ({0})', matrix.label || join(matrix.*, ', ')) }}
+    name: ${{ format('{0})', matrix.label || join(matrix.*, ', ') }}
     runs-on: ${{ matrix.os }}
     env:
       MIMALLOC_SHOW_ERRORS: 1
