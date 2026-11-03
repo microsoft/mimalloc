@@ -1332,7 +1332,7 @@ static void mi_pb_addr_map_done(mi_pb_addr_map_t* map) {
 // Returns the existing location id for `addr`, or assigns it `next_id` and
 // returns that (setting `*is_new` to true) if this is the first time `addr`
 // is seen.
-static uint64_t mi_pb_addr_map_find_or_insert(mi_pb_addr_map_t* map, uintptr_t addr, uint64_t next_id, bool* is_new) {
+static uint64_t mi_pb_addr_map_find_or_insert(mi_pb_addr_map_t* map, mi_addr_t addr, uint64_t next_id, bool* is_new) {
   if (map->failed || map->buckets == NULL) { map->failed = true; *is_new = false; return 0; }
   const size_t idx = (size_t)(addr ^ (addr >> 16)) % map->bucket_count;
   for (mi_pb_addr_entry_t* e = map->buckets[idx]; e != NULL; e = e->next) {
@@ -1425,7 +1425,7 @@ static bool mi_pprof_build_proto(mi_pprof_profiler_t* prof, mi_pb_buf_t* profile
       const size_t frame_count = (loc->callstack.count > MI_MAX_BACKTRACE_DEPTH ? MI_MAX_BACKTRACE_DEPTH : loc->callstack.count);
       uint64_t location_ids[MI_MAX_BACKTRACE_DEPTH];
       for (size_t j = 0; j < frame_count; j++) {
-        const uintptr_t addr = (uintptr_t)loc->callstack.frames[j];
+        const mi_addr_t addr = mi_addr(loc->callstack.frames[j]);
         bool is_new = false;
         const uint64_t id = mi_pb_addr_map_find_or_insert(addr_map, addr, next_location_id, &is_new);
         if (addr_map->failed) return false;

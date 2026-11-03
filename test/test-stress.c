@@ -126,19 +126,19 @@ static mi_heap_t* current_heap;
 // static volatile void* transfer[TRANSFERS];
 
 
-#if (UINTPTR_MAX != UINT32_MAX)
-const uintptr_t cookie = 0xbf58476d1ce4e5b9UL;
+#if (SIZE_MAX > UINT32_MAX)
+const size_t cookie = 0xbf58476d1ce4e5b9UL;
 #else
-const uintptr_t cookie = 0x1ce4e5b9UL;
+const size_t cookie = 0x1ce4e5b9UL;
 #endif
 
 static void* atomic_exchange_ptr(volatile void** p, void* newval);
 
-typedef uintptr_t* random_t;
+typedef size_t* random_t;
 
-static uintptr_t pick(random_t r) {
-  uintptr_t x = *r;
-#if (UINTPTR_MAX > UINT32_MAX)
+static size_t pick(random_t r) {
+  size_t x = *r;
+#if (SIZE_MAX > UINT32_MAX)
   // by Sebastiano Vigna, see: <http://xoshiro.di.unimi.it/splitmix64.c>
   x ^= x >> 30;
   x *= 0xbf58476d1ce4e5b9UL;
@@ -168,11 +168,11 @@ static void* alloc_items(size_t items, random_t r) {
     else items *= 100;                                             // 1% large objects;
   }
   if (items>=32 && items<=40) items*=2;              // pthreads uses 320b allocations (this shows that more clearly in the stats)
-  if (use_one_size > 0) items = (use_one_size / sizeof(uintptr_t));
+  if (use_one_size > 0) items = (use_one_size / sizeof(size_t));
   if (items==0) items = 1;
-  uintptr_t* p = (uintptr_t*)custom_calloc(items,sizeof(uintptr_t));
+  size_t* p = (size_t*)custom_calloc(items,sizeof(size_t));
   if (p != NULL) {
-    for (uintptr_t i = 0; i < items; i++) {
+    for (size_t i = 0; i < items; i++) {
       assert(p[i] == 0);
       p[i] = (items - i) ^ cookie;
     }
@@ -182,9 +182,9 @@ static void* alloc_items(size_t items, random_t r) {
 
 static void free_items(void* p) {
   if (p != NULL) {
-    uintptr_t* q = (uintptr_t*)p;
-    uintptr_t items = (q[0] ^ cookie);
-    for (uintptr_t i = 0; i < items; i++) {
+    size_t* q = (size_t*)p;
+    size_t items = (q[0] ^ cookie);
+    for (size_t i = 0; i < items; i++) {
       if ((q[i] ^ cookie) != items - i) {
         fprintf(stderr, "memory corruption at block %p at %zu\n", p, i);
         abort();
