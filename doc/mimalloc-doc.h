@@ -1056,8 +1056,9 @@ typedef void (mi_error_fun)(int err, void* arg);
 /// The \a errfun function is called on an error in mimalloc after emitting
 /// an error message (through the output function). It as always legal to just
 /// return from the \a errfun function in which case allocation functions generally
-/// return \a NULL or ignore the condition. The default function only calls abort()
-/// when compiled in secure mode with an \a EFAULT error. The possible error
+/// return \a NULL or ignore the condition. An \a EFAULT error message is always shown,
+/// and when compiled in secure mode, mimalloc always calls abort() after an \a EFAULT error
+/// (even if the error function returns). The possible error
 /// codes are:
 /// * \a EAGAIN: Double free was detected (only in debug and secure mode).
 /// * \a EFAULT: Corrupted free list or meta-data was detected (only in debug and secure mode).

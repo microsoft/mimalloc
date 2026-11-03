@@ -928,7 +928,7 @@ typedef struct mi_arena_s {
 
 /* -----------------------------------------------------------
   Error codes passed to `_mi_error_message`
-  All are recoverable but EFAULT is a serious error and aborts by default in secure mode.
+  All are recoverable but EFAULT is a serious error that is always shown, and aborts in secure mode.
   For portability define undefined error codes using common Unix codes:
   <https://www-numi.fnal.gov/offline_software/srt_public_context/WebDocs/Errors/unix_system_errors.html>
 ----------------------------------------------------------- */

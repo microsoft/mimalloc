@@ -596,11 +596,15 @@ void _mi_warning_message(const char* fmt, ...) {
 }
 
 
+// flush delayed output (if not yet initialized) so a serious error message is not lost
+static void mi_out_buf_flush_now(void) {
+  if (mi_atomic_load_ptr_acquire(void,&mi_process_get_sealed()->out_default) == NULL) { mi_out_buf_flush(&mi_out_stderr, true, NULL); }
+}
+
 #if MI_DEBUG
 mi_decl_noreturn mi_decl_cold void _mi_assert_fail(const char* assertion, const char* fname, unsigned line, const char* func ) mi_attr_noexcept {
   _mi_fprintf(NULL, NULL, "mimalloc: assertion failed: at \"%s\":%u, %s\n  assertion: \"%s\"\n", fname, line, (func==NULL?"":func), assertion);
-  // flush delayed output (if not yet initialized) so the message is not lost
-  if (mi_atomic_load_ptr_acquire(void,&mi_process_get_sealed()->out_default) == NULL) { mi_out_buf_flush(&mi_out_stderr, true, NULL); }
+  mi_out_buf_flush_now();
   abort();
 }
 #endif
@@ -617,11 +621,6 @@ static void mi_error_default(int err) {
       #ifdef _MSC_VER
       __debugbreak();
       #endif
-      abort();
-    }
-  #endif
-  #if MI_SECURE
-    if (err==EFAULT) {  // abort on serious errors in secure mode (corrupted meta-data)
       abort();
     }
   #endif
@@ -642,12 +641,15 @@ void mi_register_error(mi_error_fun* fun, void* arg) {
   _mi_process_seal();
 }
 
-void _mi_error_message(int err, const char* fmt, ...) {
-  // show detailed error message
-  va_list args;
-  va_start(args, fmt);
-  mi_show_error_message(fmt, args);
-  va_end(args);
+static void mi_error_message_va(int err, const char* prefix, const char* fmt, va_list args) {
+  // show detailed error message; serious errors (EFAULT) are always shown (also before the C runtime is initialized)
+  if (err==EFAULT) {
+    mi_vfprintf_thread(NULL, NULL, prefix, fmt, args);
+    mi_out_buf_flush_now();
+  }
+  else {
+    mi_show_error_message(fmt, args);
+  }
   // and call the error handler which may abort (or return normally, potentially setting errno)
   mi_process_sealed_t* const sealed = mi_process_get_sealed();
   mi_error_fun* const handler = (mi_error_fun*)mi_atomic_load_ptr_acquire(void,&sealed->error_handler);
@@ -657,16 +659,26 @@ void _mi_error_message(int err, const char* fmt, ...) {
   else {
     mi_error_default(err);
   }
+  #if MI_SECURE
+  if (err==EFAULT) {  // in secure mode always abort on serious errors (corrupted meta-data), even if the handler returns
+    abort();
+  }
+  #endif
 }
 
-// Unrecoverable error: always show the message (also before the C runtime is initialized) and abort.
+void _mi_error_message(int err, const char* fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  mi_error_message_va(err, "mimalloc: error: ", fmt, args);
+  va_end(args);
+}
+
+// Unrecoverable error: report as `EFAULT` and always abort.
 mi_decl_noreturn mi_decl_cold void _mi_fatal_error(const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  mi_vfprintf_thread(NULL, NULL, "mimalloc: fatal error: ", fmt, args);
+  mi_error_message_va(EFAULT, "mimalloc: fatal error: ", fmt, args);
   va_end(args);
-  // flush delayed output (if not yet initialized) so the message is not lost
-  if (mi_atomic_load_ptr_acquire(void,&mi_process_get_sealed()->out_default) == NULL) { mi_out_buf_flush(&mi_out_stderr, true, NULL); }
   abort();
 }
 

@@ -853,12 +853,37 @@ static bool test_page_map_tamper(void) {
 }
 #endif
 
+static bool test_collect_self_cycle(void)      { return test_free_list_cycle(true, true); }
+static bool test_collect_two_block_cycle(void) { return test_free_list_cycle(true, false); }
+
+// In secure mode an `EFAULT` error always aborts (even if the error handler returns),
+// so then check that the test aborts in a child process instead.
+#if MI_SECURE && !defined(_WIN32)
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+static bool test_efault(bool (*test)(void)) {
+  #if !MI_SECURE
+  return test();
+  #elif defined(_WIN32)
+  MI_UNUSED(test);
+  return true;  // skip
+  #else
+  fflush(NULL);
+  const pid_t pid = fork();
+  if (pid == 0) { test(); _exit(0); }
+  int status = 0;
+  return (pid > 0 && waitpid(pid, &status, 0) == pid && WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+  #endif
+}
+
 int main(void) {
   #if MI_PAC
-  CHECK("page-map-tamper", test_page_map_tamper());
+  CHECK("page-map-tamper", test_efault(&test_page_map_tamper));
   #endif
-  CHECK("collect-self-cycle", test_free_list_cycle(true, true));
-  CHECK("collect-two-block-cycle", test_free_list_cycle(true, false));
+  CHECK("collect-self-cycle", test_efault(&test_collect_self_cycle));
+  CHECK("collect-two-block-cycle", test_efault(&test_collect_two_block_cycle));
   CHECK("visit-self-cycle", test_free_list_cycle(false, true));
   CHECK("visit-two-block-cycle", test_free_list_cycle(false, false));
   #if MI_FREE_IS_CHECKED
