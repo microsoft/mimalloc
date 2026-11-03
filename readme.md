@@ -583,8 +583,10 @@ With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance impa
 - (v3) All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
   are ignored. Interior pointers are adjusted to the start of their block.
 - All free list pointers are
-  [encoded](include/mimalloc/alloc/page.h#L570)
-  with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption.
+  [encoded](include/mimalloc/alloc/page.h#L582)
+  with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption (and with [PAC],
+  the encoding uses hardware keys).
+- On free, the first 1KiB of a block is zero'd.
 
 With `ON`, performance is impacted a bit more (usually less than 25%, but can be upto 2x slower):
 
@@ -703,7 +705,7 @@ space with guard pages and readonly pages (in the .bss), and MTE tagging (the fr
 entry points we validate with PAC (the free list, the default theap, the page-map etc.).
 Are there any futher obvious (or not so obvious)
 things that could improve security further with a reasonable performance trade-off?
-There is also still a real performance overhead in practice even with hardware support -- what could we
+There is also still a real [performance overhead](https://arxiv.org/abs/2601.11786) in practice even with hardware support -- what could we
 do to improve performance more without weakening the current mitigations too much?
 
 [PAC]: https://developer.arm.com/documentation/102433/0200/Return-oriented-programming
@@ -714,7 +716,7 @@ do to improve performance more without weakening the current mitigations too muc
 (v3 only, experimental)\
 [CHERI] extends an architecture with _capabilities_: every pointer is a 128-bit capability that carries its bounds,
 permissions, and an unforgeable validity tag (so integers cannot be turned into pointers).
-_mimalloc_ supports the pure-capability ABI (detected automatically through `__CHERI_PURE_CAPABILITY__`):
+_mimalloc_ supports the pure-capability ABI:
 
 - Every returned pointer is bounded to the requested size (so overflows into an adjacent block always fault),
   and has only data permissions (no execute, seal, or virtual memory permissions).
@@ -732,6 +734,10 @@ When building natively on a pure-capability CheriBSD, just use `cmake ../.. && m
 When cross-compiling with the CHERI LLVM toolchain, add the pure-capability flags
 (e.g. `-DCMAKE_C_FLAGS="-march=morello -mabi=purecap"` for Morello, or
 `-DCMAKE_C_FLAGS="-march=rv64imafdcxcheri -mabi=l64pc128d"` for CHERI-RISC-V).
+
+We would like to thank ARM and
+[Ian Stark](https://homepages.inf.ed.ac.uk/stark/) for generously
+providing us with a [Morello] system to test CHERI with mimalloc.
 
 [CHERI]: https://www.cl.cam.ac.uk/research/security/ctsrd/cheri/
 [Morello]: https://www.arm.com/architecture/cpu/morello
