@@ -207,11 +207,11 @@ static bool visit_blocks(const mi_theap_t* theap, const mi_theap_area_t* area, v
 
 static void stress(intptr_t tid, void* vtransfers) {
   #ifndef USE_STD_MALLOC
-  // printf("test stress thread: subproc: %p, tid: %zi\n", mi_subproc_current()._mi_subproc_id, tid);
+  //  printf("test stress thread: subproc: %p, tid: %zi\n", mi_subproc_current()._mi_subproc_id, tid);
   #endif
   volatile void** transfers = (volatile void**)vtransfers;
   //bench_start_thread();
-  uintptr_t r = ((tid + 1) * 43); // rand();
+  size_t r = (((size_t)tid + 1) * 43); // rand();
   const size_t max_item_shift = 5; // 128
   const size_t max_item_retained_shift = max_item_shift + 2;
   size_t allocs = 100 * ((size_t)SCALE) * (tid % 8 + 1); // some threads do more
