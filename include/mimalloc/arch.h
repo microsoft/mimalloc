@@ -194,7 +194,21 @@ static inline void* mi_ptr_unpack(const void* auth, mi_addr_tagged_t addrt) {
 #define MI_CHERI_PERMS_NOT_DATA (__CHERI_CAP_PERMISSION_PERMIT_EXECUTE__ | __CHERI_CAP_PERMISSION_PERMIT_SEAL__ | \
                                  __CHERI_CAP_PERMISSION_PERMIT_UNSEAL__  | __CHERI_CAP_PERMISSION_ACCESS_SYSTEM_REGISTERS__ | \
                                  MI_CHERI_PERM_SW_VMEM)
+// permissions a pointer passed to `mi_free` must have
+#define MI_CHERI_PERMS_FREE     (__CHERI_CAP_PERMISSION_PERMIT_LOAD__ | __CHERI_CAP_PERMISSION_PERMIT_STORE__ | \
+                                 __CHERI_CAP_PERMISSION_PERMIT_LOAD_CAPABILITY__ | __CHERI_CAP_PERMISSION_PERMIT_STORE_CAPABILITY__)
 #endif
+
+// The bounds size for a pointer to `size` bytes that is handed out to the user. On CHERI this is never zero:
+// a zero-length capability can be validly derived at the end of a neighbouring block (which may be the start of
+// another block), so `mi_free` rejects zero-length capabilities.
+static inline size_t mi_bounds_user_size(size_t size) {
+  #if MI_CHERI
+  return (size==0 ? 1 : size);
+  #else
+  return size;
+  #endif
+}
 
 // The alignment needed for exactly representable bounds of `size` bytes (always a power of 2, and 1 if not on CHERI)
 static inline size_t mi_bounds_align(size_t size) {

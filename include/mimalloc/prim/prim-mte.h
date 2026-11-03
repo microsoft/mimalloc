@@ -35,7 +35,7 @@ the hardware instructions are never executed (as these trap on CPU's without MTE
 #define MI_MEMTAG_META            (0)         // tag used for meta data (and free arena memory)
 #define MI_MEMTAG_LINE_MIN        (32)        // supported range of the cache line size tagged by `dc gva` (checked at initialization)
 #define MI_MEMTAG_LINE_MAX        (2048)
-#define MI_MEMTAG_ZERO_MAX        (1024)      // blocks up to this size are zeroed on free (larger ones are only retagged)
+#define MI_ZERO_ON_FREE_MAX       (1024)      // blocks are zeroed on free up to this size with MTE (larger ones are only retagged), or with `MI_SECURE>=3` (only the first bytes of larger ones)
 
 // Tag exclusion masks (bit `i` set excludes tag `i`); blocks never use tag 0.
 #define MI_MEMTAG_EXCLUDE         (0x0001)
@@ -250,7 +250,7 @@ static inline void mi_memtag_blocks_init(void* start, size_t bsize, size_t idx, 
 static inline void* mi_memtag_block_free(void* block, size_t bsize) {
   mi_memtag_check(block);
   void* const tblock = mi_memtag_random_next(block);
-  if (bsize <= MI_MEMTAG_ZERO_MAX) { mi_memtag_store_zero(tblock, bsize); }
+  if (bsize <= MI_ZERO_ON_FREE_MAX) { mi_memtag_store_zero(tblock, bsize); }
                               else { mi_memtag_store(tblock, bsize); }
   return tblock;
 }

@@ -43,6 +43,19 @@ static inline void mi_debug_fill(const mi_page_t* page, void* block, int c, size
 // regular free of a (thread local) block pointer
 // fast path written carefully to prevent spilling on the stack
 
+// Prepare a block for freeing: retag memory tagged blocks (which also zeroes small blocks), or at `MI_SECURE>=3`
+// zero the block up to `MI_ZERO_ON_FREE_MAX` bytes (so only small blocks are fully zero, see `mi_page_is_zero_on_free`).
+// The padding is never cleared as it marks the block as freed.
+static inline mi_block_t* mi_block_free_clear(const mi_page_t* page, mi_block_t* block, bool was_guarded, bool memtag) {
+  if (was_guarded) return block;
+  if (memtag) { return (mi_block_t*)mi_memtag_block_free(block, mi_page_block_size(page)); }
+  #if MI_SECURE>=3
+  const size_t usize = mi_page_usable_block_size(page);
+  mi_memzero_block(block, (usize <= MI_ZERO_ON_FREE_MAX ? usize : MI_ZERO_ON_FREE_MAX));
+  #endif
+  return block;
+}
+
 static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool was_guarded, bool check_full, bool memtag)
 {
   // checks
@@ -51,8 +64,8 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   if mi_unlikely(!mi_check_double_free(page,block)) return;  // usually checked with padding
 
   // mi_stat_free(page, block);
+  block = mi_block_free_clear(page, block, was_guarded, memtag);  // (before tracking the free)
   mi_track_free_size(block, usable_size);
-  if (memtag && !was_guarded) { block = (mi_block_t*)mi_memtag_block_free(block, mi_page_block_size(page)); }
 
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
   const size_t dbgsize = (usable_size > MI_MiB ? MI_MiB : usable_size);
@@ -92,8 +105,8 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
 {
   size_t usable_size;
   if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return;    // checking padding is safe for mt
+  block = mi_block_free_clear(page, block, was_guarded, memtag);  // (before tracking the free)
   mi_track_free_size(block, usable_size);
-  if (memtag && !was_guarded) { block = (mi_block_t*)mi_memtag_block_free(block, mi_page_block_size(page)); }
 
   // _mi_padding_shrink(page, block, sizeof(mi_block_t));
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
@@ -255,6 +268,14 @@ void mi_decl_noinline _mi_free_generic(mi_page_t* page, bool is_local, void* p) 
 }
 
 
+#if MI_DEBUG || MI_CHERI
+// Report an invalid pointer; called in tail position so `mi_free` does not need a stack frame.
+static mi_decl_noinline mi_decl_cold bool mi_ptr_invalid(const char* msg, const void* p, const char* reason) {
+  _mi_error_message(EINVAL, "%s: invalid pointer%s: %p\n", msg, reason, p);
+  return false;
+}
+#endif
+
 // Get the page belonging to a pointer
 // Does further checks in debug mode to see if this was a valid pointer.
 static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const char* msg, bool free_small, bool check_p_for_null, mi_page_t** ppage)
@@ -262,8 +283,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
   MI_UNUSED_RELEASE(msg); MI_UNUSED(free_small);
   #if MI_DEBUG
   if mi_unlikely(!mi_is_aligned(p,MI_SIZE_SIZE) && !mi_option_is_enabled(mi_option_unsafe_guarded_precise)) {
-    _mi_error_message(EINVAL, "%s: invalid (unaligned) pointer: %p\n", msg, p);
-    return false;
+    return mi_ptr_invalid(msg, p, " (unaligned)");
   }
   #endif
 
@@ -284,7 +304,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
       #endif
       if mi_unlikely(mi_ptr_page_is_null(p,page) && check_p_for_null) {
         #if MI_DEBUG || MI_CHERI  // on CHERI also report in release (e.g. untagged pointers)
-        if (p!=NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
+        if (p!=NULL) { return mi_ptr_invalid(msg, p, ""); }
         #endif
         return false;
       }
@@ -294,7 +314,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
     }
   #if MI_DEBUG
   mi_page_t* const cpage = mi_checked_ptr_page(p);
-  if mi_unlikely(cpage==NULL) { _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p); }
+  if mi_unlikely(cpage==NULL) { mi_ptr_invalid(msg, p, ""); }
   #endif
 
   #if MI_PAGE_META_IS_ALIGNED
@@ -328,9 +348,20 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
   // corrupt the free list. The unsigned difference checks both cases at once (as `p < page_start` wraps around).
   if mi_unlikely((size_t)(mi_addr(p) - mi_addr(mi_page_start(page))) >= mi_atomic_load_relaxed(&page->capacity_size)) {
     #if MI_DEBUG
-    _mi_error_message(EINVAL, "%s: invalid pointer: %p\n", msg, p);
-    #endif
+    return mi_ptr_invalid(msg, p, "");
+    #else
     return false;
+    #endif
+  }
+  #endif
+  #if MI_CHERI && MI_FREE_IS_CHECKED
+  // The capability must be unsealed, have data access permissions, and cover its address (`ofs < len`).
+  // This also rejects zero-length capabilities (we never hand those out) as these can be validly derived at the end of
+  // a neighbouring block, which may be the start of another block.
+  const size_t ofs = (size_t)__builtin_cheri_offset_get(p);
+  if mi_unlikely(ofs >= (size_t)__builtin_cheri_length_get(p) || __builtin_cheri_sealed_get(p) ||
+                 (__builtin_cheri_perms_get(p) & MI_CHERI_PERMS_FREE) != MI_CHERI_PERMS_FREE) {
+    return mi_ptr_invalid(msg, p, " (sealed, insufficient permissions, or outside its capability bounds)");
   }
   #endif
   *ppage = page;
@@ -780,10 +811,10 @@ mi_decl_nodiscard size_t mi_thread_id_of(const void* p) mi_attr_noexcept {
 // Deprecated: double free is usually checked with padding now
 // as that is faster and works better for cross-thread free'ing.
 // Check for double free in secure and debug mode
-// This is somewhat expensive so only enabled for secure mode 4
+// This is somewhat expensive and only for thread-local frees, so only enabled at secure level 3 (at level 4 we use padding)
 // ------------------------------------------------------
 
-#if MI_SECURE>=4 && !MI_PADDING
+#if MI_SECURE>=3 && !MI_PADDING
 // linear check if the free list contains a specific element
 static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, const mi_block_t* elem, const char* list_kind) {
   const size_t max_count = page->capacity;      // can never hold more blocks than the capacity

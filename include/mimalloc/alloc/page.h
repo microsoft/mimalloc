@@ -348,14 +348,14 @@ static inline size_t mi_page_memtag_parity(const mi_page_t* page) {
   return ((page->reserved & 1) != 0 && mi_page_meta_is_separated(page) && mi_page_start(page) != mi_page_slice_start(page) ? 1 : 0);
 }
 
-// Are freed blocks in this page zeroed (except for the free list link)? This holds for small memory tagged blocks
-// (always false without `MI_MTE` or in debug mode as freed blocks are filled then)
+// Are freed blocks in this page zeroed (except for the free list link)? This holds for small blocks that are
+// memory tagged or with `MI_SECURE>=3` (always false otherwise, or in debug mode as freed blocks are filled then)
 static inline bool mi_page_is_zero_on_free(const mi_page_t* page) {
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
   MI_UNUSED(page);
   return false;
   #else
-  return (mi_page_is_memtag(page) && mi_page_block_size(page) <= MI_MEMTAG_ZERO_MAX);
+  return ((MI_SECURE>=3 || mi_page_is_memtag(page)) && mi_page_block_size(page) <= MI_ZERO_ON_FREE_MAX);
   #endif
 }
 

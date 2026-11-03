@@ -6,7 +6,7 @@ if(NOT DEFINED CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
 endif()
 
-set(MI_SECURE "DEFAULT" CACHE STRING "Use security mitigations (like meta data guard pages, allocation randomization, double-free mitigation, and free-list corruption detection): OFF, MINIMAL, CHECKED, ON, FULL, DEFAULT. The FULL setting adds guard pages at the end of each mimalloc page (which may be expensive). MINIMAL only uses guard pages around metadata and after huge blocks (and randomizes OS allocation addresses and free lists). CHECKED adds validation of pointers passed to free and encoded free lists. DEFAULT is CHECKED with MI_MTE or MI_PAC enabled, and OFF otherwise.")
+set(MI_SECURE "DEFAULT" CACHE STRING "Use security mitigations (like meta data guard pages, allocation randomization, double-free mitigation, and free-list corruption detection): OFF, MINIMAL, CHECKED, ON, FULL, DEFAULT. The FULL setting adds guard pages at the end of each mimalloc page (which may be expensive). MINIMAL only uses guard pages around metadata and after huge blocks (and randomizes OS allocation addresses and free lists). CHECKED adds validation of pointers passed to free and encoded free lists. DEFAULT is CHECKED with MI_MTE or MI_PAC enabled, level 3 on CHERI (CHECKED plus zero-on-free and double-free checks), and OFF otherwise.")
 set_property(CACHE MI_SECURE PROPERTY STRINGS "DEFAULT" "OFF" "MINIMAL" "CHECKED" "ON" "FULL")
 
 option(MI_OVERRIDE          "Override the standard malloc interface (i.e. define entry points for 'malloc', 'free', etc)" ON)
@@ -201,9 +201,7 @@ if((MI_SECURE STREQUAL "DEFAULT" OR NOT MI_SECURE) AND NOT MI_SECURE_FULL AND "$
 elseif(MI_SECURE STREQUAL "DEFAULT")
   if(MI_MTE OR MI_PAC)
     set(MI_SECURE "CHECKED")  # guard pages after huge blocks (which are not memory tagged), validate pointers on free, encoded free list
-  else()
-    set(MI_SECURE "OFF")
-  endif()
+  endif()                     # otherwise use the default level in `types.h` (OFF, or level 3 on CHERI)
 endif()
 
 
@@ -364,9 +362,13 @@ elseif(MI_SECURE STREQUAL "CHECKED")
     set(MI_FREE_IS_CHECKED ON)  # implied by MI_SECURE=2
   endif()
   set(MI_SECURE "OFF")  # so if(MI_SECURE) is false in subsequent checks
+elseif(MI_SECURE STREQUAL "DEFAULT")
+  set(MI_SECURE "OFF")  # no define: use the default level in `types.h`
 elseif(MI_SECURE)
   message(STATUS "Use secure build (MI_SECURE=${MI_SECURE})")
   list(APPEND mi_defines MI_SECURE=4)
+else()
+  list(APPEND mi_defines MI_SECURE=0)  # explicit opt-out (overrides the default level in `types.h`)
 endif()
 
 if(MI_TRACK_VALGRIND)

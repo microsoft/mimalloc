@@ -127,7 +127,8 @@ fn main() {
     }
     if feature("secure") {
         define("MI_SECURE", "4"); // ON
-    } // (`mte` and `pac` default to `MI_SECURE=2` in `types.h`)
+    } // (otherwise the default level in `types.h` is used: 2 with `mte` or `pac`, 3 on CHERI, and 0 otherwise;
+      //  opt out explicitly with `MIMALLOC_DEFINES="MI_SECURE=0"`)
     let is_override = feature("override") && !is_windows;
     if is_override {
         define("MI_MALLOC_OVERRIDE", "1");

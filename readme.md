@@ -708,6 +708,8 @@ do to improve performance more without weakening the current mitigations too muc
 
 [PAC]: https://developer.arm.com/documentation/102433/0200/Return-oriented-programming
 
+## CHERI -- hardware assisted pointer provenance
+
 
 
 # Getting the best performance

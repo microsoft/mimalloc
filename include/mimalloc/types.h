@@ -67,13 +67,16 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_SECURE 0  // no security mitigations
 // #define MI_SECURE 1  // + guard pages around metadata (and separated metadata) and after singleton blocks, randomized arena/OS allocation addresses, randomized free list initialization and allocation addresses within mimalloc pages, abort on EFAULT (corrupted meta-data) (`-DMI_SECURE=MINIMAL`)
 // #define MI_SECURE 2  // + invalid-pointer check on free (checked lookup in page-map.h), encode free lists (and detect corrupted free lists), clear free list `next` on allocation (`-DMI_SECURE=CHECKED`)
-// #define MI_SECURE 3  // (currently the same as 2)
+// #define MI_SECURE 3  // + zero blocks on free (up to the first 1KiB), check double free (slow, and only for thread-local frees; only at level 3 as padding is used at level 4)
 // #define MI_SECURE 4  // + check buffer overflow (with padding), check double free (with padding), more randomized free lists, decommit with mprotect (`-DMI_SECURE=ON`)
 // #define MI_SECURE 5  // + guard page at the end of each mimalloc page (expensive!), and byte-precise buffer overflow checks (`-DMI_SECURE=FULL`)
 
+// The default is 2 with MTE or PAC, and 3 on CHERI (where capabilities already provide spatial safety)
 #if !defined(MI_SECURE)
 #if MI_MTE || MI_PAC
 #define MI_SECURE 2
+#elif MI_CHERI
+#define MI_SECURE 3
 #else
 #define MI_SECURE 0
 #endif
