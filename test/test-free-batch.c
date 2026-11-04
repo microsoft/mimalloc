@@ -437,6 +437,10 @@ static bool test_concurrent_owner_exit(void) {
 }
 
 int main(void) {
+  #if !MI_FREE_BATCH
+  printf("free batching is disabled (MI_FREE_BATCH=0): skipped\n");
+  return 0;
+  #endif
   #if MI_TEST_CRASH_INFO
   const LPTOP_LEVEL_EXCEPTION_FILTER previous_filter = SetUnhandledExceptionFilter(report_crash);
   #endif

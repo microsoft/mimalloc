@@ -112,6 +112,14 @@ static void* holder(void* arg) {
   return NULL;
 }
 
+// remote frees that are still batched by a dead thread are published in the child
+// (on macOS, unbatched pending remote frees of the forking thread are dropped in the child, see `subproc.c`)
+#if defined(__APPLE__) && defined(MI_FREE_BATCH) && !MI_FREE_BATCH
+#define CHECK_REMOTE_FREED  0
+#else
+#define CHECK_REMOTE_FREED  1
+#endif
+#if CHECK_REMOTE_FREED
 static bool check_remote_freed(const mi_heap_t* heap, const mi_heap_area_t* area,
                               void* block, size_t size, void* arg) {
   (void)heap; (void)area; (void)size;
@@ -120,11 +128,14 @@ static bool check_remote_freed(const mi_heap_t* heap, const mi_heap_area_t* area
   }
   return true;
 }
+#endif
 
 static bool child_check(void) {
+  #if CHECK_REMOTE_FREED
   bool remote_freed = true;
   mi_collect(true);
   if (!mi_heap_visit_blocks(mi_heap_main(), true, check_remote_freed, &remote_freed) || !remote_freed) return false;
+  #endif
   mi_theap_quiescent_abandon(live_theap); // dead threads are otherwise only abandoned lazily
   // free blocks of a thread that does not exist in the child
   for (size_t i = 0; i < LIVE; i++) {
