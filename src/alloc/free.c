@@ -867,8 +867,8 @@ static mi_decl_noinline void mi_free_block_mt_batch_init(mi_page_t* page, mi_blo
     return;
   }
   mi_theap_t* main = _mi_theap_main();
-  if mi_unlikely(!mi_theap_is_initialized(main)) {
-    mi_thread_init();  // initialize free-only threads so they can batch as well
+  if mi_unlikely(!mi_theap_is_initialized(main) && !_mi_thread_is_done()) {
+    mi_thread_init();  // initialize free-only threads so they can batch as well (but don't re-initialize after `mi_thread_done`)
     main = _mi_theap_main();
   }
   mi_tld_t* const tld = (mi_theap_is_initialized(main) ? main->tld : NULL);

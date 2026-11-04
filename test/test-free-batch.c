@@ -227,17 +227,18 @@ static bool test_batch_budget(void) {
   return allocate_blocks() && mi_run_on_thread(free_with_partial_publication) && all_freed();
 }
 
-static bool free_without_thread_state(void) {
+static bool free_after_thread_done(void) {
+  mi_thread_init();
   mi_thread_done();
   if (_mi_thread_is_initialized()) return false;
   for (size_t i = 0; i < block_count; i++) mi_free(blocks[i]);
   return !_mi_thread_is_initialized();
 }
 
-static bool test_uninitialized_free(void) {
+static bool test_free_after_thread_done(void) {
   mode = 0;
   block_count = 128;
-  return allocate_blocks() && mi_run_on_thread(free_without_thread_state) && all_freed();
+  return allocate_blocks() && mi_run_on_thread(free_after_thread_done) && all_freed();
 }
 
 static bool test_abandoned_owner(void) {
@@ -449,7 +450,7 @@ int main(void) {
   CHECK("remote free automatic thread exit", test_remote_free(2));
   CHECK("remote free bounded cache", test_remote_free(3));
   CHECK("batch budget survives partial publication", test_batch_budget());
-  CHECK("free without thread initialization", test_uninitialized_free());
+  CHECK("free after thread done does not re-initialize", test_free_after_thread_done());
   CHECK("remote free abandoned owner", test_abandoned_owner());
   CHECK("destroy heap after remote frees", test_destroyed_heap());
   CHECK("separate heap batches and theap deletion", test_separate_heaps());
