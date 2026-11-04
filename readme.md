@@ -595,6 +595,7 @@ With `ON`, performance is impacted a bit more (usually less than 25%, but can be
 and double free's.
 - Some use-after-free accesses are detected (if these modify the first word in the block).
 - On free, the first 1KiB of a block is zero'd.
+- Free lists are randomized more to make allocation order less predictable.
 - The mimalloc library is build as `mimalloc-secure`.
 
 The `FULL` mode also adds:
@@ -612,7 +613,9 @@ As always, evaluate with care as part of an overall security strategy as all of 
 On recent arm64 hardware with the memory tagging extensions ([MTE]), _mimalloc_ can be built with `-DMI_MTE=ON`
 to give every heap block a randomized memory tag that can only be accessed with a matching pointer that has the same
 tag. Adjacent blocks always get different tags (and all linear block overflows fault), and blocks are retagged when freed
-(so (most) double-free and use-after-free accesses fault).
+(so (most) double-free and use-after-free accesses fault). Each block tag is chosen from 15 possible tags (excluding the tags of
+its neighbours), but you can define `MI_MTE_ODD_EVEN=1` to use disjoint tag sets for blocks at even and odd positions instead
+(which is slightly faster but only uses 7 or 8 possible tags per block).
 All blocks up to 512KiB are tagged, but larger blocks get a guard page
 at the end so overflows still fault (this is done as tagging memory is linear in the size of the block).
 

@@ -280,13 +280,14 @@ mi_decl_noinline mi_process_metadata_t* _mi_process_metadata_init(void) {
     }
     if (!memid.initially_zero) { mi_memzero_aligned(metadata, sizeof(mi_process_metadata_t)); }
     if (mi_memtag_use_for_meta(!memid.is_pinned)) {  // all non-large OS memory supports tagging
-      // tag each field separately (where adjacent fields have different tag classes)
+      // tag each field separately (where adjacent fields have different tags)
       #define mi_process_metadata_field_offset(tp,name)  offsetof(mi_process_metadata_t, name),
       static const size_t offsets[] = { mi_process_metadata_fields(mi_process_metadata_field_offset) sizeof(mi_process_metadata_t) };
       #undef mi_process_metadata_field_offset
-      for (size_t i = 0; i + 1 < sizeof(offsets)/sizeof(offsets[0]); i++) {
+      const size_t count = sizeof(offsets)/sizeof(offsets[0]) - 1;
+      for (size_t i = 0; i < count; i++) {
         mi_assert_internal(offsets[i] % MI_MEMTAG_UNIT_SIZE == 0);
-        mi_memtag_meta_init((uint8_t*)metadata + offsets[i], offsets[i+1] - offsets[i], i);
+        mi_memtag_meta_init_adjacent((uint8_t*)metadata + offsets[i], offsets[i+1] - offsets[i], i, i > 0 /* has prev */, i + 1 < count /* has next */);
       }
     }
     *((mi_memid_t*)mi_meta_load(&metadata->memid)) = memid;

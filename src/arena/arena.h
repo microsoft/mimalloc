@@ -80,6 +80,15 @@ static inline size_t mi_page_meta_memtag_idx(const mi_page_t* page) {
   return (mi_addr(page) / sizeof(mi_page_t));
 }
 
+// With memory tagging, (re)tag the separate arena page meta entry `page` with a random tag that differs from its current tag
+// and the adjacent arena meta data (see `arena.c:mi_arena_memtag_init`); returns `page` with its new tag.
+// The entries are preceded by the arena bitmaps, but the last entry is followed by untagged memory (or a guard page in secure mode).
+static inline mi_page_t* mi_arena_page_meta_memtag(mi_arena_t* arena, mi_page_t* page) {
+  const size_t i = (size_t)(mi_addr(page) - mi_addr(arena->pages_meta)) / sizeof(mi_page_t);
+  mi_assert_internal(i < arena->slice_count);
+  return (mi_page_t*)mi_memtag_meta_init_adjacent(page, sizeof(mi_page_t), mi_page_meta_memtag_idx(page), true /* has prev */, i + 1 < arena->slice_count /* has next */);
+}
+
 // initialize the bitmap for `slice_count` slices at base (and advance the base pointer)
 static inline mi_bitmap_t* mi_arena_bitmap_init(size_t slice_count, uint8_t** base) {
   mi_bitmap_t* bitmap = (mi_bitmap_t*)(*base);

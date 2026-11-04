@@ -174,10 +174,10 @@ static bool mi_page_map_init_once(void) {
     mi_memzero_aligned(sub0, submap_size);
   }
 
-  // tag the committed page map entries and the first sub map (with a tag of a different class as it is adjacent)
+  // tag the committed page map entries and the first sub map (with a different tag as it is adjacent once the page map is fully committed)
   if (use_memtag) {
-    pmap = (mi_page_map_t*)mi_memtag_meta_init(pmap, mi_align_up(mi_page_map_size_of_count(commit_count), MI_MEMTAG_UNIT_SIZE), 0);
-    sub0 = (mi_submap_t)mi_memtag_meta_init(sub0, submap_size, 1);
+    pmap = (mi_page_map_t*)mi_memtag_meta_init_separate(pmap, mi_align_up(mi_page_map_size_of_count(commit_count), MI_MEMTAG_UNIT_SIZE), 0, NULL);
+    sub0 = (mi_submap_t)mi_memtag_meta_init_separate(sub0, submap_size, 1, pmap);
   }
 
   // initialize the fields
@@ -210,7 +210,7 @@ static mi_submap_t mi_page_map_alloc_submap(mi_subproc_t* subproc, mi_memid_t* m
     mi_memzero_aligned(sub, MI_PAGE_MAP_SUB_SIZE);
   }
   if (sub != NULL && mi_page_map_use_memtag(memid)) {
-    sub = (mi_submap_t)mi_memtag_meta_init(sub, MI_PAGE_MAP_SUB_SIZE, 0);
+    sub = (mi_submap_t)mi_memtag_meta_init_separate(sub, MI_PAGE_MAP_SUB_SIZE, 0, NULL);
   }
   return sub;
 }

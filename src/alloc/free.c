@@ -48,7 +48,13 @@ static inline void mi_debug_fill(const mi_page_t* page, void* block, int c, size
 // The padding is never cleared as it marks the block as freed.
 static inline mi_block_t* mi_block_free_clear(const mi_page_t* page, mi_block_t* block, bool was_guarded, bool memtag) {
   if (was_guarded) return block;
-  if (memtag) { return (mi_block_t*)mi_memtag_block_free(block, mi_page_block_size(page)); }
+  if (memtag) {
+    // the first and last block of a page always have a tag of their class (see `mi_memtag_blocks_init`)
+    const size_t bsize = mi_page_block_size(page);
+    const void* prev; const void* next;
+    const size_t exclude = mi_page_block_memtag_adjacent(page, block, bsize, mi_memtag_class_of(block), &prev, &next);
+    return (mi_block_t*)mi_memtag_block_free(block, bsize, exclude, prev, next);
+  }
   #if MI_SECURE>=3
   const size_t usize = mi_page_usable_block_size(page);
   mi_memzero_block(block, (usize <= MI_ZERO_ON_FREE_MAX ? usize : MI_ZERO_ON_FREE_MAX));
@@ -233,7 +239,10 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
     #endif
     if mi_unlikely(mi_page_is_memtag(page) && !*was_guarded && mi_ptr_memtag(block)==MI_MEMTAG_META) {  // a canonical block (see `_mi_memtag_canonical`)
       const size_t bsize = mi_page_block_size(page);
-      block = (mi_block_t*)mi_memtag_block_uncanonical(block, bsize, mi_page_block_index(page, mi_addr(block) - mi_addr(mi_page_start(page))) + mi_page_memtag_parity(page));
+      const size_t idx = mi_page_block_index(page, mi_addr(block) - mi_addr(mi_page_start(page))) + mi_page_memtag_parity(page);
+      const void* prev; const void* next;
+      const size_t exclude = mi_page_block_memtag_adjacent(page, block, bsize, idx, &prev, &next);
+      block = (mi_block_t*)mi_memtag_block_uncanonical(block, bsize, exclude, prev, next);
     }
     return block;
   }

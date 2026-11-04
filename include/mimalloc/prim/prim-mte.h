@@ -18,13 +18,20 @@ extensions as well (like x86 ChkTag)
 
 Every 16-byte unit of tagged memory has a 4-bit tag, and each access must use a
 pointer with a matching tag in the top bits (56-59 on ARM, see `MI_PTR_MEMTAG_SHIFT`).
-Blocks in tagged pages get a random tag where blocks at even and odd indices use
-disjoint tag sets (tags 1 to 7, and 8 to 15), such that adjacent blocks always have
-different tags. Across page boundaries this holds as well since every page starts with
-an even block and ends with an odd block, or with a tag 0 gap (see `mi_page_memtag_parity`).
-Tag 0 is never used for blocks and is reserved for free arena memory
-and untagged meta data. Most meta data (like the page meta data, the page map, and the
-process meta data) gets a random tag as well (see `mi_memtag_meta_init`).
+Blocks in tagged pages get a random tag (from 1 to 15) that always differs from the tags of
+the adjacent blocks: when a block is (re)tagged we read the current tags of its neighbours and
+exclude those (see `mi_memtag_exclude_adjacent` and `mi_memtag_random_adjacent`). (A neighbour may be retagged concurrently
+by another thread in which case adjacent blocks can rarely end up with the same tag.)
+At the edges of a page we cannot read the adjacent memory and there we use tag classes
+instead: the first block of a page uses the even class (tags 1 to 7) and the last block the
+odd class (tags 8 to 15), or there is a tag 0 gap (see `mi_page_memtag_parity`).
+When building with `MI_MTE_ODD_EVEN=1`, all blocks use tag classes instead where blocks
+at even and odd indices use disjoint tag sets. This does not need to read the neighbouring tags
+but has less entropy (on free, a block gets one of 6 or 7 possible tags instead of 12 to 14).
+Tag 0 is never used for blocks and is reserved for free arena memory and untagged meta data.
+Most meta data (like the page meta data, the page map, and the process meta data) gets a
+random tag as well that differs from adjacent meta data (see `mi_memtag_meta_init_adjacent` and
+`mi_memtag_meta_init_separate`).
 
 Memory tagging is only used when built with `MI_MTE=1` and when it is enabled
 at runtime (see `mi_memtag_is_enabled`); otherwise all operations are no-ops and
@@ -42,6 +49,11 @@ the hardware instructions are never executed (as these trap on CPU's without MTE
 #define MI_MEMTAG_EXCLUDE_EVEN    (MI_MEMTAG_EXCLUDE | 0xFF00)   // even blocks use tags 1 to 7
 #define MI_MEMTAG_EXCLUDE_ODD     (MI_MEMTAG_EXCLUDE | 0x00FE)   // odd blocks use tags 8 to 15
 #define MI_MEMTAG_ODD_BIT         (8)   // logical tag bit that is set for odd blocks
+
+// Use only tag classes (even and odd) to ensure adjacent blocks and meta data have different tags (instead of reading the tags of neighbours)
+#ifndef MI_MTE_ODD_EVEN
+#define MI_MTE_ODD_EVEN           (0)
+#endif
 
 #if (MI_CACHE_LINE_SIZE % MI_MEMTAG_UNIT_SIZE) != 0
 #error "`mi_decl_cache_align` must align on a memory tag unit"
@@ -115,12 +127,32 @@ static inline void* mi_memtag_random(void* p, size_t exclude);
 static inline void* mi_memtag_load(void* p);
 static inline void  mi_memtag_store(void* p, size_t size);
 static inline void  mi_memtag_store_zero(void* p, size_t size);
-static inline void* mi_memtag_random_next(void* p);
-static inline void  mi_memtag_blocks_init(void* start, size_t bsize, size_t idx, size_t count);
-static inline void* mi_memtag_block_free(void* block, size_t bsize);
-static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_t idx);
+static inline size_t mi_memtag_exclude_tag(const void* p, size_t exclude);
+static inline size_t mi_memtag_exclude_adjacent(size_t idx, bool edge, const void* prev, const void* next);
+static inline void  mi_memtag_blocks_init(void* start, size_t bsize, size_t i, size_t n, size_t parity, size_t count);
+static inline void* mi_memtag_random_adjacent(void* p, size_t exclude, const void* prev, const void* next);
+static inline void* mi_memtag_block_free(void* block, size_t bsize, size_t exclude, const void* prev, const void* next);
+static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_t exclude, const void* prev, const void* next);
 static inline void  mi_memtag_clear(void* p, size_t size);
-static inline void* mi_memtag_meta_init(void* p, size_t size, size_t idx);
+static inline void* mi_memtag_meta_init_adjacent(void* p, size_t size, size_t idx, bool has_prev, bool has_next);
+static inline void* mi_memtag_meta_init_class(void* p, size_t size, size_t idx);
+static inline void* mi_memtag_meta_init_separate(void* p, size_t size, size_t idx, const void* other);
+
+// The tag exclusion mask for the tag class of index `idx` (alternating between even and odd so adjacent indices never share a tag)
+static inline size_t mi_memtag_exclude_class(size_t idx) {
+  return ((idx&1)==0 ? MI_MEMTAG_EXCLUDE_EVEN : MI_MEMTAG_EXCLUDE_ODD);
+}
+
+// The tag class index of a tagged pointer `p` (only meaningful if it was tagged using its tag class)
+static inline size_t mi_memtag_class_of(const void* p) {
+  return ((mi_ptr_memtag(p) & MI_MEMTAG_ODD_BIT) != 0 ? 1 : 0);
+}
+
+// The base tag exclusion mask for memory with tag class index `idx`: at the `edge` of a region (where the adjacent
+// memory cannot be read) we use the tag class, and otherwise only exclude tag 0 (or always use the class with `MI_MTE_ODD_EVEN`)
+static inline size_t mi_memtag_exclude_base(size_t idx, bool edge) {
+  return (MI_MTE_ODD_EVEN || edge ? mi_memtag_exclude_class(idx) : MI_MEMTAG_EXCLUDE);
+}
 
 
 /* ----------------------------------------------------------------------------
@@ -219,47 +251,91 @@ static inline void mi_memtag_store_zero(void* p, size_t size) {
   __mi_memtag_store_ex(p, size, true);
 }
 
-// Return `p` with a fresh random tag of the same class (odd or even) that differs from its current tag (`gmi`, `irg`)
-static inline void* mi_memtag_random_next(void* p) {
-  const size_t class_exclude = ((mi_ptr_memtag(p) & MI_MEMTAG_ODD_BIT) == 0 ? MI_MEMTAG_EXCLUDE_EVEN : MI_MEMTAG_EXCLUDE_ODD);
-  size_t exclude;
-  __asm__ (MI_MEMTAG_ASM "gmi %0, %1, %2" : "=r"(exclude) : "r"(p), "r"(class_exclude));
-  return mi_memtag_random(p, exclude);
+// Add the tag of pointer `p` to the tag exclusion mask (`gmi`)
+static inline size_t mi_memtag_exclude_tag(const void* p, size_t exclude) {
+  size_t x;
+  __asm__ (MI_MEMTAG_ASM "gmi %0, %1, %2" : "=r"(x) : "r"(p), "r"(exclude));
+  return x;
+}
+
+// The tag exclusion mask for (re)tagging memory such that its tag differs from the current tags of the adjacent memory
+// at `prev` and `next` (which are only read if not NULL and must be committed). At the `edge` of a region the tag class of
+// `idx` is used as well (see `mi_memtag_exclude_base`). With `MI_MTE_ODD_EVEN` the neighbours are never read.
+static inline size_t mi_memtag_exclude_adjacent(size_t idx, bool edge, const void* prev, const void* next) {
+  size_t exclude = mi_memtag_exclude_base(idx, edge);
+  #if !MI_MTE_ODD_EVEN
+  if (prev != NULL) { exclude = mi_memtag_exclude_tag(mi_memtag_load((void*)prev), exclude); }
+  if (next != NULL) { exclude = mi_memtag_exclude_tag(mi_memtag_load((void*)next), exclude); }
+  #else
+  MI_UNUSED(prev); MI_UNUSED(next);
+  #endif
+  return exclude;
+}
+
+// Return `p` with a random tag that is not in `exclude` and differs from the current tags of the adjacent memory at `prev`
+// and `next` (which are only read if not NULL and must be committed). This has the same result as `mi_memtag_random(p, exclude')`
+// with `exclude' == mi_memtag_exclude_adjacent(..)` but is faster on the critical free path: we first pick a tag without
+// considering the neighbours, and only on a (rare) conflict pick again. This way the new tag does not depend on the neighbour
+// loads (as the conflict branch is predicted) which keeps those loads off the critical path to the subsequent tag stores.
+static inline void* mi_memtag_random_adjacent(void* p, size_t exclude, const void* prev, const void* next) {
+  void* q = mi_memtag_random(p, exclude);
+  #if !MI_MTE_ODD_EVEN
+  void* const ptag = (prev != NULL ? mi_memtag_load((void*)prev) : NULL);
+  void* const ntag = (next != NULL ? mi_memtag_load((void*)next) : NULL);
+  const size_t tag = mi_ptr_memtag(q);
+  if mi_unlikely((prev != NULL && mi_ptr_memtag(ptag) == tag) || (next != NULL && mi_ptr_memtag(ntag) == tag)) {
+    if (prev != NULL) { exclude = mi_memtag_exclude_tag(ptag, exclude); }
+    if (next != NULL) { exclude = mi_memtag_exclude_tag(ntag, exclude); }
+    q = mi_memtag_random(p, exclude);
+  }
+  #else
+  MI_UNUSED(prev); MI_UNUSED(next);
+  #endif
+  return q;
 }
 
 /* ----------------------------------------------------------------------------
   Tagging blocks
 -----------------------------------------------------------------------------*/
 
-// The tag exclusion mask for the block at index `idx` (alternating between even and odd so adjacent blocks never share a tag)
-static inline size_t __mi_memtag_class_exclude(size_t idx) {
-  return ((idx&1)==0 ? MI_MEMTAG_EXCLUDE_EVEN : MI_MEMTAG_EXCLUDE_ODD);
-}
-
-// Tag `count` fresh blocks of size `bsize` at `start` where the first block has class index `idx` (its index in the page plus the page parity).
-static inline void mi_memtag_blocks_init(void* start, size_t bsize, size_t idx, size_t count) {
+// Tag `count` fresh blocks of size `bsize` at `start` where the first block has index `i` in a page of `n` blocks (with tag class index `i + parity`).
+// The block before the first one (if `i > 0`) is already tagged, while the blocks after the last one are not yet tagged (and exclude the tag
+// of the last block when they are tagged later on). The first and last block of the page use their tag class (see `mi_memtag_exclude_base`).
+static inline void mi_memtag_blocks_init(void* start, size_t bsize, size_t i, size_t n, size_t parity, size_t count) {
   uint8_t* p = (uint8_t*)start;
-  for (size_t i = idx; i < idx + count; i++, p += bsize) {
-    void* const tp = mi_memtag_random(p, __mi_memtag_class_exclude(i));
+  #if !MI_MTE_ODD_EVEN
+  void* prev = (i > 0 ? mi_memtag_load(p - bsize) : NULL);
+  #endif
+  for (const size_t end = i + count; i < end; i++, p += bsize) {
+    size_t exclude = mi_memtag_exclude_base(i + parity, i == 0 || i + 1 == n);
+    #if !MI_MTE_ODD_EVEN
+    if (prev != NULL) { exclude = mi_memtag_exclude_tag(prev, exclude); }
+    #endif
+    void* const tp = mi_memtag_random(p, exclude);
     mi_memtag_store(tp, bsize);
+    #if !MI_MTE_ODD_EVEN
+    prev = tp;
+    #endif
   }
 }
 
-// Retag a block on free with a fresh tag (of the same class) and zero it if it is small; returns the block with its new tag.
-// The first read uses the current tag of `block` so a stale pointer (e.g. a double free) faults.
-static inline void* mi_memtag_block_free(void* block, size_t bsize) {
+// Retag a block on free with a fresh random tag that differs from its current tag, is not in `exclude`, and differs from the adjacent
+// blocks at `prev` and `next` (if not NULL, see `mi_memtag_random_adjacent`),
+// and zero it if it is small; returns the block with its new tag. The first read uses the current tag of `block` so a stale pointer (e.g. a double free) faults.
+static inline void* mi_memtag_block_free(void* block, size_t bsize, size_t exclude, const void* prev, const void* next) {
   mi_memtag_check(block);
-  void* const tblock = mi_memtag_random_next(block);
+  void* const tblock = mi_memtag_random_adjacent(block, mi_memtag_exclude_tag(block, exclude), prev, next);
   if (bsize <= MI_ZERO_ON_FREE_MAX) { mi_memtag_store_zero(tblock, bsize); }
                               else { mi_memtag_store(tblock, bsize); }
   return tblock;
 }
 
-// Retag a canonical block (with the meta tag, see `_mi_memtag_canonical`) with class index `idx` with a fresh tag of its class;
-// returns the block with its new tag. The first read uses the meta tag so a stale pointer faults.
-static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_t idx) {
+// Retag a canonical block (with the meta tag, see `_mi_memtag_canonical`) with a fresh random tag that is not in `exclude`
+// and differs from the adjacent blocks at `prev` and `next` (if not NULL, see `mi_memtag_random_adjacent`); returns the block
+// with its new tag. The first read uses the meta tag so a stale pointer faults.
+static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_t exclude, const void* prev, const void* next) {
   mi_memtag_check(block);
-  void* const tblock = mi_memtag_random(block, __mi_memtag_class_exclude(idx));
+  void* const tblock = mi_memtag_random_adjacent(block, exclude, prev, next);
   mi_memtag_store(tblock, bsize);
   return tblock;
 }
@@ -269,12 +345,37 @@ static inline void mi_memtag_clear(void* p, size_t size) {
   mi_memtag_store(mi_ptr_memtag_meta(p), size);
 }
 
-// Tag the meta data `[p,p+size)` with a random tag; returns `p` with its new tag.
-// The tag has the class of index `idx` such that meta data at adjacent indices has different tags.
-static inline void* mi_memtag_meta_init(void* p, size_t size, size_t idx) {
-  void* const tp = mi_memtag_random(mi_ptr_memtag_meta(p), __mi_memtag_class_exclude(idx));
+// Tag the meta data `[p,p+size)` with a random tag that is not in `exclude` and differs from its current tag; returns `p` with its new tag.
+static inline void* mi_memtag_meta_init_ex(void* p, size_t size, size_t exclude) {
+  uint8_t* const q = (uint8_t*)mi_ptr_memtag_meta(p);
+  void* const tp = mi_memtag_random(q, mi_memtag_exclude_tag(mi_memtag_load(q), exclude));
   mi_memtag_store(tp, size);
   return tp;
+}
+
+// Tag the meta data `[p,p+size)` with a random tag that differs from its current tag; returns `p` with its new tag.
+// The meta data is part of a region of adjacent meta data where `idx` is its index (or the index of the first part plus
+// its distance). If `has_prev` (or `has_next`) is set, the adjacent meta data before (or after) it is part of the same region
+// (and can be read) such that we exclude its tag. The edges of a region use the full tag range as well: in secure mode
+// the meta data regions are surrounded by guard pages, and otherwise adjacent regions can rarely have the same tag.
+// With `MI_MTE_ODD_EVEN` the tag class of `idx` is used instead (and the neighbours are not read).
+static inline void* mi_memtag_meta_init_adjacent(void* p, size_t size, size_t idx, bool has_prev, bool has_next) {
+  uint8_t* const q = (uint8_t*)mi_ptr_memtag_meta(p);
+  return mi_memtag_meta_init_ex(q, size, mi_memtag_exclude_adjacent(idx, false, (has_prev ? q - MI_MEMTAG_UNIT_SIZE : NULL), (has_next ? q + size : NULL)));
+}
+
+// Tag the meta data `[p,p+size)` with a random tag that differs from its current tag and from the tag of the (tagged) pointer
+// `other` (if not NULL); returns `p` with its new tag. This is used for meta data in a separate OS allocation (see
+// `mi_memtag_meta_init_adjacent` for the use of `idx`).
+static inline void* mi_memtag_meta_init_separate(void* p, size_t size, size_t idx, const void* other) {
+  const size_t exclude = mi_memtag_exclude_base(idx, false);
+  return mi_memtag_meta_init_ex(p, size, (other != NULL ? mi_memtag_exclude_tag(other, exclude) : exclude));
+}
+
+// Tag the meta data `[p,p+size)` with a random tag of the class of index `idx` that differs from its current tag; returns `p` with its new tag.
+// This is used for meta data whose tag must differ from adjacent memory that cannot be read, where that memory uses the other tag class.
+static inline void* mi_memtag_meta_init_class(void* p, size_t size, size_t idx) {
+  return mi_memtag_meta_init_ex(p, size, mi_memtag_exclude_class(idx));
 }
 
 #else
@@ -284,22 +385,33 @@ static inline void* mi_memtag_random(void* p, size_t exclude)  { MI_UNUSED(exclu
 static inline void* mi_memtag_load(void* p)                    { return p; }
 static inline void  mi_memtag_store(void* p, size_t size)      { MI_UNUSED(p); MI_UNUSED(size); }
 static inline void  mi_memtag_store_zero(void* p, size_t size) { MI_UNUSED(p); MI_UNUSED(size); }
-static inline void* mi_memtag_random_next(void* p)             { return p; }
-
-static inline void mi_memtag_blocks_init(void* start, size_t bsize, size_t idx, size_t count) {
-  MI_UNUSED(start); MI_UNUSED(bsize); MI_UNUSED(idx); MI_UNUSED(count);
+static inline size_t mi_memtag_exclude_tag(const void* p, size_t exclude) { MI_UNUSED(p); return exclude; }
+static inline size_t mi_memtag_exclude_adjacent(size_t idx, bool edge, const void* prev, const void* next) {
+  MI_UNUSED(idx); MI_UNUSED(edge); MI_UNUSED(prev); MI_UNUSED(next); return 0;
 }
-static inline void* mi_memtag_block_free(void* block, size_t bsize) {
-  MI_UNUSED(bsize); return block;
+static inline void mi_memtag_blocks_init(void* start, size_t bsize, size_t i, size_t n, size_t parity, size_t count) {
+  MI_UNUSED(start); MI_UNUSED(bsize); MI_UNUSED(i); MI_UNUSED(n); MI_UNUSED(parity); MI_UNUSED(count);
 }
-static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_t idx) {
-  MI_UNUSED(bsize); MI_UNUSED(idx); return block;
+static inline void* mi_memtag_random_adjacent(void* p, size_t exclude, const void* prev, const void* next) {
+  MI_UNUSED(exclude); MI_UNUSED(prev); MI_UNUSED(next); return p;
+}
+static inline void* mi_memtag_block_free(void* block, size_t bsize, size_t exclude, const void* prev, const void* next) {
+  MI_UNUSED(bsize); MI_UNUSED(exclude); MI_UNUSED(prev); MI_UNUSED(next); return block;
+}
+static inline void* mi_memtag_block_uncanonical(void* block, size_t bsize, size_t exclude, const void* prev, const void* next) {
+  MI_UNUSED(bsize); MI_UNUSED(exclude); MI_UNUSED(prev); MI_UNUSED(next); return block;
 }
 static inline void mi_memtag_clear(void* p, size_t size) {
   MI_UNUSED(p); MI_UNUSED(size);
 }
-static inline void* mi_memtag_meta_init(void* p, size_t size, size_t idx) {
+static inline void* mi_memtag_meta_init_adjacent(void* p, size_t size, size_t idx, bool has_prev, bool has_next) {
+  MI_UNUSED(size); MI_UNUSED(idx); MI_UNUSED(has_prev); MI_UNUSED(has_next); return p;
+}
+static inline void* mi_memtag_meta_init_class(void* p, size_t size, size_t idx) {
   MI_UNUSED(size); MI_UNUSED(idx); return p;
+}
+static inline void* mi_memtag_meta_init_separate(void* p, size_t size, size_t idx, const void* other) {
+  MI_UNUSED(size); MI_UNUSED(idx); MI_UNUSED(other); return p;
 }
 #endif
 
