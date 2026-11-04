@@ -141,7 +141,7 @@ static inline void mi_free_block_mt_publish(mi_page_t* page, mi_block_t* head, m
 }
 
 // We can also batch remote free's
-static mi_decl_noinline void mi_free_block_mt_batch(mi_page_t* page, mi_block_t* block);
+mi_decl_maybe_unused static mi_decl_noinline void mi_free_block_mt_batch(mi_page_t* page, mi_block_t* block);
 
 // Free a block multi-threaded
 #if defined(_MSC_VER)
@@ -164,12 +164,13 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
   }
   #endif
 
+  #if MI_FREE_BATCH
   if (allow_reclaim && !was_guarded) {
     mi_free_block_mt_batch(page, block);
+    return;
   }
-  else {
-    mi_free_block_mt_publish(page, block, block, allow_reclaim);
-  }
+  #endif
+  mi_free_block_mt_publish(page, block, block, allow_reclaim);
 }
 
 
@@ -878,8 +879,10 @@ static mi_decl_noinline void mi_free_batch_miss(mi_theap_t* theap, mi_free_batch
 }
 
 static inline void mi_free_block_mt_batch_in(mi_theap_t* theap, mi_page_t* page, mi_block_t* block, size_t block_size) {
-  // don't batch frees into our own abandoned pages so these can be reclaimed right away
-  if mi_unlikely(!theap->free_batch.enabled || (mi_page_is_abandoned(page) && page->theap == theap)) {
+  // don't batch frees into our own abandoned pages so these can be reclaimed right away,
+  // nor into abandoned OS pages so these can be freed right away (as these may use scarce aligned virtual address space)
+  if mi_unlikely(!theap->free_batch.enabled ||
+                 (mi_page_is_abandoned(page) && (page->theap == theap || page->memid.memkind != MI_MEM_ARENA))) {
     mi_free_block_mt_publish(page, block, block, true);
     return;
   }
@@ -922,7 +925,7 @@ static mi_decl_noinline void mi_free_block_mt_batch_init(mi_page_t* page, mi_blo
   mi_free_block_mt_batch_in(theap, page, block, block_size);
 }
 
-static mi_decl_noinline void mi_free_block_mt_batch(mi_page_t* page, mi_block_t* block) {
+mi_decl_maybe_unused static mi_decl_noinline void mi_free_block_mt_batch(mi_page_t* page, mi_block_t* block) {
   const size_t block_size = mi_page_block_size(page);
   if mi_unlikely(block_size > MI_MEDIUM_MAX_OBJ_SIZE || mi_page_is_singleton(page)) {  // don't keep singleton pages alive in a batch
     mi_free_block_mt_publish(page, block, block, true);

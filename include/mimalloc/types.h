@@ -688,7 +688,16 @@ typedef struct mi_padding_s {
 
 #define MI_PAGES_DIRECT   (MI_SMALL_WSIZE_MAX + MI_PADDING_WSIZE + 1)
 
+#ifndef MI_FREE_BATCH
+#define MI_FREE_BATCH       1     // batch cross-thread frees (set to 0 to disable)
+#endif
+#ifndef MI_FREE_BATCH_COUNT       // number of batch entries (must be a power of 2)
+#if MI_SIZE_SIZE >= 8
 #define MI_FREE_BATCH_COUNT 64
+#else
+#define MI_FREE_BATCH_COUNT 16    // batched pages stay alive; pin fewer pages on 32-bit as the virtual address space is limited
+#endif
+#endif
 #define MI_FREE_BATCH_BYTES (256*MI_KiB)
 
 typedef struct mi_free_batch_entry_s {
