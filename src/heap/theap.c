@@ -11,11 +11,13 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/util/random.h"
 #include "mimalloc/util/stats.h"
 #include "mimalloc/alloc/page.h"
+#include "mimalloc/alloc/free.h"
 #include "mimalloc/arena/arena-alloc.h"
 #include "mimalloc/profile/sample-guarded.h"
 #include "mimalloc/profile/sample-profile.h"
 #include "mimalloc/heap/heap.h"
 #include "mimalloc/heap/theap.h"
+#include "mimalloc/heap/subproc.h"
 
 #if defined(_MSC_VER) && (_MSC_VER < 1920)
 #pragma warning(disable:4204)  // non-constant aggregate initializer
@@ -136,7 +138,9 @@ static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
   const bool force = (collect >= MI_FORCE);
   if (collect != MI_ABANDON) {     // skip on thread shutdown to avoid running user-code after process exit (issue #1377)
     _mi_deferred_free(theap, force);
+    _mi_fork_child_try_collect();  // in a forked child, abandon the theaps of dead threads
   }
+  _mi_theap_free_batch_collect(theap);
 
   // python/cpython#112532: we may be called from a thread that is not the owner of the theap
   // const bool is_main_thread = (_mi_is_main_thread() && theap->thread_id == _mi_thread_id());
@@ -168,6 +172,8 @@ void _mi_theap_abandon_owned_pages(mi_theap_t* theap) {
   mi_assert_internal(theap!=NULL);
   mi_assert_internal(theap->tld == NULL);  // should be detached as we may access from another thread
   if (theap==NULL) return;
+  theap->free_batch.enabled = false;
+  _mi_theap_free_batch_collect(theap);
   for (size_t bin = 0; bin <= MI_BIN_FULL; bin++) {
     mi_page_queue_t* const pq = &theap->pages[bin];
     mi_page_t* page = pq->first;
@@ -309,6 +315,8 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
     if (head!=NULL) { head->hprev = theap; }
     heap->theaps = theap;
   }
+  theap->free_batch.enabled = (!theap->is_detached && !mi_heap_qsbr_is_enabled(heap) &&
+                              tld->subproc == heap->subproc);
 }
 
 // Initialize a detached theap for meta data allocation
@@ -364,6 +372,7 @@ size_t _mi_theap_random_next(mi_theap_t* theap) {
 
 static void mi_theap_free_mem(mi_theap_t* theap) {
   if (theap!=NULL) {
+    mi_assert_internal(theap->free_batch.batched_total == 0);
     #if MI_QSBR
     mi_assert_internal(theap->qsbr_first == NULL && theap->qsbr_last == NULL);
     #endif
@@ -542,10 +551,12 @@ void mi_theap_quiescent_abandon(mi_theap_t* theap) mi_attr_noexcept {
   mi_lock_maybe(&tld->theaps_lock, tld!=NULL) {
     mi_lock(&heap->theaps_lock) {
       // Temporarily detach for foreign-thread page cleanup, without changing any TLS references.
+      const bool batch_enabled = theap->free_batch.enabled;
       theap->tld = NULL;
       _mi_theap_abandon_owned_pages(theap);
       theap->tld = tld;
       _mi_theap_merge_stats(theap);
+      theap->free_batch.enabled = batch_enabled;
     }
   }
 }

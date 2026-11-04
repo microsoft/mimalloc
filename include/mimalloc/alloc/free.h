@@ -15,5 +15,9 @@ void          _mi_padding_shrink(const mi_page_t* page, const mi_block_t* block,
 void          _mi_free_subproc_safe(void* p) mi_attr_noexcept;
 size_t        _mi_page_usable_size(const mi_page_t* page, const void* p) mi_attr_noexcept;
 void*         _mi_memtag_canonical(void* p);
+// Requires the owner, or exclusive access to a detached/quiescent theap.
+void          _mi_theap_free_batch_collect(mi_theap_t* theap);
+// Requires the owning thread.
+void          _mi_tld_free_batch_collect(mi_tld_t* tld, bool disable);
 
 #endif

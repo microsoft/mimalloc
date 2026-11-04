@@ -15,6 +15,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim/prim-tls.h"
 #include "mimalloc/util/stats.h"
 #include "mimalloc/alloc/alloc.h"
+#include "mimalloc/alloc/free.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/profile/sample-profile.h"
 #include "mimalloc/heap/subproc.h"
@@ -368,6 +369,7 @@ static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
     else {
       // otherwise we do a mini-collect
       _mi_deferred_free(theap, false);         // call potential deferred free routines
+      _mi_theap_free_batch_collect(theap);
       _mi_theap_collect_retired(theap, false); // free retired pages
     }
   }

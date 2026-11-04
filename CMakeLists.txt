@@ -965,7 +965,7 @@ endif()
 # set language for source files now
 if(MI_USE_CXX)
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
-  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-arena.c test/test-bitmap.c test/test-qsbr.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-stress-pprof.c test/test-profile.c test/test-pprof.c test/test-fork.c PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-arena.c test/test-bitmap.c test/test-free-batch.c test/test-qsbr.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-stress-pprof.c test/test-profile.c test/test-pprof.c test/test-fork.c PROPERTIES LANGUAGE CXX )
 endif()
 
 # platform specific headers that are only needed for profiling support
@@ -1390,14 +1390,22 @@ if (MI_BUILD_TESTS)
     endif()
   endif()
 
-  # Check QSBR
-  add_executable(mimalloc-test-qsbr test/test-qsbr.c)
-  mi_test_sign(mimalloc-test-qsbr)
-  target_compile_definitions(mimalloc-test-qsbr PRIVATE ${mi_defines})
-  target_compile_options(mimalloc-test-qsbr PRIVATE ${mi_cflags})
-  target_include_directories(mimalloc-test-qsbr PRIVATE include)
-  target_link_libraries(mimalloc-test-qsbr PRIVATE ${mi_libraries})
-  add_test(NAME test-qsbr COMMAND mimalloc-test-qsbr)
+  # These tests embed the allocator to inspect internal state or extend its layout.
+  foreach(TEST_NAME qsbr free-batch)
+    add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
+    mi_test_sign(mimalloc-test-${TEST_NAME})
+    target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
+    target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})
+    target_include_directories(mimalloc-test-${TEST_NAME} PRIVATE include)
+    target_link_libraries(mimalloc-test-${TEST_NAME} PRIVATE ${mi_libraries})
+    if(MSVC AND TEST_NAME STREQUAL "free-batch")
+      target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE MI_TEST_CRASH_INFO=1)
+      target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE /Zi)
+      target_link_options(mimalloc-test-${TEST_NAME} PRIVATE /DEBUG /DELAYLOAD:dbghelp.dll)
+      target_link_libraries(mimalloc-test-${TEST_NAME} PRIVATE dbghelp delayimp)
+    endif()
+    add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
+  endforeach()
 
   # Check that memory tagging catches invalid accesses
   if(MI_MTE AND MI_ARCH STREQUAL "arm64" AND NOT WIN32)

@@ -16,6 +16,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/heap/process.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/util/threadlocal.h"
+#include "mimalloc/alloc/free.h"
 
 // the list of sub-processes is in the sealed `subprocs` (and the main subprocess is allocated in the process meta data)
 
@@ -386,6 +387,8 @@ static bool mi_fork_heap_abandon_dead(mi_heap_t* heap) {
   while (theap != NULL) {
     mi_theap_t* const next = theap->hnext;
     if (mi_fork_theap_is_dead(theap)) {
+      theap->free_batch.enabled = false;
+      _mi_theap_free_batch_collect(theap);
       mi_list_unlink_check(theap, hprev, hnext, heap->theaps, NULL);
       if (theap->hnext != NULL) { theap->hnext->hprev = theap->hprev; }
       if (theap->hprev != NULL) { theap->hprev->hnext = theap->hnext; }

@@ -12,6 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/util/random.h"
 #include "mimalloc/util/stats.h"
 #include "mimalloc/heap/page-map.h"
+#include "mimalloc/alloc/free.h"
 #include "mimalloc/profile/pprof.h"
 #include "mimalloc/profile/sample-profile.h"
 
@@ -132,7 +133,8 @@ static mi_decl_cache_align const mi_tld_t mi_tld_empty = {
   false,                  // recurse
   false,                  // in_profiler
   false,                  // is_in_threadpool
-  MI_MEMID_STATIC         // memid
+  true,                   // free_batch_disabled
+  MI_MEMID_STATIC,        // memid
 };
 
 #ifdef __cplusplus
@@ -166,6 +168,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   NULL, NULL,             // hnext, hprev
   MI_PAGE_QUEUES_EMPTY,
   MI_MEMID_STATIC,
+  { 0, false, false, { { NULL, NULL, NULL } } },
   MI_STATS_NULL,          // stats
   #if MI_QSBR
   NULL, NULL,            // qsbr_first, qsbr_last
@@ -386,6 +389,7 @@ mi_theap_t* _mi_theap_main(void) {
 static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc) {
   tld->subproc = subproc;
   tld->theaps = NULL;
+  tld->free_batch_disabled = (tld->thread_id == MI_THREAD_ID_DETACHED);
   mi_lock_init(&tld->theaps_lock);
   if (tld->thread_id == MI_THREAD_ID_DETACHED) {
     tld->numa_node = -1;
@@ -616,7 +620,7 @@ void _mi_thread_done(mi_theap_t* _theap_main)
 {
   // NULL can be passed on some platforms
   if (_theap_main==NULL) {
-    _theap_main = _mi_theap_default();
+    _theap_main = _mi_theap_main();
   }
   else {
     _theap_main = mi_theap_thread_done_auth(_theap_main);
@@ -630,6 +634,10 @@ void _mi_thread_done(mi_theap_t* _theap_main)
 
   // get the current tld
   mi_tld_t* const tld = _theap_main->tld;
+
+  if (tld->thread_id == _mi_prim_thread_id()) {
+    _mi_tld_free_batch_collect(tld, true);
+  }
 
   // release dynamic thread_local's
   _mi_thread_locals_thread_done();
@@ -767,6 +775,11 @@ void mi_process_init(void) mi_attr_noexcept {
 // Called once on process exit (when the process/dll is exiting gracefully)
 static void mi_process_unwind_once(void)
 {
+  mi_theap_t* const theap = _mi_theap_main();
+  if (mi_theap_is_initialized(theap)) {
+    _mi_tld_free_batch_collect(theap->tld, true);
+  }
+
   // stop the profiler
   _mi_pprof_profiler_done();
 
