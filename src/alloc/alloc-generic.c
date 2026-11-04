@@ -318,8 +318,8 @@ static mi_theap_t* mi_theap_init(mi_theap_t* theap) {
   if mi_likely(mi_theap_is_initialized(theap)) {
     return (mi_theap_handle_is_valid(theap) ? theap : NULL);  // validate the theap handle (see `heap/heap.h:mi_theap_handle_is_valid`)
   }
-  if (mi_addr(theap) == mi_addr(&mi_process_metadata()->theap_empty_wrong)) {
-    // we were unable to allocate a theap for a first-class heap
+  if (_mi_theap_is_unavailable(theap) || _mi_thread_is_done()) {
+    // we were unable to allocate a theap for a first-class heap, or the thread is done (and we do not re-initialize implicitly)
     return NULL;
   }
   // otherwise we initialize the thread and its default theap
@@ -449,8 +449,30 @@ static mi_decl_noinline void* mi_malloc_generic_sample(mi_theap_t* theap, size_t
   return mi_malloc_generic_from_page(theap, size, zero, huge_alignment, ppage, sample_countdown_adjust);
 }
 
+// Allocate on a thread after `mi_thread_done` (for example in thread-local destructors)
+// using meta-data allocation (instead of re-initializing the thread which could leak).
+// Note: `size` includes `MI_PADDING_SIZE` and the allocation is always zero'd.
+static mi_decl_noinline void* mi_malloc_generic_thread_done(size_t size, size_t huge_alignment, mi_page_t** ppage)
+{
+  mi_subproc_t* const subproc = _mi_subproc();
+  const size_t req_size = size - MI_PADDING_SIZE;
+  void* const p = (huge_alignment==0 ? _mi_meta_zalloc(subproc, req_size, NULL) : _mi_meta_zalloc_aligned(subproc, req_size, huge_alignment, NULL));
+  if (p!=NULL && ppage!=NULL) { *ppage = mi_ptr_page(p); }
+  return p;
+}
+
+// The unavailable theap is either the default theap of a done thread, or signifies that
+// a theap could not be created for a heap on a live thread (in which case we return NULL).
+static bool mi_theap_is_thread_done(const mi_theap_t* theap) {
+  return (_mi_theap_is_unavailable(theap) && _mi_thread_is_done());
+}
+
 static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage)
 {
+  if mi_unlikely(mi_theap_is_thread_done(theap)) {
+    return mi_malloc_generic_thread_done(size, huge_alignment, ppage);
+  }
+
   // initialize if necessary
   theap = mi_malloc_generic_admin(theap);
   if (theap==NULL) return NULL;
@@ -515,6 +537,9 @@ mi_decl_restrict void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t
 // Generic allocation without sampling
 mi_decl_restrict void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
+  if mi_unlikely(mi_theap_is_thread_done(theap)) {
+    return mi_malloc_generic_thread_done(size, 0, ppage);
+  }
   // do the admin first as it can update the sample rate; we never call it (or the sampling path) recursively here
   theap = mi_malloc_generic_admin(theap);
   if (theap==NULL) return NULL;

@@ -307,8 +307,19 @@ mi_decl_cold mi_decl_noinline mi_theap_t* _mi_theap_empty_get(void) {
   return (mi_theap_t*)&_mi_theap_empty;
 }
 
+mi_theap_t* _mi_theap_unavailable(void) {
+  return mi_process_metadata_field(mi_theap_t, theap_unavailable);
+}
+
 bool _mi_is_empty_theap(const mi_theap_t* theap) {
-  return (theap == &_mi_theap_empty);
+  return (theap == &_mi_theap_empty || _mi_theap_is_unavailable(theap));
+}
+
+// A thread is done once `mi_thread_done` set its default theap to the unavailable theap.
+// Implicit (lazy) initialization is then no longer done as that would leak if the thread-done hooks already ran
+// (for example when thread-local destructors allocate). Only an explicit `mi_thread_init` re-initializes the thread.
+bool _mi_thread_is_done(void) {
+  return _mi_theap_is_unavailable(_mi_theap_default());
 }
 
 /* -----------------------------------------------------------
@@ -322,8 +333,8 @@ static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc);
 // Initialize main heap
 static void mi_heap_main_init_once(void) {
   mi_memid_t memid_static = _mi_memid_create(MI_MEM_STATIC);
-  mi_theap_t* const theap_empty_wrong = mi_process_metadata_field(mi_theap_t, theap_empty_wrong);
-  mi_memcpy(theap_empty_wrong,&_mi_theap_empty,sizeof(*theap_empty_wrong));
+  mi_theap_t* const theap_unavailable = _mi_theap_unavailable();
+  mi_memcpy(theap_unavailable,&_mi_theap_empty,sizeof(*theap_unavailable));
 
   // initialize the main subprocess
   mi_subproc_t* subproc_main = _mi_subproc_main_init();
@@ -547,11 +558,12 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
     }
   }
 
-  // reset the thread local theaps
+  // reset the thread local theaps and mark the thread as done
   // note: do this after abandon as page->heap may be NULL and mi_heap_main should return the heap
   // belonging to the right subprocess
-  _mi_theap_default_set((mi_theap_t*)&_mi_theap_empty);
+  _mi_theap_default_set(_mi_theap_unavailable());
   _mi_theap_cached_set((mi_theap_t*)&_mi_theap_empty);
+  _mi_prim_thread_associate_default_theap(NULL);  // so the thread-done hook does not use the freed theap
 
   // We might run concurrently with a `mi_heap_free_theaps` and we need to ensure we free theaps atomically.
   // we first detach our theaps list from any heaps
@@ -574,7 +586,7 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
     }
   }
 
-  mi_assert(_mi_theap_default()==(mi_theap_t*)&_mi_theap_empty); // careful to not re-initialize the default theap during theap_delete
+  mi_assert(_mi_thread_is_done()); // careful to not re-initialize the default theap during theap_delete
   mi_assert(!mi_theap_is_initialized(_mi_theap_default()));
 }
 
