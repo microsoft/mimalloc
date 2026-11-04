@@ -40,6 +40,7 @@ static const mi_os_mem_config_t mi_os_mem_config_default = {
   true,     // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
   false,    // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
   true,     // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
+  false,    // has aligned allocation? (if true the OS can directly allocate at a requested alignment)
   false,    // has transparent huge pages? (if true we purge in (aligned) large page size chunks only to not fragment such pages)
   false,    // is elevated? (set in `_mi_os_init`)
   false     // has memory tagging? (if true, all non-large OS memory supports memory tagging)
@@ -471,8 +472,8 @@ static void* mi_os_prim_alloc_aligned(mi_subproc_t* subproc, size_t size, size_t
   #if MI_SIZE_SIZE >= 8
   const bool try_direct_alloc = true;
   #else
-  // try a direct allocation if the alignment is below the default, or less than or equal to 1/4 fraction of the size.
-  const bool try_direct_alloc = (alignment <= mi_os_mem_config()->alloc_granularity || alignment <= size/4);
+  // try a direct allocation if the OS supports aligned allocation, the alignment is below the default, or less than or equal to 1/4 fraction of the size.
+  const bool try_direct_alloc = (mi_os_mem_config()->has_aligned_alloc || alignment <= mi_os_mem_config()->alloc_granularity || alignment <= size/4);
   #endif
 
   bool os_is_large = false;

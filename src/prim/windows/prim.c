@@ -223,6 +223,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     if (pVirtualAlloc2==NULL) pVirtualAlloc2 = mi_win_get_proc_encoded(hDll, "VirtualAlloc2");
     mi_win_freelibrary(hDll, hDllFree);
   }
+  config->has_aligned_alloc = (pVirtualAlloc2 != NULL);
   // NtAllocateVirtualMemoryEx is used for huge page allocation
   hDll = mi_win_getlibrary(L"ntdll.dll", &hDllFree);
   if (hDll != NULL) {
