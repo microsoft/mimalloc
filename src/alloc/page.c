@@ -913,7 +913,7 @@ bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   // tag the new blocks
   const bool memtag = mi_page_is_memtag(page);
   if (memtag) {
-    mi_memtag_blocks_init(mi_page_start(page) + (page->capacity * bsize), bsize, page->capacity + mi_page_memtag_parity(page), extend);
+    mi_memtag_blocks_init(mi_page_start(page) + (page->capacity * bsize), bsize, page->capacity, page->reserved, mi_page_memtag_parity(page), extend);
   }
   // if not initially zero, the free list of a zero-on-free page is no longer zero
   if (!page->memid.initially_zero) { page->free_is_zero = false; }

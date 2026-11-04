@@ -348,6 +348,24 @@ static inline size_t mi_page_memtag_parity(const mi_page_t* page) {
   return ((page->reserved & 1) != 0 && mi_page_meta_is_separated(page) && mi_page_start(page) != mi_page_slice_start(page) ? 1 : 0);
 }
 
+// The tag exclusion mask for (re)tagging the `block` of size `bsize` in a memory tagged page, and the adjacent blocks in `*prev`
+// and `*next` (or NULL) such that the new tag can differ from the tags of the adjacent blocks (see `prim-mte.h:mi_memtag_random_adjacent`).
+// Only the first unit of the neighbours is read (as a guarded block may end in a guard page), and only for blocks below the capacity
+// (as later blocks are not yet tagged and may not be committed). The first and the last block of the page use the tag class of `idx`
+// (as the adjacent memory cannot be read).
+// (note: the capacity can be read concurrently by a non-owning thread but it only grows while the page has a used block)
+// (note: we branch on the (rare) edge case instead of selecting the mask as this keeps it off the critical path of the retagging)
+static inline size_t mi_page_block_memtag_adjacent(const mi_page_t* page, const void* block, size_t bsize, size_t idx, const void** prev, const void** next) {
+  const uint8_t* const ublock = (const uint8_t*)mi_ptr_memtag_meta(block);
+  const size_t ofs = (size_t)(mi_addr(ublock) - mi_addr(mi_page_start(page)));
+  *prev = (ofs == 0 ? NULL : ublock - bsize);
+  *next = (ofs + bsize >= (size_t)page->capacity * bsize ? NULL : ublock + bsize);
+  if mi_unlikely(ofs == 0 || ofs + bsize >= (size_t)page->reserved * bsize) {
+    return mi_memtag_exclude_base(idx, true);
+  }
+  return mi_memtag_exclude_base(idx, false);
+}
+
 // Are freed blocks in this page zeroed (except for the free list link)? This holds for small blocks that are
 // memory tagged or with `MI_SECURE>=3` (always false otherwise, or in debug mode as freed blocks are filled then)
 static inline bool mi_page_is_zero_on_free(const mi_page_t* page) {

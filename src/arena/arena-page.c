@@ -651,15 +651,27 @@ static void mi_arenas_page_init_memory(mi_theap_t* theap, mi_page_t* page, uint8
   if (memid->guard_end)   { _mi_os_secure_guard_page_set_at(subproc, slice_start + page_end, *memid); }
 }
 
-// With memory tagging, give the page meta data a random tag. Page meta data in front of the slices
-// has the opposite tag class of the first block, while separate page meta data alternates the tag class
-// with adjacent page meta data (see `mi_page_meta_memtag_idx`). Free arena memory is untagged, but the
-// separate arena page meta entries always have a random tag (see `arena.c:mi_arena_memtag_init`).
-// (note: the extra aligned page meta entries that only point to the page (see `mi_arenas_page_link_aligned_meta`) stay untagged)
+// With memory tagging, give the page meta data a fresh random tag. Page meta data in front of the slices
+// has the opposite tag class of the first block, the separate arena page meta entries have a tag that differs
+// from the adjacent entries (see `arena.h:mi_arena_page_meta_memtag`), and the separate page meta data of pages allocated
+// directly from the OS (which is not adjacent to other page meta data) gets a tag from the full range.
+// Free arena memory is untagged, but the separate arena page meta entries always have a random tag (see `arena.c:mi_arena_memtag_init`).
+// (note: aligned page meta data is never used with memory tagging as that always uses `MI_FREE_IS_CHECKED`)
 static mi_page_t* mi_page_meta_memtag(mi_page_t* page, uint8_t* slice_start, mi_memid_t memid) {
   if (!mi_memtag_use_for_meta(memid.is_memtag)) return page;
-  const size_t idx = (mi_addr(page) == mi_addr(slice_start) ? 1 : mi_page_meta_memtag_idx(page));
-  return mi_page_meta_bounded(mi_memtag_meta_init(page, sizeof(mi_page_t), idx));
+  if (mi_addr(page) == mi_addr(slice_start)) {
+    return mi_page_meta_bounded(mi_memtag_meta_init_class(page, sizeof(mi_page_t), 1));
+  }
+  mi_arena_t* const arena = mi_memid_arena(memid);
+  if (arena != NULL && arena->pages_meta != NULL) {
+    mi_assert_internal(mi_addr(page) == mi_addr(&arena->pages_meta[memid.mem.arena.slice_index]));
+    return mi_page_meta_bounded(mi_arena_page_meta_memtag(arena, page));
+  }
+  #if MI_PAGE_META_IS_ALIGNED
+  return mi_page_meta_bounded(mi_memtag_meta_init_class(page, sizeof(mi_page_t), mi_page_meta_memtag_idx(page)));  // alternate the tag class in aligned arrays
+  #else
+  return mi_page_meta_bounded(mi_memtag_meta_init_separate(page, sizeof(mi_page_t), mi_page_meta_memtag_idx(page), NULL));
+  #endif
 }
 
 // Is this page meta data an entry of the separate arena page meta data (`arena->pages_meta`)?
@@ -675,7 +687,7 @@ static bool mi_page_meta_is_arena_entry(mi_page_t* page) {
 // random tag while other page meta data is untagged again (as free arena memory).
 static void mi_page_meta_memtag_done(mi_page_t* page, mi_memid_t memid) {
   if (!mi_memtag_use_for_meta(memid.is_memtag)) return;
-  if (mi_page_meta_is_arena_entry(page)) { mi_memtag_meta_init(page, sizeof(mi_page_t), mi_page_meta_memtag_idx(page)); }
+  if (mi_page_meta_is_arena_entry(page)) { mi_arena_page_meta_memtag(mi_memid_arena(memid), page); }
                                     else { mi_memtag_clear(page, sizeof(mi_page_t)); }
 }
 

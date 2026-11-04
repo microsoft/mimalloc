@@ -440,6 +440,9 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   }
   config->has_partial_free = true;    // mmap can free in parts
   config->has_virtual_reserve = true; // todo: check if this true for NetBSD?  (for anonymous mmap with PROT_NONE)
+  #if defined(MAP_ALIGNED) || defined(MAP_ALIGN)
+  config->has_aligned_alloc = true;   // see `unix_mmap_prim_aligned`
+  #endif
   config->large_page_size = unix_detect_large_page_size();
   config->has_transparent_huge_pages = (config->large_page_size <= MI_UNIX_MAX_THP_PAGE_SIZE) && unix_detect_thp();
   config->has_overcommit = unix_detect_overcommit();
