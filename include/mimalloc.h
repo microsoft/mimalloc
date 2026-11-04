@@ -392,6 +392,7 @@ struct mi_theap_s;
 typedef struct mi_theap_s mi_theap_t;
 
 mi_decl_export mi_theap_t* mi_heap_theap(mi_heap_t* heap);
+mi_decl_export mi_heap_t*  mi_theap_heap(const mi_theap_t* theap);
 mi_decl_export mi_theap_t* mi_theap_set_default(mi_theap_t* theap);
 mi_decl_export mi_theap_t* mi_theap_get_default(void);
 mi_decl_export void        mi_theap_collect(mi_theap_t* theap, bool force) mi_attr_noexcept;

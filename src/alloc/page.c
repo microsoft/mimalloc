@@ -929,7 +929,7 @@ bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
 mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   mi_assert(page != NULL);
   mi_assert(theap!=NULL);
-  // page->heap = (mi_is_heap_main(mi_theap_heap(theap)) ? NULL : mi_theap_heap(theap)); // faster for `mi_page_associated_theap`
+  // page->heap = (mi_is_heap_main(_mi_theap_heap(theap)) ? NULL : _mi_theap_heap(theap)); // faster for `mi_page_associated_theap`
   // mi_page_set_theap(page, theap);
 
   size_t page_size;
@@ -951,7 +951,7 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page) {
   #endif
 
   mi_assert_internal(page->heap != NULL);
-  mi_assert_internal(page->heap == mi_theap_heap(theap));
+  mi_assert_internal(page->heap == _mi_theap_heap(theap));
   mi_assert_internal(page->theap!=NULL);
   mi_assert_internal(page->theap == mi_page_theap(page));
   mi_assert_internal(page->capacity == 0);

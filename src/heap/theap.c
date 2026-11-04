@@ -124,7 +124,7 @@ static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_pag
 
 void _mi_theap_merge_stats(mi_theap_t* theap) {
   mi_assert_internal(mi_theap_is_initialized(theap));
-  mi_heap_t* const heap = mi_theap_heap(theap);
+  mi_heap_t* const heap = _mi_theap_heap(theap);
   _mi_stats_merge_into(&heap->stats, &theap->stats);
 }
 
@@ -199,6 +199,10 @@ void mi_heap_collect(mi_heap_t* heap, bool force) {
 /* -----------------------------------------------------------
   Heap new
 ----------------------------------------------------------- */
+
+mi_heap_t* mi_theap_heap(const mi_theap_t* theap) {
+  return _mi_theap_heap(theap);
+}
 
 mi_theap_t* mi_theap_get_default(void) {
   mi_theap_t* theap = _mi_theap_default();
@@ -403,7 +407,7 @@ static void mi_theap_detach_from_tld(mi_theap_t* theap) {
 }
 
 static void mi_theap_detach_from_heap(mi_theap_t* theap) {
-  mi_heap_t* const heap = mi_theap_heap(theap);
+  mi_heap_t* const heap = _mi_theap_heap(theap);
   if (theap->hnext != NULL) { theap->hnext->hprev = theap->hprev; }
   if (theap->hprev != NULL) { theap->hprev->hnext = theap->hnext; }
                       else { mi_assert_internal(heap->theaps == theap); heap->theaps = theap->hnext; }
@@ -499,7 +503,7 @@ void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept {
     while (owned!=NULL && owned!=theap) { owned = owned->tnext; }
     if (owned!=NULL) {
       found = true;
-      mi_heap_t* const heap = mi_theap_heap(owned);
+      mi_heap_t* const heap = _mi_theap_heap(owned);
       mi_assert_internal(heap!=NULL);
       mi_lock(&heap->theaps_lock) {
         if (owned == main) {
@@ -529,7 +533,7 @@ void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept {
 void mi_theap_quiescent_abandon(mi_theap_t* theap) mi_attr_noexcept {
   if (theap==NULL || !mi_theap_is_initialized(theap)) return;
   mi_tld_t* const tld = theap->tld;
-  mi_heap_t* const heap = mi_theap_heap(theap);
+  mi_heap_t* const heap = _mi_theap_heap(theap);
   mi_lock_maybe(&tld->theaps_lock, tld!=NULL) {
     mi_lock(&heap->theaps_lock) {
       // Temporarily detach for foreign-thread page cleanup, without changing any TLS references.
@@ -549,7 +553,7 @@ void mi_theap_unload(mi_theap_t* theap) {
   mi_assert(mi_theap_is_initialized(theap));
   mi_assert_expensive(mi_theap_is_valid(theap));
   if (theap==NULL || !mi_theap_is_initialized(theap)) return;
-  if (mi_theap_heap(theap)->exclusive_arena == NULL) {
+  if (_mi_theap_heap(theap)->exclusive_arena == NULL) {
     _mi_warning_message("cannot unload theaps that are not associated with an exclusive arena\n");
     return;
   }
@@ -569,7 +573,7 @@ void mi_theap_unload(mi_theap_t* theap) {
 bool mi_theap_reload(mi_theap_t* theap, mi_arena_id_t arena_id) {
   mi_assert(mi_theap_is_initialized(theap));
   if (theap==NULL || !mi_theap_is_initialized(theap)) return false;
-  if (mi_theap_heap(theap)->exclusive_arena == NULL) {
+  if (_mi_theap_heap(theap)->exclusive_arena == NULL) {
     _mi_warning_message("cannot reload theaps that were not associated with an exclusive arena\n");
     return false;
   }
@@ -578,8 +582,8 @@ bool mi_theap_reload(mi_theap_t* theap, mi_arena_id_t arena_id) {
     return false;
   }
   mi_arena_t* arena = _mi_arena_from_id(arena_id);
-  if (mi_theap_heap(theap)->exclusive_arena != arena) {
-    _mi_warning_message("trying to reload a theap at a different arena address: %p vs %p\n", mi_theap_heap(theap)->exclusive_arena, arena);
+  if (_mi_theap_heap(theap)->exclusive_arena != arena) {
+    _mi_warning_message("trying to reload a theap at a different arena address: %p vs %p\n", _mi_theap_heap(theap)->exclusive_arena, arena);
     return false;
   }
 
@@ -792,7 +796,7 @@ typedef struct mi_visit_blocks_args_s {
 
 static bool mi_theap_area_visitor(const mi_theap_t* theap, const mi_theap_area_ex_t* xarea, void* arg) {
   mi_visit_blocks_args_t* args = (mi_visit_blocks_args_t*)arg;
-  if (!args->visitor(mi_theap_heap(theap), &xarea->area, NULL, xarea->area.block_size, args->arg)) return false;
+  if (!args->visitor(_mi_theap_heap(theap), &xarea->area, NULL, xarea->area.block_size, args->arg)) return false;
   if (args->visit_blocks) {
     return _mi_theap_area_visit_blocks(&xarea->area, xarea->page, args->visitor, args->arg);
   }

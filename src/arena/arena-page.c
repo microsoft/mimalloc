@@ -176,7 +176,7 @@ static mi_page_guards_t mi_theap_page_guards(const mi_theap_t* theap, size_t siz
   const size_t gsize = _mi_os_secure_guard_page_size();
   const bool guard_end = (theap->guard_end || (singleton && MI_SECURE >= 1));  // in secure mode, huge blocks are always followed by a guard page
   mi_page_guards_t guards = { 0, 0 };
-  const mi_arena_t* const req_arena = mi_theap_heap(theap)->exclusive_arena;
+  const mi_arena_t* const req_arena = _mi_theap_heap(theap)->exclusive_arena;
   if (req_arena != NULL && req_arena->memid.is_pinned) return guards;
   if (theap->guard_front && !os_align && gsize <= size/4) { guards.front = gsize; }
   if (guard_end && guards.front + gsize <= size/4) { guards.end = gsize; }
@@ -235,7 +235,7 @@ static bool mi_arena_try_find_abandoned_visit(mi_arena_t* arena, const void* arg
   const mi_arena_abandoned_visit_info_t* info = (const mi_arena_abandoned_visit_info_t*)arg;
   mi_assert_internal(result != NULL);
   mi_theap_t* const theap = info->theap;
-  mi_heap_t* const heap = mi_theap_heap(theap);
+  mi_heap_t* const heap = _mi_theap_heap(theap);
   const size_t tseq = theap->tld->thread_seq;
   mi_arena_pages_t* const arena_pages = mi_heap_arena_pages(heap, arena);
   if (arena_pages != NULL) {
@@ -270,7 +270,7 @@ static bool mi_arena_try_find_abandoned_visit(mi_arena_t* arena, const void* arg
 
 static mi_page_t* mi_arenas_page_try_find_abandoned(mi_theap_t* theap, size_t slice_count, size_t block_size, mi_page_guards_t guards)
 {
-  mi_heap_t* const heap = mi_theap_heap(theap);
+  mi_heap_t* const heap = _mi_theap_heap(theap);
   const size_t tseq = theap->tld->thread_seq;
   mi_arena_t* const req_arena = heap->exclusive_arena;
 
@@ -442,7 +442,7 @@ static bool mi_arena_page_meta_ensure_committed(mi_arena_t* arena, uint8_t* slic
 // Try to allocate slices from free space in the arena's, and return the separate page meta data (if available) in `*ppage_meta`.
 static uint8_t* mi_arenas_page_alloc_from_slices(mi_theap_t* theap, size_t slice_count, bool commit, bool allow_large,
                                                  mi_memid_t* memid, mi_arena_pages_t** parena_pages, mi_page_t** ppage_meta) {
-  mi_heap_t* const heap = mi_theap_heap(theap);
+  mi_heap_t* const heap = _mi_theap_heap(theap);
   mi_tld_t*  const tld  = theap->tld;
   const int numa_node = (heap->numa_node >= 0 ? heap->numa_node : tld->numa_node);
 
@@ -571,7 +571,7 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
   *parena_pages = NULL;
   *ppage_meta = NULL;
   *memid = _mi_memid_none();
-  mi_heap_t* const heap = mi_theap_heap(theap);
+  mi_heap_t* const heap = _mi_theap_heap(theap);
 
   // try to allocate from free space in arena's
   uint8_t* slice_start = NULL;
@@ -697,7 +697,7 @@ static void mi_arenas_page_init_meta(mi_theap_t* theap, mi_page_t* page, uint8_t
   page->free_is_zero = memid.initially_zero;
   page->slice_pcommitted = (uint16_t)(commit_size / _mi_os_page_size());
 
-  page->heap = mi_theap_heap(theap);
+  page->heap = _mi_theap_heap(theap);
   if (block_size <= MI_LARGE_MAX_OBJ_SIZE && mi_memtag_use_for(memid.is_memtag, block_size)) {  // huge blocks are not tagged (but have an end guard page in secure mode); over-aligned singletons up to this size are tagged
     mi_page_flags_set(page, true, MI_PAGE_IS_MEMTAG);
   }
@@ -1392,7 +1392,7 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
   MI_UNUSED(block); MI_UNUSED(block_size); MI_UNUSED(heap);
   const mi_heap_delete_visit_info_t* info = (const mi_heap_delete_visit_info_t*)arg;
   mi_heap_t*  heap_target           = info->heap_target;
-  mi_theap_t* const theap           = NULL; // info->theap;       mi_assert_internal(mi_theap_heap(theap) == heap);
+  mi_theap_t* const theap           = NULL; // info->theap;       mi_assert_internal(_mi_theap_heap(theap) == heap);
   mi_page_t*  const page            = mi_heap_area_page(area);
 
   mi_page_claim_ownership(page);       // claim ownership

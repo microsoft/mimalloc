@@ -433,7 +433,7 @@ void _mi_fork_child_zone(void) {
   if (!mi_theap_is_initialized(theap_default)) return;
 
   // suspend reclaiming abandoned pages (by allocation) of the default heap
-  mi_heap_t* const heap = mi_theap_heap(theap_default);
+  mi_heap_t* const heap = _mi_theap_heap(theap_default);
   for (size_t bin = 0; bin < MI_BIN_COUNT; bin++) {
     _mi_process.fork.suspended_count[bin] = mi_atomic_exchange_relaxed(&heap->abandoned_count[bin], 0);
   }

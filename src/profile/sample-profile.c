@@ -112,7 +112,7 @@ static mi_profiler_t* mi_heap_profiler(const mi_heap_t* heap) {
 }
 
 static mi_profiler_t* mi_theap_get_enabled_profiler(const mi_theap_t* theap) {
-  mi_heap_t* const heap = mi_theap_heap(theap);
+  mi_heap_t* const heap = _mi_theap_heap(theap);
   mi_profiler_t* prof = mi_atomic_load_ptr_acquire(mi_profiler_t, &heap->profiler);
   if (prof!=NULL && mi_profiler_is_enabled(prof) && prof->on_alloc != NULL) {
     return prof;
@@ -130,7 +130,7 @@ static mi_profiler_t* mi_theap_get_enabled_profiler(const mi_theap_t* theap) {
 static size_t mi_profiler_on_alloc(mi_theap_t* theap, mi_profiler_t* prof, mi_profiler_sample_data_t* data, void* p, size_t req_size, uint64_t requested_since_last_sample) {
   mi_tld_t* const tld = theap->tld;
   tld->in_profiler = true;
-  const size_t new_sample_rate = (*prof->on_alloc)(prof, data, p, req_size, theap->profile_sample_rate, requested_since_last_sample, mi_theap_heap(theap));
+  const size_t new_sample_rate = (*prof->on_alloc)(prof, data, p, req_size, theap->profile_sample_rate, requested_since_last_sample, _mi_theap_heap(theap));
   tld->in_profiler = false;
   return new_sample_rate;
 }

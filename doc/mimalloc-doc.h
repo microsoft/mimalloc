@@ -1413,6 +1413,11 @@ typedef struct mi_theap_s mi_theap_t;
 /// the theap at each allocation call.
 mi_theap_t* mi_heap_theap(mi_heap_t* heap);
 
+/// @brief Return the owning heap for the given thread-local heap.
+/// @param theap the thread-local heap
+/// @return The heap that owns the `theap`
+mi_theap_t* mi_theap_heap(const mi_heap_t* heap);
+
 /// Release outstanding resources in a specific theap.
 void mi_theap_collect(mi_theap_t* theap, bool force);
 
