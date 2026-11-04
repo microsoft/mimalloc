@@ -915,7 +915,7 @@ static mi_decl_noinline void mi_free_block_mt_batch_init(mi_page_t* page, mi_blo
 
 static mi_decl_noinline void mi_free_block_mt_batch(mi_page_t* page, mi_block_t* block) {
   const size_t block_size = mi_page_block_size(page);
-  if mi_unlikely(block_size > MI_MEDIUM_MAX_OBJ_SIZE) {
+  if mi_unlikely(block_size > MI_MEDIUM_MAX_OBJ_SIZE || mi_page_is_singleton(page)) {  // don't keep singleton pages alive in a batch
     mi_free_block_mt_publish(page, block, block, true);
     return;
   }
