@@ -95,7 +95,23 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
 // Forward declaration for multi-threaded collect
 static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t* mt_free, bool allow_reclaim) mi_attr_noexcept;
 
-static inline void mi_free_block_mt_publish(mi_page_t* page, mi_block_t* head, mi_block_t* tail, bool allow_reclaim) {
+#if MI_BATCH_SPLICE
+// Splice the `count-1` blocks after `head` (up to `tail`) into the local free list of an owned page
+// (experimental: used when a published batch takes ownership of an abandoned page).
+static void mi_decl_noinline mi_free_block_mt_splice(mi_page_t* page, mi_block_t* head, mi_block_t* tail, size_t count) {
+  mi_assert_internal(mi_page_is_owned(page));
+  mi_assert_internal(count > 1 && count <= mi_page_used(page));
+  mi_block_t* const first = mi_block_next(page, head);
+  mi_block_set_next(page, head, mi_block_next(page, tail));  // keep `head` in the thread free list
+  mi_block_set_next(page, tail, page->local_free);
+  page->local_free = first;
+  page->xused.used_alloc -= (count - 1);
+}
+#endif
+
+// Publish a list of `count` blocks from `head` to `tail` to the thread free list of a page
+static inline void mi_free_block_mt_publish_n(mi_page_t* page, mi_block_t* head, mi_block_t* tail, size_t count, bool allow_reclaim) {
+  MI_UNUSED(count);
   mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
   mi_thread_free_t tf_new;
   do {
@@ -107,8 +123,15 @@ static inline void mi_free_block_mt_publish(mi_page_t* page, mi_block_t* head, m
   mi_assert_internal(mi_tf_is_owned(tf_new));
   if (!mi_tf_is_owned(tf_old)) {
     mi_assert_internal(mi_page_is_abandoned(page));
+    #if MI_BATCH_SPLICE
+    if (count > 1 && page->block_size <= MI_SMALL_SIZE_MAX) { mi_free_block_mt_splice(page, head, tail, count); }
+    #endif
     mi_free_try_collect_mt(page, head, allow_reclaim);
   }
+}
+
+static inline void mi_free_block_mt_publish(mi_page_t* page, mi_block_t* head, mi_block_t* tail, bool allow_reclaim) {
+  mi_free_block_mt_publish_n(page, head, tail, 1, allow_reclaim);
 }
 
 // We can also batch remote free's
@@ -778,10 +801,12 @@ static void mi_free_batch_publish(mi_theap_t* theap, mi_free_batch_entry_t* batc
   mi_assert_internal(mi_page_heap(page) == mi_theap_heap(theap));
   mi_block_t* const head = batch->head;
   mi_block_t* const tail = batch->tail;
+  const size_t count = batch->count;
+  batch->count = 0;
   batch->page = NULL;
   batch->head = batch->tail = NULL;
   // const bool allow_reclaim = (theap->tld != NULL && theap->tld->thread_id == _mi_prim_thread_id());
-  mi_free_block_mt_publish(page, head, tail, true);
+  mi_free_block_mt_publish_n(page, head, tail, count, true);
 }
 
 void _mi_theap_free_batch_collect(mi_theap_t* theap) {
@@ -819,6 +844,7 @@ static inline void mi_free_batch_push(mi_theap_t* theap, mi_free_batch_entry_t* 
   // Until publication these blocks remain counted as used and keep the page alive.
   mi_block_set_next(page, block, batch->head);
   batch->head = block;
+  batch->count++;
   theap->free_batch.batched_total += block_size;
   if mi_unlikely(theap->free_batch.batched_total >= MI_FREE_BATCH_BYTES) {
     _mi_theap_free_batch_collect(theap);

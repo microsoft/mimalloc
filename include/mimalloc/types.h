@@ -695,6 +695,7 @@ typedef struct mi_free_batch_entry_s {
   mi_page_t*  page;
   mi_block_t* head;
   mi_block_t* tail;
+  size_t      count;
 } mi_free_batch_entry_t;
 
 typedef struct mi_free_batch_s {
