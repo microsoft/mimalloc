@@ -135,7 +135,7 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
   }
   #endif
 
-  if (allow_reclaim && !was_guarded && !mi_page_is_abandoned(page)) {
+  if (allow_reclaim && !was_guarded) {
     mi_free_block_mt_batch(page, block);
   }
   else {
@@ -843,7 +843,8 @@ static mi_decl_noinline void mi_free_batch_miss(mi_theap_t* theap, mi_free_batch
 }
 
 static inline void mi_free_block_mt_batch_in(mi_theap_t* theap, mi_page_t* page, mi_block_t* block, size_t block_size) {
-  if mi_unlikely(!theap->free_batch.enabled) {
+  // don't batch frees into our own abandoned pages so these can be reclaimed right away
+  if mi_unlikely(!theap->free_batch.enabled || (mi_page_is_abandoned(page) && page->theap == theap)) {
     mi_free_block_mt_publish(page, block, block, true);
     return;
   }
@@ -860,11 +861,18 @@ static inline void mi_free_block_mt_batch_in(mi_theap_t* theap, mi_page_t* page,
 }
 
 static mi_decl_noinline void mi_free_block_mt_batch_init(mi_page_t* page, mi_block_t* block, mi_heap_t* heap, size_t block_size) {
-  mi_theap_t* const main = _mi_theap_main();
-  mi_tld_t* const tld = (main == NULL ? NULL : main->tld);
-  if mi_unlikely(tld == NULL || tld->free_batch_disabled ||
-                tld->subproc != heap->subproc || mi_heap_qsbr_is_enabled(heap) ||
-                mi_page_thread_id(page) == MI_THREAD_ID_DETACHED) {
+  // check first as meta-data pages are also freed during thread teardown
+  if mi_unlikely(mi_page_thread_id(page) == MI_THREAD_ID_DETACHED || mi_heap_qsbr_is_enabled(heap)) {
+    mi_free_block_mt_publish(page, block, block, true);
+    return;
+  }
+  mi_theap_t* main = _mi_theap_main();
+  if mi_unlikely(!mi_theap_is_initialized(main)) {
+    mi_thread_init();  // initialize free-only threads so they can batch as well
+    main = _mi_theap_main();
+  }
+  mi_tld_t* const tld = (mi_theap_is_initialized(main) ? main->tld : NULL);
+  if mi_unlikely(tld == NULL || tld->free_batch_disabled || tld->subproc != heap->subproc) {
     mi_free_block_mt_publish(page, block, block, true);
     return;
   }
