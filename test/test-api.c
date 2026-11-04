@@ -59,6 +59,7 @@ static bool test_zero_aligned_first(void);
 static bool test_aligned_all(void);
 static bool test_heap_destroy_xthread_free(void);
 static bool test_heap_destroy_stale_theap(void);
+static bool test_thread_done_no_reinit(void);
 #ifdef __cplusplus
 static bool test_new_first(void);
 #endif
@@ -756,6 +757,9 @@ int main(void) {
   CHECK_THREADS_BODY("heap-destroy-stale-theap") {    // a thread's cached theap must not survive the destroy of its heap
     result = test_heap_destroy_stale_theap();
   }
+  CHECK_THREADS_BODY("thread-done-no-reinit") {      // allocation after `mi_thread_done` (e.g. in thread-local destructors) must not re-initialize the thread
+    result = test_thread_done_no_reinit();
+  }
 
   //CHECK("theap_destroy", test_theap1());
   //CHECK("theap_delete", test_theap2());
@@ -1144,4 +1148,42 @@ static bool test_heap_destroy_stale_theap(void) {
 
   if (!reused) { fprintf(stderr, "(heap address not reused, inconclusive) "); }
   return stale_result;
+}
+
+
+// ---------------------------------------------------------------------------
+// Allocation after `mi_thread_done` must work without re-initializing the thread
+// (which would leak as the thread-done hooks may have already run).
+// ---------------------------------------------------------------------------
+
+static int64_t current_threads(void) {
+  mi_stats_t_decl(stats);
+  mi_stats_get(&stats);
+  return stats.threads.current;
+}
+
+static bool thread_done_no_reinit_fun(void) {
+  mi_free(mi_malloc(32));  // ensure the thread is initialized
+  const int64_t threads = current_threads();
+  mi_thread_done();
+  bool ok = (current_threads() == threads - 1);
+  void* p = mi_malloc(64);
+  void* q = mi_zalloc_aligned(100, 256);
+  void* r = mi_malloc(1000000);
+  ok = ok && p != NULL && q != NULL && r != NULL && mem_is_zero(q, 100) && ((uintptr_t)q % 256) == 0;
+  mi_heap_t* heap = mi_heap_main();
+  void* s = mi_heap_malloc(heap, 32);
+  ok = ok && s != NULL;
+  mi_free(p); mi_free(q); mi_free(r); mi_free(s);
+  ok = ok && (current_threads() == threads - 1);
+  mi_thread_init();  // explicit re-initialization is allowed
+  ok = ok && (current_threads() == threads);
+  void* t = mi_malloc(32);
+  ok = ok && t != NULL;
+  mi_free(t);
+  return ok;
+}
+
+static bool test_thread_done_no_reinit(void) {
+  return mi_run_on_thread(&thread_done_no_reinit_fun);
 }

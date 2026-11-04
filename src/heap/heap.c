@@ -102,8 +102,12 @@ mi_decl_cold mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
   mi_assert_internal(heap->theap != 0);
   mi_theap_t* theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
   if mi_unlikely(theap==NULL) {
+    if (_mi_thread_is_done()) {
+      // don't re-initialize; allocation in the main heap uses the meta-data theap while other heaps return NULL (see `alloc/alloc-generic.c`)
+      return (heap == mi_heap_main() ? _mi_theap_unavailable() : _mi_theap_empty_get());
+    }
     theap = mi_heap_init_theap(heap);
-    if (theap==NULL) { return mi_process_metadata_field(mi_theap_t, theap_empty_wrong); }  // this will return NULL from alloc/alloc-generic.c:_mi_malloc_generic
+    if (theap==NULL) { return _mi_theap_unavailable(); }  // this will return NULL from alloc/alloc-generic.c:_mi_malloc_generic
   }
   _mi_theap_cached_set(theap);
   return theap;

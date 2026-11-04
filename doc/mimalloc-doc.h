@@ -1000,6 +1000,9 @@ void mi_thread_init(void);
 /// Should not be used as on most systems (pthreads, windows) this is done
 /// automatically. Ensures that any memory that is not freed yet (but will
 /// be freed by other threads in the future) is properly handled.
+/// Afterwards, the thread is not implicitly re-initialized: allocations
+/// (for example in thread-local destructors) use a shared fallback heap
+/// until mi_thread_init() is called explicitly.
 void mi_thread_done(void);
 
 /// Type of deferred free functions.

@@ -23,6 +23,8 @@ void          _mi_thread_done(mi_theap_t* theap);
 mi_theap_t*   _mi_thread_init(void);
 mi_theap_t*   _mi_thread_init_with_heap(mi_heap_t* heap);
 bool          _mi_is_empty_theap(const mi_theap_t* theap);
+mi_theap_t*   _mi_theap_unavailable(void);    // empty default theap of a thread after `mi_thread_done`, or returned if a theap could not be created
+bool          _mi_thread_is_done(void);       // true after `mi_thread_done` (until an explicit `mi_thread_init`)
 
 extern mi_decl_hidden const mi_theap_t _mi_theap_empty; // read-only empty theap, initial value of the thread local default theap (in the MI_TLS_MODEL_LOCAL)
 
@@ -59,7 +61,7 @@ typedef struct mi_os_state_s {
   F(mi_tld_t,         tld_main)                 /* initial tld for the main thread */ \
   F(mi_theap_t,       theap_meta)               /* detached theap for meta-data allocation */ \
   F(mi_tld_t,         tld_meta)                 /* detached tld for `theap_meta` */ \
-  F(mi_theap_t,       theap_empty_wrong)        /* empty theap used to signal that a theap for a heap could not be allocated */ \
+  F(mi_theap_t,       theap_unavailable)        /* empty theap used for a thread after `mi_thread_done`, or if a theap for a heap could not be allocated */ \
   F(mi_memid_t,       memid)                    /* OS provenance of the meta data (never freed) */
 
 #define mi_process_metadata_field_decl(tp,name)  mi_decl_cache_align tp name;
@@ -225,6 +227,11 @@ static inline mi_process_metadata_t* mi_process_metadata(void) {
 
 // Get a pointer (with its memory tag) to a field of the process meta data.
 #define mi_process_metadata_field(tp,field)   ((tp*)mi_meta_load(&mi_process_metadata()->field))
+
+// Is this the unavailable theap? (the default theap of a thread after `mi_thread_done`, or returned if a theap could not be created)
+static inline bool _mi_theap_is_unavailable(const mi_theap_t* theap) {
+  return (mi_addr(theap) == mi_addr(&mi_process_metadata()->theap_unavailable));
+}
 
 // Make the sealed process data writable (and take a lock); must be followed by `_mi_process_seal`.
 mi_process_sealed_t* _mi_process_unseal(void);
