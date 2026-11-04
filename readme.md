@@ -589,6 +589,7 @@ With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance impa
   are ignored. Interior pointers are adjusted to the start of their block.
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
   mitigate against attacks that rely on a predictable allocation order.
+- Freed blocks are not reused immediately but randomly delayed, making it harder to reclaim just-freed blocks.
 
 With `ON`, performance is impacted a bit more (usually less than 25%, but can be 2x slower):
 
