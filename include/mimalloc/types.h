@@ -65,8 +65,8 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Define MI_SECURE to enable security mitigations
 // #define MI_SECURE 0  // no security mitigations
-// #define MI_SECURE 1  // + guard pages around metadata (and separated metadata) and after singleton blocks, randomized arena/OS allocation addresses, randomized free list initialization and allocation addresses within mimalloc pages, abort on EFAULT (corrupted meta-data) (`-DMI_SECURE=MINIMAL`)
-// #define MI_SECURE 2  // + invalid-pointer check on free (checked lookup in page-map.h), encode free lists (and detect corrupted free lists), clear free list `next` on allocation (`-DMI_SECURE=CHECKED`)
+// #define MI_SECURE 1  // + guard pages around metadata (and separated metadata) and after singleton blocks, randomized arena/OS allocation addresses, abort on EFAULT (corrupted meta-data) (`-DMI_SECURE=MINIMAL`)
+// #define MI_SECURE 2  // + invalid-pointer check on free (checked lookup in page-map.h), encode free lists (and detect corrupted free lists), clear free list `next` on allocation, randomized free list initialization and allocation addresses within mimalloc pages (`-DMI_SECURE=CHECKED`)
 // #define MI_SECURE 3  // + zero blocks on free (up to the first 1KiB), check double free (slow, and only for thread-local frees; only at level 3 as padding is used at level 4)
 // #define MI_SECURE 4  // + check buffer overflow (with padding), fast double free check (with padding), more randomized free lists, decommit with mprotect (`-DMI_SECURE=ON`)
 // #define MI_SECURE 5  // + guard page at the end of each mimalloc page (expensive!), and byte-precise buffer overflow checks (`-DMI_SECURE=FULL`)
@@ -154,7 +154,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // In secure mode, initialize the free list of fresh blocks in a page in a randomized order.
 #if !defined(MI_SECURE_SHUFFLE_FREELIST)
-#if MI_SECURE>=1 // && !(MI_MTE>=2 && MI_SECURE<4)
+#if MI_SECURE>=2 // && !(MI_MTE>=2 && MI_SECURE<4)
 #define MI_SECURE_SHUFFLE_FREELIST  1
 #else
 #define MI_SECURE_SHUFFLE_FREELIST  0
@@ -163,7 +163,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // In secure mode, randomly extend the free list of a page even if it still has free blocks
 #if !defined(MI_SECURE_RANDOM_EXTEND)
-#define MI_SECURE_RANDOM_EXTEND    (MI_SECURE>=1)
+#define MI_SECURE_RANDOM_EXTEND    (MI_SECURE>=2)
 #endif
 
 // Deprecated (double-free is now checked with padding)

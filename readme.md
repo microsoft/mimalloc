@@ -576,8 +576,7 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
   corrupted through a heap block buffer overflow).
 - The start address of OS allocated memory is randomized
   (if possible), and mimalloc aborts on corrupted meta data detection.
-- The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
-  mitigate against attacks that rely on a predictable allocation order.
+- When corrupted metadata is detected mimalloc always aborts.
 - Large blocks (> 512 KiB) are followed by a guard page.
 
 With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance impact is still small (usually less than 10%, but can be 2x slower):
@@ -588,6 +587,8 @@ With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance impa
   the encoding uses hardware keys).
 - All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
   are ignored. Interior pointers are adjusted to the start of their block.
+- The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
+  mitigate against attacks that rely on a predictable allocation order.
 
 With `ON`, performance is impacted a bit more (usually less than 25%, but can be 2x slower):
 
@@ -612,11 +613,9 @@ As always, evaluate with care as part of an overall security strategy as all of 
 (v3 only, experimental)\
 On recent arm64 hardware with the memory tagging extensions ([MTE]), _mimalloc_ can be built with `-DMI_MTE=ON`
 to give every heap block a randomized memory tag that can only be accessed with a matching pointer that has the same
-tag. Adjacent blocks always get different tags (and all linear block overflows fault), and blocks are retagged when freed
+tag. Adjacent blocks (almost) always get different tags (and linear block overflows fault), and blocks are retagged when freed
 (so (most) double-free and use-after-free accesses fault). Each block tag is chosen from 15 possible tags (excluding the tags of
-its neighbours), but you can define `MI_MTE_ODD_EVEN=1` to use disjoint tag sets for blocks at even and odd positions instead
-(which is slightly faster but only uses 7 or 8 possible tags per block).
-All blocks up to 512KiB are tagged, but larger blocks get a guard page
+its neighbours). All blocks up to 512KiB are tagged, but larger blocks get a guard page
 at the end so overflows still fault (this is done as tagging memory is linear in the size of the block).
 
 It depends on the hardware and workload,
