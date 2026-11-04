@@ -1311,6 +1311,9 @@ void mi_options_print_out(mi_output_fun* out, void* arg);
 
 
 /// Runtime options.
+///
+/// Options prefixed with `mi_option_deprecated_...` have been
+/// removed from mimalloc and no longer have any effect.
 typedef enum mi_option_e {
   // stable options
   mi_option_show_errors,  ///< Print error messages.
