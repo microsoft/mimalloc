@@ -27,9 +27,13 @@ static inline bool mi_page_free_quick_collect(mi_page_t* page) {
   if mi_likely(page->free != NULL) return true;
   if (page->local_free == NULL) return false;
   // move local_free to free
+  #if (MI_SECURE_REUSE_DELAY > 0) || (MI_SECURE_HOLD_BACK > 0)
+  if (!_mi_page_local_free_to_free(page)) return false;
+  #else
   page->free = page->local_free;
   page->local_free = NULL;
   page->free_is_zero = mi_page_is_zero_on_free(page);
+  #endif
   _mi_page_update_sample_countdown(page);
   return true;
 }
@@ -56,6 +60,10 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
     page_full_retain += (long)(pq->xcollect_score >> MI_XCOLLECT_SCORE_SHIFT);
   }
   mi_page_t* page_candidate = NULL;  // a page with free space
+  #if (MI_SECURE_REUSE_DELAY > 0)
+  mi_page_t* page_delayed = NULL;    // the first page whose freed blocks are delayed for reuse (used if there are no other candidates)
+  size_t delayed_count = 0;
+  #endif
   mi_page_t* page = pq->first;
   mi_page_t* const last = pq->last;
 
@@ -82,6 +90,15 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
       }
     }
 
+    #if (MI_SECURE_REUSE_DELAY > 0)
+    if (!immediate_available && page->local_free != NULL && !mi_page_is_expandable(page)) {
+      // reuse is delayed: keep the page in the queue (at the back) as a fallback
+      if (page_delayed == NULL) { page_delayed = page; }
+      if (page_candidate == NULL && ++delayed_count >= MI_SECURE_REUSE_DELAY_PAGES) break;
+      if (page!=last && pq->last!=page) { mi_page_queue_move_to_back(theap, pq, page); }
+    }
+    else
+    #endif
     // if the page is completely full, move it to the `mi_pages_full`
     // queue so we don't visit long-lived pages too often.
     if (!immediate_available && !mi_page_is_expandable(page)) {
@@ -140,6 +157,14 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
   if (page_candidate != NULL) {
     page = page_candidate;
   }
+  #if (MI_SECURE_REUSE_DELAY > 0)
+  else if (page_delayed != NULL && delayed_count >= MI_SECURE_REUSE_DELAY_PAGES) {
+    // too many delayed pages: reuse the first one anyway
+    _mi_page_local_free_to_free_now(page_delayed);
+    _mi_page_update_sample_countdown(page_delayed);
+    page = page_delayed;
+  }
+  #endif
   if (page != NULL) {
     if (!mi_page_immediate_available(page)) {
       mi_assert_internal(mi_page_is_expandable(page));

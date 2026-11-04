@@ -384,6 +384,61 @@ static bool mi_page_thread_free_collect(mi_page_t* page)
 }
 
 
+#if (MI_SECURE_HOLD_BACK > 0)
+// Keep a random number (1 to `MI_SECURE_HOLD_BACK`) of the most recently freed blocks in the local free list
+// and return the rest; if the list is too short, all blocks are returned.
+static mi_block_t* mi_page_local_free_hold_back(mi_page_t* page) {
+  mi_block_t* const head = page->local_free;
+  #if (MI_ENCODE_FREELIST || MI_PADDING)
+  const size_t rnd = mi_random_shuffle(page->keys[1] ^ mi_addr(head) ^ mi_page_used(page));
+  #else
+  const size_t rnd = mi_random_shuffle(mi_addr(page) ^ mi_addr(head) ^ mi_page_used(page));
+  #endif
+  size_t n = 1 + (rnd % MI_SECURE_HOLD_BACK);
+  mi_block_t* last = head;
+  mi_block_t* next = mi_block_next(page, last);
+  while (next != NULL && --n > 0) {
+    last = next;
+    next = mi_block_next(page, last);
+  }
+  if (next == NULL) {
+    page->local_free = NULL;
+    return head;
+  }
+  mi_block_set_next(page, last, NULL);
+  return next;
+}
+#endif
+
+// Move the local free list to the (empty) free list regardless of any reuse delay.
+static inline void mi_page_local_free_to_free_now(mi_page_t* page) {
+  mi_assert_internal(page->free == NULL && page->local_free != NULL);
+  #if (MI_SECURE_HOLD_BACK > 0)
+  page->free = mi_page_local_free_hold_back(page);
+  #else
+  page->free = page->local_free;
+  page->local_free = NULL;
+  #endif
+  page->free_is_zero = mi_page_is_zero_on_free(page);
+}
+
+#if (MI_SECURE_REUSE_DELAY > 0) || (MI_SECURE_HOLD_BACK > 0)
+// Move the local free list to the (empty) free list; returns `false` if reuse is delayed (see `MI_SECURE_REUSE_DELAY`).
+static inline bool mi_page_local_free_to_free(mi_page_t* page) {
+  if (mi_page_reuse_is_delayed(page)) return false;
+  mi_page_local_free_to_free_now(page);
+  return true;
+}
+
+void _mi_page_local_free_to_free_now(mi_page_t* page) {
+  mi_page_local_free_to_free_now(page);
+}
+
+bool _mi_page_local_free_to_free(mi_page_t* page) {
+  return mi_page_local_free_to_free(page);
+}
+#endif
+
 bool _mi_page_free_collect(mi_page_t* page, bool force) {
   mi_assert_internal(page!=NULL);
 
@@ -394,11 +449,15 @@ bool _mi_page_free_collect(mi_page_t* page, bool force) {
   if (page->local_free != NULL) {
     if mi_likely(page->free == NULL) {
       // usual case
-      page->free = page->local_free;
-      page->local_free = NULL;
-      page->free_is_zero = mi_page_is_zero_on_free(page);
+      #if (MI_SECURE_REUSE_DELAY > 0)
+      // blocks freed by other threads are not delayed (as they were already delayed in the thread-free list)
+      if (collected_xfree) { mi_page_local_free_to_free_now(page); }
+                      else { mi_page_local_free_to_free(page); }
+      #else
+      mi_page_local_free_to_free_now(page);
+      #endif
     }
-    else if (force) {
+    if (force && page->local_free != NULL) {
       // append -- only on shutdown (force) as this is a linear operation
       mi_block_t* tail = page->local_free;
       mi_block_t* next;
@@ -436,9 +495,7 @@ mi_block_t* _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head) {
     mi_block_set_next(page, head, NULL);
     mi_page_thread_collect_to_local(page, next);
     if (page->local_free != NULL && page->free == NULL) {
-      page->free = page->local_free;
-      page->local_free = NULL;
-      page->free_is_zero = mi_page_is_zero_on_free(page);
+      mi_page_local_free_to_free_now(page);  // not delayed as these were freed by other threads
       _mi_page_update_sample_countdown(page);
     }
   }
@@ -509,6 +566,9 @@ mi_page_t* _mi_page_fresh_alloc(mi_theap_t* theap, mi_page_queue_t* pq, size_t b
     reclaimed = mi_page_is_abandoned(page);
   } while (reclaimed && _mi_theap_page_reclaim(theap, page));
   if (reclaimed) {
+    #if (MI_SECURE_REUSE_DELAY > 0)
+    if (!mi_page_immediate_available(page) && page->local_free != NULL) { _mi_page_free_collect(page, true); }
+    #endif
     if (!mi_page_immediate_available(page)) {
       if (mi_page_is_expandable(page)) {
         if (!_mi_page_extend_free(theap, page)) {
@@ -758,7 +818,9 @@ void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {
 static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* const page, const size_t bsize, const size_t extend, const bool memtag) {
   #if !MI_SECURE_RANDOM_EXTEND
   mi_assert_internal(page->free == NULL);
+  #if !(MI_SECURE_REUSE_DELAY || MI_SECURE_HOLD_BACK)
   mi_assert_internal(page->local_free == NULL);
+  #endif
   #endif
   mi_assert_internal(page->capacity + extend <= page->reserved);
   mi_assert_internal(bsize == mi_page_block_size(page));
@@ -815,7 +877,9 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 {
   #if !MI_SECURE_RANDOM_EXTEND
   mi_assert_internal(page->free == NULL);
+  #if !(MI_SECURE_REUSE_DELAY || MI_SECURE_HOLD_BACK)
   mi_assert_internal(page->local_free == NULL);
+  #endif
   #endif
   mi_assert_internal(page->capacity + extend <= page->reserved);
   mi_assert_internal(bsize == mi_page_block_size(page));
@@ -856,7 +920,9 @@ bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_expensive(mi_page_is_valid_init(page));
   #if !MI_SECURE_RANDOM_EXTEND
   mi_assert(page->free == NULL);
+  #if !(MI_SECURE_REUSE_DELAY || MI_SECURE_HOLD_BACK)
   mi_assert(page->local_free == NULL);
+  #endif
   if (page->free != NULL) return true;
   #endif
   if (page->capacity >= page->reserved) return true;

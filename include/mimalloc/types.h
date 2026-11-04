@@ -154,11 +154,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // In secure mode, initialize the free list of fresh blocks in a page in a randomized order.
 #if !defined(MI_SECURE_SHUFFLE_FREELIST)
-#if MI_SECURE>=2 // && !(MI_MTE>=2 && MI_SECURE<4)
-#define MI_SECURE_SHUFFLE_FREELIST  1
-#else
-#define MI_SECURE_SHUFFLE_FREELIST  0
-#endif
+#define MI_SECURE_SHUFFLE_FREELIST  (MI_SECURE>=2)
 #endif
 
 // In secure mode, randomly extend the free list of a page even if it still has free blocks
@@ -166,10 +162,26 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SECURE_RANDOM_EXTEND    (MI_SECURE>=2)
 #endif
 
-// Deprecated (double-free is now checked with padding)
-// #if (MI_ENCODE_FREELIST && (MI_SECURE>=4 || MI_DEBUG!=0))
-// #define MI_CHECK_DOUBLE_FREE  1
-// #endif
+// In secure mode, delay the reuse of blocks freed in a page until at least `capacity / MI_SECURE_REUSE_DELAY` blocks are free
+#if !defined(MI_SECURE_REUSE_DELAY)
+#if MI_SECURE>=2
+#define MI_SECURE_REUSE_DELAY       8
+#else
+#define MI_SECURE_REUSE_DELAY       0
+#endif
+#endif
+#if (MI_SECURE_REUSE_DELAY > 0) && !defined(MI_SECURE_REUSE_DELAY_MIN)
+#define MI_SECURE_REUSE_DELAY_MIN   8       // Minimum number of blocks to delay reuse for
+#define MI_SECURE_REUSE_DELAY_MAX   64      // Maximum number of blocks to delay reuse for
+#define MI_SECURE_REUSE_DELAY_PAGES 4       // Number of pages to delay reuse for
+#endif
+
+// In secure mode, when freed blocks become available for reuse again, hold back a random number (between 1 and
+// `MI_SECURE_HOLD_BACK`) of the most recently freed ones until the next time (if `MI_SECURE_HOLD_BACK > 0`).
+#if !defined(MI_SECURE_HOLD_BACK) && MI_SECURE>=2
+#define MI_SECURE_HOLD_BACK         16
+#endif
+
 
 // Enable large pages for objects between 64KiB and 512KiB.
 // This should perhaps be disabled by default as for many workloads the block sizes above 64 KiB
