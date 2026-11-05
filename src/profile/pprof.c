@@ -975,37 +975,61 @@ static void mi_pprof_collect_modules_linux(mi_heap_t* heap, mi_pprof_modules_t* 
 }
 
 #elif defined(__FreeBSD__)
+#include <sys/types.h>
+#include <sys/sysctl.h> // sysctl, CTL_KERN, KERN_PROC, KERN_PROC_VMMAP
 #include <sys/user.h>   // struct kinfo_vmentry
-#include <libutil.h>    // kinfo_getvmmap
 #include <unistd.h>     // getpid
-#include <stdlib.h>     // free
+#include <stddef.h>     // offsetof
+#include <string.h>     // memchr
 
 // FreeBSD does not reliably provide Linux's `/proc/self/maps` (procfs is optional and rarely
-// mounted by default); use the native `kinfo_getvmmap` API instead (declared in <libutil.h>,
-// requires linking `-lutil`) to enumerate the process's virtual memory mappings.
-// (DragonFly forked from FreeBSD before `kinfo_getvmmap` was added and does not provide it.)
-static void mi_write_mapped_libraries_bsd(FILE* f) {
-  int cnt = 0;
-  struct kinfo_vmentry* vmmap = kinfo_getvmmap(getpid(), &cnt);
-  if (vmmap == NULL) return;
-  for (int i = 0; i < cnt; i++) {
-    const struct kinfo_vmentry* kve = &vmmap[i];
-    if (kve->kve_path[0] == 0) continue;  // skip anonymous mappings
-    mi_fprintf(f, "%l8x-%l8x r-xp 00000000 00:00 0            %s\n", (uint64_t)kve->kve_start, (uint64_t)kve->kve_end, kve->kve_path);
+// mounted by default); instead we use the `KERN_PROC_VMMAP` sysctl to enumerate the process's
+// virtual memory mappings. This returns packed `kinfo_vmentry` records of `kve_structsize` bytes
+// each, where the final `kve_path` field is truncated. We use the sysctl directly (instead of
+// `kinfo_getvmmap`) to avoid a dependency on `libutil`.
+// (DragonFly forked from FreeBSD before `KERN_PROC_VMMAP` was added and does not provide it.)
+static void mi_walk_mappings_freebsd(void (*on_mapping)(void* ctx, uintptr_t start, uintptr_t end, const char* path), void* ctx) {
+  int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_VMMAP, (int)getpid() };
+  size_t len = 0;
+  if (sysctl(mib, 4, NULL, &len, NULL, 0) != 0 || len == 0) return;
+  len = len * 4 / 3;  // leave room for mappings added in the meantime
+  char* const buf = (char*)mi_malloc(len);
+  if (buf == NULL) return;
+  if (sysctl(mib, 4, buf, &len, NULL, 0) == 0) {
+    const size_t path_ofs = offsetof(struct kinfo_vmentry, kve_path);
+    size_t ofs = 0;
+    while (ofs + path_ofs < len) {
+      const struct kinfo_vmentry* const kve = (const struct kinfo_vmentry*)(buf + ofs);
+      const size_t size = (size_t)kve->kve_structsize;
+      if (size <= path_ofs || size > len - ofs) break;  // end of the records (or corrupted)
+      ofs += size;
+      const char* const path = kve->kve_path;
+      if (path[0] == 0) continue;  // skip anonymous mappings
+      if (memchr(path, 0, size - path_ofs) == NULL) continue;  // path is not terminated within the record
+      on_mapping(ctx, (uintptr_t)kve->kve_start, (uintptr_t)kve->kve_end, path);
+    }
   }
-  free(vmmap);
+  mi_free(buf);
+}
+
+static void mi_write_mapped_libraries_on_mapping_freebsd(void* ctx, uintptr_t start, uintptr_t end, const char* path) {
+  mi_fprintf((FILE*)ctx, "%tx-%tx r-xp 00000000 00:00 0            %s\n", start, end, path);
+}
+
+static void mi_write_mapped_libraries_bsd(FILE* f) {
+  mi_walk_mappings_freebsd(&mi_write_mapped_libraries_on_mapping_freebsd, f);
+}
+
+typedef struct { mi_heap_t* heap; mi_pprof_modules_t* mods; } mi_pprof_collect_modules_freebsd_ctx_t;
+
+static void mi_pprof_collect_modules_freebsd_on_mapping(void* ctx, uintptr_t start, uintptr_t end, const char* path) {
+  mi_pprof_collect_modules_freebsd_ctx_t* c = (mi_pprof_collect_modules_freebsd_ctx_t*)ctx;
+  mi_pprof_modules_add(c->heap, c->mods, start, end, path);
 }
 
 static void mi_pprof_collect_modules_bsd(mi_heap_t* heap, mi_pprof_modules_t* mods) {
-  int cnt = 0;
-  struct kinfo_vmentry* vmmap = kinfo_getvmmap(getpid(), &cnt);
-  if (vmmap == NULL) return;
-  for (int i = 0; i < cnt; i++) {
-    const struct kinfo_vmentry* kve = &vmmap[i];
-    if (kve->kve_path[0] == 0) continue;  // skip anonymous mappings
-    mi_pprof_modules_add(heap, mods, (uintptr_t)kve->kve_start, (uintptr_t)kve->kve_end, kve->kve_path);
-  }
-  free(vmmap);
+  mi_pprof_collect_modules_freebsd_ctx_t ctx = { heap, mods };
+  mi_walk_mappings_freebsd(&mi_pprof_collect_modules_freebsd_on_mapping, &ctx);
 }
 #endif
 

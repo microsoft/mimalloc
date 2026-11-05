@@ -1020,14 +1020,6 @@ if(NOT WIN32 AND MI_PROFILE)
       message(WARNING "No backtrace support available: neither execinfo.h nor unwind.h (_Unwind_Backtrace) found.")
     endif()
   endif()
-  # FreeBSD needs `kinfo_getvmmap` (in `libutil`) to collect the process's
-  # memory mappings (used for module/library info in dumped profiles).
-  if(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
-    find_link_library("util" MI_LIB_UTIL)
-    if(MI_LIB_UTIL)
-      list(APPEND mi_libraries "${MI_LIB_UTIL}")
-    endif()
-  endif()
 endif()
 
 
