@@ -729,13 +729,16 @@ int main(void) {
     mi_stats_get(&stats0);
     mi_option_set(mi_option_disallow_arena_alloc, 1);   // force all pages to be OS allocated
     mi_heap_t* h = mi_heap_new();
-    for (int i = 0; i < 1000; i++) { (void)mi_heap_malloc(h, 48); }  // owned OS-backed pages with live blocks
+    bool allocated = true;
+    for (int i = 0; i < 1000; i++) {  // owned OS-backed pages with live blocks
+      if (mi_heap_malloc(h, 48) == NULL) { allocated = false; }
+    }
     mi_heap_destroy(h);
     mi_option_set(mi_option_disallow_arena_alloc, 0);
     mi_collect(true);
     mi_stats_t_decl(stats1);
     mi_stats_get(&stats1);
-    result = (stats0.pages.current == stats1.pages.current);  // orphaned if destroy missed the owned OS pages
+    result = allocated && (stats0.pages.current == stats1.pages.current);  // orphaned if destroy missed the owned OS pages
   }
 
   #define NHEAPS (1000)
