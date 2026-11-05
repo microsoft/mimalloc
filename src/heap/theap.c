@@ -668,8 +668,10 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
   mi_assert(page != NULL);
   if (page == NULL) return true;
 
-  _mi_page_free_collect(page,true);              // collect both thread_delayed and local_free
-  mi_assert_internal(page->local_free == NULL);
+  if (mi_page_is_owned(page)) {                  // unowned abandoned pages are collected (if claimed) in `mi_heap_visit_page`
+    _mi_page_free_collect(page,true);            // collect both thread_delayed and local_free
+    mi_assert_internal(page->local_free == NULL);
+  }
   if (mi_page_used(page) == 0) return true;
 
   size_t psize;

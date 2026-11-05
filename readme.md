@@ -576,10 +576,10 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
   corrupted through a heap block buffer overflow).
 - The start address of OS allocated memory is randomized
   (if possible), and mimalloc aborts on corrupted meta data detection.
-- When corrupted metadata is detected mimalloc always aborts.
 - Large blocks (> 512 KiB) are followed by a guard page.
 
-With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance impact is still small (usually less than 10%, but can be 2x slower):
+With `CHECKED` (the default with `-DMI_MTE` and `-DMI_PAC`), the performance and memory impact
+is still relatively small (usually less than 10%, but can be 2x slower):
 
 - All free list pointers are
   [encoded](include/mimalloc/alloc/page.h#L582)
@@ -589,8 +589,10 @@ With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance impa
   are ignored. Interior pointers are adjusted to the start of their block.
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
   mitigate against attacks that rely on a predictable allocation order.
+- Reuse of freed blocks is delayed (until 1/8th of a page is free) and a random number of the most recently
+  freed blocks is held back, making it harder to reclaim a just-freed block (to exploit use-after-free).
 
-With `ON`, performance is impacted a bit more (usually less than 25%, but can be 2x slower):
+With `ON`, performance and memory usage is impacted a bit more (usually less than 25%, but can be 2 to 3x slower):
 
 - Padding (8 bytes) is added at the end of each heap block to detect heap block overflows (detected once the block is freed),
 and double free's.

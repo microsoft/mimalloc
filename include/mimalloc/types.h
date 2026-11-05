@@ -154,11 +154,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // In secure mode, initialize the free list of fresh blocks in a page in a randomized order.
 #if !defined(MI_SECURE_SHUFFLE_FREELIST)
-#if MI_SECURE>=2 // && !(MI_MTE>=2 && MI_SECURE<4)
-#define MI_SECURE_SHUFFLE_FREELIST  1
-#else
-#define MI_SECURE_SHUFFLE_FREELIST  0
-#endif
+#define MI_SECURE_SHUFFLE_FREELIST  (MI_SECURE>=2)
 #endif
 
 // In secure mode, randomly extend the free list of a page even if it still has free blocks
@@ -166,10 +162,26 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SECURE_RANDOM_EXTEND    (MI_SECURE>=2)
 #endif
 
-// Deprecated (double-free is now checked with padding)
-// #if (MI_ENCODE_FREELIST && (MI_SECURE>=4 || MI_DEBUG!=0))
-// #define MI_CHECK_DOUBLE_FREE  1
-// #endif
+// In secure mode, delay the reuse of blocks freed in a page until at least `capacity / MI_SECURE_REUSE_DELAY` blocks are free
+#if !defined(MI_SECURE_REUSE_DELAY)
+#if MI_SECURE>=2
+#define MI_SECURE_REUSE_DELAY       8
+#else
+#define MI_SECURE_REUSE_DELAY       0
+#endif
+#endif
+#if (MI_SECURE_REUSE_DELAY > 0) && !defined(MI_SECURE_REUSE_DELAY_MIN)
+#define MI_SECURE_REUSE_DELAY_MIN   8       // Minimum number of blocks to delay reuse for
+#define MI_SECURE_REUSE_DELAY_MAX   64      // Maximum number of blocks to delay reuse for
+#define MI_SECURE_REUSE_DELAY_PAGES 4       // Number of pages to delay reuse for
+#endif
+
+// In secure mode, when freed blocks become available for reuse again, hold back a random number (between 1 and
+// `MI_SECURE_HOLD_BACK`) of the most recently freed ones until the next time (if `MI_SECURE_HOLD_BACK > 0`).
+#if !defined(MI_SECURE_HOLD_BACK) && MI_SECURE>=2
+#define MI_SECURE_HOLD_BACK         16
+#endif
+
 
 // Enable large pages for objects between 64KiB and 512KiB.
 // This should perhaps be disabled by default as for many workloads the block sizes above 64 KiB
@@ -240,6 +252,8 @@ terms of the MIT license. A copy of the license can be found in the file
   #define MI_ARENA_SLICE_SHIFT              (18)                        // 256 KiB as 64 KiB guard pages can be at most 1/4 of a slice (issue #1166)
   #elif MI_SECURE>=5 && MI_OS_PROBABLE_PAGE_SIZE >= 16*MI_KiB
   #define MI_ARENA_SLICE_SHIFT              (17)                        // 128 KiB to not waste too much due to 16 KiB guard pages
+  #elif MI_OS_PROBABLE_PAGE_SIZE >= 64*MI_KiB
+  #define MI_ARENA_SLICE_SHIFT              (16)                        // 64 KiB: at least the OS page size (e.g. on wasm32)
   #else
   #define MI_ARENA_SLICE_SHIFT              (13 + MI_SIZE_SHIFT)        // 64 KiB (32 KiB on 32-bit)
   #endif
@@ -910,7 +924,11 @@ struct mi_tld_s {
 
 #define MI_ARENA_BIN_COUNT      (MI_MAX_SINGLETON_BIN+1)
 #define MI_ARENA_MIN_SIZE       (MI_BCHUNK_BITS * MI_ARENA_SLICE_SIZE)           // 32 MiB (or 8 MiB on 32-bit)
+#if MI_SIZE_BITS > 32
 #define MI_ARENA_MAX_SIZE       (MI_BITMAP_MAX_BIT_COUNT * MI_ARENA_SLICE_SIZE)  // 16 GiB
+#else
+#define MI_ARENA_MAX_SIZE       (1*MI_GiB)                                       // 1 GiB on 32-bit (to not overflow with large slices)
+#endif
 
 typedef struct mi_bitmap_s  mi_bitmap_t;    // atomic bitmap  (defined in `src/arena/bitmap.h`)
 typedef struct mi_bbitmap_s mi_bbitmap_t;   // atomic binned bitmap (defined in `src/arena/bitmap.h`)

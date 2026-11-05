@@ -265,6 +265,21 @@ static inline bool mi_page_is_mostly_used(const mi_page_t* page) {
   return mi_page_is_used_at_frac(page, 8);
 }
 
+// Is reuse of the freed blocks in this page delayed? (see `MI_SECURE_REUSE_DELAY`)
+static inline bool mi_page_reuse_is_delayed(const mi_page_t* page) {
+  #if (MI_SECURE_REUSE_DELAY > 0)
+  const size_t capacity = page->capacity;
+  size_t delay = capacity / MI_SECURE_REUSE_DELAY;
+  const size_t delay_min = (capacity/2 < MI_SECURE_REUSE_DELAY_MIN ? capacity/2 : MI_SECURE_REUSE_DELAY_MIN);
+  if (delay < delay_min) { delay = delay_min; }
+  if (delay > MI_SECURE_REUSE_DELAY_MAX) { delay = MI_SECURE_REUSE_DELAY_MAX; }
+  return (capacity - mi_page_used(page) < delay);
+  #else
+  MI_UNUSED(page);
+  return false;
+  #endif
+}
+
 static inline bool mi_page_is_small(const mi_page_t* page) {
   return (page->block_size <= MI_SMALL_MAX_OBJ_SIZE && !mi_page_is_singleton(page));
 }

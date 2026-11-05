@@ -1249,13 +1249,11 @@ typedef struct mi_heap_visit_info_s {
 
 static bool mi_heap_visit_page(mi_page_t* page, const mi_heap_visit_info_t* vinfo) {
   mi_heap_area_t area;
-  #if MI_QSBR
-  const bool claimed = (mi_page_is_abandoned(page) && mi_page_claim_ownership(page));
-  #endif
-  _mi_page_free_collect(page, true);  // collect cross-thread free'd blocks so `area.used` is precise.
-  #if MI_QSBR
-  if (claimed && mi_abandoned_page_unown(page, NULL)) return true;
-  #endif
+  // abandoned pages can only be collected if we can claim them
+  const bool abandoned = mi_page_is_abandoned(page);
+  const bool claimed = (abandoned && mi_page_claim_ownership(page));
+  if (!abandoned || claimed) { _mi_page_free_collect(page, true); }  // collect cross-thread free'd blocks so `area.used` is precise.
+  if (claimed && mi_abandoned_page_unown(page, NULL)) return true;    // the page was freed
   _mi_heap_area_init(&area, page);
   mi_assert_internal(vinfo->heap == mi_page_heap(page));
   if (!vinfo->visitor(vinfo->heap, &area, NULL, area.block_size, vinfo->arg)) {
