@@ -719,7 +719,9 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
       mi_assert_internal(arena->blocks_committed != NULL);
       mi_assert_internal(arena->blocks_purge != NULL);
 
-      if (!all_committed) {
+      // a range that is entirely committed but not marked as committed (claimed without commit and then committed on demand)
+      // is handled like a partially committed one, as the delayed purge below will not decrease the commit statistic for it
+      if (!all_committed || !_mi_bitmap_is_claimed_across(arena->blocks_committed, arena->field_count, blocks, bitmap_idx, NULL)) {
         // mark the entire range as no longer committed (so we will recommit the full range when re-using)
         _mi_bitmap_unclaim_across(arena->blocks_committed, arena->field_count, blocks, bitmap_idx);
         mi_track_mem_noaccess(p,size);
