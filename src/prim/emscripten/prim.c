@@ -225,6 +225,17 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   return 0; // not found
 }
 
+int _mi_prim_getenv_prefixed(const char* prefix, mi_env_is_known_fun* is_known, char* buf, size_t buf_size) {
+  buf[0] = 0;
+  char** env = environ;
+  if (env == NULL) return 0;
+  int count = 0;
+  for (int i = 0; i < 10000 && env[i] != NULL; i++) {
+    count += _mi_env_append_prefixed(env[i], prefix, is_known, buf, buf_size);
+  }
+  return count;
+}
+
 
 //----------------------------------------------------------------
 // Random

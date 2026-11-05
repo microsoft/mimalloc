@@ -1174,6 +1174,16 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   }
   return 0; // not found
 }
+int _mi_prim_getenv_prefixed(const char* prefix, mi_env_is_known_fun* is_known, char* buf, size_t buf_size) {
+  buf[0] = 0;
+  char** env = mi_get_environ();
+  if (env == NULL) return 0;
+  int count = 0;
+  for (int i = 0; i < 10000 && env[i] != NULL; i++) {
+    count += _mi_env_append_prefixed(env[i], prefix, is_known, buf, buf_size);
+  }
+  return count;
+}
 #else
 // fallback: use standard C `getenv` but this cannot be used while initializing the C runtime
 int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
@@ -1193,6 +1203,11 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   if (s == NULL || _mi_strnlen(s,result_size) >= result_size) return 0; // not found
   if (!_mi_strlcpy(result, s, result_size)) return -1;
   return 1;  // success
+}
+int _mi_prim_getenv_prefixed(const char* prefix, mi_env_is_known_fun* is_known, char* buf, size_t buf_size) {
+  MI_UNUSED(prefix); MI_UNUSED(is_known); MI_UNUSED(buf_size);
+  buf[0] = 0;
+  return 0;  // cannot iterate the environment
 }
 #endif  // !MI_USE_ENVIRON
 

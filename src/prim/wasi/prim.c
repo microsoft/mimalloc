@@ -269,6 +269,12 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   return 1; // found
 }
 
+int _mi_prim_getenv_prefixed(const char* prefix, mi_env_is_known_fun* is_known, char* buf, size_t buf_size) {
+  MI_UNUSED(prefix); MI_UNUSED(is_known); MI_UNUSED(buf_size);
+  buf[0] = 0;
+  return 0;  // cannot iterate the environment
+}
+
 
 //----------------------------------------------------------------
 // Random

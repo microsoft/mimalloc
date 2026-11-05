@@ -720,6 +720,20 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   return (len < result_size ? (len > 0 ? 1 /* success */ : 0 /* not found */) : -1 /* error */);
 }
 
+int _mi_prim_getenv_prefixed(const char* prefix, mi_env_is_known_fun* is_known, char* buf, size_t buf_size) {
+  buf[0] = 0;
+  char* env = GetEnvironmentStringsA();  // a sequence of `name=value\0` entries ending with an empty entry
+  if (env == NULL) return 0;
+  int count = 0;
+  int entries = 0;
+  for (const char* s = env; *s != 0 && entries < 10000; s += _mi_strnlen(s,1024) + 1) {
+    count += _mi_env_append_prefixed(s, prefix, is_known, buf, buf_size);
+    entries++;
+  }
+  FreeEnvironmentStringsA(env);
+  return count;
+}
+
 
 //----------------------------------------------------------------
 // Random

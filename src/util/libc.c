@@ -191,6 +191,24 @@ int _mi_getenv(const char* name, char* result, size_t result_size) {
 }
 #endif
 
+// Helper for `_mi_prim_getenv_prefixed`: if the environment `entry` (`name=value`) starts with `prefix`
+// (case insensitive) and is not known, append its name to the `;` separated list in `buf` (if it fits whole) and return 1.
+int _mi_env_append_prefixed(const char* entry, const char* prefix, mi_env_is_known_fun* is_known, char* buf, size_t buf_size) {
+  const size_t plen = _mi_strlen(prefix);
+  if (_mi_strnicmp(entry, prefix, plen) != 0) return 0;
+  size_t nlen = plen;
+  while (entry[nlen] != 0 && entry[nlen] != '=') { nlen++; }
+  if (is_known(entry + plen, nlen - plen)) return 0;
+  const size_t len = _mi_strnlen(buf, buf_size);
+  const size_t sep = (len > 0 ? 1 : 0);
+  if (len + sep + nlen < buf_size) {
+    if (sep > 0) { buf[len] = ';'; }
+    mi_memcpy(buf + len + sep, entry, nlen);
+    buf[len + sep + nlen] = 0;
+  }
+  return 1;
+}
+
 
 // --------------------------------------------------------
 // Define our own primitives for doing an action once

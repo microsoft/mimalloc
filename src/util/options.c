@@ -222,6 +222,38 @@ static bool mi_option_has_size_in_bytes(mi_option_t option) {
           option == mi_option_profile_alloc_interval || option == mi_option_profile_inuse_interval || option == mi_option_profile_sample_rate);
 }
 
+// Is `name` (of length `len`, not zero terminated) equal to `s` (case insensitive)?
+static bool mi_env_name_eq(const char* name, size_t len, const char* s) {
+  return (s != NULL && _mi_strnicmp(name, s, len) == 0 && s[len] == 0);
+}
+
+// Is `name` (without the `mimalloc_` prefix) a known environment variable?
+static bool mi_env_is_known(const char* name, size_t len) {
+  static const char* const extra_names[] = {
+    "profile",    // pprof profiler output (src/profile/pprof.c)
+    "defines",    // C defines for the Rust build script (contrib/rust/sys/build.rs)
+    "disable_redirect", "disable_override", "enable_redirect", "prioritize_load_order",  // used by mimalloc-redirect.dll
+    "patch_imports", "force_redirect", "patch_ntheap",
+  };
+  for (size_t i = 0; i < _mi_option_last; i++) {
+    const mi_option_desc_t* desc = &mi_option_descs[i];
+    if (mi_env_name_eq(name, len, desc->name) || mi_env_name_eq(name, len, desc->legacy_name)) return true;
+  }
+  for (size_t i = 0; i < sizeof(extra_names)/sizeof(extra_names[0]); i++) {
+    if (mi_env_name_eq(name, len, extra_names[i])) return true;
+  }
+  return false;
+}
+
+// Warn about `MIMALLOC_` environment variables that are ignored (e.g. a misspelled option)
+static void mi_options_check_unknown(void) {
+  #if !defined(MI_NO_GETENV)
+  char buf[256];
+  if (_mi_prim_getenv_prefixed("mimalloc_", &mi_env_is_known, buf, sizeof(buf)) <= 0) return;
+  _mi_warning_message("unknown environment option(s) are ignored: %s\n", (buf[0] != 0 ? buf : "..."));
+  #endif
+}
+
 void _mi_options_init(void) {
   // called on process load
   for(int i = 0; i < _mi_option_last; i++ ) {
@@ -242,6 +274,7 @@ void _mi_options_init(void) {
 void _mi_options_post_init(void) {
   mi_add_stderr_output(); // now it safe to use stderr for output
   if (mi_option_is_enabled(mi_option_verbose)) { mi_options_print(); }
+  mi_options_check_unknown();
 }
 
 #define mi_stringifyx(str)  #str                // and stringify
