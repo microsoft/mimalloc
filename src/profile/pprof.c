@@ -974,16 +974,16 @@ static void mi_pprof_collect_modules_linux(mi_heap_t* heap, mi_pprof_modules_t* 
   fclose(maps);
 }
 
-#elif defined(__FreeBSD__) || defined(__DragonFly__)
+#elif defined(__FreeBSD__)
 #include <sys/user.h>   // struct kinfo_vmentry
 #include <libutil.h>    // kinfo_getvmmap
 #include <unistd.h>     // getpid
 #include <stdlib.h>     // free
 
-// FreeBSD (and DragonFly, which forked from FreeBSD) do not reliably provide Linux's
-// `/proc/self/maps` (procfs is optional and rarely mounted by default); use the native
-// `kinfo_getvmmap` API instead (declared in <libutil.h>, requires linking `-lutil`) to
-// enumerate the process's virtual memory mappings.
+// FreeBSD does not reliably provide Linux's `/proc/self/maps` (procfs is optional and rarely
+// mounted by default); use the native `kinfo_getvmmap` API instead (declared in <libutil.h>,
+// requires linking `-lutil`) to enumerate the process's virtual memory mappings.
+// (DragonFly forked from FreeBSD before `kinfo_getvmmap` was added and does not provide it.)
 static void mi_write_mapped_libraries_bsd(FILE* f) {
   int cnt = 0;
   struct kinfo_vmentry* vmmap = kinfo_getvmmap(getpid(), &cnt);
@@ -1020,7 +1020,7 @@ static void mi_pprof_collect_modules(mi_heap_t* heap, mi_pprof_modules_t* mods) 
   mi_pprof_collect_modules_win32(heap, mods);
   #elif defined(__APPLE__)
   mi_pprof_collect_modules_macos(heap, mods);
-  #elif defined(__FreeBSD__) || defined(__DragonFly__)
+  #elif defined(__FreeBSD__)
   mi_pprof_collect_modules_bsd(heap, mods);
   #else
   MI_UNUSED(heap);
@@ -1035,7 +1035,7 @@ static void mi_pprof_write_mapped_libraries(FILE* f) {
   mi_write_mapped_libraries_win32(f);
   #elif defined(__APPLE__)
   mi_write_mapped_libraries_macos(f);
-  #elif defined(__FreeBSD__) || defined(__DragonFly__)
+  #elif defined(__FreeBSD__)
   mi_write_mapped_libraries_bsd(f);
   #endif
 }
