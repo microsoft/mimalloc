@@ -786,10 +786,13 @@ static mi_page_t* mi_arenas_page_alloc_fresh(mi_theap_t* theap, size_t slice_cou
   mi_page_t* page_meta          = NULL;
   uint8_t* const slice_start    = mi_arenas_page_alloc_fresh_area(theap,slice_count,max_page_meta_count,block_alignment,os_align,commit || guards.front > 0,allow_large,&memid,&arena_pages,&page_meta);
   if (!slice_start) return NULL;
-  // in a torn forked child, the free slices may still have a guard page of a page that was allocated during the fork
-  if (MI_SECURE >= 1 && memid.memkind == MI_MEM_ARENA && !memid.is_pinned && _mi_fork_is_torn()) {
+  // in a torn forked child, the free slices may still have a guard page of a page (or guarded block) that was freed
+  // during the fork (as the fork may not copy the memory protection atomically with the memory contents)
+  #if MI_SECURE >= 1 || MI_GUARDED
+  if (memid.memkind == MI_MEM_ARENA && !memid.is_pinned && _mi_fork_is_torn()) {
     _mi_os_unguard(slice_start, _mi_size_of_slices(slice_count), true /* make accessible */);
   }
+  #endif
 
   // determine the page meta data, the offset of the first block, and the end of the page
   size_t block_start            = 0;
