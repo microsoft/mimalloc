@@ -882,7 +882,7 @@ static inline void mi_free_block_mt_batch_in(mi_theap_t* theap, mi_page_t* page,
   // don't batch frees into our own abandoned pages so these can be reclaimed right away,
   // nor into abandoned OS pages so these can be freed right away (as these may use scarce aligned virtual address space)
   if mi_unlikely(!theap->free_batch.enabled ||
-                 (mi_page_is_abandoned(page) && (page->theap == theap || page->memid.memkind != MI_MEM_ARENA))) {
+                 (mi_page_is_abandoned(page) && (mi_page_theap_peek(page) == theap || page->memid.memkind != MI_MEM_ARENA))) {
     mi_free_block_mt_publish(page, block, block, true);
     return;
   }

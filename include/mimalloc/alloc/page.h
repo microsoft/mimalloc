@@ -421,9 +421,19 @@ static inline void mi_page_qsbr_set_in_queue(mi_page_t* page, bool in_queue) {
 }
 #endif
 
+// `page->theap` is only written by the owner but non-owners may peek at it (in `mi_free_block_mt_batch_in`),
+// so writes and peeks are relaxed atomic (while owner reads can stay plain).
+static inline void mi_page_theap_store(mi_page_t* page, mi_theap_t* theap) {
+  mi_atomic_store_ptr_relaxed(mi_theap_t, (_Atomic(mi_theap_t*)*)&page->theap, theap);
+}
+
+static inline mi_theap_t* mi_page_theap_peek(mi_page_t* page) {
+  return mi_atomic_load_ptr_relaxed(mi_theap_t, (_Atomic(mi_theap_t*)*)&page->theap);
+}
+
 static inline void mi_page_set_theap(mi_page_t* page, mi_theap_t* theap) {
   // mi_assert_internal(!mi_page_is_in_full(page));  // can happen when destroying pages on theap_destroy
-  page->theap = theap;
+  mi_page_theap_store(page, theap);
   const mi_thread_id_t tid = (theap == NULL ? MI_THREAD_ID_ABANDONED : theap->tld->thread_id);
   mi_assert_internal((tid & MI_PAGE_FLAG_MASK) == 0);
 
