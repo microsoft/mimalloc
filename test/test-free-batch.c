@@ -445,24 +445,24 @@ int main(void) {
   const LPTOP_LEVEL_EXCEPTION_FILTER previous_filter = SetUnhandledExceptionFilter(report_crash);
   #endif
   mi_option_set(mi_option_guarded_sample_rate, 0);
-  CHECK("remote free explicit collect", test_remote_free(0));
+  CHECK_THREADS("remote free explicit collect", test_remote_free(0));
   #if MI_TEST_CRASH_INFO
   SetUnhandledExceptionFilter(previous_filter);
   #endif
   trace_first_test = false;
-  CHECK("remote free thread reinitialization", test_remote_free(1));
-  CHECK("remote free automatic thread exit", test_remote_free(2));
-  CHECK("remote free bounded cache", test_remote_free(3));
-  CHECK("batch budget survives partial publication", test_batch_budget());
-  CHECK("free after thread done does not re-initialize", test_free_after_thread_done());
-  CHECK("remote free abandoned owner", test_abandoned_owner());
-  CHECK("destroy heap after remote frees", test_destroyed_heap());
-  CHECK("separate heap batches and theap deletion", test_separate_heaps());
-  CHECK("delete heap with a live consumer batch", test_heap_end_with_pending(HEAP_DELETE));
-  CHECK("destroy heap with a live consumer batch", test_heap_end_with_pending(HEAP_DESTROY));
-  CHECK("abandon a quiescent foreign theap batch", test_heap_end_with_pending(THEAP_ABANDON));
-  CHECK("free while theap creation is disabled", test_creation_disabled());
-  CHECK("detached metadata is not batched", test_detached_metadata());
-  CHECK("remote free concurrent owner exit", test_concurrent_owner_exit());
+  CHECK_THREADS("remote free thread reinitialization", test_remote_free(1));
+  CHECK_THREADS("remote free automatic thread exit", test_remote_free(2));
+  CHECK_THREADS("remote free bounded cache", test_remote_free(3));
+  CHECK_THREADS("batch budget survives partial publication", test_batch_budget());
+  CHECK_THREADS("free after thread done does not re-initialize", test_free_after_thread_done());
+  CHECK_THREADS("remote free abandoned owner", test_abandoned_owner());
+  CHECK_THREADS("destroy heap after remote frees", test_destroyed_heap());
+  CHECK_THREADS("separate heap batches and theap deletion", test_separate_heaps());
+  CHECK_THREADS("delete heap with a live consumer batch", test_heap_end_with_pending(HEAP_DELETE));
+  CHECK_THREADS("destroy heap with a live consumer batch", test_heap_end_with_pending(HEAP_DESTROY));
+  CHECK_THREADS("abandon a quiescent foreign theap batch", test_heap_end_with_pending(THEAP_ABANDON));
+  CHECK_THREADS("free while theap creation is disabled", test_creation_disabled());
+  CHECK_THREADS("detached metadata is not batched", test_detached_metadata());
+  CHECK_THREADS("remote free concurrent owner exit", test_concurrent_owner_exit());
   return print_test_summary();
 }
