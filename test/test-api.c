@@ -127,6 +127,12 @@ int main(void) {
     mi_free(p);
   };
 
+  CHECK_BODY("os_page_size") {
+    extern size_t _mi_os_page_size(void);
+    const size_t ps = _mi_os_page_size();
+    result = (ps > 0 && (ps & (ps - 1)) == 0);
+  };
+
   CHECK_BODY("mi_urealloc_invalid") {
     void* p = mi_malloc(64);
     size_t pre, post;
