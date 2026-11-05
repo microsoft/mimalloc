@@ -170,8 +170,9 @@ static void mi_theap_cached_key_destroy(void* theapv) {
 
 void _mi_tls_slots_init(void) {
   mi_atomic_do_once {
-    pthread_key_t key;
+    pthread_key_t key = MI_PTHREAD_KEY_INVALID;
     if (_mi_pthread_key_create(&key,NULL,NULL)) { mi_atomic_store_release(&_mi_theap_default_key,key); }
+    key = MI_PTHREAD_KEY_INVALID;
     if (_mi_pthread_key_create(&key,&mi_theap_cached_key_destroy,NULL)) { mi_atomic_store_release(&_mi_theap_cached_key,key); }
   }
 }

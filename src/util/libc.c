@@ -229,9 +229,17 @@ void _mi_atomic_once_release(mi_atomic_once_t* once) {
 
 #if MI_USE_PTHREADS
 mi_decl_noinline bool _mi_pthread_key_create(pthread_key_t* pkey, void (*destruct)(void*), void* init) {
-  int err = pthread_key_create(pkey,destruct);
+  // keys are created lazily on first use so multiple threads can race to create the same key
+  static mi_lock_t key_lock = MI_LOCK_INITIALIZER;
+  int err = 0;
+  mi_lock(&key_lock) {
+    if (*pkey == MI_PTHREAD_KEY_INVALID) {
+      pthread_key_t key;
+      err = pthread_key_create(&key,destruct);
+      if (err==0) { *pkey = key; }
+    }
+  }
   if mi_unlikely(err!=0) {
-    *pkey = MI_PTHREAD_KEY_INVALID;
     _mi_error_message(ENOMEM,"unable to allocate a thread local variable (error %d)\n", err);
     return false;
   }
