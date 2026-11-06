@@ -242,6 +242,19 @@ static bool remote_free_abandoned(void) {
   return true;
 }
 
+// a thread that released the heap must not reclaim the page into its (sentinel) theap
+static bool remote_free_released(void) {
+  mi_page_t* page = mi_ptr_page(remote_block);
+  require(mi_page_is_abandoned(page));
+  mi_heap_t* heap = mi_page_heap(page);
+  require(mi_heap_theap(heap) != NULL && _mi_thread_is_initialized());
+  mi_thread_heap_release(heap);
+  mi_free(remote_block);
+  require(mi_page_is_abandoned(page) && !mi_page_is_owned(page) && mi_page_all_free(page));
+  require(page->qsbr.goal != 0 && !mi_page_qsbr_is_in_queue(page));
+  return true;
+}
+
 static void* full_page_blocks[1024];
 static size_t full_page_count;
 
@@ -459,7 +472,7 @@ static bool test_reclaim_ready_pages(void) {
   return true;
 }
 
-static bool test_orphan(size_t size, bool os, bool empty) {
+static bool test_orphan(size_t size, bool os, bool empty, bool released) {
   worker_heap = mi_heap_new_qsbr();
   require(worker_heap != NULL);
   // Establish a distinct receiving theap before the originating theap can be freed.
@@ -481,7 +494,7 @@ static bool test_orphan(size_t size, bool os, bool empty) {
       require(mi_page_is_abandoned(worker_page) && theap->page_count == 0);
     }
     remote_block = worker_blocks[0];
-    require(mi_run_on_thread(&remote_free_abandoned));
+    require(mi_run_on_thread(released ? &remote_free_released : &remote_free_abandoned));
     require(worker_page->qsbr.goal != 0 && mi_page_all_free(worker_page));
     require(mi_page_is_abandoned(worker_page) && !mi_page_is_owned(worker_page) && !mi_page_qsbr_is_in_queue(worker_page));
   }
@@ -631,11 +644,13 @@ int main(void) {
   CHECK_THREADS("delayed empty arena singleton is reclaimed", test_reclaim_delayed_empty(2*MI_MiB, false));
   CHECK_THREADS("delayed empty OS singleton is reclaimed", test_reclaim_delayed_empty(2*MI_MiB, true));
   CHECK_THREADS("allocation retries when reclaim releases ready empty pages", test_reclaim_ready_pages());
-  CHECK_THREADS("live orphan, origin-only reclaim, last free initializes a receiving thread", test_orphan(64, false, false));
-  CHECK_THREADS("empty abandoned arena singleton", test_orphan(2*MI_MiB, false, true));
-  CHECK_THREADS("live abandoned arena singleton", test_orphan(2*MI_MiB, false, false));
-  CHECK_THREADS("empty abandoned OS singleton", test_orphan(2*MI_MiB, true, true));
-  CHECK_THREADS("live abandoned OS singleton", test_orphan(2*MI_MiB, true, false));
+  CHECK_THREADS("live orphan, origin-only reclaim, last free initializes a receiving thread", test_orphan(64, false, false, false));
+  CHECK_THREADS("live orphan, last free by a thread that released the heap keeps it abandoned", test_orphan(64, false, false, true));
+  CHECK_THREADS("live abandoned OS singleton, last free by a thread that released the heap", test_orphan(2*MI_MiB, true, false, true));
+  CHECK_THREADS("empty abandoned arena singleton", test_orphan(2*MI_MiB, false, true, false));
+  CHECK_THREADS("live abandoned arena singleton", test_orphan(2*MI_MiB, false, false, false));
+  CHECK_THREADS("empty abandoned OS singleton", test_orphan(2*MI_MiB, true, true, false));
+  CHECK_THREADS("live abandoned OS singleton", test_orphan(2*MI_MiB, true, false, false));
   CHECK_THREADS("last frees during abandonment unown", test_free_during_unown(false));
   CHECK_THREADS("last frees during free-side unown", test_free_during_unown(true));
   CHECK_THREADS("full arena page becomes mapped on delayed last frees during unown", test_full_page_free_during_unown());

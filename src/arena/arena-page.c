@@ -249,6 +249,7 @@ static bool mi_arena_try_find_abandoned_visit(mi_arena_t* arena, const void* arg
       mi_assert_internal(mi_page_is_owned(page));
       mi_assert_internal(mi_page_is_abandoned(page));
       mi_assert_internal(mi_heap_has_page(heap, arena, page));
+      mi_page_clear_abandoned_mapped(page);  // no longer in the abandoned map
       mi_atomic_decrement_relaxed(&heap->abandoned_count[info->bin]);
       mi_theap_stat_decrease(theap, pages_abandoned, 1);
       mi_theap_stat_counter_increase(theap, pages_reclaim_on_alloc, 1);

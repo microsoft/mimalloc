@@ -523,6 +523,8 @@ bool _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page)
   mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
+  mi_assert_internal(!mi_page_is_abandoned_mapped(page));  // already removed from the abandoned map
+  mi_assert_internal(mi_theap_is_initialized(theap));
 
   mi_page_set_theap(page,theap);
   _mi_page_free_collect(page, false); // ensure used count is up to date

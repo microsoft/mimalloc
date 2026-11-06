@@ -112,7 +112,7 @@ static mi_theap_t* mi_theap_failed(void) {
 mi_decl_cold mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
 {
   if (!mi_heap_handle_is_valid(heap)) { return mi_theap_failed(); }  // allocation returns NULL
-  mi_assert_internal(heap->theap != 0);
+  mi_assert_internal(heap->theap != 0 || heap->is_deleted);  // the slot is released by `mi_heap_free_theaps`
   _mi_theap_tls_check();  // report if the cached theap was overwritten
   mi_theap_t* theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
   if mi_unlikely(theap==NULL) {

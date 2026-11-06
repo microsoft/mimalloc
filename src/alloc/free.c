@@ -612,15 +612,15 @@ static bool mi_abandoned_page_collect_empty(mi_page_t* page)
     _mi_arenas_page_free(page,NULL);
   }
   else {
-    mi_heap_t* const heap = mi_page_heap(page);
-    mi_theap_t* const theap = mi_heap_theap(heap);
-    if (theap != NULL) {
-      // reclaim such that it gets part of the theap's qsbr list.
+    // reclaim into our theap such that it becomes part of the theap's qsbr list (see `doc/qsbr.md`)
+    // note: this may create a theap and initialize the thread; it returns a sentinel theap for a deleted heap,
+    // or if the thread is terminated or released this heap (see `heap/heap.c:_mi_heap_theap_get_or_init`)
+    mi_theap_t* const theap = _mi_heap_theap(mi_page_heap(page));
+    if (mi_theap_is_initialized(theap)) {
       _mi_theap_page_reclaim(theap, page);
     }
     else {
-      mi_assert_internal(false);
-      // abandon as empty; it can only be collected by _mi_heap_collect_abandoned at this point
+      // abandon as empty; it is collected later by an allocation reclaim or `_mi_heap_collect_abandoned`
       _mi_arenas_page_abandon(page,NULL);
     }
   }
