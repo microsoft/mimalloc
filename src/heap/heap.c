@@ -246,7 +246,8 @@ static void mi_heap_free_theaps(mi_heap_t* heap) {
   }
 
   // set the theap thread local to NULL (so _mi_page_associated_theap does not read from a freed theap (through delete pages -> page_update_stats))
-  if (!mi_is_process_heap_main(heap)) {
+  // (main heaps of all subprocesses share the fast key which must never be released)
+  if (!mi_is_heap_main(heap)) {
     _mi_thread_local_free(heap->theap);
     heap->theap = 0;
   }

@@ -754,6 +754,24 @@ int main(void) {
     }
   }
 
+  CHECK_BODY("subproc-destroy-keeps-thread-locals") {  // destroying another subproc must not release the caller's thread locals or the fast key
+    mi_heap_t* const h2 = mi_heap_new();
+    mi_theap_t* const t2 = mi_heap_theap(h2);
+    mi_theap_t* const tmain = mi_heap_theap(mi_heap_main());
+    mi_subproc_destroy(mi_subproc_new());
+    mi_heap_t* const h3 = mi_heap_new();
+    mi_theap_t* const t3 = mi_heap_theap(h3);
+    mi_subproc_destroy(mi_subproc_new());
+    mi_heap_t* const h4 = mi_heap_new();
+    mi_theap_t* const t4 = mi_heap_theap(h4);
+    result = (t2!=NULL && t3!=NULL && t4!=NULL && t2!=t3 && t3!=t4);
+    for (int i = 0; i < 100 && result; i++) {
+      result = (mi_heap_theap(h2)==t2 && mi_heap_theap(h3)==t3 && mi_heap_theap(h4)==t4 && mi_heap_theap(mi_heap_main())==tmain);
+    }
+    mi_heap_delete(h4);
+    mi_heap_delete(h3);
+    mi_heap_delete(h2);
+  }
   CHECK_THREADS_BODY("heap-destroy-xthread-free") {   // destroy a heap with live blocks and pending cross-thread frees
     result = test_heap_destroy_xthread_free();
   }
