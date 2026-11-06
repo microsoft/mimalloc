@@ -892,8 +892,11 @@ bool mi_bbitmap_try_find_and_clearN_(mi_bbitmap_t* bbitmap, size_t tseq, size_t 
       // now try to claim it!
       if (mi_bbitmap_try_clearN_(bbitmap, chunk_idx, n)) {
         *pidx = (chunk_idx * MI_BCHUNK_BITS);
+        // fully used chunks are HUGE, but a partially used last chunk stays NONE so its tail can still be found
+        const bool last_is_full = ((n % MI_BCHUNK_BITS) == 0);
         for (size_t i = 0; i < count; i++) {
-          mi_bbitmap_set_chunk_bin(bbitmap, chunk_idx + i, MI_CBIN_HUGE);
+          const bool is_full = (i + 1 < count || last_is_full);
+          mi_bbitmap_set_chunk_bin(bbitmap, chunk_idx + i, (is_full ? MI_CBIN_HUGE : MI_CBIN_NONE));
         }
         mi_assert_internal(*pidx + n <= mi_bbitmap_max_bits(bbitmap));
         return true;
