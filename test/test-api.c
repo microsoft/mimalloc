@@ -541,6 +541,25 @@ int main(void) {
     }
   };
 
+  CHECK_BODY("reallocarr-zero-size") {
+    void* p = mi_malloc(32);
+    if (p == NULL) { result = false; }
+    else {
+      int err = mi_reallocarr(&p, 2, 0);
+      result = (err == 0 && p == NULL);
+      mi_free(p);
+    }
+  };
+
+  CHECK_BODY("realloc-aligned-other-heap") {
+    mi_heap_t* heap = mi_heap_new();
+    void* p = mi_heap_malloc_aligned(heap, 100, 64);
+    void* q = mi_realloc_aligned(p, 100, 64);  // fits in place but must move to the default heap
+    result = (q != NULL && mi_heap_of(q) != heap);
+    mi_free(q);
+    mi_heap_delete(heap);
+  };
+
   CHECK_BODY("reallocarr-overflow") {
     void* p = mi_malloc(32);
     if (p == NULL) { result = false; }
@@ -619,6 +638,11 @@ int main(void) {
       mi_ufree(p,&fsize);
       assert(fsize == post_size);
     }
+  }
+  CHECK_BODY("ucalloc-nomem") {
+    size_t bsize = 42;
+    void* p = mi_ucalloc(SIZE_MAX/4, 4, &bsize);
+    result = (p == NULL && bsize == 42);
   }
 
   #if (MI_SIZE_SIZE > 4)

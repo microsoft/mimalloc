@@ -438,33 +438,33 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_calloc(mi_heap_t* heap, size_t 
 
 // Return usable size
 static void* mi_ublock_size( void* p, mi_page_t* page, size_t* pblock_size ) {
-  mi_assert_internal(page == mi_ptr_page(p));
-  if (pblock_size!=NULL) {
-    if (p!=NULL) { *pblock_size = mi_page_block_size(page); }
+  if (p!=NULL && pblock_size!=NULL) {
+    mi_assert_internal(page == mi_ptr_page(p));
+    *pblock_size = mi_page_block_size(page);
   }
   return p;
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_umalloc_small(size_t size, size_t* pblock_size) mi_attr_noexcept {
-  mi_page_t* page;
+  mi_page_t* page = NULL;
   void* p = mi_theap_xmalloc_small_zero(_mi_theap_default(), size, false, false, &page);
   return mi_ublock_size(p,page,pblock_size);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_uzalloc_small(size_t size, size_t* pblock_size) mi_attr_noexcept {
-  mi_page_t* page;
+  mi_page_t* page = NULL;
   void* p = mi_theap_xmalloc_small_zero(_mi_theap_default(), size, false, true, &page);
   return mi_ublock_size(p,page,pblock_size);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_umalloc(size_t size, size_t* pblock_size) mi_attr_noexcept {
-  mi_page_t* page;
+  mi_page_t* page = NULL;
   void* p = _mi_theap_malloc_zero(_mi_theap_default(), size, false, 0, &page);
   return mi_ublock_size(p,page,pblock_size);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_uzalloc(size_t size, size_t* pblock_size) mi_attr_noexcept {
-  mi_page_t* page;
+  mi_page_t* page = NULL;
   void* p = _mi_theap_malloc_zero(_mi_theap_default(), size, true, 0, &page);
   return mi_ublock_size(p,page,pblock_size);
 }
@@ -760,6 +760,9 @@ static size_t mi_path_max(void) {
     else if (m < 256) pmax = 256; // at least 256
     else if (m > 64*1024) pmax = 64*1024;  // at most 64 KiB
     else pmax = m;
+    #ifdef PATH_MAX
+    if (pmax < PATH_MAX) pmax = PATH_MAX;  // realpath requires at least PATH_MAX bytes
+    #endif
     size_t expected = 0;
     mi_atomic_cas_strong_relaxed(&path_max, &expected, pmax);
   }
