@@ -800,6 +800,7 @@ typedef struct mi_heap_s {
 
   mi_theap_t*           theaps;                         // list of all thread-local theaps belonging to this heap (using the `hnext`/`hprev` fields)
   mi_lock_t             theaps_lock;                    // protects the theaps list and serializes heap walks with thread-exit abandonment
+  bool                  is_deleted;                     // set once the heap is deleted or destroyed: no new theaps can be attached (protected by `theaps_lock`)
 
   _Atomic(mi_profiler_t*) profiler;
 

@@ -44,7 +44,7 @@ static inline mi_addr_t mi_heap_cookie(const mi_heap_t* heap) {
 }
 
 static inline bool mi_heap_handle_is_valid(const mi_heap_t* heap) {
-  return ((heap->cookie == mi_heap_cookie(heap)) || _mi_heap_invalid(heap));
+  return ((heap!=NULL && heap->cookie == mi_heap_cookie(heap)) || _mi_heap_invalid(heap));
 }
 
 static inline mi_addr_t mi_theap_cookie(const mi_theap_t* theap) {

@@ -508,7 +508,8 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
       theap = _mi_theap_alloc(heap_main,tld);  // otherwise meta allocate
       if (theap==NULL) { mi_tld_free(tld); return NULL; } // out-of-memory on theap allocation
     }
-    _mi_theap_init(theap,heap_main,tld);
+    const bool attached = _mi_theap_init(theap,heap_main,tld);  // a main heap is never deleted while it is in use
+    mi_assert_internal(attached); MI_UNUSED_RELEASE(attached);
   }
 
   // now initialize the thread

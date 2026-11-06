@@ -60,6 +60,7 @@ static bool test_aligned_all(void);
 static bool test_heap_destroy_xthread_free(void);
 static bool test_heap_destroy_stale_theap(void);
 static bool test_thread_done_no_reinit(void);
+static bool test_thread_heap_release(void);
 #ifdef __cplusplus
 static bool test_new_first(void);
 #endif
@@ -786,6 +787,9 @@ int main(void) {
   CHECK_THREADS_BODY("thread-done-no-reinit") {      // allocation after `mi_thread_done` (e.g. in thread-local destructors) must not re-initialize the thread
     result = test_thread_done_no_reinit();
   }
+  CHECK_THREADS_BODY("thread-heap-release") {        // after `mi_thread_heap_release` a thread can still free but no longer allocate in the heap
+    result = test_thread_heap_release();
+  }
 
   //CHECK("theap_destroy", test_theap1());
   //CHECK("theap_delete", test_theap2());
@@ -1216,4 +1220,38 @@ static bool thread_done_no_reinit_fun(void) {
 
 static bool test_thread_done_no_reinit(void) {
   return mi_run_on_thread(&thread_done_no_reinit_fun);
+}
+
+
+// ---------------------------------------------------------------------------
+// After `mi_thread_heap_release` a thread can still free blocks but no longer allocate in the heap
+// (and no theap is created again). The blocks can still be freed after the heap is deleted.
+// ---------------------------------------------------------------------------
+
+static mi_heap_t* release_heap;
+static void*      release_blocks[64];
+
+static bool thread_heap_release_fun(void) {
+  for (int i = 0; i < 64; i++) {
+    release_blocks[i] = mi_heap_malloc(release_heap, 16 + i);
+    if (release_blocks[i] == NULL) return false;
+  }
+  mi_free(release_blocks[0]); release_blocks[0] = NULL;
+  mi_thread_heap_release(release_heap);
+  bool ok = (mi_heap_malloc(release_heap, 16) == NULL && mi_heap_malloc(release_heap, 100000) == NULL);
+  mi_free(release_blocks[1]); release_blocks[1] = NULL;
+  mi_thread_heap_release(release_heap);  // releasing again is allowed
+  ok = ok && (mi_heap_malloc(release_heap, 16) == NULL);
+  return ok;
+}
+
+static bool test_thread_heap_release(void) {
+  release_heap = mi_heap_new();
+  if (release_heap == NULL) return false;
+  mi_thread_heap_release(release_heap);  // never used in this thread
+  bool ok = (mi_heap_malloc(release_heap, 16) == NULL);
+  ok = ok && mi_run_on_thread(&thread_heap_release_fun);
+  mi_heap_delete(release_heap);
+  for (int i = 0; i < 64; i++) { mi_free(release_blocks[i]); }
+  return ok;
 }

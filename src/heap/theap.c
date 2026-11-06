@@ -231,8 +231,31 @@ static void mi_theap_options_init(mi_theap_t* theap, mi_heap_t* heap) {
   theap->is_detached = (theap->tld->thread_id == MI_THREAD_ID_DETACHED);
 }
 
+static void mi_theap_detach_from_tld(mi_theap_t* theap);
+static void mi_theap_free_mem(mi_theap_t* theap);
+
+// Push the theap on the heap's theap list; fails if the heap is deleted (see `heap/heap.c:mi_heap_free_theaps`)
+static bool mi_theap_attach_to_heap(mi_theap_t* theap, mi_heap_t* heap) {
+  bool attached = false;
+  mi_lock(&heap->theaps_lock) {
+    if (!heap->is_deleted) {
+      // only now set the heap member as it is used to determine if a theap is initialized
+      mi_atomic_store_ptr_release(mi_heap_t,&theap->heap,heap);
+      mi_theap_t* const head = heap->theaps;
+      theap->hprev = NULL;
+      theap->hnext = head;
+      if (head!=NULL) { head->hprev = theap; }
+      heap->theaps = theap;
+      attached = true;
+    }
+  }
+  return attached;
+}
+
+// Initialize a theap and attach it to its thread and heap.
+// Returns `false` (and leaves the theap unattached) if the heap is deleted.
 // todo: make order of parameters consistent (but would that break compat with CPython?)
-void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
+bool _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
 {
   mi_assert_internal(theap!=NULL);
   mi_assert_internal(heap!=NULL);
@@ -298,22 +321,19 @@ void _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
     mi_subproc_stat_increase(mi_theap_subproc(theap),theaps,1);  // on subproc to match theap_free_mem
   }
 
-  // only now set the heap member as it is used to determine if a theap is initialized
-  mi_atomic_store_ptr_release(mi_heap_t,&theap->heap,heap);
-
   // push on the heap's theap list
-  mi_lock(&heap->theaps_lock) {
-    head = heap->theaps;
-    theap->hprev = NULL;
-    theap->hnext = head;
-    if (head!=NULL) { head->hprev = theap; }
-    heap->theaps = theap;
+  if (!mi_theap_attach_to_heap(theap, heap)) {
+    // not on a heap list, so the thread lock suffices to unlink
+    mi_lock(&theap->tld->theaps_lock) { mi_theap_detach_from_tld(theap); }
+    return false;
   }
+  return true;
 }
 
 // Initialize a detached theap for meta data allocation
 void _mi_theap_meta_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld) {
-  _mi_theap_init(theap, heap, tld);
+  const bool attached = _mi_theap_init(theap, heap, tld);  // a main heap is never deleted while it is in use
+  mi_assert_internal(attached); MI_UNUSED_RELEASE(attached);
   theap->allow_page_abandon = false;  // for security, don't share with other threads
   theap->page_full_retain = 2;
   theap->sample_rate = 0;             // no sampling for meta data
@@ -354,7 +374,10 @@ mi_theap_t* _mi_theap_alloc(mi_heap_t* heap, mi_tld_t* tld) {
 mi_theap_t* _mi_theap_create(mi_heap_t* heap, mi_tld_t* tld) {
   mi_theap_t* theap = _mi_theap_alloc(heap,tld);
   if (theap == NULL) return NULL;
-  _mi_theap_init(theap, heap, tld);
+  if (!_mi_theap_init(theap, heap, tld)) {  // the heap is deleted
+    mi_theap_free_mem(theap);
+    return NULL;
+  }
   return theap;
 }
 
@@ -487,7 +510,11 @@ void _mi_tld_detach_theaps( mi_tld_t* tld ) {
   Safe theap delete
 ----------------------------------------------------------- */
 
-void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept {
+// Release a theap owned by this thread: abandon its pages, merge its stats, and unlink it from its thread and heap.
+// The heap's thread-local slot is set to `slot_theap`: either `NULL` (so a fresh theap is created on demand),
+// or the unavailable theap (so no theap is ever created again for this heap in this thread, see `heap/heap.c:mi_thread_heap_release`).
+// The main theap of the thread is only abandoned (and stays alive).
+void _mi_theap_release(mi_theap_t* theap, mi_theap_t* slot_theap) {
   if (theap==NULL) return;
   // The main theap stays alive even if a concurrent heap delete invalidates our default.
   mi_theap_t* const main = _mi_theap_main();
@@ -516,7 +543,7 @@ void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept {
           _mi_theap_merge_stats(owned);
         }
         else {
-          const bool cleared = _mi_thread_local_set(heap->theap, NULL);
+          const bool cleared = _mi_thread_local_set(heap->theap, slot_theap);
           mi_assert_internal(cleared); MI_UNUSED_RELEASE(cleared);
           mi_theap_detach_from_tld(owned);
           _mi_theap_abandon_owned_pages(owned);
@@ -532,6 +559,10 @@ void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept {
   }
   if (release) { _mi_theap_decref(theap); }
   if (!found) { _mi_verbose_message("theap %p is no longer owned by this thread\n", theap); }
+}
+
+void mi_theap_delete(mi_theap_t* theap) mi_attr_noexcept {
+  _mi_theap_release(theap, NULL);
 }
 
 

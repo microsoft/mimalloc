@@ -218,6 +218,7 @@ unsafe extern "C" {
     pub safe fn mi_heap_new() -> *mut mi_heap_t;
     pub fn mi_heap_delete(heap: *mut mi_heap_t);
     pub fn mi_heap_destroy(heap: *mut mi_heap_t);
+    pub fn mi_thread_heap_release(heap: *mut mi_heap_t);
     pub fn mi_heap_set_numa_affinity(heap: *mut mi_heap_t, numa_node: c_int);
     pub fn mi_heap_set_debug_fill_preserve(heap: *mut mi_heap_t, preserve: usize);
     pub fn mi_heap_collect(heap: *mut mi_heap_t, force: bool);

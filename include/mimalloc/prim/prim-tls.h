@@ -484,6 +484,7 @@ static inline bool _mi_thread_is_initialized(void) {
 // Get (and possible create) the theap belonging to a heap
 // We cache the last accessed theap in `_mi_theap_cached` for better performance.
 static inline mi_theap_t* _mi_heap_theap(mi_heap_t* heap) {
+  mi_assert(heap!=NULL);  // NULL is not a valid heap (and could match an empty theap)
   mi_theap_t* theap = _mi_theap_cached();
   #if MI_THEAP_INITASNULL
   if mi_likely(theap!=NULL && mi_theap_heap_peek(theap)==heap) return theap;
@@ -494,6 +495,7 @@ static inline mi_theap_t* _mi_heap_theap(mi_heap_t* heap) {
 }
 
 static inline mi_theap_t* _mi_heap_theap_cached(mi_heap_t* heap) {
+  mi_assert(heap!=NULL);  // NULL is not a valid heap (and could match an empty theap)
   mi_theap_t* theap = _mi_theap_cached();
   #if MI_THEAP_INITASNULL
   if mi_likely(theap!=NULL && mi_theap_heap_peek(theap)==heap) return theap;
@@ -511,8 +513,12 @@ static inline mi_theap_t* _mi_heap_theap_peek(const mi_heap_t* heap) {
   #else
   if mi_likely(mi_theap_heap_peek(theap)==heap) return theap;
   #endif
+  // otherwise look in the thread local slot of the heap (which is `NULL` if not yet created)
   theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);  // don't update the cache on a query
-  mi_assert_internal(theap==NULL || (!_mi_is_empty_theap(theap) && theap->heap==heap));
+  if mi_unlikely(theap!=NULL && mi_theap_heap_peek(theap)!=heap) {
+    return NULL;  // released: the slot holds the unavailable theap (see `heap/heap.c:mi_thread_heap_release`)
+  }
+  mi_assert_internal(theap==NULL || !_mi_is_empty_theap(theap));
   return theap;
 }
 

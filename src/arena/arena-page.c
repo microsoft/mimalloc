@@ -1343,7 +1343,7 @@ static bool mi_heap_visit_blocks_locked(mi_heap_t* heap, bool abandoned_only, bo
 bool _mi_heap_visit_blocks(mi_heap_t* heap, bool abandoned_only, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
   mi_assert(visitor!=NULL);
   if (visitor==NULL) return false;
-  if (heap==NULL) { heap = mi_heap_main(); }
+  // if (heap==NULL) { heap = mi_heap_main(); }
   if (!mi_heap_handle_is_valid(heap)) return false;
   bool ok = false;
   mi_lock(&heap->theaps_lock) {

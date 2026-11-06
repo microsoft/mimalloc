@@ -339,19 +339,18 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
 /* -----------------------------------------------------------
   Admin
 ----------------------------------------------------------- */
+// Return an initialized and valid theap, or NULL if the allocation should fail.
+// Only the uninitialized default theap of the thread initializes the thread implicitly. Any other
+// uninitialized theap could not be created, was released, or its heap was deleted.
+// (the unavailable default theap of a done thread is handled before, see `mi_theap_is_thread_done`)
 static mi_theap_t* mi_theap_init(mi_theap_t* theap) {
   if mi_likely(mi_theap_is_initialized(theap)) {
     return (mi_theap_handle_is_valid(theap) ? theap : NULL);  // validate the theap handle (see `heap/heap.h:mi_theap_handle_is_valid`)
   }
-  if (_mi_theap_is_unavailable(theap) || _mi_thread_is_done()) {
-    // we were unable to allocate a theap for a first-class heap, or the thread is done (and we do not re-initialize implicitly)
-    return NULL;
-  }
-  // otherwise we initialize the thread and its default theap
+  if (theap != _mi_theap_default()) return NULL;
+  mi_assert_internal(!_mi_thread_is_done());
   theap = _mi_thread_init();
-  if mi_unlikely(!mi_theap_is_initialized(theap)) { return NULL; }
-  mi_assert_internal(mi_theap_is_initialized(theap));
-  return theap;
+  return (mi_theap_is_initialized(theap) ? theap : NULL);
 }
 
 static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)

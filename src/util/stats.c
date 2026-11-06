@@ -468,7 +468,7 @@ static const mi_stats_t* mi_stats_merge_theap_to_heap(mi_theap_t* theap) mi_attr
 }
 
 static const mi_stats_t* mi_heap_get_stats(mi_heap_t* heap) {
-  if (heap==NULL) { heap = mi_heap_main(); }
+  // if (heap==NULL) { heap = mi_heap_main(); }
   if (!mi_heap_handle_is_valid(heap)) return NULL;
   mi_theap_t* theap = _mi_heap_theap_peek(heap);
   if (theap==NULL) return &heap->stats;
@@ -490,7 +490,7 @@ void mi_stats_reset(void) mi_attr_noexcept {
 
 
 void mi_heap_stats_print_out(mi_heap_t* heap, mi_output_fun* out, void* arg) mi_attr_noexcept {
-  if (heap==NULL) { heap = mi_heap_main(); }
+  // if (heap==NULL) { heap = mi_heap_main(); }
   if (!mi_heap_handle_is_valid(heap)) return;
   _mi_stats_print("heap", heap->heap_seq, mi_heap_get_stats(heap), out, arg);
 }
