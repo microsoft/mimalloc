@@ -726,9 +726,11 @@ int _mi_prim_getenv_prefixed(const char* prefix, mi_env_is_known_fun* is_known, 
   if (env == NULL) return 0;
   int count = 0;
   int entries = 0;
-  for (const char* s = env; *s != 0 && entries < 10000; s += _mi_strnlen(s,1024) + 1) {
+  for (const char* s = env; *s != 0 && entries < 10000; entries++) {
+    const size_t len = _mi_strnlen(s, 64*MI_KiB);  // entries are at most 32767 characters
+    if (len >= 64*MI_KiB) break;                   // malformed environment block
     count += _mi_env_append_prefixed(s, prefix, is_known, buf, buf_size);
-    entries++;
+    s += len + 1;
   }
   FreeEnvironmentStringsA(env);
   return count;
