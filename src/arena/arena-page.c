@@ -124,7 +124,7 @@ static mi_arena_t* mi_page_arena_pages(mi_page_t* page, size_t* slice_index, siz
     mi_heap_t* heap = mi_page_heap(page);
     mi_arena_pages_t* const arena_pages = mi_heap_arena_pages(heap, arena);
     mi_assert_internal(arena_pages != NULL);
-    mi_assert_internal(slice_index==NULL || mi_bitmap_is_set(arena_pages->pages, *slice_index));
+    // note: we cannot assert the page bit is set as moving heap pages may temporarily clear it (see `mi_heap_move_page_at`)
     *parena_pages = arena_pages;
   }
   return arena;
@@ -964,22 +964,29 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
   mi_assert_internal(mi_page_all_free(page));
   mi_assert_internal(page->next==NULL && page->prev==NULL);
 
-  #if MI_DEBUG>1
-  if (page->memid.memkind==MI_MEM_ARENA && !mi_page_is_full(page)) {
-    size_t bin = _mi_bin(mi_page_block_size(page));
-    size_t slice_index;
-    size_t slice_count;
-    mi_arena_pages_t* arena_pages = NULL;
-    mi_arena_t* const arena = mi_page_arena_pages(page, &slice_index, &slice_count, &arena_pages);
-    mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
-    mi_assert_internal(mi_page_slice_committed(page) > 0 || mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
-    mi_assert_internal(bin >= MI_ARENA_BIN_COUNT || mi_bitmap_is_clearN(arena_pages->pages_abandoned[bin], slice_index, 1));
-    mi_assert_internal(mi_bitmap_is_setN(arena_pages->pages, slice_index, 1));
-    // note: we cannot check for `!mi_page_is_abandoned_and_mapped` since that may
-    // be (temporarily) not true if the free happens while trying to reclaim
-    // see `mi_arena_try_claim_abandoned`
+  mi_arena_t* arena = NULL;
+  mi_arena_pages_t* arena_pages = NULL;
+  size_t slice_index = 0;
+  size_t slice_count = 0;
+  if (page->memid.memkind == MI_MEM_ARENA) {
+    arena = mi_page_arena_pages(page, &slice_index, &slice_count, &arena_pages);
+    mi_assert_internal(arena_pages!=NULL);
+    mi_assert_internal(arena->subproc == mi_page_subproc(page));
+    #if MI_DEBUG>1
+    if (!mi_page_is_full(page)) {
+      size_t bin = _mi_bin(mi_page_block_size(page));
+      mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
+      mi_assert_internal(mi_page_slice_committed(page) > 0 || mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
+      mi_assert_internal(bin >= MI_ARENA_BIN_COUNT || mi_bitmap_is_clearN(arena_pages->pages_abandoned[bin], slice_index, 1));
+      // note: we cannot check for `!mi_page_is_abandoned_and_mapped` since that may
+      // be (temporarily) not true if the free happens while trying to reclaim
+      // see `mi_arena_try_claim_abandoned`
+    }
+    #endif
+    // first remove the page from its heap; this waits if moving heap pages temporarily
+    // cleared the bit to safely claim the page (see `mi_heap_move_page_at`)
+    mi_bitmap_clear_once_set(arena->subproc, arena_pages->pages, slice_index);
   }
-  #endif
 
   // unregister page
   _mi_page_map_unregister(page);
@@ -998,14 +1005,7 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
   if (page->memid.guard_end)   { _mi_os_secure_guard_page_reset_at(subproc, slice_start + mi_page_guard_end_offset(page), page->memid); }
 
   // and free
-  if (page->memid.memkind == MI_MEM_ARENA) {
-    mi_arena_pages_t* arena_pages;
-    size_t slice_index;
-    size_t slice_count; MI_UNUSED(slice_count);
-    mi_arena_t* const arena = mi_page_arena_pages(page, &slice_index, &slice_count, &arena_pages);
-    mi_assert_internal(arena_pages!=NULL);
-    mi_assert_internal(arena->subproc == mi_page_subproc(page));
-    mi_bitmap_clear(arena_pages->pages, slice_index);
+  if (arena != NULL) {
     const size_t slice_committed = mi_page_slice_committed(page);
     if (slice_committed > 0) {
       // if committed on-demand, set the commit bits to account commit properly
@@ -1405,38 +1405,38 @@ void _mi_heap_collect_abandoned(mi_heap_t* heap) {
 #endif
 
 
-typedef struct mi_heap_delete_visit_info_s {
-  mi_heap_t*  heap_target;
+/* -----------------------------------------------------------
+  Move all pages of a deleted heap to a target heap: empty pages are freed,
+  and if there is no target heap (`heap_target==NULL`) all pages are destroyed.
+  At this point all theaps are freed and all pages are abandoned. A concurrent free can
+  still own a page briefly; we skip such pages and retry them in a next round.
+  When no page was skipped the heap has no pages left, as no new pages can be added.
+  This terminates since a free only owns a page for a bounded time (and then frees it,
+  re-abandons it, or unowns it).
+----------------------------------------------------------- */
+
+typedef struct mi_heap_move_info_s {
+  mi_heap_t*  heap;
+  mi_heap_t*  heap_target;   // NULL to destroy the pages
   mi_theap_t* theap_target;
-  mi_theap_t* theap;
-} mi_heap_delete_visit_info_t;
+  bool        retry;         // set if a page could not be claimed (as it is owned by a concurrent free)
+} mi_heap_move_info_t;
 
-static mi_page_t* mi_heap_area_page(const mi_heap_area_t* area) {
-  return mi_ptr_page(area->blocks);
-}
-
-static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg) {
-  MI_UNUSED(block); MI_UNUSED(block_size); MI_UNUSED(heap);
-  const mi_heap_delete_visit_info_t* info = (const mi_heap_delete_visit_info_t*)arg;
-  mi_heap_t*  heap_target           = info->heap_target;
-  mi_theap_t* const theap           = NULL; // info->theap;       mi_assert_internal(mi_theap_heap(theap) == heap);
-  mi_page_t*  const page            = mi_heap_area_page(area);
-
-  mi_page_claim_ownership(page);       // claim ownership
-  _mi_page_qsbr_clear(page); // deletion requires an unprotected heap; destruction requires no readers
-  if (mi_page_is_abandoned(page)) {
-    _mi_arenas_page_unabandon(page,theap);
-  }
-  else {
-    page->next = page->prev = NULL;    // yikes.. better not to try to access this from a thread later on..
-    mi_page_set_theap(page,NULL);      // set thread_id to abandoned
-  }
-  mi_assert_internal(mi_page_is_abandoned(page));
+// Free, destroy, or move an owned abandoned page to the target heap
+static void mi_heap_move_page(const mi_heap_move_info_t* info, mi_page_t* page) {
+  mi_heap_t* const heap  = info->heap;
+  mi_heap_t* heap_target = info->heap_target;
   mi_assert_internal(mi_page_is_owned(page));
+  mi_assert_internal(mi_page_is_abandoned(page));
+  mi_assert_internal(mi_page_heap(page) == heap);
+
+  _mi_page_free_collect(page, true);  // collect cross-thread frees so `used` is precise
+  _mi_page_qsbr_clear(page);          // deletion requires an unprotected heap; destruction requires no readers
+  _mi_arenas_page_unabandon(page, NULL);
 
   if (mi_page_used(page)==0) {
     // free the page
-    _mi_arenas_page_free(page, theap);
+    _mi_arenas_page_free(page, NULL);
   }
   else if (heap_target==NULL) {
     #if MI_GUARDED
@@ -1445,7 +1445,7 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
     // destroy the page
     _mi_page_free_collect(page, false); // collect the thread-free list first while `used` still counts those blocks (as `_mi_arenas_page_free` collects it again) (see #1420)
     mi_page_used_reset(page);           // note: invariant `|local_free| + |free| == reserved - used`  does not hold in this case
-    _mi_arenas_page_free(page, theap);
+    _mi_arenas_page_free(page, NULL);
   }
   else {
     // move the page to `heap_target` as an abandoned page
@@ -1464,14 +1464,8 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
       // os allocated
       mi_assert_internal(mi_memid_is_os(page->memid) && page->next == NULL);
     }
-    if (theap != NULL) {
-      mi_theap_stat_decrease(theap, page_bins[sbin], 1);
-      mi_theap_stat_decrease(theap, pages, 1);
-    }
-    else {
-      mi_heap_stat_decrease((mi_heap_t*)heap, page_bins[_mi_page_stats_bin(page)], 1);
-      mi_heap_stat_decrease((mi_heap_t*)heap, pages, 1);
-    }
+    mi_heap_stat_decrease(heap, page_bins[sbin], 1);
+    mi_heap_stat_decrease(heap, pages, 1);
     mi_theap_t* theap_target = info->theap_target;
 
     // and then add it to the new target heap
@@ -1492,30 +1486,76 @@ static bool mi_heap_delete_page(const mi_heap_t* heap, const mi_heap_area_t* are
     mi_theap_stat_increase(theap_target, pages, 1);
 
     // and abandon in the new heap
-    _mi_arenas_page_abandon(page,theap_target);
+    _mi_arenas_page_abandon(page, theap_target);
+  }
+}
+
+static bool mi_heap_move_page_at(size_t slice_index, size_t slice_count, mi_arena_t* arena, void* arg) {
+  MI_UNUSED(slice_count);
+  mi_heap_move_info_t* const info = (mi_heap_move_info_t*)arg;
+  mi_bitmap_t* const pages = mi_heap_arena_pages(info->heap, arena)->pages;
+  // temporarily clear the bit so a concurrent free cannot free the page while we claim it (see `mi_arenas_page_free_prim`)
+  if (!mi_bitmap_clear(pages, slice_index)) return true;  // freed concurrently
+  mi_page_t* const page = mi_arena_page_at_slice(arena, slice_index);
+  const bool claimed = mi_page_claim_ownership(page);
+  mi_bitmap_set(pages, slice_index);
+  if (claimed) { mi_heap_move_page(info, page); }
+          else { info->retry = true; }  // owned by a concurrent free: retry in the next round
+  return true;
+}
+
+static bool mi_heap_move_arena_pages(mi_arena_t* arena, const void* arg, void** result) {
+  MI_UNUSED(result);
+  mi_heap_move_info_t* const info = (mi_heap_move_info_t*)arg;
+  mi_arena_pages_t* const arena_pages = mi_heap_arena_pages(info->heap, arena);
+  if (arena_pages != NULL) {
+    _mi_bitmap_forall_set(arena_pages->pages, &mi_heap_move_page_at, arena, info);
   }
   return true; // continue
 }
 
-static void mi_heap_delete_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
-  mi_theap_t* const theap_target = (heap_target != NULL ? _mi_heap_theap(heap_target) : NULL);
-  // mi_theap_t* const theap = _mi_heap_theap(heap);
-  mi_heap_delete_visit_info_t info = { heap_target, theap_target, NULL };
-  _mi_heap_visit_blocks(heap, false, false, &mi_heap_delete_page, &info);
-  #if MI_DEBUG>1
-  // no more arena pages?
-  for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
-    mi_arena_pages_t* const arena_pages = mi_atomic_load_ptr_relaxed(mi_arena_pages_t, &heap->arena_pages[i]);
-    if (arena_pages!=NULL) {
-      mi_assert_internal(mi_bitmap_is_all_clear(arena_pages->pages));
+// Claim an abandoned OS page that is not owned by a concurrent free.
+// We claim under the lock: a free must unlink the page (under the lock) before it can free it.
+static mi_page_t* mi_heap_os_abandoned_page_try_claim(mi_heap_move_info_t* info) {
+  mi_heap_t* const heap = info->heap;
+  mi_page_t* claimed = NULL;
+  mi_lock(&heap->os_abandoned_pages_lock) {
+    for (mi_page_t* page = heap->os_abandoned_pages; page != NULL && claimed == NULL; page = page->next) {
+      if (mi_page_claim_ownership(page)) { claimed = page; }
+                                    else { info->retry = true; }
     }
   }
-  // nor os abandoned pages?
-  mi_lock(&heap->os_abandoned_pages_lock) {
+  return claimed;
+}
 
-    mi_assert_internal(heap->os_abandoned_pages == NULL);
+#if MI_DEBUG>1
+static bool mi_heap_has_pages(mi_heap_t* heap) {
+  for (size_t i = 0; i < MI_MAX_ARENAS; i++) {
+    mi_arena_pages_t* const arena_pages = mi_atomic_load_ptr_relaxed(mi_arena_pages_t, &heap->arena_pages[i]);
+    if (arena_pages != NULL && !mi_bitmap_is_all_clear(arena_pages->pages)) return true;
   }
-  // nor arena abandoned pages?
+  bool has_os_pages = false;
+  mi_lock(&heap->os_abandoned_pages_lock) {
+    has_os_pages = (heap->os_abandoned_pages != NULL);
+  }
+  return has_os_pages;
+}
+#endif
+
+static void mi_heap_move_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
+  mi_assert_internal(heap->is_deleted && heap->theaps == NULL);
+  mi_heap_move_info_t info = { heap, heap_target, (heap_target != NULL ? _mi_heap_theap(heap_target) : NULL), false };
+  do {
+    info.retry = false;
+    mi_forall_arenas(heap, NULL, 0, &mi_heap_move_arena_pages, &info, NULL);
+    mi_page_t* page;
+    while ((page = mi_heap_os_abandoned_page_try_claim(&info)) != NULL) {
+      mi_heap_move_page(&info, page);
+    }
+    if (info.retry) { _mi_prim_thread_yield(); }  // some pages are still owned by concurrent frees
+  } while (info.retry);
+  #if MI_DEBUG>1
+  mi_assert_internal(!mi_heap_has_pages(heap));
   for (size_t i = 0; i < MI_ARENA_BIN_COUNT; i++) {
     mi_assert_internal(mi_atomic_load_relaxed(&heap->abandoned_count[i])==0);
   }
@@ -1525,10 +1565,10 @@ static void mi_heap_delete_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
 void _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to) {
   if (mi_is_heap_main(heap_from)) return;
   if (heap_to==NULL) { heap_to = heap_from->subproc->heap_main; }
-  mi_heap_delete_pages(heap_from, heap_to);
+  mi_heap_move_pages(heap_from, heap_to);
 }
 
 void _mi_heap_destroy_pages(mi_heap_t* heap_from) {
   if (mi_is_heap_main(heap_from)) return;
-  mi_heap_delete_pages(heap_from, NULL);
+  mi_heap_move_pages(heap_from, NULL);
 }

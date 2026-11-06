@@ -567,7 +567,7 @@ mi_heap_t* mi_heap_new();
 /// @see mi_thread_heap_release() for releasing a heap in the current thread.
 void mi_heap_delete(mi_heap_t* heap);
 
-/// @brief Release the heap in the calling thread -- promises to not allocate in the heap anymore.
+/// @brief Release a heap in the calling thread -- promises to not allocate in that heap anymore.
 /// @param heap The heap to release in the calling thread.
 ///
 /// After this call, allocation in the heap from this thread returns `NULL`.
@@ -575,7 +575,7 @@ void mi_heap_delete(mi_heap_t* heap);
 /// In particular, for mi_heap_delete() it is not safe if any thread is concurrently freeing (or allocating)
 /// in that heap while it is being deleted. However, if each other thread that allocated in the heap first
 /// calls mi_thread_heap_release(), it is safe to delete the heap even with concurrent freeing.
-/// Using mi_thread_heap_releasse() is not needed for mi_heap_destroy() (where all blocks are freed) but
+/// Using mi_thread_heap_release() is not needed for mi_heap_destroy() (where all blocks are freed) but
 /// it is still good practice. Calling this multiple times is allowed.
 ///
 /// Note: trying to release the main heap of a subprocess is ignored.
