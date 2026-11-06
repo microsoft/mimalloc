@@ -162,7 +162,7 @@ static void mi_print_number(int64_t n, mi_output_fun* out, void* arg, bool limit
     const char* magnitude = "K";
     if (pos >= divider*base) { divider *= base; magnitude = "M"; }
     if (pos >= divider*base) { divider *= base; magnitude = "G"; }
-    const int64_t tens = (n / (divider/10));
+    const int64_t tens = (n / divider)*10 + ((n % divider)*10)/divider;
     const long whole = (long)(tens/10);
     const long frac1 = (long)(tens%10);
     char unitdesc[8];
