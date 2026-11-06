@@ -367,7 +367,8 @@ static void mi__malloc_fork_parent(void) {
   // nothing
 }
 static void mi__malloc_fork_child(void) {
-  // nothing
+  // we replace libSystem's `_malloc_fork_child` (which would call our zone `intro_reinit_lock`)
+  _mi_fork_child_zone();
 }
 
 static void mi_malloc_printf(const char* fmt, ...) {

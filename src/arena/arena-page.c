@@ -1318,7 +1318,7 @@ static bool mi_heap_visit_owned_os_blocks(mi_heap_t* heap, bool visit_blocks, mi
 
 static bool mi_heap_visit_blocks_locked(mi_heap_t* heap, bool abandoned_only, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
   // visit all pages in a heap
-  // Other threads must not access this heap; thread-exit abandonment is blocked by the heap lock.
+  // Other threads must not allocate in or free into this heap; thread-exit abandonment is blocked by the heap lock.
   const mi_heap_visit_info_t visit_info = { heap, visitor, arg, visit_blocks, abandoned_only };
   bool ok = mi_forall_arenas(heap, NULL, 0, &mi_heap_visit_arena, &visit_info, NULL);
   if (!ok) return false;
