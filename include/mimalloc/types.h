@@ -384,10 +384,14 @@ static inline bool mi_memkind_needs_no_free(mi_memkind_t memkind) {
   return (memkind <= MI_MEM_STATIC);
 }
 
+// OS memory sizes in a memid are counted in 32-bit 4 KiB pages (up to 16 TiB)
+#define MI_MEMID_OS_PAGE_SHIFT  (12)
+#define MI_MEMID_OS_PAGE_SIZE   (MI_ZU(1) << MI_MEMID_OS_PAGE_SHIFT)
+
 typedef struct mi_memid_os_info {
   void*         base;               // actual base address of the block (used for offset aligned allocations)
-  size_t        size;               // allocated full size
-  // size_t        alignment;       // alignment at allocation
+  uint32_t      psize;              // allocated full size in 4 KiB pages (see `mi_memid_os_size`)
+  uint32_t      pcommitted;         // committed size in 4 KiB pages as accounted in the statistics (see `mi_memid_os_committed`)
 } mi_memid_os_info_t;
 
 typedef struct mi_memid_arena_info {
@@ -405,7 +409,7 @@ typedef struct mi_memid_s {
   union {
     mi_memid_os_info_t     os;       // only used for MI_MEM_OS(_HUGE/_REMAP)
     mi_memid_arena_info_t  arena;    // only used for MI_MEM_ARENA
-    mi_memid_malloc_info_t malloc;   // only used for MI_MEM_MALLOC
+    mi_memid_malloc_info_t malloc;   // only used for MI_MEM_MALLOC, MI_MEM_STATIC, and MI_MEM_EXTERNAL
   } mem;
   mi_memkind_t  memkind;
   bool          is_pinned;          // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large (2Mib) or huge (1GiB) OS pages)
@@ -416,11 +420,33 @@ typedef struct mi_memid_s {
   bool          guard_end : 1;      // `true` if a page has a guard page right after its blocks
 } mi_memid_t;
 
-#define MI_MEMID_INIT(kind)   {{{NULL,0}}, kind, true /* pinned */, true /* committed */, false /* zero */, false /* memtag */, false, false /* guard front and end */ }
+#define MI_MEMID_INIT(kind)   {{{NULL,0,0}}, kind, true /* pinned */, true /* committed */, false /* zero */, false /* memtag */, false, false /* guard front and end */ }
 #define MI_MEMID_STATIC       MI_MEMID_INIT(MI_MEM_STATIC)
 
 static inline bool mi_memid_is_os(mi_memid_t memid) {
   return mi_memkind_is_os(memid.memkind);
+}
+
+static inline bool mi_memid_os_size_fits(size_t size) {
+  return (((uint64_t)size >> MI_MEMID_OS_PAGE_SHIFT) <= UINT32_MAX);
+}
+
+static inline uint32_t mi_memid_os_pages(size_t size) {
+  mi_assert_internal(size % MI_MEMID_OS_PAGE_SIZE == 0 && mi_memid_os_size_fits(size));
+  return (uint32_t)(size >> MI_MEMID_OS_PAGE_SHIFT);
+}
+
+static inline size_t mi_memid_os_size(mi_memid_t memid) {
+  return ((size_t)memid.mem.os.psize << MI_MEMID_OS_PAGE_SHIFT);
+}
+
+static inline size_t mi_memid_os_committed(mi_memid_t memid) {
+  return ((size_t)memid.mem.os.pcommitted << MI_MEMID_OS_PAGE_SHIFT);
+}
+
+static inline void mi_memid_os_set_committed(mi_memid_t* memid, size_t commit_size) {
+  mi_assert_internal(mi_memid_is_os(*memid) && commit_size <= mi_memid_os_size(*memid));
+  memid->mem.os.pcommitted = mi_memid_os_pages(commit_size);
 }
 
 static inline bool mi_memid_needs_no_free(mi_memid_t memid) {
@@ -430,7 +456,7 @@ static inline bool mi_memid_needs_no_free(mi_memid_t memid) {
 // defined in arena.c
 mi_memid_t    _mi_memid_create(mi_memkind_t memkind);
 mi_memid_t    _mi_memid_none(void);
-mi_memid_t    _mi_memid_create_os(void* base, size_t size, bool committed, bool is_zero, bool is_large);
+mi_memid_t    _mi_memid_create_os(void* base, size_t size, size_t commit_size, bool is_zero, bool is_large);
 mi_memid_t    _mi_memid_create_static(void* p, size_t size);
 mi_memid_t    _mi_memid_create_malloc(void* p, size_t size, bool iszero);
 size_t        _mi_memid_size(mi_memid_t memid);

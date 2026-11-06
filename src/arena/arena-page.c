@@ -58,13 +58,14 @@ static size_t mi_page_full_size(mi_page_t* page) {
   if (page->memid.memkind == MI_MEM_ARENA) {
     return page->memid.mem.arena.slice_count * MI_ARENA_SLICE_SIZE;
   }
-  else if (mi_memid_is_os(page->memid) || page->memid.memkind == MI_MEM_EXTERNAL) {
+  else if (mi_memid_is_os(page->memid)) {
     // note: the page meta data may be in front of the slices (see `mi_arenas_page_alloc_from_os`)
     uint8_t* const slice_start = mi_page_slice_start(page);
     mi_assert_internal((uint8_t*)page->memid.mem.os.base <= slice_start);
-    const ptrdiff_t presize = slice_start - (uint8_t*)page->memid.mem.os.base;
-    mi_assert_internal((ptrdiff_t)page->memid.mem.os.size >= presize);
-    return (presize > (ptrdiff_t)page->memid.mem.os.size ? 0 : page->memid.mem.os.size - presize);
+    const size_t presize = (size_t)(slice_start - (uint8_t*)page->memid.mem.os.base);
+    const size_t os_size = mi_memid_os_size(page->memid);
+    mi_assert_internal(os_size >= presize);
+    return (presize > os_size ? 0 : os_size - presize);
   }
   else {
     return 0;
@@ -529,7 +530,10 @@ static uint8_t* mi_arenas_page_alloc_from_os(mi_heap_t* heap, size_t slice_count
     _mi_os_secure_guard_pages_set_around(heap->subproc, page_meta_start, page_meta_size, *memid);
   }
   #endif
-  if (commit) { memid->initially_committed = true; } // so we don't commit again
+  if (commit) {
+    memid->initially_committed = true;  // so we don't commit again
+    mi_memid_os_set_committed(memid, alloc_size);
+  }
 
   // and determine the page meta data
   mi_assert_internal(mi_is_aligned(start,page_alignment));
@@ -1006,8 +1010,9 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
   if (page->memid.guard_end)   { _mi_os_secure_guard_page_reset_at(subproc, slice_start + mi_page_guard_end_offset(page), page->memid); }
 
   // and free
+  mi_memid_t memid = page->memid;
+  const size_t slice_committed = mi_page_slice_committed(page);
   if (arena != NULL) {
-    const size_t slice_committed = mi_page_slice_committed(page);
     if (slice_committed > 0) {
       // if committed on-demand, set the commit bits to account commit properly
       mi_assert_internal(mi_page_full_size(page) >= slice_committed);
@@ -1030,9 +1035,9 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
   }
   else {
     mi_heap_stat_decrease(page->heap, pages_os_allocated, 1);
+    if (slice_committed > 0) { mi_memid_os_set_committed(&memid, slice_committed); }  // committed on-demand
   }
   if (mi_page_meta_is_separated(page)) { page->block_size = 0; }  // for assertion checking
-  const mi_memid_t memid = page->memid;
   const size_t full_size = mi_page_full_size(page);
   mi_page_meta_memtag_done(page, memid);  // the page meta data cannot be accessed anymore
   _mi_arenas_free(subproc, slice_start, full_size, memid);

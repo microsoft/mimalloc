@@ -223,7 +223,8 @@ static mi_submap_t mi_page_map_alloc_submap(mi_subproc_t* subproc, mi_memid_t* m
 // We do not store the memid of a sub map but can recreate it (see `_mi_os_alloc_with_guards`)
 static mi_memid_t mi_page_map_submap_memid(mi_submap_t sub) {
   const size_t guard_size = _mi_os_secure_guard_page_size();
-  return _mi_memid_create_os((uint8_t*)mi_ptr_memtag_meta(sub) - guard_size, _mi_os_good_alloc_size(MI_PAGE_MAP_SUB_SIZE + 2*guard_size), true, false, false);
+  const size_t size = _mi_os_good_alloc_size(MI_PAGE_MAP_SUB_SIZE + 2*guard_size);
+  return _mi_memid_create_os((uint8_t*)mi_ptr_memtag_meta(sub) - guard_size, size, size, false, false);
 }
 
 void _mi_page_map_unsafe_destroy(void) {
