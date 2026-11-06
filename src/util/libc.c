@@ -357,7 +357,7 @@ static void mi_out_fill(char fill, size_t len, char** out, char* end) {
 
 static void mi_out_alignright(char fill, char* start, size_t len, size_t extra, char* end) {
   if (len == 0 || extra == 0) return;
-  if (start + len + extra >= end) return;
+  if (start + len + extra > end) return;
   // move `len` characters to the right (in reverse since it can overlap)
   for (size_t i = 1; i <= len; i++) {
     start[len + extra - i] = start[len - i];
@@ -522,6 +522,11 @@ int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
           pre = numplus;
         }
         mi_out_num((uintmax_t)x, 10, pre, &out, end);
+        if (pre != 0 && fill == '0' && alignright && out > start) {
+          // zero fill goes after the sign
+          start++;
+          if (width > 0) { width--; }
+        }
       }
       else if (c >= ' ' && c <= '~') {
         // unknown format
