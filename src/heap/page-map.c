@@ -88,10 +88,15 @@ mi_decl_nodiscard static mi_decl_noinline bool mi_page_map_commit_entries(mi_pag
 mi_decl_nodiscard static bool mi_page_map_ensure_committed(mi_page_map_t* pmap, size_t idx, mi_submap_t* submap) {
   mi_assert_internal(submap!=NULL && *submap==NULL);
   if mi_unlikely(idx >= mi_page_map_committed()) {
-    if (idx >= mi_atomic_load_acquire(&mi_process_get_sealed()->page_map_committed)) {
-      if (!mi_page_map_commit_entries(pmap,idx)) return false;
-      mi_assert_internal(idx < mi_page_map_committed());
+    // commit under the lock so the committed count only increases
+    bool ok = true;
+    mi_lock(&pmap->lock) {
+      if (idx >= mi_atomic_load_acquire(&mi_process_get_sealed()->page_map_committed)) {
+        ok = mi_page_map_commit_entries(pmap,idx);
+      }
     }
+    if (!ok) return false;
+    mi_assert_internal(idx < mi_page_map_committed());
   }
   *submap = mi_page_map_at(pmap, idx);
   return true;
