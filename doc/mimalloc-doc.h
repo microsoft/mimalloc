@@ -1415,6 +1415,10 @@ typedef struct mi_theap_s mi_theap_t;
 /// This can be used by runtime systems to request the thread-local theap
 /// once and then use it in its allocation functions (like mi_theap_malloc() or mi_theap_malloc_small() ) to avoid re-looking up
 /// the theap at each allocation call.
+///
+/// This is never NULL: if the theap could not be created, or if the current
+/// thread has already terminated (after mi_thread_done()), a special empty theap is
+/// returned instead. Allocation through such an empty theap returns NULL
 mi_theap_t* mi_heap_theap(mi_heap_t* heap);
 
 /// Release outstanding resources in a specific theap.
