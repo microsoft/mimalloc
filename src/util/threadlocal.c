@@ -24,8 +24,8 @@ terms of the MIT license. A copy of the license can be found in the file
   The version is used to safely reuse slots.
 ----------------------------------------------------------- */
 typedef struct mi_tls_slot_s {
-  size_t  version;
-  void*   value;
+  mi_thread_local_t version;
+  void*             value;
 } mi_tls_slot_t;
 
 typedef struct mi_thread_locals_s {
@@ -76,27 +76,33 @@ mi_define_thread_local(void*, mi_slot_fast, NULL, MI_TLS_TAG_SLOT_FAST)
   a value, we also set the version of the key.
 ----------------------------------------------------------- */
 
-#if MI_SIZE_BITS >= 64
-#define MI_TLS_IDX_BITS     (MI_SIZE_BITS/4)      /* 16 bits for the index, 48 bits for the version */
-#elif MI_SIZE_BITS >= 32
-#define MI_TLS_IDX_BITS     (12)                  /* 12 bits for index, 20 for the version? */
+#if MI_TLS_KEY32
+#define MI_TLS_KEY_BITS     MI_SIZE_BITS
+#else
+#define MI_TLS_KEY_BITS     64
+#endif
+
+#if MI_TLS_KEY_BITS >= 64
+#define MI_TLS_IDX_BITS     (16)                  /* 16 bits for the index, 48 bits for the version */
+#elif MI_TLS_KEY_BITS >= 32
+#define MI_TLS_IDX_BITS     (12)                  /* 12 bits for index, 20 for the version (see `MI_TLS_KEY32` in `types.h`) */
 #else
 #error not enough bits for the version for thread locals
 #endif
 #define MI_TLS_IDX_MASK     ((MI_ZU(1)<<MI_TLS_IDX_BITS)-1)
 #define MI_TLS_IDX_MAX      MI_TLS_IDX_MASK
-#define MI_TLS_VERSION_MAX  ((MI_ZU(1)<<(MI_SIZE_BITS - MI_TLS_IDX_BITS))-1)
+#define MI_TLS_VERSION_MAX  ((((mi_thread_local_t)1)<<(MI_TLS_KEY_BITS - MI_TLS_IDX_BITS))-1)
 
 
-static size_t mi_key_index( size_t key ) {
-  return (key & MI_TLS_IDX_MASK);
+static size_t mi_key_index( mi_thread_local_t key ) {
+  return (size_t)(key & MI_TLS_IDX_MASK);
 }
 
-static size_t mi_key_version( size_t key ) {
+static mi_thread_local_t mi_key_version( mi_thread_local_t key ) {
   return (key >> MI_TLS_IDX_BITS);
 }
 
-static mi_thread_local_t mi_key_create( size_t index, size_t version ) {
+static mi_thread_local_t mi_key_create( size_t index, mi_thread_local_t version ) {
   mi_assert_internal(version != 0 && version <= MI_TLS_VERSION_MAX);
   mi_assert_internal(index <= MI_TLS_IDX_MAX);
   const mi_thread_local_t key = ((version << MI_TLS_IDX_BITS) | index);

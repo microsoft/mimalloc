@@ -179,7 +179,7 @@ typedef struct mi_process_s {
   _Atomic(size_t)     profiler_generation;      // fresh generation for each profiler attach (see `profile/sample-profile.c`)
 
   mi_lock_t           thread_locals_lock;       // initialized in `_mi_thread_locals_init` (see `util/threadlocal.c`)
-  size_t              thread_locals_version;    // version to be able to reuse slots safely
+  mi_thread_local_t   thread_locals_version;    // version to be able to reuse slots safely
 
   mi_os_state_t       os;                       // OS state
   mi_fork_state_t     fork;                     // fork state (see `heap/subproc.c`)

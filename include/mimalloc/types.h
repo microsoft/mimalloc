@@ -779,8 +779,13 @@ typedef struct mi_arena_pages_s mi_arena_pages_t;
 #define MI_MAX_ARENAS   (160)   // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `_mi_arena_reserve`)
                                 // 160 arenas is enough for ~2 TiB memory
 
-// A dynamic thread-local variable; 0 for an invalid thread-local
-typedef size_t mi_thread_local_t;
+// A dynamic thread-local variable: a slot index and a version (see `util/threadlocal.c`); 0 for an invalid thread-local.
+// By default always 64-bit
+#if MI_TLS_KEY32
+typedef size_t   mi_thread_local_t;
+#else
+typedef uint64_t mi_thread_local_t;
+#endif
 
 typedef struct mi_heap_s {
   mi_addr_t             cookie;                         // keyed MAC of the heap address to validate heap handles (see `heap/heap.h:mi_heap_handle_is_valid`)
