@@ -1377,7 +1377,7 @@ typedef enum mi_option_e {
   // guard pages
   mi_option_guarded_min,              ///< only used when building with MI_GUARDED: minimal rounded object size for guarded objects (=0)
   mi_option_guarded_max,              ///< only used when building with MI_GUARDED: maximal rounded object size for guarded objects (=0)
-  mi_option_guarded_precise,          ///< disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
+  mi_option_unsafe_guarded_precise,   ///< disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
   mi_option_guarded_sample_rate,      ///< guard an object in the min/max range about every N requested bytes (=0)
   mi_option_guarded_sample_seed,      ///< can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0)
 
@@ -2112,8 +2112,8 @@ many system calls. Therefore, there are various environment variables (and optio
   page is considered (`0` and `1GiB` respectively). If you suspect a buffer overflow occurs with an object of size
   141, set the minimum and maximum to `148` and the sample rate to `1` to have all of those guarded.
 
-- `MIMALLOC_GUARDED_PRECISE=1`: If we have an object of size 13, we would usually place it an aligned 16 bytes in
-  front of the guard page. Using `MIMALLOC_GUARDED_PRECISE` places it exactly 13 bytes before a page so that even
+- `MIMALLOC_UNSAFE_GUARDED_PRECISE=1`: If we have an object of size 13, we would usually place it an aligned 16 bytes in
+  front of the guard page. Using `MIMALLOC_UNSAFE_GUARDED_PRECISE` places it exactly 13 bytes before a page so that even
   a 1 byte overflow is detected. This violates the C/C++ minimal alignment guarantees though so use with care.
 
 */

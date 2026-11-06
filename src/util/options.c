@@ -232,6 +232,7 @@ static bool mi_env_is_known(const char* name, size_t len) {
   static const char* const extra_names[] = {
     "profile",    // pprof profiler output (src/profile/pprof.c)
     "defines",    // C defines for the Rust build script (contrib/rust/sys/build.rs)
+    "src_dir",    // mimalloc source directory for the Rust build script (contrib/rust/sys/build.rs)
     "disable_redirect", "disable_override", "enable_redirect", "prioritize_load_order",  // used by mimalloc-redirect.dll
     "patch_imports", "force_redirect", "patch_ntheap",
   };
@@ -611,7 +612,7 @@ static void mi_show_error_message(const char* fmt, va_list args) {
   if (!mi_option_is_enabled(mi_option_verbose)) {
     if (!mi_option_is_enabled(mi_option_show_errors)) return;
     const long max_errors = mi_option_get(mi_option_max_errors);
-    if (max_errors >= 0 && (long)mi_atomic_increment_acq_rel(&_mi_process.error_count) > max_errors) return;
+    if (max_errors >= 0 && (long)mi_atomic_increment_acq_rel(&_mi_process.error_count) >= max_errors) return;
   }
   mi_vfprintf_thread(NULL, NULL, "mimalloc: error: ", fmt, args);
 }
@@ -620,7 +621,7 @@ void _mi_warning_message(const char* fmt, ...) {
   if (!mi_option_is_enabled(mi_option_verbose)) {
     if (!mi_option_is_enabled(mi_option_show_errors)) return;
     const long max_warnings = mi_option_get(mi_option_max_warnings);
-    if (max_warnings >= 0 && (long)mi_atomic_increment_acq_rel(&_mi_process.warning_count) > max_warnings) return;
+    if (max_warnings >= 0 && (long)mi_atomic_increment_acq_rel(&_mi_process.warning_count) >= max_warnings) return;
   }
   va_list args;
   va_start(args,fmt);
