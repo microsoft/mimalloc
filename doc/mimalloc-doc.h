@@ -313,6 +313,11 @@ size_t mi_good_size(size_t size);
 /// Note that `alignment` always follows `size` for consistency with the unaligned
 /// allocation API, but unfortunately this differs from `posix_memalign` and `aligned_alloc` in the C library.
 ///
+/// Aligned and unaligned functions can be freely mixed: any pointer returned by mimalloc can be passed
+/// to `mi_realloc_aligned` (and `mi_realloc_aligned_at`) with any alignment (and offset), larger or smaller
+/// than the one it was originally allocated with. Similarly, pointers from the aligned API can be passed
+/// to `mi_free`, `mi_realloc`, `mi_usable_size`, etc.
+///
 /// \{
 
 /// Allocate \a size bytes aligned by \a alignment.

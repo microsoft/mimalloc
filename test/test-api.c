@@ -391,6 +391,11 @@ int main(void) {
   CHECK_BODY("malloc-aligned-at2") {
     void* p = mi_malloc_aligned_at(50,32,8); result = (p != NULL && ((uintptr_t)(p) + 8) % 32 == 0); mi_free(p);
   };
+  CHECK_BODY("realloc-aligned-from-offset") {  // realloc to a small alignment must realign a pointer allocated at an offset
+    void* p = mi_malloc_aligned_at(16,16,4);
+    void* q = mi_realloc_aligned(p,16,sizeof(void*));
+    result = (p != NULL && q != NULL && (uintptr_t)q % sizeof(void*) == 0); mi_free(q);
+  };
   CHECK_BODY("memalign1") {
     void* p;
     bool ok = true;

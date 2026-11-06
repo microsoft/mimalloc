@@ -290,12 +290,6 @@ static mi_decl_noinline mi_decl_cold bool mi_ptr_invalid(const char* msg, const 
 static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const char* msg, bool free_small, bool check_p_for_null, mi_page_t** ppage)
 {
   MI_UNUSED_RELEASE(msg); MI_UNUSED(free_small);
-  #if MI_DEBUG
-  if mi_unlikely(!mi_is_aligned(p,MI_SIZE_SIZE) && !mi_option_is_enabled(mi_option_unsafe_guarded_precise)) {
-    return mi_ptr_invalid(msg, p, " (unaligned)");
-  }
-  #endif
-
   mi_page_t* page;
   #if MI_PAGE_META_SMALL_IS_ALIGNED
     if (free_small) {
@@ -348,6 +342,12 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
 
   mi_assert_internal(page!=NULL);
   mi_assert(cpage==page /* page_map lookup should be the same as aligned lookup */ );
+  #if MI_DEBUG
+  // pointers allocated at an offset (`mi_malloc_aligned_at`) or guarded precise pointers can be unaligned
+  if mi_unlikely(!mi_is_aligned(p,MI_SIZE_SIZE) && !mi_page_has_interior_pointers(page) && !mi_option_is_enabled(mi_option_unsafe_guarded_precise)) {
+    return mi_ptr_invalid(msg, p, " (unaligned)");
+  }
+  #endif
   #if !MI_GUARDED
   if (free_small) { mi_assert_internal(page->block_size <= MI_SMALL_MAX_OBJ_SIZE); /* free small should only be called on small pages */ }
   #endif
