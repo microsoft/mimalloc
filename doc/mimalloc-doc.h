@@ -1353,7 +1353,7 @@ typedef enum mi_option_e {
   mi_option_abandoned_reclaim_on_free,  ///< __v1__,__v2__: allow to reclaim an abandoned segment on a free (=1)
   mi_option_purge_extend_delay,         ///< __v1__,__v2__: extend purge delay on each subsequent delay (=1)
   mi_option_disallow_arena_alloc,       ///< 1 = do not use arena's for allocation (except if using specific arena id's)
-  mi_option_visit_abandoned,            ///< allow visiting heap blocks from abandoned threads (=0)
+  mi_option_visit_abandoned,            ///< __v1__,__v2__: allow visiting heap blocks from abandoned threads (=0)
   mi_option_target_segments_per_thread, ///< __v1__,__v2__: experimental (=0)
 
   // v3 options
