@@ -782,16 +782,16 @@ static void mi_page_try_retire(mi_page_queue_t* pq, mi_page_t* page, size_t bin,
 }
 
 // free retired pages: we don't need to look at the entire queues
-// since we only retire pages that are at the head position in a queue.
+// since we only retire pages in queues of at most MI_RETIRE_MAX_PAGES pages.
 void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {
   size_t min = MI_BIN_FULL;
   size_t max = 0;
   for(size_t bin = theap->page_retired_min; bin <= theap->page_retired_max; bin++) {
     mi_page_queue_t* pq  = &theap->pages[bin];
     mi_page_t* page      = pq->first;
-    for (int i = 0; i<MI_RETIRE_MAX_PAGES && page!=NULL && page->retire_expire!=0; i++) {
+    for (int i = 0; i<MI_RETIRE_MAX_PAGES && page!=NULL; i++) {
       mi_page_t* next = page->next;
-      mi_page_try_retire(pq,page,bin,force,&min,&max);
+      if (page->retire_expire!=0) { mi_page_try_retire(pq,page,bin,force,&min,&max); }
       page = next;
     }
   }
