@@ -396,6 +396,24 @@ static inline bool mi_atomic_casi64_strong_acq_rel(volatile _Atomic(int64_t)* p,
 
 #endif
 
+// Atomic minimum where 0 means "not set" (and `x > 0`); returns the previous value.
+// This always writes (even if the value is unchanged) so it is a read-modify-write that
+// is ordered with other read-modify-writes on `p` (unlike a failed CAS which is just a read).
+static inline int64_t mi_atomic_mini64_nonzero_acq_rel(_Atomic(int64_t)* p, int64_t x) {
+  int64_t current = mi_atomic_loadi64_relaxed(p);
+  int64_t desired;
+  do {
+    desired = (current == 0 || x < current ? x : current);
+  } while (!mi_atomic_casi64_strong_acq_rel(p, &current, desired));
+  return current;
+}
+
+static inline int64_t mi_atomic_exchangei64_acq_rel(_Atomic(int64_t)* p, int64_t x) {
+  int64_t current = mi_atomic_loadi64_relaxed(p);
+  while (!mi_atomic_casi64_strong_acq_rel(p, &current, x)) { /* nothing */ };
+  return current;
+}
+
 static inline mi_ssize_t mi_atomic_addi_acq_rel(_Atomic(mi_ssize_t)*p, mi_ssize_t add) {
   return (mi_ssize_t)mi_atomic_add_acq_rel((_Atomic(size_t)*)p, (size_t)add);
 }

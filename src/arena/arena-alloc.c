@@ -412,19 +412,16 @@ static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_
     mi_arena_purge(arena, slice_index, slice_count);
   }
   else {
-    // schedule purge
-    const mi_msecs_t expire = _mi_clock_now() + delay;
-    mi_msecs_t expire0 = 0;
-    if (mi_atomic_casi64_strong_release(&arena->purge_expire, &expire0, expire)) {
-      // expiration was not yet set
-      // maybe set the global arenas expire as well (if it wasn't set already)
-      mi_assert_internal(expire0==0);
-      mi_atomic_casi64_strong_release(&arena->subproc->purge_expire, &expire0, expire);
-    }
-    else {
-      // already an expiration was set
-    }
+    // schedule purge: first set the purge bits, then lower the arena expiration, and if we lowered it,
+    // the global one as well. These are (always writing) read-modify-writes that are ordered with the
+    // exchanges in `mi_arenas_try_purge` (and `mi_arena_try_purge`): either the purger sees our
+    // expiration (and purge bits), or we see its reset to 0 and publish our expiration again.
     mi_bitmap_setN(arena->slices_purge, slice_index, slice_count, NULL);
+    const mi_msecs_t expire = _mi_clock_now() + delay;
+    const mi_msecs_t prev = mi_atomic_mini64_nonzero_acq_rel(&arena->purge_expire, expire);
+    if (prev == 0 || expire < prev) {
+      mi_atomic_mini64_nonzero_acq_rel(&arena->subproc->purge_expire, expire);
+    }
   }
 }
 
@@ -472,22 +469,23 @@ static bool mi_arena_try_purge_visitor(size_t slice_index, size_t slice_count, m
   return true; // continue
 }
 
-// returns
-// -1 = nothing was purged
-// 0  = nothing was purged yet because have not yet reached the expire time
-// 1  = some pages in the arena were purged
-static int mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
+// Returns `true` if some pages in the arena were purged.
+// If the arena expiration is not yet reached, `*pending_expire` is lowered to it.
+static bool mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force, mi_msecs_t* pending_expire)
 {
   // check pre-conditions
-  if (arena->memid.is_pinned) return -1;
+  if (arena->memid.is_pinned) return false;
 
   // expired yet?
-  mi_msecs_t expire = mi_atomic_loadi64_relaxed(&arena->purge_expire);
-  if (expire==0) return -1;
-  if (!force && expire > now) return 0;
+  const mi_msecs_t expire = mi_atomic_loadi64_relaxed(&arena->purge_expire);
+  if (expire==0) return false;
+  if (!force && expire > now) {
+    if (*pending_expire == 0 || expire < *pending_expire) { *pending_expire = expire; }
+    return false;
+  }
 
-  // reset expire
-  mi_atomic_storei64_release(&arena->purge_expire, (mi_msecs_t)0);
+  // reset expire (ordered with `mi_arena_schedule_purge` so we see the purge bits of any free that saw the old expiration)
+  mi_atomic_exchangei64_acq_rel(&arena->purge_expire, (mi_msecs_t)0);
   mi_subproc_stat_counter_increase(arena->subproc, arena_purges, 1);
 
   // go through all purge info's  (with max MI_BFIELD_BITS ranges at a time)
@@ -499,7 +497,7 @@ static int mi_arena_try_purge(mi_arena_t* arena, mi_msecs_t now, bool force)
   const size_t minslices = _mi_slice_count_of_size(_mi_os_minimal_purge_size());
   _mi_bitmap_forall_setc_rangesn(arena->slices_purge, minslices, &mi_arena_try_purge_visitor, arena, &vinfo);
 
-  return (vinfo.any_purged ? 1 : -1);
+  return vinfo.any_purged;
 }
 
 
@@ -514,38 +512,31 @@ static void mi_arenas_try_purge(bool force, bool visit_all, mi_subproc_t* subpro
   const mi_msecs_t arenas_expire = mi_atomic_loadi64_acquire(&subproc->purge_expire);
   if (!visit_all && !force && (arenas_expire == 0 || arenas_expire > now)) return;
 
-  const size_t max_arena = mi_arenas_get_count(subproc);
-  if (max_arena == 0) return;
-
   // allow only one thread to purge at a time (todo: allow concurrent purging?)
   mi_atomic_guard(&_mi_process.arena_purge_guard)
   {
-    // increase global expire: at most one purge per delay cycle
-    if (arenas_expire > now) { mi_atomic_storei64_release(&subproc->purge_expire, now + (delay/10)); }
-    const size_t arena_start = tseq % max_arena;
+    // reset the global expiration (ordered with `mi_arena_schedule_purge`): any free that saw the old
+    // expiration has its arena expiration visible to us; any later free publishes its expiration again.
+    mi_atomic_exchangei64_acq_rel(&subproc->purge_expire, (mi_msecs_t)0);
+    mi_msecs_t pending_expire = 0;  // earliest expiration of the arenas we did not purge
+    const size_t max_arena = mi_arenas_get_count(subproc);
+    const size_t arena_start = (max_arena == 0 ? 0 : tseq % max_arena);
     size_t max_purge_count = (visit_all ? max_arena : (max_arena/4)+1);
-    bool all_visited = true;
-    bool any_purged = false;
     for (size_t _i = 0; _i < max_arena; _i++) {
       size_t i = _i + arena_start;
       if (i >= max_arena) { i -= max_arena; }
       mi_arena_t* arena = mi_arena_from_index(subproc,i);
-      if (arena != NULL) {
-        const int purged = mi_arena_try_purge(arena, now, force);
-        if (purged >= 0) {      // purged, or arena expire is not yet reached
-          any_purged = true;
-          if (purged >= 1) {    // purged
-            if (max_purge_count <= 1) {
-              all_visited = false;
-              break;
-            }
-            max_purge_count--;
-          }
+      if (arena != NULL && mi_arena_try_purge(arena, now, force, &pending_expire)) {
+        if (max_purge_count <= 1) {
+          pending_expire = now;  // not all arenas were visited; continue at the next try
+          break;
         }
+        max_purge_count--;
       }
     }
-    if (all_visited && !any_purged) {
-      mi_atomic_storei64_release(&subproc->purge_expire, (mi_msecs_t)0);
+    // publish the earliest pending expiration again
+    if (pending_expire != 0) {
+      mi_atomic_mini64_nonzero_acq_rel(&subproc->purge_expire, pending_expire);
     }
   }
 }
