@@ -227,7 +227,7 @@ void _mi_process_seal_once(void) {
 #endif
 static void mi_process_sealed_init(void) {
   bool protect = false;
-  #if MI_SECURE_SEALED_PAGE
+  #if MI_SECURE_STATIC_SEALED
   mi_assert_internal(sizeof(mi_process_sealed_once_t) <= MI_OS_PROBABLE_PAGE_SIZE);
   mi_assert_internal(sizeof(mi_process_sealed_t) <= MI_OS_PROBABLE_PAGE_SIZE);
   if ((MI_OS_PROBABLE_PAGE_SIZE % _mi_os_page_size()) == 0) {

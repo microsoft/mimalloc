@@ -878,7 +878,31 @@ static bool test_efault(bool (*test)(void)) {
   #endif
 }
 
+// In secure mode, the sealed process data must be read-only.
+#if MI_SECURE_STATIC_SEALED && !defined(_WIN32)
+static bool test_write_faults(volatile uint8_t* p) {
+  fflush(NULL);
+  const pid_t pid = fork();
+  if (pid == 0) { *p = *p; _exit(0); }
+  int status = 0;
+  return (pid > 0 && waitpid(pid, &status, 0) == pid && WIFSIGNALED(status) && (WTERMSIG(status) == SIGSEGV || WTERMSIG(status) == SIGBUS));
+}
+#endif
+
+static bool test_process_sealed(void) {
+  #if MI_SECURE_STATIC_SEALED
+  if ((MI_OS_PROBABLE_PAGE_SIZE % _mi_os_page_size()) != 0) return true;  // cannot seal with larger OS pages (and warns at startup)
+  if (!mi_process_get_sealed_once()->is_protected) return false;
+  #if !defined(_WIN32)
+  return (test_write_faults((volatile uint8_t*)mi_process_get_sealed_once()) &&
+          test_write_faults((volatile uint8_t*)mi_process_get_sealed()));
+  #endif
+  #endif
+  return true;
+}
+
 int main(void) {
+  CHECK("process-sealed", test_process_sealed());
   #if MI_PAC
   CHECK("page-map-tamper", test_efault(&test_page_map_tamper));
   #endif
