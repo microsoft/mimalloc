@@ -176,6 +176,7 @@ typedef struct mi_process_s {
   _Atomic(size_t)     error_count;              // stop emitting errors when >= `mi_option_max_errors`
   _Atomic(size_t)     warning_count;            // stop emitting warnings when >= `mi_option_max_warnings`
   _Atomic(size_t)     output_buf_len;           // used length of `output_buf`
+  _Atomic(size_t)     profiler_generation;      // fresh generation for each profiler attach (see `profile/sample-profile.c`)
 
   mi_lock_t           thread_locals_lock;       // initialized in `_mi_thread_locals_init` (see `util/threadlocal.c`)
   size_t              thread_locals_version;    // version to be able to reuse slots safely

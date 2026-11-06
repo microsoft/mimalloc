@@ -57,14 +57,18 @@ static inline bool mi_block_ptr_is_sampled(const mi_block_t* block, const void* 
 #endif
 }
 
-static inline bool mi_profiler_is_enabled(const mi_profiler_t* prof) {
-  _Atomic(size_t)* penabled = (_Atomic(size_t)*)&prof->reserved;
-  return (mi_atomic_load_acquire(penabled) != 0);
+// The profiler state is stored in its `reserved` field as `(generation << 1) | enabled`,
+// where the profiler gets a fresh generation each time it is attached.
+static inline _Atomic(size_t)* mi_profiler_pstate(const mi_profiler_t* prof) {
+  return (_Atomic(size_t)*)&prof->reserved;
 }
 
-static inline bool mi_profiler_set_enabled(mi_profiler_t* prof, bool enable) {
-  _Atomic(size_t)* penabled = (_Atomic(size_t)*)&prof->reserved;
-  return (mi_atomic_exchange_release(penabled, (enable ? 1 : 0)) != 0);
+static inline size_t mi_profiler_state(const mi_profiler_t* prof) {
+  return mi_atomic_load_acquire(mi_profiler_pstate(prof));
+}
+
+static inline bool mi_profiler_is_enabled(const mi_profiler_t* prof) {
+  return ((mi_profiler_state(prof) & 1) != 0);
 }
 
 #endif

@@ -126,6 +126,13 @@ static mi_profiler_t* mi_theap_get_enabled_profiler(const mi_theap_t* theap) {
 // Profile an allocation
 //-----------------------------------------------------------------------------
 
+// The header of a profiled block (followed by the user data of the sample data, and then the user object)
+typedef struct mi_profiled_block_s {
+  mi_block_t                block;          // `next` is `MI_BLOCK_TAG_PROFILED`
+  size_t                    profiler_state; // the profiler state when sampled; `on_free` is only called if it is still the same
+  mi_profiler_sample_data_t sample_data;
+} mi_profiled_block_t;
+
 // call `on_alloc`; allocations made by the profiler itself (e.g. by `backtrace`) are not sampled
 static size_t mi_profiler_on_alloc(mi_theap_t* theap, mi_profiler_t* prof, mi_profiler_sample_data_t* data, void* p, size_t req_size, uint64_t requested_since_last_sample) {
   mi_tld_t* const tld = theap->tld;
@@ -158,15 +165,15 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
   }
   else {
     // overallocate a larger block to store the profiler data
-    // [MI_BLOCK_TAG_PROFILE] [usable size] [ ... profile data ... ] [... user data ...]
-    const size_t sample_data_offset    = sizeof(mi_block_t);
+    // [MI_BLOCK_TAG_PROFILED] [profiler state] [ ... profile data ... ] [... user data ...]
     const size_t sample_user_data_size = mi_align_up(prof->sample_data_size > MI_PROFILE_SAMPLE_DATA_MAX_SIZE ? MI_PROFILE_SAMPLE_DATA_MAX_SIZE : prof->sample_data_size, sizeof(void*));
-    const size_t sample_data_size      = sizeof(mi_profiler_sample_data_t) + sample_user_data_size;  // one void* too many just in case
-    const size_t user_offset           = mi_align_up(sample_data_offset + sample_data_size, MI_MAX_ALIGN_SIZE);
+    const size_t header_size           = sizeof(mi_profiled_block_t) + sample_user_data_size;  // one void* too many just in case
+    const size_t user_offset           = mi_align_up(header_size, MI_MAX_ALIGN_SIZE);
     const size_t oversize              = user_offset + size;
     mi_page_t* page = NULL;
-    mi_block_t* const block = (mi_block_t*)_mi_malloc_generic_no_sample(theap,oversize,zero,&page);
-    if (block==NULL) return NULL;
+    mi_profiled_block_t* const pblock = (mi_profiled_block_t*)_mi_malloc_generic_no_sample(theap,oversize,zero,&page);
+    if (pblock==NULL) return NULL;
+    mi_block_t* const block = &pblock->block;
     mi_assert_internal(page!=NULL);
     if (ppage!=NULL) { *ppage = page; }
     #if MI_PAGE_META_SMALL_IS_ALIGNED
@@ -180,7 +187,8 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
     mi_page_set_has_interior_pointers(page, true);
     block->next = MI_BLOCK_TAG_PROFILED;
     p = mi_ptr_bounded((uint8_t*)block + user_offset, mi_bounds_user_size(req_size));  // exclude the profile data in front
-    mi_profiler_sample_data_t* const sample_data = (mi_profiler_sample_data_t*)((uint8_t*)block + sample_data_offset);
+    pblock->profiler_state = mi_profiler_state(prof);
+    mi_profiler_sample_data_t* const sample_data = &pblock->sample_data;
     sample_data->user_data_size = sample_user_data_size;
 
     // and call the profiler on_alloc
@@ -202,11 +210,14 @@ void _mi_page_profile_on_free(mi_page_t* page, mi_block_t* block, void* p) {
   mi_heap_t* const heap = mi_page_heap(page);
   if (heap==NULL) return;
   mi_profiler_t* prof = mi_heap_profiler(heap);
-  if (prof==NULL || !mi_profiler_is_enabled(prof) || prof->on_free==NULL) return;
+  if (prof==NULL || prof->on_free==NULL) return;
 
-  // call the on_free callback
-  mi_profiler_sample_data_t* const sample_data = (mi_profiler_sample_data_t*)((uint8_t*)block + sizeof(mi_block_t));
-  (*prof->on_free)(prof, sample_data, p, heap);
+  // only call `on_free` if the block was sampled by this profiler since it was last started
+  // (as the sample data may otherwise refer to deallocated data from a previous profiler)
+  mi_profiled_block_t* const pblock = (mi_profiled_block_t*)block;
+  const size_t state = mi_profiler_state(prof);
+  if (pblock->profiler_state != state || (state & 1) == 0) return;
+  (*prof->on_free)(prof, &pblock->sample_data, p, heap);
 }
 
 
@@ -230,10 +241,20 @@ static bool mi_heap_set_profiler(mi_heap_t* heap, mi_profiler_t* profiler) {
   return mi_atomic_cas_ptr_strong_release(mi_profiler_t, &heap->profiler, &previous, profiler);
 }
 
+// Called when a stopped profiler is attached: the fresh generation ensures `on_free` is
+// only called for allocations that are sampled by this profiler after it was attached.
+static void mi_profiler_new_generation(mi_profiler_t* profiler) {
+  if (profiler==NULL) return;
+  const size_t generation = mi_atomic_increment_relaxed(&_mi_process.profiler_generation) + 1;
+  mi_atomic_store_release(mi_profiler_pstate(profiler), generation << 1);
+}
+
 mi_decl_export bool mi_heap_profile(mi_heap_t* heap, mi_profiler_t* profiler) {
   // if (heap==NULL) { heap = mi_heap_main(); }
   mi_profiler_stop(profiler);
-  return mi_heap_set_profiler(heap,profiler);
+  if (!mi_heap_set_profiler(heap,profiler)) return false;
+  mi_profiler_new_generation(profiler);
+  return true;
 }
 
 mi_decl_export void mi_heap_profile_disable(mi_heap_t* heap) {
@@ -249,6 +270,7 @@ mi_decl_export bool mi_subproc_profile(mi_subproc_id_t subproc_id, mi_profiler_t
   mi_profiler_stop(profiler);
   mi_profiler_t* previous = (profiler==NULL ? mi_atomic_load_ptr_acquire(mi_profiler_t,&subproc->profiler) : NULL); // don't overwrite unless it is NULL
   if (!mi_atomic_cas_ptr_strong_release(mi_profiler_t,&subproc->profiler, &previous, profiler)) { return false; }
+  mi_profiler_new_generation(profiler);
   mi_lock(&subproc->heaps_lock) {
     for (mi_heap_t* heap = subproc->heaps; heap!=NULL; heap = heap->next) {
       mi_heap_set_profiler(heap,profiler);
@@ -263,7 +285,7 @@ mi_decl_export bool mi_profile( mi_profiler_t* profiler) {
 
 bool mi_profiler_start(mi_profiler_t* profiler ) {
   if (profiler==NULL) return false;
-  const bool was_running = mi_profiler_set_enabled(profiler,true);
+  const bool was_running = ((mi_atomic_or_acq_rel(mi_profiler_pstate(profiler), (size_t)1) & 1) != 0);
   if (was_running) return true;
   // for the main heap, if this is the profiler, start the theap more aggressively
   // otherwise it will be picked up when theaps take the slow generic malloc path.
@@ -279,7 +301,7 @@ bool mi_profiler_start(mi_profiler_t* profiler ) {
 
 bool mi_profiler_stop(mi_profiler_t* profiler) {
   if (profiler==NULL) return false;
-  return mi_profiler_set_enabled(profiler,false);
+  return ((mi_atomic_and_acq_rel(mi_profiler_pstate(profiler), ~(size_t)1) & 1) != 0);
 }
 
 void mi_profiler_snapshot(mi_profiler_t* profiler) {

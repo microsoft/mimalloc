@@ -168,6 +168,58 @@ bool test_profiler_free_count_le_alloc_count(void) {
   return true;
 }
 
+static my_profiler_t my_profiler2 = {
+  { NULL, sizeof(void*), 0, &on_alloc, &on_free, NULL, NULL },
+  0, 0, 0, 0, NULL
+};
+
+// allocate until `prof` samples an allocation and return it (still live)
+static void* allocate_sampled(my_profiler_t* prof) {
+  const uint64_t before = prof->alloc_count;
+  void* p = NULL;
+  for (int count = 0; prof->alloc_count == before && count < MAXLOOP; count++) {
+    mi_free(p);
+    p = mi_malloc(1024);
+  }
+  return (prof->alloc_count == before ? NULL : p);
+}
+
+bool test_profiler_switch(void) {
+  CHECK_BODY("profiler: on_free not called for allocations sampled before a re-attach or by another profiler") {
+    void* p0 = allocate_sampled(&my_profiler);
+    void* p1 = allocate_sampled(&my_profiler);
+    void* p2 = allocate_sampled(&my_profiler);
+    // pausing keeps passing earlier allocations to on_free
+    mi_profiler_stop(&my_profiler.profiler);
+    mi_profiler_start(&my_profiler.profiler);
+    uint64_t free_before = my_profiler.free_count;
+    mi_free(p0);
+    const bool pause_ok = (p0 != NULL && my_profiler.free_count == free_before + 1);
+    // re-attach: allocations sampled before are no longer passed to on_free
+    mi_profile(NULL);
+    mi_profile(&my_profiler.profiler);
+    mi_profiler_start(&my_profiler.profiler);
+    free_before = my_profiler.free_count;
+    mi_free(p1);
+    const bool restart_ok = (p1 != NULL && my_profiler.free_count == free_before);
+    // switch to another profiler: allocations sampled by the previous profiler are not passed to on_free
+    mi_profiler_stop(&my_profiler.profiler);
+    mi_profile(NULL);
+    mi_profile(&my_profiler2.profiler);
+    mi_profiler_start(&my_profiler2.profiler);
+    mi_free(p2);
+    const bool switch_ok = (p2 != NULL && my_profiler2.free_count == 0 && my_profiler.free_count == free_before);
+    // but allocations sampled by the new profiler are
+    void* p3 = allocate_sampled(&my_profiler2);
+    mi_free(p3);
+    const bool new_ok = (p3 != NULL && my_profiler2.free_count == 1);
+    mi_profiler_stop(&my_profiler2.profiler);
+    mi_profile(NULL);
+    result = (pause_ok && restart_ok && switch_ok && new_ok);
+  }
+  return true;
+}
+
 
 // ---------------------------------------------------------------------------
 // main
@@ -182,8 +234,7 @@ int main(void) {
   test_profiler_record_fields();
   test_profiler_on_free_called();
   test_profiler_free_count_le_alloc_count();
-
-  mi_profiler_stop(&my_profiler.profiler);
+  test_profiler_switch();
 
   return print_test_summary();
 }
