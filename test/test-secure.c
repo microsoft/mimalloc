@@ -97,7 +97,7 @@ static bool test_page_guard(size_t size, size_t alignment) {
   uint8_t* const p = (uint8_t*)(alignment == 0 ? mi_malloc(size) : mi_malloc_aligned(size, alignment));
   if (p == NULL) return false;
   const size_t usable = mi_usable_size(p);
-  memset(p, 0, usable);  // all usable memory is accessible
+  for (size_t i = 0; i < usable; i++) { p[i] = 0; }  // all usable memory is accessible (note: `memset` is rejected by `_FORTIFY_SOURCE` beyond `size`)
   const mi_page_t* const page = mi_ptr_page(p);
   uint8_t* const guard = mi_page_slice_start(page) + mi_page_guard_end_offset(page);
   const bool ok = (usable >= size && page->memid.guard_end && guard >= p + usable && test_access_faults(guard, false));
