@@ -570,8 +570,18 @@ mi_decl_restrict void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t si
   if (!mi_malloc_generic_check_size(size)) return NULL;
   const size_t sample_countdown = theap->sample_countdown;
   theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;  // don't count this allocation
-  void* p = mi_malloc_generic_from_page(theap, size, zero, 0, ppage, 0);
+  mi_page_t* page = NULL;
+  void* p = mi_malloc_generic_from_page(theap, size, zero, 0, &page, 0);
+  if (ppage!=NULL) { *ppage = page; }
+  // other allocations can be counted in batches during this allocation as well
+  const size_t counted = MI_SAMPLE_COUNTDOWN_MAX - theap->sample_countdown;
+  #if MI_SAMPLE==1
+  const size_t self = (p==NULL ? 0 : mi_page_usable_block_size(page) - MI_PADDING_SIZE);
+  #else
+  const size_t self = (p==NULL ? 0 : size - MI_PADDING_SIZE);
+  #endif
   // the sample rate may have changed (e.g. by a profiler `on_free` callback during a collect)
   theap->sample_countdown = (theap->sample_rate!=0 && sample_countdown > theap->sample_rate ? theap->sample_rate : sample_countdown);
+  if (counted > self) { mi_theap_sample_countdown_sub(theap, counted - self); }
   return p;
 }

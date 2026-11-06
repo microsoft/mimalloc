@@ -75,7 +75,7 @@ mi_decl_export bool mi_profile(mi_profiler_t* profiler);
 // start sampling
 mi_decl_export bool mi_profiler_start(mi_profiler_t* profiler);
 
-// end sampling (and no longer call `on_free`).
+// end sampling (but `on_free` is still called for sampled allocations until the profiler is detached).
 // Note: a profiler can only be deleted once it is detached and no other threads may still use it (call `on_free`).
 mi_decl_export bool mi_profiler_stop(mi_profiler_t* profiler);
 

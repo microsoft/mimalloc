@@ -41,6 +41,17 @@ static inline bool mi_theap_should_sample(mi_theap_t* theap, size_t req_size) {
   return ((mi_ssize_t)theap->sample_countdown < (mi_ssize_t)req_size);
 }
 
+// count requested bytes against the sample countdown (where any bytes beyond the countdown are added to `sample_requested`)
+static inline void mi_theap_sample_countdown_sub(mi_theap_t* theap, uint64_t requested) {
+  if (requested <= theap->sample_countdown) {
+    theap->sample_countdown -= (size_t)requested;
+  }
+  else {
+    theap->sample_requested += requested - theap->sample_countdown;
+    theap->sample_countdown = 0;
+  }
+}
+
 // we always align guarded pointers in a block at an offset
 // the block `next` field is then used as a tag to distinguish regular offset aligned blocks from guarded ones
 #define MI_BLOCK_TAG_ALIGNED   ((mi_encoded_t)(0))

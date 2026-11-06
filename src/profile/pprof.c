@@ -28,6 +28,7 @@ format generation).
 #include "mimalloc/util/options.h"
 #include "mimalloc/util/stats.h"
 #include "mimalloc/profile/pprof.h"
+#include "mimalloc/profile/sample-profile.h"  // MI_SAMPLE_RATE_MAX
 #include "mimalloc/heap/process.h"  // mi_process_get_sealed()->profile_env_profiler
 #include "mimalloc/prim/os.h"       // _mi_os_is_elevated
 
@@ -204,17 +205,16 @@ static size_t mi_exp_sample(mi_theap_t* theap, size_t scale) {
   if (scale == 1) return 1;                                     // keep 1 as is (to allow sampling every allocation)
   #endif
   const size_t r  = _mi_theap_random_next(theap) | 1;
-  const size_t lz = mi_clz(r);                                  // coarse -log2(U): Geometric(1/2)
-  // The highest set bit of `r` is at position `MI_SIZE_BITS-1-lz`; shift it out and
-  // take the next 8 bits as a fractional refinement in [0,256). When `r == 1`
-  // (lz == MI_SIZE_BITS-1) there are no fractional bits and the shift would be
-  // undefined, so the fraction is 0 there.
-  const size_t frac_q8 = (lz >= MI_SIZE_BITS - 1 ? 0 : (r << (lz + 1)) >> (MI_SIZE_BITS - 8));
-  const size_t bits_q8 = (lz << 8) | frac_q8;                   // Q8 fixed-point estimate of -log2(U)
-  const size_t ln_q8   = (bits_q8 * 177) >> 8;                  // -log2(U) -> -ln(U): *ln(2) (~177/256)
-  size_t next = ((ln_q8 * scale) >> 8) + 1;                     // scale by the mean; +1 avoids a zero threshold
-  const size_t cap = scale * 32;                                // clamp the (rare) long tail
-  return (next > cap ? cap : next);
+  const size_t lz = mi_clz(r);
+  // with `r = 2^(MI_SIZE_BITS-1-lz) * m` (for `1 <= m < 2`), we have `-log2(U) = lz + 1 - log2(m)` (for `U = r/2^MI_SIZE_BITS`)
+  const size_t frac_q8  = (lz >= MI_SIZE_BITS - 1 ? 0 : (r << (lz + 1)) >> (MI_SIZE_BITS - 8));  // `m-1` in Q8
+  const size_t log2m_q8 = frac_q8 + ((frac_q8 * (256 - frac_q8) * 89) >> 16);  // `log2(1+x) ~ x + 0.347*x*(1-x)`
+  const size_t bits_q8  = ((lz + 1) << 8) - log2m_q8;  // -log2(U) in Q8
+  size_t ln_q8 = (bits_q8 * 45426) >> 16;             // -ln(U) = -log2(U)*ln(2)
+  if (ln_q8 > (32 << 8)) { ln_q8 = (32 << 8); }       // clamp the (rare) long tail at 32 times the mean
+  size_t next;
+  if (mi_mul_overflow(scale >> 8, ln_q8, &next) || next > MI_SAMPLE_RATE_MAX) return MI_SAMPLE_RATE_MAX;
+  return next + (((scale & 0xFF) * ln_q8) >> 8) + 1;  // `scale*ln_q8/256`; +1 avoids a zero threshold
 }
 
 // Check if the sampled bytes accumulated so far (batched per-thread) should trigger a shared
@@ -1066,6 +1066,59 @@ static void mi_pprof_write_mapped_libraries(FILE* f) {
 
 
 // ---------------------------------------------------------------------------
+// Estimate the actual values from the sampled ones (using Q32 fixed-point arithmetic)
+// ---------------------------------------------------------------------------
+
+#define MI_Q32_ONE  ((uint64_t)1 << 32)
+
+// `n/d` in Q32 (saturating) without needing 128-bit arithmetic
+static uint64_t mi_div_q32(uint64_t n, uint64_t d) {
+  uint64_t q = n / d;
+  if (q >= MI_Q32_ONE) return UINT64_MAX;
+  uint64_t r = n % d;
+  for (int i = 0; i < 32; i++) {  // long division for the 32 fractional bits (where `r < d`)
+    q <<= 1;
+    if (r >= d - r) { r -= d - r; q |= 1; } else { r <<= 1; }
+  }
+  return q;
+}
+
+// `1 - e^(-x)` in Q32 for `x` in Q32: halve `x` until small, use a Taylor series, and double back using `1 - e^(-2x) = y*(2-y)` where `y = 1 - e^(-x)`
+static uint64_t mi_one_minus_exp_neg_q32(uint64_t x) {
+  int k = 0;
+  while (x > MI_Q32_ONE/2) { x >>= 1; k++; }
+  uint64_t y = x;
+  uint64_t term = x;
+  for (unsigned i = 2; i <= 10; i++) {  // partial sums stay positive as the terms decrease
+    term = ((term * x) >> 32) / i;
+    y = ((i & 1) != 0 ? y + term : y - term);
+  }
+  while (k-- > 0) { y = (y * (2*MI_Q32_ONE - y)) >> 32; }  // no overflow as `y < 1`
+  return y;
+}
+
+// `n/p` for a probability `p` in Q32
+static int64_t mi_unsample_value(uint64_t n, uint64_t p) {
+  const uint64_t m = mi_div_q32(n, p);
+  return (m > INT64_MAX ? INT64_MAX : (int64_t)m);
+}
+
+// Estimate the actual count and bytes from the sampled ones (as pprof does for sampled heap profiles):
+// an object of size `s` is sampled with probability `1 - e^(-s/rate)`.
+static void mi_pprof_unsample(int64_t* count, int64_t* bytes, size_t rate) {
+  if (*count <= 0 || *bytes <= 0 || rate <= 1) return;
+  const uint64_t n = (uint64_t)*count;
+  const uint64_t b = (uint64_t)*bytes;
+  const uint64_t avg = b / n;
+  if (avg/32 >= rate) return;  // sampled with probability 1 (within 1e-13)
+  const uint64_t x = mi_div_q32(avg, rate) + mi_div_q32(b % n, n) / rate;  // `(b/n)/rate` in Q32
+  uint64_t p = mi_one_minus_exp_neg_q32(x);
+  if (p == 0) { p = 1; }
+  *count = mi_unsample_value(n, p);
+  *bytes = mi_unsample_value(b, p);
+}
+
+// ---------------------------------------------------------------------------
 // Writing the profile in the (original, textual) pprof heap profile format
 // ---------------------------------------------------------------------------
 
@@ -1095,8 +1148,9 @@ static bool mi_pprof_snapshot_text(mi_pprof_profiler_t* prof, const char* fname)
     }
   }
 
-  mi_fprintf(f, "heap profile: %6l8d: %8l8d [%6l8d: %8l8d] @ heapprofile\n",
-             total_inuse_objects, total_inuse_bytes, total_alloc_objects, total_alloc_bytes);
+  // the sample rate in the header lets pprof estimate the actual counts and bytes
+  mi_fprintf(f, "heap profile: %6l8d: %8l8d [%6l8d: %8l8d] @ heap_v2/%zu\n",
+             total_inuse_objects, total_inuse_bytes, total_alloc_objects, total_alloc_bytes, prof->sample_threshold);
 
   // second pass: write one line per unique call location
   for (size_t i = 0; i < locations->bucket_count; i++) {
@@ -1469,10 +1523,12 @@ static bool mi_pprof_build_proto(mi_pprof_profiler_t* prof, mi_pb_buf_t* profile
       mi_pb_buf_t sample;
       mi_pb_init(&sample, heap);
       mi_pb_packed_uint64_field(&sample, 1, location_ids, frame_count);  // location_id (leaf-first, matching our capture order)
-      const int64_t values[4] = {
+      int64_t values[4] = {
         loc->alloc_count, loc->alloc_bytes,
         (int64_t)inuse_count, (int64_t)inuse_bytes
       };
+      mi_pprof_unsample(&values[0], &values[1], prof->sample_threshold);
+      mi_pprof_unsample(&values[2], &values[3], prof->sample_threshold);
       mi_pb_packed_int64_field(&sample, 2, values, 4);  // value
       {
         // attach the originating thread id as a numeric label: pprof has no

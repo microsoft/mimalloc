@@ -28,6 +28,26 @@ size_t _mi_theap_update_sample_rate(mi_theap_t* theap) {
   return old_sample_rate;
 }
 
+// Restart the sample countdown at the nearest profile or guarded countdown.
+// These bytes are counted down from both in advance, so the next sample only counts the bytes beyond it.
+static void mi_theap_sample_countdown_restart(mi_theap_t* theap) {
+  size_t countdown = theap->sample_rate;
+  if (theap->profile_sample_rate!=0 && theap->profile_sample_countdown < countdown) { countdown = theap->profile_sample_countdown; }
+  if (theap->guarded_sample_rate!=0 && theap->guarded_sample_countdown < countdown) { countdown = theap->guarded_sample_countdown; }
+  if (theap->profile_sample_rate!=0) { theap->profile_sample_countdown -= countdown; }
+  if (theap->guarded_sample_rate!=0) { theap->guarded_sample_countdown -= countdown; }
+  theap->sample_countdown = countdown;
+}
+
+// The bytes beyond a derived countdown that were counted in a batch before this allocation (and count towards the next sample)
+static uint64_t mi_sample_carry(uint64_t excess, size_t req_size) {
+  return (excess > req_size ? excess - req_size : 0);
+}
+
+static size_t mi_sample_countdown_next(size_t rate, uint64_t carry) {
+  return (carry < rate ? rate - (size_t)carry : 0);
+}
+
 // Called when the theap sample countdown <= req_size; should call guarded or profiled allocation.
 mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
@@ -49,56 +69,53 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* the
     return _mi_malloc_generic_no_sample(theap,size,zero,ppage);
   }
 
-  // update countdown and total accummulated requested bytes since the last sample
   mi_assert_internal(!_mi_is_empty_theap(theap));
   mi_assert_internal(req_size <= SIZE_MAX/2);
   mi_assert_internal(theap->sample_rate > 0);
   mi_assert_internal(theap->sample_rate <= SIZE_MAX/2);
   mi_assert_internal(theap->sample_rate >= theap->sample_countdown);
-
-  const uint64_t requested = theap->sample_requested = (uint64_t)theap->sample_rate + (uint64_t)(req_size - theap->sample_countdown) + theap->sample_requested;
-  mi_assert_internal(requested > 0);
-  mi_assert_internal(requested >= req_size);
-  theap->sample_countdown = theap->sample_rate;      // reset sampling
-
-  // update derived countdowns
   mi_assert_internal(theap->profile_sample_rate!=0 || theap->profile_sample_countdown==0);
   mi_assert_internal(theap->guarded_sample_rate!=0 || theap->guarded_sample_countdown==0);
-  bool sample_profile = false;
-  bool sample_guarded = false;
+
+  // the requested bytes beyond the countdown (which was already counted down from the derived countdowns at restart)
+  const uint64_t requested = (uint64_t)(req_size - theap->sample_countdown) + theap->sample_requested;
+  theap->sample_countdown = 0;
+  theap->sample_requested = 0;
+
+  // update the derived countdowns; a sample is due if the requested bytes exceed its countdown
+  uint64_t profile_excess = 0;
+  uint64_t guarded_excess = 0;
+  uint64_t profile_requested = 0;
   if (theap->profile_sample_rate!=0) {
-    if (theap->profile_sample_countdown >= requested) { theap->profile_sample_countdown -= (size_t)requested; } else { sample_profile = true; }
+    profile_requested = (theap->profile_sample_rate - theap->profile_sample_countdown) + requested;  // since the last profile sample
+    if (requested <= theap->profile_sample_countdown) { theap->profile_sample_countdown -= (size_t)requested; } else { profile_excess = requested - theap->profile_sample_countdown; }
   }
   if (theap->guarded_sample_rate!=0) {
-    if (theap->guarded_sample_countdown >= requested) { theap->guarded_sample_countdown -= (size_t)requested; } else { sample_guarded = true; }
+    if (requested <= theap->guarded_sample_countdown) { theap->guarded_sample_countdown -= (size_t)requested; } else { guarded_excess = requested - theap->guarded_sample_countdown; }
   }
 
-  // invoke callback?
-  if (sample_profile) {
-    theap->profile_sample_countdown = theap->profile_sample_rate;  // reset countdown
-    theap->sample_requested = 0;                                   // reset requested as we pass it to malloc_profiled
-    #if MI_PROFILE
-    return _mi_theap_malloc_profiled(theap,size,requested,zero,ppage);
-    #endif
+  void* p;
+  if (profile_excess > 0) {
+    const uint64_t carry = mi_sample_carry(profile_excess, req_size);
+    p = _mi_theap_malloc_profiled(theap,size,profile_requested - carry,zero,ppage);  // can update the profile sample rate
+    theap->profile_sample_countdown = mi_sample_countdown_next(theap->profile_sample_rate, carry);
+    if (guarded_excess > 0) { theap->guarded_sample_countdown = 0; }  // retry at the next allocation
   }
-  else if (sample_guarded) {
+  else if (guarded_excess > 0) {
     if (req_size >= theap->guarded_size_min && req_size <= theap->guarded_size_max) {
-      // use guarded allocation
-      theap->guarded_sample_countdown = theap->guarded_sample_rate; // reset countdown
-      #if MI_GUARDED
-      return _mi_theap_malloc_guarded(theap,size,zero,ppage);
-      #endif
+      p = _mi_theap_malloc_guarded(theap,size,zero,ppage);
+      theap->guarded_sample_countdown = mi_sample_countdown_next(theap->guarded_sample_rate, mi_sample_carry(guarded_excess, req_size));
     }
-    #if MI_GUARDED
     else {
-      // failed size criteria, rewind the sample countdown so we sample asap again
-      // todo: can we do better here as this will cause many samples until it fits the size..
-      theap->sample_countdown = 0;
+      p = _mi_malloc_generic_no_sample(theap,size,zero,ppage);
+      theap->guarded_sample_countdown = 0;  // retry at the next allocation
     }
-    #endif
   }
-  // take generic path
-  return _mi_malloc_generic_no_sample(theap,size,zero,ppage);
+  else {
+    p = _mi_malloc_generic_no_sample(theap,size,zero,ppage);
+  }
+  mi_theap_sample_countdown_restart(theap);
+  return p;
 }
 
 
@@ -129,7 +146,7 @@ static mi_profiler_t* mi_theap_get_enabled_profiler(const mi_theap_t* theap) {
 // The header of a profiled block (followed by the user data of the sample data, and then the user object)
 typedef struct mi_profiled_block_s {
   mi_block_t                block;          // `next` is `MI_BLOCK_TAG_PROFILED`
-  size_t                    profiler_state; // the profiler state when sampled; `on_free` is only called if it is still the same
+  size_t                    profiler_state; // the profiler state when sampled; `on_free` is only called if it is still the same generation
   mi_profiler_sample_data_t sample_data;
 } mi_profiled_block_t;
 
@@ -147,7 +164,6 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
   mi_assert_internal(theap!=NULL);
   mi_assert_internal(size>=MI_PADDING_SIZE);
   const size_t req_size = size - MI_PADDING_SIZE;
-  mi_assert_internal(req_size<=requested_since_last_sample);
   mi_profiler_t* const prof = mi_theap_get_enabled_profiler(theap);
   if (prof == NULL) { return _mi_malloc_generic_no_sample(theap,size,zero,ppage); }
   mi_assert_internal(prof!=NULL && prof->on_alloc!=NULL && mi_profiler_is_enabled(prof));
@@ -212,11 +228,10 @@ void _mi_page_profile_on_free(mi_page_t* page, mi_block_t* block, void* p) {
   mi_profiler_t* prof = mi_heap_profiler(heap);
   if (prof==NULL || prof->on_free==NULL) return;
 
-  // only call `on_free` if the block was sampled by this profiler since it was last started
+  // only call `on_free` if the block was sampled by this profiler since it was last attached (even if it is stopped now)
   // (as the sample data may otherwise refer to deallocated data from a previous profiler)
   mi_profiled_block_t* const pblock = (mi_profiled_block_t*)block;
-  const size_t state = mi_profiler_state(prof);
-  if (pblock->profiler_state != state || (state & 1) == 0) return;
+  if ((pblock->profiler_state >> 1) != (mi_profiler_state(prof) >> 1)) return;  // compare generations
   (*prof->on_free)(prof, &pblock->sample_data, p, heap);
 }
 
