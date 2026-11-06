@@ -112,7 +112,7 @@ static mi_theap_t* mi_theap_failed(void) {
 mi_decl_cold mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
 {
   if (!mi_heap_handle_is_valid(heap)) { return mi_theap_failed(); }  // allocation returns NULL
-  mi_assert_internal(heap->theap != 0 || heap->is_deleted);  // the slot is released by `mi_heap_free_theaps`
+  mi_assert_internal(heap->theap != 0 || heap->is_deleted);  // the slot is released by `mi_heap_free`
   _mi_theap_tls_check();  // report if the cached theap was overwritten
   mi_theap_t* theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
   if mi_unlikely(theap==NULL) {
@@ -230,6 +230,13 @@ static void mi_heap_free_theaps(mi_heap_t* heap) {
   // We first detach our theaps list from any thread local lists
   _mi_heap_detach_theaps(heap);
 
+  // clear our own thread local slot so `_mi_page_associated_theap` does not read a freed theap (through destroy pages -> page_update_stats).
+  // (the key itself is only freed in `mi_heap_free` as concurrent frees may still read it until all pages are gone)
+  // (main heaps of all subprocesses share the fast key which must never be released)
+  if (!mi_is_heap_main(heap) && _mi_thread_local_get(heap->theap) != NULL) {
+    _mi_thread_local_set(heap->theap, NULL);
+  }
+
   // Now we can safely free the theaps
   mi_lock(&heap->theaps_lock) { // paranoia
     mi_theap_t* theap = heap->theaps;
@@ -250,13 +257,6 @@ static void mi_heap_free_theaps(mi_heap_t* heap) {
       _mi_theap_decref(theap);  // a cached entry can still point to the theap
       theap = next;
     }
-  }
-
-  // set the theap thread local to NULL (so _mi_page_associated_theap does not read from a freed theap (through delete pages -> page_update_stats))
-  // (main heaps of all subprocesses share the fast key which must never be released)
-  if (!mi_is_heap_main(heap)) {
-    _mi_thread_local_free(heap->theap);
-    heap->theap = 0;
   }
 }
 
@@ -297,9 +297,12 @@ static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
   mi_lock_done(&heap->theaps_lock);
   mi_lock_done(&heap->os_abandoned_pages_lock);
   mi_lock_done(&heap->arena_pages_lock);
+  if (!is_main) {  // main heaps of all subprocesses share the fast key which must never be released
+    _mi_thread_local_free(heap->theap);
+    heap->theap = 0;
+  }
   if (!mi_is_process_heap_main(heap)) {
     heap->cookie = 0;  // invalidate the handle
-    // _mi_thread_local_free(heap->theap);
     _mi_free_subproc_safe(heap);
   }
 }
@@ -351,7 +354,7 @@ void mi_heap_delete(mi_heap_t* heap) {
     _mi_warning_message("cannot delete a QSBR heap; use destroy after readers and mutators have stopped\n");
     return;
   }
-  // release our own theap first (the thread-local slot is freed below)
+  // release our own theap first (the thread-local key is freed in `mi_heap_free`)
   _mi_theap_release(_mi_heap_theap_peek(heap), NULL);
   #if MI_DEBUG
   mi_heap_check_released(heap);
