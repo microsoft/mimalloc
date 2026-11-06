@@ -150,6 +150,19 @@ bool _mi_page_is_valid(mi_page_t* page) {
   Page statistics
 ----------------------------------------------------------- */
 
+// Reset the `alloc_count` (and `last_alloc`), and set `last_used` to `used`
+static void mi_page_reset_alloc_count(mi_page_t* page) {
+  const size_t used = mi_page_used(page);
+  #if MI_SIZE_SIZE >= 8
+  page->xused.used_alloc = (used << 32) | used;
+  #else
+  page->xused.used_alloc = used;
+  page->xlast_used = (uint16_t)used;
+  page->xlast_alloc = 0;
+  #endif
+  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+  mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
+}
 
 #if MI_STATS || (MI_SAMPLE==1)
 // Gets the theap belonging to a page.
@@ -271,17 +284,7 @@ static void mi_theap_page_update_stats(mi_theap_t* theapx, mi_page_t* page) {
     return;
   }
 
-  // reset the `alloc_count` (and `last_alloc`), and set `last_used` to `used`
-  #if MI_SIZE_SIZE >= 8
-  page->xused.used_alloc = (used << 32) | used;
-  #else
-  page->xused.used_alloc = used;
-  page->xlast_used = (uint16_t)used;
-  page->xlast_alloc = 0;
-  #endif
-  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
-  mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
-
+  mi_page_reset_alloc_count(page);
   mi_theap_page_merge_stats(theapx, page, alloc_count, free_count);
 }
 
@@ -291,8 +294,13 @@ void _mi_page_update_stats(mi_page_t* page) {         // called on abandoned pag
 }
 
 #else
+// Without statistics we still reset the `alloc_count` so it cannot overflow (see `_mi_page_update_sample_countdown`)
 void _mi_page_update_stats(mi_page_t* page) {
-  MI_UNUSED(page);
+  #if MI_SAMPLE==1
+  mi_theap_t* const theap = mi_theap_of_page(page);
+  if (theap!=NULL) { mi_theap_adjust_sample_countdown(theap,page,mi_page_alloc_count(page)); }
+  #endif
+  mi_page_reset_alloc_count(page);
 }
 #endif
 
