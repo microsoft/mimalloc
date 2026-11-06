@@ -728,6 +728,10 @@ void _mi_arena_free(void* p, size_t size, size_t committed_size, mi_memid_t memi
         // that contains already decommitted parts. Since purge consistently uses reset or decommit that
         // works (as we should never reset decommitted parts).
       }
+      else {
+        // fully committed (possibly on demand if claimed without commit): mark the range as committed (issue #1482)
+        _mi_bitmap_claim_across(arena->blocks_committed, arena->field_count, blocks, bitmap_idx, NULL, NULL);
+      }
       // (delay) purge the entire range
       mi_arena_schedule_purge(arena, bitmap_idx, blocks);
     }
