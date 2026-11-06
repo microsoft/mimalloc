@@ -687,6 +687,12 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
   if (memid.initially_committed) {
     mi_bitmap_unsafe_setN(arena->slices_committed, 0, arena->slice_count);
   }
+  #if MI_PAGE_META_IS_ALIGNED
+  else {
+    // the page meta array of the first area was committed as part of the arena meta data
+    mi_bitmap_unsafe_setN(arena->slices_committed, MI_ARENA_GUARD_SLICES, mi_arena_page_meta_aligned_array_slices());
+  }
+  #endif
   if (!memid.initially_zero) {
     mi_bitmap_unsafe_setN(arena->slices_dirty, 0, arena->slice_count);
   }
