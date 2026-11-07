@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim/prim-tls.h"
 #include "mimalloc/util/random.h"
 #include "mimalloc/util/stats.h"
+#include "mimalloc/util/memid.h"
 #include "mimalloc/heap/page-map.h"
 #include "mimalloc/profile/pprof.h"
 #include "mimalloc/profile/sample-profile.h"

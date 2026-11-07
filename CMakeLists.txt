@@ -114,6 +114,7 @@ set(mi_sources
     src/prim/prim.c
     src/prim/prim-tls.c
     src/util/libc.c
+    src/util/memid.c
     src/util/options.c
     src/util/random.c
     src/util/stats.c

@@ -21,6 +21,7 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 
 #include "mimalloc.h"
 #include "mimalloc/util/stats.h"
+#include "mimalloc/util/memid.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/heap/subproc.h"
 #include "mimalloc/arena/arena.h"
@@ -42,64 +43,6 @@ size_t _mi_slice_count_of_size(size_t size) {
 // Byte size of a number of blocks
 size_t _mi_size_of_slices(size_t bcount) {
   return (bcount * MI_ARENA_SLICE_SIZE);
-}
-
-mi_memid_t _mi_memid_create(mi_memkind_t memkind) {
-  mi_memid_t memid;
-  _mi_memzero_var(memid);
-  memid.memkind = memkind;
-  return memid;
-}
-
-mi_memid_t _mi_memid_none(void) {
-  return _mi_memid_create(MI_MEM_NONE);
-}
-
-mi_memid_t _mi_memid_create_os(void* base, size_t size, size_t commit_size, bool is_zero, bool is_large) {
-  mi_memid_t memid = _mi_memid_create(MI_MEM_OS);
-  memid.mem.os.base = base;
-  memid.mem.os.psize = mi_memid_os_pages(size);
-  memid.mem.os.pcommitted = mi_memid_os_pages(commit_size);
-  memid.initially_committed = (commit_size > 0);
-  memid.initially_zero = is_zero;
-  memid.is_pinned = is_large;
-  memid.is_memtag = (!is_large && _mi_os_has_memtag());
-  return memid;
-}
-
-mi_memid_t _mi_memid_create_static(void* p, size_t size) {
-  mi_memid_t memid = _mi_memid_create(MI_MEM_STATIC);
-  memid.mem.malloc.base = p;
-  memid.mem.malloc.size = size;
-  memid.initially_committed = true;
-  memid.is_pinned = true;
-  return memid;
-}
-
-mi_memid_t _mi_memid_create_malloc(void* p, size_t size, bool iszero) {
-  mi_memid_t memid = _mi_memid_create(MI_MEM_MALLOC);
-  memid.mem.malloc.base = p;
-  memid.mem.malloc.size = size;
-  memid.initially_committed = true;
-  memid.initially_zero = iszero;
-  memid.is_pinned = true;
-  return memid;
-}
-
-size_t _mi_memid_size(mi_memid_t memid) {
-  if (mi_memid_is_os(memid)) {
-    return mi_memid_os_size(memid);
-  }
-  else if (memid.memkind == MI_MEM_ARENA) {
-    return _mi_size_of_slices(memid.mem.arena.slice_count);
-  }
-  else if (memid.memkind == MI_MEM_MALLOC) {
-    return memid.mem.malloc.size;
-  }
-  else {
-    mi_assert_internal(mi_memid_needs_no_free(memid));
-    return 0;
-  }
 }
 
 

@@ -468,6 +468,7 @@
     <ClCompile Include="..\..\src\heap\heap.c" />
     <ClCompile Include="..\..\src\heap\process.c" />
     <ClCompile Include="..\..\src\util\libc.c" />
+    <ClCompile Include="..\..\src\util\memid.c" />
     <ClCompile Include="..\..\src\heap\page-map.c" />
     <ClCompile Include="..\..\src\prim\prim-tls.c" />
     <ClCompile Include="..\..\src\prim\prim.c" />
@@ -504,6 +505,7 @@
     <ClInclude Include="..\..\include\mimalloc\arch.h" />
     <ClInclude Include="..\..\include\mimalloc\internal.h" />
     <ClInclude Include="..\..\include\mimalloc\util\libc.h" />
+    <ClInclude Include="..\..\include\mimalloc\util\memid.h" />
     <ClInclude Include="..\..\include\mimalloc\util\options.h" />
     <ClInclude Include="..\..\include\mimalloc\util\random.h" />
     <ClInclude Include="..\..\include\mimalloc\prim\prim-tls.h" />

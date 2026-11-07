@@ -10,6 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim/prim-tls.h"  // _mi_theap_default
 #include "mimalloc/util/random.h"
 #include "mimalloc/util/stats.h"
+#include "mimalloc/util/memid.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/arena/arena-alloc.h"
 #include "mimalloc/profile/sample-guarded.h"

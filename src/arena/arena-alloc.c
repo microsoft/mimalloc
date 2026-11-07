@@ -7,6 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/util/stats.h"
+#include "mimalloc/util/memid.h"
 #include "mimalloc/alloc/free.h"          // mi_free_subproc_safe
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/heap/subproc.h"

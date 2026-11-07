@@ -6,6 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc.h"
+#include "mimalloc/util/memid.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/arena/arena.h"
 #include "mimalloc/heap/subproc.h"

@@ -36,6 +36,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #include "util/libc.c"
+#include "util/memid.c"
 #include "util/options.c"
 #include "util/random.c"
 #include "util/stats.c"

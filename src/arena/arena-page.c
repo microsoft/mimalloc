@@ -8,6 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc/prim/prim-tls.h"
 #include "mimalloc/util/stats.h"
+#include "mimalloc/util/memid.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/arena/arena-alloc.h"
 #include "mimalloc/profile/sample-guarded.h"  // _mi_page_unguard_all

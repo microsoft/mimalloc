@@ -40,6 +40,9 @@
     <ClCompile Include="..\..\src\util\libc.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\util\memid.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\util\options.c">
       <Filter>Sources</Filter>
     </ClCompile>
@@ -115,6 +118,9 @@
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\mimalloc\util\libc.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\util\memid.h">
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\mimalloc\util\options.h">
