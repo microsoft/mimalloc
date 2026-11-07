@@ -899,27 +899,22 @@ static inline void mi_free_block_mt_batch_in(mi_theap_t* theap, mi_page_t* page,
   }
 }
 
+// Called if the cached theap does not belong to the heap of the page.
+// A free never creates a theap for (nor dereferences) a non-main heap: a thread that did not
+// allocate in it may free concurrently with a `mi_heap_delete` (see `mi_thread_heap_release`).
 static mi_decl_noinline void mi_free_block_mt_batch_init(mi_page_t* page, mi_block_t* block, mi_heap_t* heap, size_t block_size) {
   // check first as meta-data pages are also freed during thread teardown
-  if mi_unlikely(mi_page_thread_id(page) == MI_THREAD_ID_DETACHED || mi_heap_qsbr_is_enabled(heap)) {
+  if mi_unlikely(mi_page_thread_id(page) == MI_THREAD_ID_DETACHED) {
     mi_free_block_mt_publish(page, block, block, true);
     return;
   }
-  mi_theap_t* main = _mi_theap_main();
-  if mi_unlikely(!mi_theap_is_initialized(main) && !_mi_thread_is_done()) {
+  mi_theap_t* theap = _mi_theap_main();
+  if mi_unlikely(!mi_theap_is_initialized(theap) && !_mi_thread_is_done() && mi_is_process_heap_main(heap)) {
     mi_thread_init();  // initialize free-only threads so they can batch as well (but don't re-initialize after `mi_thread_done`)
-    main = _mi_theap_main();
+    theap = _mi_theap_main();
   }
-  mi_tld_t* const tld = (mi_theap_is_initialized(main) ? main->tld : NULL);
-  if mi_unlikely(tld == NULL || tld->free_batch_disabled || tld->subproc != heap->subproc) {
-    mi_free_block_mt_publish(page, block, block, true);
-    return;
-  }
-
-  tld->free_batch_disabled = true;
-  mi_theap_t* const theap = _mi_heap_theap_get_or_init(heap);
-  tld->free_batch_disabled = false;
-  if mi_unlikely(!mi_theap_is_initialized(theap) || theap->tld != tld || mi_theap_heap_peek(theap) != heap) {
+  if mi_unlikely(!mi_theap_is_initialized(theap) || mi_theap_heap_peek(theap) != heap ||
+                 theap->tld == NULL || theap->tld->free_batch_disabled) {
     mi_free_block_mt_publish(page, block, block, true);
     return;
   }
@@ -933,7 +928,7 @@ mi_decl_maybe_unused static mi_decl_noinline void mi_free_block_mt_batch(mi_page
     return;
   }
   mi_heap_t* const heap = mi_page_heap(page);
-  mi_theap_t* const theap = _mi_heap_theap_cached(heap);
+  mi_theap_t* const theap = _mi_heap_theap_cached(heap);  // only compares the heap pointer (as the heap may be deleted concurrently)
   if mi_unlikely(theap == NULL) {
     mi_free_block_mt_batch_init(page, block, heap, block_size);
     return;

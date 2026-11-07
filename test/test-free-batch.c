@@ -150,7 +150,10 @@ static bool free_blocks(void) {
   trace_phase("worker heap lookup");
   mi_heap_t* const heap = (disposable == NULL ? mi_heap_main() : disposable);
   mi_theap_t* theap = _mi_heap_theap_peek(heap);
-  if (disposable != NULL && theap != NULL) return false;
+  if (disposable != NULL) {
+    // frees only batch into a non-main heap if this thread uses it (and thus has a theap for it)
+    if (theap != NULL || mi_heap_theap(disposable) == NULL) return false;
+  }
   bool pending = false;
   trace_phase("worker free loop");
   for (size_t i = 0; i < block_count; i++) {
@@ -260,13 +263,21 @@ static mi_heap_t* separate_heaps[2];
 static void* separate_blocks[2][33];
 static mi_theap_t* consumer_theap;
 
+// use the heap (so this thread has a theap for it) and free a block of it
+static void free_separate_block(size_t h, size_t i) {
+  mi_heap_theap(separate_heaps[h]);
+  mi_free(separate_blocks[h][i]);
+}
+
 static bool free_separate_heaps(void) {
   mi_thread_init();
+  // a thread without a theap for a (non-main) heap does not create one on free
   for (size_t h = 0; h < 2; h++) {
+    mi_free(separate_blocks[h][0]);
     if (_mi_heap_theap_peek(separate_heaps[h]) != NULL) return false;
   }
-  for (size_t i = 0; i < 32; i++) {
-    for (size_t h = 0; h < 2; h++) mi_free(separate_blocks[h][i]);
+  for (size_t i = 1; i < 32; i++) {
+    for (size_t h = 0; h < 2; h++) free_separate_block(h, i);
   }
   mi_theap_t* first = _mi_heap_theap_peek(separate_heaps[0]);
   mi_theap_t* second = _mi_heap_theap_peek(separate_heaps[1]);
@@ -277,7 +288,7 @@ static bool free_separate_heaps(void) {
   if (first->free_batch.batched_total != 0 || second->free_batch.batched_total == 0) return false;
   mi_theap_delete(second);
   if (_mi_heap_theap_peek(separate_heaps[1]) != NULL) return false;
-  for (size_t h = 0; h < 2; h++) mi_free(separate_blocks[h][32]);
+  for (size_t h = 0; h < 2; h++) free_separate_block(h, 32);
   second = _mi_heap_theap_peek(separate_heaps[1]);
   if (second == NULL || first->free_batch.batched_total == 0 ||
       second->free_batch.batched_total == 0) return false;
@@ -306,6 +317,7 @@ static bool test_separate_heaps(void) {
 
 static bool pending_heap_consumer(void) {
   mi_thread_init();
+  if (mi_heap_theap(disposable) == NULL) return false;  // use the heap so frees are batched
   for (size_t i = 0; i + 1 < block_count; i++) mi_free(blocks[i]);
   mi_theap_t* const theap = _mi_heap_theap_peek(disposable);
   consumer_theap = theap;
