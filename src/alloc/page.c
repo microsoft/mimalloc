@@ -12,6 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/util/stats.h"
 #include "mimalloc/arena/arena-page.h"
 #include "mimalloc/alloc/page.h"
+#include "mimalloc/profile/sample-profile.h"
 #include "page-queue.h"
 #include "page.h"
 
