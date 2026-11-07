@@ -466,6 +466,8 @@
     <ClInclude Include="..\..\src\arena\bitmap.h" />
     <ClInclude Include="..\..\src\arena\bitmap-chunk.h" />
     <ClInclude Include="..\..\src\arena\arena.h" />
+    <ClInclude Include="..\..\src\arena\arena-page.h" />
+    <ClInclude Include="..\..\src\profile\pprof.h" />
     <ClInclude Include="..\..\src\alloc\page-queue.h" />
     <ClInclude Include="..\..\src\alloc\page.h" />
   </ItemGroup>
@@ -495,6 +497,8 @@
     <ClCompile Include="..\..\src\arena\arena.c" />
     <ClCompile Include="..\..\src\arena\arena-alloc.c" />
     <ClCompile Include="..\..\src\arena\arena-page.c" />
+    <ClCompile Include="..\..\src\arena\arena-page-alloc.c" />
+    <ClCompile Include="..\..\src\arena\arena-heap.c" />
     <ClCompile Include="..\..\src\arena\bitmap.c" />
     <ClCompile Include="..\..\src\arena\bitmap-chunk.c" />
     <ClCompile Include="..\..\src\alloc\free.c">
@@ -510,6 +514,8 @@
     <ClCompile Include="..\..\src\heap\heap.c" />
     <ClCompile Include="..\..\src\prim\prim-tls.c" />
     <ClCompile Include="..\..\src\profile\pprof.c" />
+    <ClCompile Include="..\..\src\profile\pprof-os.c" />
+    <ClCompile Include="..\..\src\profile\pprof-write.c" />
     <ClCompile Include="..\..\src\profile\sample-guarded.c" />
     <ClCompile Include="..\..\src\profile\sample-profile.c" />
     <ClCompile Include="..\..\src\heap\subproc.c" />

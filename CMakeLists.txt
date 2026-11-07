@@ -122,6 +122,8 @@ set(mi_sources
     src/arena/arena.c
     src/arena/arena-alloc.c
     src/arena/arena-page.c
+    src/arena/arena-page-alloc.c
+    src/arena/arena-heap.c
     src/arena/bitmap.c
     src/arena/bitmap-chunk.c
     src/alloc/alloc.c
@@ -139,7 +141,9 @@ set(mi_sources
     src/heap/theap.c
     src/profile/sample-guarded.c
     src/profile/sample-profile.c
-    src/profile/pprof.c)
+    src/profile/pprof.c
+    src/profile/pprof-os.c
+    src/profile/pprof-write.c)
 
 set(mi_cflags "")
 set(mi_cflags_static "")            # extra flags for a static library build

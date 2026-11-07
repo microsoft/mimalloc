@@ -416,7 +416,7 @@ typedef struct mi_memid_s {
   bool          initially_committed;// `true` if the memory was originally allocated as committed
   bool          initially_zero;     // `true` if the memory was originally zero initialized
   bool          is_memtag : 1;      // `true` if the memory supports memory tagging (MTE)
-  bool          guard_front : 1;    // `true` if a page has a guard page in front of its blocks (see `arena-page.c:mi_theap_page_guards`)
+  bool          guard_front : 1;    // `true` if a page has a guard page in front of its blocks (see `arena/arena-page-alloc.c:mi_theap_page_guards`)
   bool          guard_end : 1;      // `true` if a page has a guard page right after its blocks
 } mi_memid_t;
 

@@ -87,7 +87,7 @@ static inline bool mi_block_size_is_medium(size_t bsize) {
 }
 
 // The alignment that every block of size `bsize` is guaranteed to have in any page (or 0 if `bsize==0`).
-// This is guaranteed by the block start (see `arena/arena-page.c:mi_page_meta_in_front_block_start` and `mi_page_meta_select`),
+// This is guaranteed by the block start (see `arena/arena-page-alloc.c:mi_page_meta_in_front_block_start` and `mi_page_meta_select`),
 // and used by `mi_malloc_aligned` to avoid over-allocation for naturally aligned blocks.
 static inline size_t mi_natural_alignment_of_size(size_t bsize) {
   const size_t lowbit = bsize & (~bsize + 1);  // largest power of 2 that divides `bsize`

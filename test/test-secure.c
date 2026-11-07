@@ -7,7 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Test the memory protections in secure mode (`MI_SECURE`): each test accesses protected memory
 // in a forked child process that is expected to fault (so these tests are skipped on Windows).
-// See `MI_SECURE_STATIC_SEALED` in `heap/process.h` and `mi_theap_page_guards` in `arena/arena-page.c`.
+// See `MI_SECURE_STATIC_SEALED` in `heap/process.h` and `mi_theap_page_guards` in `arena/arena-page-alloc.c`.
 #include "mimalloc.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/heap/process.h"

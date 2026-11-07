@@ -428,7 +428,7 @@ static bool test_reclaim_delayed_empty(size_t size, bool os) {
     require(mi_page_is_abandoned(worker_page));
     require(mi_page_claim_ownership(worker_page));
     worker_page->retire_expire = 2;
-    require(!mi_abandoned_page_unown(worker_page, NULL));
+    require(!_mi_abandoned_page_unown(worker_page, NULL));
   }
   mi_free(worker_blocks[0]);
   require(!mi_page_is_abandoned(worker_page) && mi_page_theap(worker_page) == theap);
@@ -548,7 +548,7 @@ static bool test_free_during_unown(bool from_free) {
     mi_abandoned_page_unown_from_free(worker_page, NULL);
   }
   else {
-    require(!mi_abandoned_page_unown(worker_page, NULL));
+    require(!_mi_abandoned_page_unown(worker_page, NULL));
   }
   require(mi_page_all_free(worker_page) && worker_page->qsbr.goal != 0);
   if (from_free) {
@@ -590,7 +590,7 @@ static bool test_full_page_free_during_unown(void) {
   // Keep the frees pending until the unmapped page is unowned.
   for (size_t i = 0; i < full_page_count; i++) { mi_free(full_page_blocks[i]); }
   require(mi_page_is_full(page));
-  require(!mi_abandoned_page_unown(page, theap));
+  require(!_mi_abandoned_page_unown(page, theap));
   require(mi_page_all_free(page) && !mi_page_is_owned(page) && mi_page_is_abandoned_mapped(page));
   const uint64_t goal = page->qsbr.goal;
   require(goal != 0 && !mi_page_qsbr_is_in_queue(page));

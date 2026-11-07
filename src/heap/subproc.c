@@ -362,7 +362,7 @@ void _mi_subproc_main_done(void) {
   the forking thread, and suspends reclaiming abandoned pages until the pthread child
   handler. (So on macOS the zone override is required for fork support.)
   It also marks the child as torn, since free arena slices may still have a guard
-  page of a page that was allocated concurrently with the fork (see `arena-page.c`).
+  page of a page that was allocated concurrently with the fork (see `arena/arena-page-alloc.c`).
 ----------------------------------------------------------- */
 
 

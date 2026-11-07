@@ -109,7 +109,7 @@ static inline mi_page_t* mi_checked_ptr_page(const void* p) {
 }
 
 
-// With memory tagging, page meta data has a random tag (see `arena/arena-page.c:mi_page_meta_memtag`);
+// With memory tagging, page meta data has a random tag (see `arena/arena-page-alloc.c:mi_page_meta_memtag`);
 // this loads the tag for a `page` pointer that is derived from an address (instead of the page map).
 static inline mi_page_t* mi_page_meta_load(mi_page_t* page) {
   return (mi_page_t*)mi_meta_load(page);
