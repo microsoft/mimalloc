@@ -260,46 +260,6 @@ jobs:
       - name: Release, clang
         run: sh .github/ci/cmake-test.sh release-clang Release -DCMAKE_C_COMPILER=clang
 
-  # MSYS2
-  mingw:
-    name: mingw-${{ matrix.target }}
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: ucrt64
-            msystem: UCRT64
-            cc: gcc
-          - target: mingw64
-            msystem: MINGW64    # gcc + msvcrt
-            cc: gcc
-          - target: clang64
-            msystem: CLANG64    # clang + ucrt
-            cc: clang
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Setup
-        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
-        with:
-          msystem: ${{ matrix.msystem }}
-          suppress-deprecation-warnings: msystem-mingw64   # keep testing gcc + msvcrt
-          pacboy: ${{ matrix.cc }}:p git:p make:p cmake:p
-
-      - name: Debug
-        run: sh .github/ci/cmake-test.sh debug Debug -DMI_DEBUG=FULL
-
-      - name: Release
-        if: matrix.target == 'ucrt64'
-        run: sh .github/ci/cmake-test.sh release Release -DMI_OPT_ARCH=ON
-
   # VM: FreeBSD (for arm64 (slow), use `arch: arm64` and `MI_TEST_LIGHT=1`)
   freebsd:
     name: qemu, freebsd-x64
@@ -549,3 +509,42 @@ jobs:
       - name: Single threaded
         run: sh .github/ci/cmake-test.sh single-wasm Release
 
+  # MSYS2
+  mingw:
+    name: mingw-${{ matrix.target }}
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ucrt64
+            msystem: UCRT64
+            cc: gcc
+          - target: mingw64
+            msystem: MINGW64    # gcc + msvcrt
+            cc: gcc
+          - target: clang64
+            msystem: CLANG64    # clang + ucrt
+            cc: clang
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        with:
+          msystem: ${{ matrix.msystem }}
+          suppress-deprecation-warnings: msystem-mingw64   # keep testing gcc + msvcrt
+          pacboy: ${{ matrix.cc }}:p git:p make:p cmake:p
+
+      - name: Debug
+        run: sh .github/ci/cmake-test.sh debug Debug -DMI_DEBUG=FULL
+
+      - name: Release
+        if: matrix.target == 'ucrt64'
+        run: sh .github/ci/cmake-test.sh release Release -DMI_OPT_ARCH=ON

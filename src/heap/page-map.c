@@ -292,9 +292,10 @@ static bool mi_page_map_set_range_prim(mi_page_map_t* pmap, mi_page_t* page, siz
       return false;
     };
     mi_assert_internal(sub!=NULL);
-    // set the offsets for the page
+    // set the offsets for the page; use atomic stores as the entries of a freed OS page can be set by another
+    // thread that reallocates the same address range (and the OS unmap and map do not synchronize for TSAN)
     while (slice_count > 0 && sub_idx < MI_PAGE_MAP_SUB_COUNT) {
-      mi_ptr_sign_at(&sub[sub_idx], page);
+      mi_atomic_ptr_sign_relaxed((_Atomic(mi_ptr_signed_t)*)&sub[sub_idx], page);
       slice_count--;
       sub_idx++;
     }

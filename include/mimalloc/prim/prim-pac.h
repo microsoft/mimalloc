@@ -225,6 +225,7 @@ Note: the `slot` argument is evaluated twice.
 #define mi_fun_sign_at(slot,f)                (*(slot) = mi_addr_sign((mi_addr_t)(uintptr_t)(f), mi_addr(slot)))
 #define mi_fun_auth_at(tp,slot)               ((tp*)(uintptr_t)mi_addr_auth(*(slot), mi_addr(slot)))
 
+#define mi_atomic_ptr_sign_relaxed(slot,p)    mi_atomic_store_relaxed(slot, mi_ptr_sign(p, mi_addr(slot)))
 #define mi_atomic_ptr_sign_release(slot,p)    mi_atomic_store_release(slot, mi_ptr_sign(p, mi_addr(slot)))
 #define mi_atomic_ptr_auth_acquire(tp,slot)   ((tp*)mi_ptr_auth(mi_atomic_load_acquire(slot), mi_addr(slot)))
 
