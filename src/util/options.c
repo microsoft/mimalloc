@@ -740,6 +740,18 @@ mi_decl_noinline void _mi_error_ptr_pac_unaligned(const void* p) {
 // Initialize options by checking the environment
 // --------------------------------------------------------
 
+// Report an invalid environment option value and use the default value.
+static void mi_option_init_invalid(mi_option_t option, mi_option_state_t* state, const char* reason) {
+  // set `init` first to avoid recursion through _mi_warning_message on mimalloc_verbose.
+  state->init = MI_OPTION_DEFAULTED;
+  // if the 'mimalloc_verbose' env var has a bogus value we'd never know
+  // (since the value defaults to 'off') so in that case briefly enable verbose
+  const bool force_verbose = (option == mi_option_verbose && state->value == 0);
+  if (force_verbose) { state->value = 1; }
+  _mi_warning_message("environment option mimalloc_%s %s.\n", mi_option_desc(option)->name, reason);
+  if (force_verbose) { state->value = 0; }
+}
+
 static void mi_option_init(mi_option_t option, mi_option_state_t* state) {
   const mi_option_desc_t* const desc = mi_option_desc(option);
   // Read option value from the environment
@@ -756,7 +768,7 @@ static void mi_option_init(mi_option_t option, mi_option_state_t* state) {
       _mi_warning_message("environment option \"mimalloc_%s\" is deprecated -- use \"mimalloc_%s\" instead.\n", desc->legacy_name, desc->name);
     }
   }
-  if (err==0 && _mi_os_is_elevated()) {
+  if ((err==0 || err==E2BIG) && _mi_os_is_elevated()) {
     err = ENOENT;  // don't let an untrusted environment influence a privileged process (e.g. disable memory tagging)
   }
 
@@ -808,21 +820,13 @@ static void mi_option_init(mi_option_t option, mi_option_state_t* state) {
         mi_option_set(option, value);
       }
       else {
-        // set `init` first to avoid recursion through _mi_warning_message on mimalloc_verbose.
-        state->init = MI_OPTION_DEFAULTED;
-        if (option == mi_option_verbose && state->value == 0) {
-          // if the 'mimalloc_verbose' env var has a bogus value we'd never know
-          // (since the value defaults to 'off') so in that case briefly enable verbose
-          state->value = 1;
-          _mi_warning_message("environment option mimalloc_%s has an invalid value.\n", desc->name);
-          state->value = 0;
-        }
-        else {
-          _mi_warning_message("environment option mimalloc_%s has an invalid value.\n", desc->name);
-        }
+        mi_option_init_invalid(option, state, "has an invalid value");
       }
     }
     mi_assert_internal(state->init >= MI_OPTION_DEFAULTED);
+  }
+  else if (err==E2BIG) {
+    mi_option_init_invalid(option, state, "has a value that is too long");
   }
   else if (err==ENOENT) {
     state->init = MI_OPTION_DEFAULTED;

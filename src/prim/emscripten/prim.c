@@ -218,7 +218,7 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   for (int i = 0; i < 10000 && env[i] != NULL; i++) {
     const char* s = env[i];
     if (_mi_strnicmp(name, s, len) == 0 && s[len] == '=') { // case insensitive
-      if (!_mi_strlcpy(result, s + len + 1, result_size)) return -1;
+      if (!_mi_strlcpy(result, s + len + 1, result_size)) return -2;  // too long
       return 1;
     }
   }

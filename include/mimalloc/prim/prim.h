@@ -131,7 +131,7 @@ void _mi_prim_out_stderr( const char* msg );
 
 // Get an environment variable. (only for options)
 // name != NULL, result != NULL, result_size >= 64
-// Return 1 for success, 0 if not found,
+// Return 1 for success, 0 if not found, -2 if the value does not fit in `result`,
 // and -1 on error (for example, if `getenv` cannot be called yet during preloading).
 int _mi_prim_getenv(const char* name, char* result, size_t result_size);
 

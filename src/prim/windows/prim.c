@@ -717,7 +717,7 @@ void _mi_prim_out_stderr( const char* msg )
 int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   result[0] = 0;
   const size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);
-  return (len < result_size ? (len > 0 ? 1 /* success */ : 0 /* not found */) : -1 /* error */);
+  return (len < result_size ? (len > 0 ? 1 /* success */ : 0 /* not found */) : -2 /* too long */);
 }
 
 int _mi_prim_getenv_prefixed(const char* prefix, mi_env_is_known_fun* is_known, char* buf, size_t buf_size) {
