@@ -280,14 +280,14 @@ static mi_page_t* mi_huge_page_alloc(mi_theap_t* theap, size_t size, size_t page
 // Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
 static mi_page_t* mi_find_page(mi_theap_t* theap, size_t size, size_t huge_alignment) mi_attr_noexcept {
   const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
-  if mi_unlikely(req_size > MI_MAX_ALLOC_SIZE) {   // TODO: remove as we check in generic_fallback ?
+  if mi_unlikely(req_size > MI_MAX_ALLOC_SIZE) {   // todo: remove as we check in generic_fallback ?
     _mi_error_message(EOVERFLOW, "allocation request is too large (%zu bytes)\n", req_size);
     return NULL;
   }
   mi_page_queue_t* pq = mi_page_queue(theap, (huge_alignment > 0 ? MI_LARGE_MAX_OBJ_SIZE+1 : size));
   mi_page_t* page;
   // huge allocation?
-  if mi_unlikely(mi_page_queue_is_huge(pq) || req_size > MI_MAX_ALLOC_SIZE) {
+  if mi_unlikely(mi_page_queue_is_huge(pq)) {   // || req_size > MI_MAX_ALLOC_SIZE  (checked above)
     page = mi_huge_page_alloc(theap,size,huge_alignment,pq);
   }
   else {

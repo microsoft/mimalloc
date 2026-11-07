@@ -571,7 +571,12 @@ static int unix_mmap_fd(void) {
   #endif
 }
 
-#if defined(MAP_ALIGNED_SUPER) || defined(MAP_HUGETLB) || defined(MAP_HUGE_1GB) || defined(MAP_HUGE_2MB) || defined(VM_FLAGS_SUPERPAGE_SIZE_2MB)
+// macOS superpages are not supported on arm64 (with 16KiB pages)
+#if defined(VM_FLAGS_SUPERPAGE_SIZE_2MB) && !(defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__)))
+#define MI_OS_HAS_SUPERPAGES  1
+#endif
+
+#if defined(MAP_ALIGNED_SUPER) || defined(MAP_HUGETLB) || defined(MAP_HUGE_1GB) || defined(MAP_HUGE_2MB) || MI_OS_HAS_SUPERPAGES
 #define MI_OS_HAS_HUGE_PAGES  1
 #endif
 
@@ -652,7 +657,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
         lflags |= MAP_HUGE_2MB;
         #endif
       }
-      #ifdef VM_FLAGS_SUPERPAGE_SIZE_2MB
+      #if MI_OS_HAS_SUPERPAGES
       lfd |= VM_FLAGS_SUPERPAGE_SIZE_2MB;
       #endif
       if (large_only || lflags != flags) {
@@ -677,7 +682,8 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
     }
   } // huge pages
   #else
-  MI_UNUSED(large_only); MI_UNUSED(allow_huge);
+  MI_UNUSED(allow_huge);
+  if (large_only) { *is_large = false; errno = ENOMEM; return NULL; }  // no huge OS pages available
   #endif
   // regular allocation
   if (p == NULL) {
