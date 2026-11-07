@@ -736,12 +736,16 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
 }
 
 
-static void mi_theap_collect_full_pages(mi_theap_t* theap) {
-  // note: normally full pages get immediately abandoned and the full queue is always empty
-  // this path is only used if abandoning is disabled due to a destroy-able theap or options
-  // set by the user.
+#define MI_FULL_COLLECT_MAX_PAGES  (4)   /* visit at most N full pages per collect (unless forced) */
+
+// Collect pages in the full queue that had blocks freed by other threads.
+// Visits at most MI_FULL_COLLECT_MAX_PAGES pages (unless forced) and rotates the queue so the next call continues after them.
+// note: normally full pages get immediately abandoned and the full queue is always empty;
+// this is only used if abandoning is disabled for the theap (see `theap.c:mi_theap_options_init`).
+static void mi_theap_collect_full_pages(mi_theap_t* theap, bool force) {
   mi_page_queue_t* pq = &theap->pages[MI_BIN_FULL];
-  for (mi_page_t* page = pq->first; page != NULL; ) {
+  mi_page_t* page = pq->first;
+  for (size_t count = 0; page != NULL && (force || count < MI_FULL_COLLECT_MAX_PAGES); count++) {
     mi_page_t* next = page->next;         // get next in case we free the page
     _mi_page_free_collect(page, false);   // register concurrent free's
     // no longer full?
@@ -755,6 +759,7 @@ static void mi_theap_collect_full_pages(mi_theap_t* theap) {
     }
     page = next;
   }
+  if (page != NULL) { mi_page_queue_full_rotate_to(pq, page); }
 }
 
 static void mi_page_try_retire(mi_page_queue_t* pq, mi_page_t* page, size_t bin, bool force, size_t* min, size_t* max) {
@@ -792,7 +797,7 @@ void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {
   theap->page_retired_min = min;
   theap->page_retired_max = max;
   if (!theap->allow_page_abandon) {
-    mi_theap_collect_full_pages(theap);
+    mi_theap_collect_full_pages(theap, force);
   }
   _mi_theap_qsbr_collect_delayed(theap);
 }
