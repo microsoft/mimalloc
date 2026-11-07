@@ -887,6 +887,17 @@ if(NOT MI_OPT_ARCH MATCHES "^(0|OFF|NO|FALSE|N)$")
   elseif(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM_NAME MATCHES "Haiku")
     if(MI_OPT_ARCH STREQUAL "avx2")
       set(MI_OPT_ARCH_FLAGS "-march=haswell;-mavx2")      # fast bit scan (since 2013)
+      # avoid the Skylake JCC erratum (jumps crossing a 32-byte boundary bypass the uop cache)
+      if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+        set(mi_jcc_flag "-mbranches-within-32B-boundaries")
+      else()
+        set(mi_jcc_flag "-Wa,-mbranches-within-32B-boundaries")
+      endif()
+      include(CheckCCompilerFlag)
+      check_c_compiler_flag("${mi_jcc_flag}" mi_has_jcc_flag)
+      if(mi_has_jcc_flag)
+        list(APPEND MI_OPT_ARCH_FLAGS "${mi_jcc_flag}")
+      endif()
     elseif(MI_OPT_ARCH MATCHES "^armv[89].*$")
       set(MI_OPT_ARCH_FLAGS "-march=${MI_OPT_ARCH}-a")    # fast atomics
     elseif(MI_OPT_ARCH MATCHES "^rva[0-9][0-9]$")
@@ -902,6 +913,9 @@ if(NOT MI_OPT_ARCH MATCHES "^(0|OFF|NO|FALSE|N)$")
   elseif (MSVC AND MSVC_VERSION GREATER_EQUAL 1914 AND NOT MI_CLANG_CL) # vs2017+
     if(MI_OPT_ARCH STREQUAL "avx2")
       set(MI_OPT_ARCH_FLAGS "/arch:AVX2")
+      if(MSVC_VERSION GREATER_EQUAL 1925)                 # vs2019 16.5+
+        list(APPEND MI_OPT_ARCH_FLAGS "/QIntel-jcc-erratum")  # avoid the Skylake JCC erratum
+      endif()
     elseif(MI_OPT_ARCH MATCHES "^armv[89].*$")
       set(MI_OPT_ARCH_FLAGS "/arch:${MI_OPT_ARCH}")       # fast atomics
     else()
