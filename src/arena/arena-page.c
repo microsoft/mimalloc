@@ -592,6 +592,7 @@ static uint8_t* mi_arenas_page_alloc_fresh_area(mi_theap_t* theap, size_t slice_
     slice_start = mi_arenas_page_alloc_from_os(heap, slice_count, max_page_meta_count, block_alignment, os_align, commit, allow_large, memid, ppage_meta);
     if (slice_start == NULL) return NULL;
     mi_heap_stat_increase(heap,pages_os_allocated,1);
+    mi_atomic_increment_relaxed(&heap->os_page_count);
   }
   mi_assert_internal(mi_is_aligned(slice_start, MI_PAGE_ALIGN));
   return slice_start;
@@ -969,6 +970,7 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
   mi_assert_internal(mi_page_all_free(page));
   mi_assert_internal(page->next==NULL && page->prev==NULL);
 
+  mi_subproc_t* const subproc = mi_page_subproc(page);  // read before the page leaves its heap (as the heap may be deleted concurrently)
   mi_arena_t* arena = NULL;
   mi_arena_pages_t* arena_pages = NULL;
   size_t slice_index = 0;
@@ -976,7 +978,7 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
   if (page->memid.memkind == MI_MEM_ARENA) {
     arena = mi_page_arena_pages(page, &slice_index, &slice_count, &arena_pages);
     mi_assert_internal(arena_pages!=NULL);
-    mi_assert_internal(arena->subproc == mi_page_subproc(page));
+    mi_assert_internal(arena->subproc == subproc);
     #if MI_DEBUG>1
     if (!mi_page_is_full(page)) {
       size_t bin = _mi_bin(mi_page_block_size(page));
@@ -1004,7 +1006,6 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
   // reset the guard pages
   // we must do this since we may later allocate large spans over this page and cannot have a guard page in between
   // (for a page committed on demand the end guard page stays decommitted and its commit bit is clear)
-  mi_subproc_t* const subproc = mi_page_subproc(page);
   uint8_t* const slice_start = mi_page_slice_start(page);
   if (page->memid.guard_front) { _mi_os_secure_guard_page_reset_at(subproc, slice_start, page->memid); }
   if (page->memid.guard_end)   { _mi_os_secure_guard_page_reset_at(subproc, slice_start + mi_page_guard_end_offset(page), page->memid); }
@@ -1035,6 +1036,7 @@ static void mi_arenas_page_free_prim(mi_page_t* page) {
   }
   else {
     mi_heap_stat_decrease(page->heap, pages_os_allocated, 1);
+    mi_atomic_sub_acq_rel(&page->heap->os_page_count, 1);  // last access to the heap (see `mi_heap_move_pages`)
     if (slice_committed > 0) { mi_memid_os_set_committed(&memid, slice_committed); }  // committed on-demand
   }
   if (mi_page_meta_is_separated(page)) { page->block_size = 0; }  // for assertion checking
@@ -1438,6 +1440,7 @@ void _mi_heap_collect_abandoned(mi_heap_t* heap) {
   At this point all theaps are freed and all pages are abandoned. A concurrent free can
   still own a page briefly; we skip such pages and retry them in a next round.
   When no page was skipped the heap has no pages left, as no new pages can be added.
+  A free unlinks an abandoned OS page before freeing it, so we also retry until `os_page_count` is zero.
   This terminates since a free only owns a page for a bounded time (and then frees it,
   re-abandons it, or unowns it).
 ----------------------------------------------------------- */
@@ -1490,6 +1493,8 @@ static void mi_heap_move_page(const mi_heap_move_info_t* info, mi_page_t* page) 
     else {
       // os allocated
       mi_assert_internal(mi_memid_is_os(page->memid) && page->next == NULL);
+      mi_atomic_decrement_relaxed(&heap->os_page_count);
+      mi_atomic_increment_relaxed(&heap_target->os_page_count);
     }
     mi_heap_stat_decrease(heap, page_bins[sbin], 1);
     mi_heap_stat_decrease(heap, pages, 1);
@@ -1579,6 +1584,7 @@ static void mi_heap_move_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
     while ((page = mi_heap_os_abandoned_page_try_claim(&info)) != NULL) {
       mi_heap_move_page(&info, page);
     }
+    if (mi_atomic_load_acquire(&heap->os_page_count) > 0) { info.retry = true; }  // a concurrent free of an unlinked OS page may still access the heap
     if (info.retry) { _mi_prim_thread_yield(); }  // some pages are still owned by concurrent frees
   } while (info.retry);
   #if MI_DEBUG>1

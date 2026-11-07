@@ -836,6 +836,7 @@ typedef struct mi_heap_s {
   _Atomic(mi_profiler_t*) profiler;
 
   _Atomic(size_t)       abandoned_count[MI_BIN_COUNT];  // total count of abandoned pages in this heap
+  _Atomic(size_t)       os_page_count;                  // count of OS allocated pages that belong to this heap
   mi_page_t*            os_abandoned_pages;             // list of pages that are OS allocated and not in an arena
   mi_lock_t             os_abandoned_pages_lock;        // lock for the os abandoned pages list (this lock protects list operations)
 

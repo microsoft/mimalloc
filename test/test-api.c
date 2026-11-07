@@ -1321,7 +1321,9 @@ static void delete_free_worker(size_t id) {
 }
 
 static bool test_heap_delete_concurrent_free(void) {
+  const long disallow_arena_alloc = mi_option_get(mi_option_disallow_arena_alloc);
   for (int iter = 0; iter < 20; iter++) {
+    mi_option_set(mi_option_disallow_arena_alloc, iter % 2);  // odd iterations use OS allocated pages
     delete_free_heap = mi_heap_new();
     if (delete_free_heap == NULL) return false;
     test_thread_t threads[DELETE_FREE_THREADS];
@@ -1338,5 +1340,6 @@ static bool test_heap_delete_concurrent_free(void) {
     mi_heap_delete(delete_free_heap);
     for (size_t i = 0; i < DELETE_FREE_THREADS; i++) { test_thread_join(threads[i]); }
   }
+  mi_option_set(mi_option_disallow_arena_alloc, disallow_arena_alloc);
   return true;
 }
