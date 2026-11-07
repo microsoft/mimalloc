@@ -39,9 +39,11 @@ static void mi_theap_sample_countdown_restart(mi_theap_t* theap) {
   theap->sample_countdown = countdown;
 }
 
-// The bytes beyond a derived countdown that were counted in a batch before this allocation (and count towards the next sample)
-static uint64_t mi_sample_carry(uint64_t excess, size_t req_size) {
-  return (excess > req_size ? excess - req_size : 0);
+// The bytes beyond a derived countdown that were counted in a batch before this allocation (and count towards the next sample).
+// This is at most the `rate` so any bytes beyond that are attributed to the current sample (instead of being lost).
+static uint64_t mi_sample_carry(uint64_t excess, size_t req_size, size_t rate) {
+  const uint64_t carry = (excess > req_size ? excess - req_size : 0);
+  return (carry < rate ? carry : rate);
 }
 
 static size_t mi_sample_countdown_next(size_t rate, uint64_t carry) {
@@ -96,7 +98,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* the
 
   void* p;
   if (profile_excess > 0) {
-    const uint64_t carry = mi_sample_carry(profile_excess, req_size);
+    const uint64_t carry = mi_sample_carry(profile_excess, req_size, theap->profile_sample_rate);
     p = _mi_theap_malloc_profiled(theap,size,profile_requested - carry,zero,ppage);  // can update the profile sample rate
     theap->profile_sample_countdown = mi_sample_countdown_next(theap->profile_sample_rate, carry);
     if (guarded_excess > 0) { theap->guarded_sample_countdown = 0; }  // retry at the next allocation
@@ -104,7 +106,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* the
   else if (guarded_excess > 0) {
     if (req_size >= theap->guarded_size_min && req_size <= theap->guarded_size_max) {
       p = _mi_theap_malloc_guarded(theap,size,zero,ppage);
-      theap->guarded_sample_countdown = mi_sample_countdown_next(theap->guarded_sample_rate, mi_sample_carry(guarded_excess, req_size));
+      theap->guarded_sample_countdown = mi_sample_countdown_next(theap->guarded_sample_rate, mi_sample_carry(guarded_excess, req_size, theap->guarded_sample_rate));
     }
     else {
       p = _mi_malloc_generic_no_sample(theap,size,zero,ppage);

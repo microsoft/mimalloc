@@ -82,9 +82,10 @@ static my_profiler_t my_profiler = {
 // ---------------------------------------------------------------------------
 
 // Force at least one sample by allocating well over the threshold.
+// (with MI_SAMPLE==1 allocations are counted in batches of up to a page, e.g. 219 KiB in secure mode on 32-bit)
 static void allocate_past_threshold(void) {
   size_t total = 0;
-  while (total < TEST_THRESHOLD * 10) {
+  while (total < TEST_THRESHOLD * 128) {
     void* p = mi_malloc(4096);
     mi_free(p);
     total += 4096;
