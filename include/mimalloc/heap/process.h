@@ -5,8 +5,8 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef MI_INTERNAL_PROCESS_H
-#define MI_INTERNAL_PROCESS_H
+#ifndef MI_HEAP_PROCESS_H
+#define MI_HEAP_PROCESS_H
 
 #include "../types.h"
 #include "../prim/prim.h"          // mi_os_mem_config_t
@@ -176,9 +176,10 @@ typedef struct mi_process_s {
   _Atomic(size_t)     error_count;              // stop emitting errors when >= `mi_option_max_errors`
   _Atomic(size_t)     warning_count;            // stop emitting warnings when >= `mi_option_max_warnings`
   _Atomic(size_t)     output_buf_len;           // used length of `output_buf`
+  _Atomic(size_t)     profiler_generation;      // fresh generation for each profiler attach (see `profile/sample-profile.c`)
 
   mi_lock_t           thread_locals_lock;       // initialized in `_mi_thread_locals_init` (see `util/threadlocal.c`)
-  size_t              thread_locals_version;    // version to be able to reuse slots safely
+  mi_thread_local_t   thread_locals_version;    // version to be able to reuse slots safely
 
   mi_os_state_t       os;                       // OS state
   mi_fork_state_t     fork;                     // fork state (see `heap/subproc.c`)

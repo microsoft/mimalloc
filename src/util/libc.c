@@ -182,14 +182,47 @@ int _mi_getenv(const char* name, char* result, size_t result_size) {
   MI_UNUSED(result_size);
   return ENOENT;
 }
+bool _mi_env_visit(mi_env_visit_fun* visit, void* arg) {
+  MI_UNUSED(visit);
+  MI_UNUSED(arg);
+  return true;  // an empty environment
+}
 #else
 int _mi_getenv(const char* name, char* result, size_t result_size) {
   if (name==NULL || result == NULL || result_size < 64) return ENOENT;
   // change the result of _mi_prim_getenv to an errno result
   const int res = _mi_prim_getenv(name,result,result_size);
-  return (res > 0 ? 0 : (res == 0 ? ENOENT : EAGAIN));
+  return (res > 0 ? 0 : (res == 0 ? ENOENT : (res == -2 ? E2BIG : EAGAIN)));
+}
+bool _mi_env_visit(mi_env_visit_fun* visit, void* arg) {
+  if (visit == NULL) return false;
+  return _mi_prim_env_visit(visit, arg);
 }
 #endif
+
+typedef struct mi_getenv_visit_s {
+  const char* name;
+  size_t      name_len;
+  char*       result;
+  size_t      result_size;
+  int         res;          // result of `_mi_prim_getenv`
+} mi_getenv_visit_t;
+
+static void mi_getenv_visit(const char* entry, void* arg) {
+  mi_getenv_visit_t* const v = (mi_getenv_visit_t*)arg;
+  if (v->res != 0) return;  // the first occurrence takes precedence
+  if (_mi_strnicmp(v->name, entry, v->name_len) == 0 && entry[v->name_len] == '=') {  // case insensitive
+    v->res = (_mi_strlcpy(v->result, entry + v->name_len + 1, v->result_size) ? 1 : -2 /* too long */);
+  }
+}
+
+int _mi_prim_getenv_by_visit(const char* name, char* result, size_t result_size) {
+  if (name == NULL) return -1;
+  mi_getenv_visit_t v = { name, _mi_strlen(name), result, result_size, 0 };
+  if (v.name_len == 0) return -1;
+  if (!_mi_prim_env_visit(&mi_getenv_visit, &v)) return -1;  // try again later
+  return v.res;
+}
 
 
 // --------------------------------------------------------
@@ -339,7 +372,7 @@ static void mi_out_fill(char fill, size_t len, char** out, char* end) {
 
 static void mi_out_alignright(char fill, char* start, size_t len, size_t extra, char* end) {
   if (len == 0 || extra == 0) return;
-  if (start + len + extra >= end) return;
+  if (start + len + extra > end) return;
   // move `len` characters to the right (in reverse since it can overlap)
   for (size_t i = 1; i <= len; i++) {
     start[len + extra - i] = start[len - i];
@@ -504,6 +537,11 @@ int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
           pre = numplus;
         }
         mi_out_num((uintmax_t)x, 10, pre, &out, end);
+        if (pre != 0 && fill == '0' && alignright && out > start) {
+          // zero fill goes after the sign
+          start++;
+          if (width > 0) { width--; }
+        }
       }
       else if (c >= ' ' && c <= '~') {
         // unknown format

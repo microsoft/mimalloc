@@ -5,8 +5,8 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef MI_INTERNAL_LIBC_H
-#define MI_INTERNAL_LIBC_H
+#ifndef MI_UTIL_LIBC_H
+#define MI_UTIL_LIBC_H
 
 #include "../types.h"
 
@@ -27,6 +27,7 @@ const char*   _mi_strrchr(const char* s, char c);
 bool          _mi_streq(const char* s, const char* t);
 bool          _mi_strntol(const char* s, size_t max_len, const char** end, long* result); // parses at most max_len bytes; no terminator required
 int           _mi_getenv(const char* name, char* result, size_t result_size);
+bool          _mi_env_visit(void (*visit)(const char* entry, void* arg), void* arg);  // returns `false` if the full environment cannot be iterated
 void          _mi_detect_cpu_features(void);
 
 

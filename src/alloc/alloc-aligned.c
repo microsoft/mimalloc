@@ -20,7 +20,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
   // certain blocks are always allocated at a certain natural alignment.
-  // (see `alloc/page.h:mi_natural_alignment_of_size`, asserted in `arena/arena-page.c:mi_arenas_page_alloc_fresh`).
+  // (see `alloc/page.h:mi_natural_alignment_of_size`, asserted in `arena/arena-page-alloc.c:mi_arenas_page_alloc_fresh`).
   mi_assert_internal(mi_alignment_is_valid(alignment));
   if (alignment > size) return false;
   const size_t bsize = mi_good_size(size);
@@ -192,6 +192,11 @@ static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, siz
     return mi_error_bad_alignment(size, alignment, offset);
   }
 
+  // regular blocks are always aligned to the word size, and to MI_MAX_ALIGN_SIZE if at least that large
+  if (offset == 0 && (alignment <= sizeof(void*) || (alignment <= MI_MAX_ALIGN_SIZE && size >= alignment))) {
+    return _mi_theap_malloc_zero(theap, size, zero, 0, ppage);
+  }
+
   // Use a naturally aligned size class instead of over-allocating and adjusting the pointer.
   // Keep the requested size when padding is enabled for byte-precise overflow checks.
   if (MI_PADDING_SIZE == 0 && offset == 0 && size < alignment && alignment <= MI_PAGE_MAX_START_BLOCK_ALIGN2) {
@@ -343,11 +348,14 @@ static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t
   if mi_unlikely(!mi_alignment_is_valid(alignment)) { // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
     return mi_error_bad_alignment(newsize,alignment,offset);
   }
-  if (alignment <= sizeof(uintptr_t) && offset==0) return _mi_theap_realloc_zero(theap,p,newsize,zero);
+  if (alignment <= sizeof(uintptr_t) && offset==0 && (mi_addr(p) & (alignment-1))==0) {  // `p` may be misaligned if allocated with an offset
+    return _mi_theap_realloc_zero(theap,p,newsize,zero);
+  }
   if (p == NULL) return mi_theap_malloc_zero_aligned_at(theap,newsize,alignment,offset,zero,NULL);
   const size_t size = mi_usable_size(p);
-  if (newsize <= size && newsize >= (size - (size / 2)) && ((mi_addr(p) + offset) & (alignment-1)) == 0) {
-    return mi_ptr_bounded(p, mi_bounds_user_size(newsize));  // reallocation still fits, is aligned and not more than 50% waste
+  if (newsize <= size && newsize >= (size - (size / 2)) && ((mi_addr(p) + offset) & (alignment-1)) == 0 &&
+      theap != NULL && mi_page_heap(mi_ptr_page(p)) == mi_theap_heap_peek(theap)) {
+    return mi_ptr_bounded(p, mi_bounds_user_size(newsize));  // reallocation still fits, is aligned, not more than 50% waste, and in the same heap
   }
   else {
     // note: we don't zero allocate upfront so we only zero initialize the expanded part (at the cost of calling mi_usable_size)
@@ -371,7 +379,6 @@ static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t
 
 static void* mi_theap_realloc_zero_aligned(mi_theap_t* theap, void* p, size_t newsize, size_t alignment, bool zero) mi_attr_noexcept {
   mi_assert(alignment > 0);
-  if (alignment <= sizeof(uintptr_t)) return _mi_theap_realloc_zero(theap,p,newsize,zero);
   return mi_theap_realloc_zero_aligned_at(theap,p,newsize,alignment,0,zero);
 }
 

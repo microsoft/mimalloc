@@ -131,9 +131,22 @@ void _mi_prim_out_stderr( const char* msg );
 
 // Get an environment variable. (only for options)
 // name != NULL, result != NULL, result_size >= 64
-// Return 1 for success, 0 if not found,
+// Return 1 for success, 0 if not found, -2 if the value does not fit in `result`,
 // and -1 on error (for example, if `getenv` cannot be called yet during preloading).
 int _mi_prim_getenv(const char* name, char* result, size_t result_size);
+
+// Visit all entries of the environment (only for options). Calls `visit(entry,arg)` for each
+// zero terminated `name=value` entry (which is only valid during the call). The environment may be locked
+// during the visit so `visit` should not call into the OS. Very long entries may be skipped.
+// Returns `false` if the platform cannot iterate the full environment (or not yet, e.g. during preloading);
+// in that case options are looked up one at a time using `_mi_prim_getenv`.
+// visit != NULL
+typedef void (mi_env_visit_fun)(const char* entry, void* arg);
+bool _mi_prim_env_visit(mi_env_visit_fun* visit, void* arg);
+
+// Generic implementation of `_mi_prim_getenv` using `_mi_prim_env_visit` (case insensitive).
+// Can be used on platforms where visiting the environment does not allocate (e.g. using `environ`).
+int _mi_prim_getenv_by_visit(const char* name, char* result, size_t result_size);
 
 
 // Fill a buffer with strong randomness; return `false` on error or if

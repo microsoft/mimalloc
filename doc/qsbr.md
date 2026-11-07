@@ -232,12 +232,12 @@ lives in `_PyMem_mi_page_maybe_free`, not `_PyMem_mi_page_is_safe_to_free`.
 Cold abandoned pages need an explicit progress path. The internal
 `_mi_heap_collect_abandoned(heap)` helper scans the existing all-pages map
 and abandoned OS list, claims abandoned pages before collecting their frees,
-and releases only safe empty pages. The caller must first stop **all**
-allocation, freeing, heap/theap lifecycle operations, and other collectors
-that could access this heap. The allocator's heap lock alone does not provide
-this exclusion. This is intended for runtime-controlled quiescent collection,
-not concurrent background scanning. If readers have not finished, pages remain
-retained and a later sweep is required.
+and releases only safe empty pages. Frees may run concurrently: pages owned by
+a concurrent free are skipped, as that free collects the page itself. The caller
+must first stop all allocation, heap/theap lifecycle operations, and other
+collectors that could access this heap. The allocator's heap lock alone does not
+provide this exclusion. If readers have not finished, pages remain retained and
+a later sweep is required.
 
 ## Reclaim and heap lifetime
 

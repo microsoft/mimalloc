@@ -114,6 +114,7 @@ set(mi_sources
     src/prim/prim.c
     src/prim/prim-tls.c
     src/util/libc.c
+    src/util/memid.c
     src/util/options.c
     src/util/random.c
     src/util/stats.c
@@ -121,6 +122,8 @@ set(mi_sources
     src/arena/arena.c
     src/arena/arena-alloc.c
     src/arena/arena-page.c
+    src/arena/arena-page-alloc.c
+    src/arena/arena-heap.c
     src/arena/bitmap.c
     src/arena/bitmap-chunk.c
     src/alloc/alloc.c
@@ -138,7 +141,9 @@ set(mi_sources
     src/heap/theap.c
     src/profile/sample-guarded.c
     src/profile/sample-profile.c
-    src/profile/pprof.c)
+    src/profile/pprof.c
+    src/profile/pprof-os.c
+    src/profile/pprof-write.c)
 
 set(mi_cflags "")
 set(mi_cflags_static "")            # extra flags for a static library build
@@ -882,6 +887,17 @@ if(NOT MI_OPT_ARCH MATCHES "^(0|OFF|NO|FALSE|N)$")
   elseif(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM_NAME MATCHES "Haiku")
     if(MI_OPT_ARCH STREQUAL "avx2")
       set(MI_OPT_ARCH_FLAGS "-march=haswell;-mavx2")      # fast bit scan (since 2013)
+      # avoid the Skylake JCC erratum
+      if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+        set(mi_jcc_flag "-mbranches-within-32B-boundaries")
+      else()
+        set(mi_jcc_flag "-Wa,-mbranches-within-32B-boundaries")
+      endif()
+      include(CheckCCompilerFlag)
+      check_c_compiler_flag("${mi_jcc_flag}" mi_has_jcc_flag)
+      if(mi_has_jcc_flag)
+        list(APPEND MI_OPT_ARCH_FLAGS "${mi_jcc_flag}")
+      endif()
     elseif(MI_OPT_ARCH MATCHES "^armv[89].*$")
       set(MI_OPT_ARCH_FLAGS "-march=${MI_OPT_ARCH}-a")    # fast atomics
     elseif(MI_OPT_ARCH MATCHES "^rva[0-9][0-9]$")
@@ -897,8 +913,11 @@ if(NOT MI_OPT_ARCH MATCHES "^(0|OFF|NO|FALSE|N)$")
   elseif (MSVC AND MSVC_VERSION GREATER_EQUAL 1914 AND NOT MI_CLANG_CL) # vs2017+
     if(MI_OPT_ARCH STREQUAL "avx2")
       set(MI_OPT_ARCH_FLAGS "/arch:AVX2")
+      if(MSVC_VERSION GREATER_EQUAL 1925)                     # vs2019 16.5+
+        list(APPEND MI_OPT_ARCH_FLAGS "/QIntel-jcc-erratum")  # avoid the Skylake JCC erratum
+      endif()
     elseif(MI_OPT_ARCH MATCHES "^armv[89].*$")
-      set(MI_OPT_ARCH_FLAGS "/arch:${MI_OPT_ARCH}")       # fast atomics
+      set(MI_OPT_ARCH_FLAGS "/arch:${MI_OPT_ARCH}")           # fast atomics
     else()
       message(STATUS "warning: unknown MI_OPT_ARCH=${MI_OPT_ARCH} passed as '/arch:${MI_OPT_ARCH}'")
     endif()
@@ -965,7 +984,7 @@ endif()
 # set language for source files now
 if(MI_USE_CXX)
   set_source_files_properties(${mi_sources} PROPERTIES LANGUAGE CXX )
-  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-arena.c test/test-bitmap.c test/test-free-batch.c test/test-qsbr.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-stress-pprof.c test/test-profile.c test/test-pprof.c test/test-fork.c PROPERTIES LANGUAGE CXX )
+  set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-arena.c test/test-bitmap.c test/test-free-batch.c test/test-qsbr.c test/test-secure.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-stress-pprof.c test/test-profile.c test/test-pprof.c test/test-fork.c PROPERTIES LANGUAGE CXX )
 endif()
 
 # platform specific headers that are only needed for profiling support
@@ -1300,8 +1319,8 @@ if (MI_BUILD_TESTS)
   endif()
 
   # static link tests
-  foreach(TEST_NAME api api-fill arena bitmap stress-heaps stress-subprocs stress stress-pprof profile pprof fork)
-    if((TEST_NAME STREQUAL "arena" OR TEST_NAME STREQUAL "bitmap") AND (NOT MI_BUILD_STATIC OR MI_DEBUG_TSAN))
+  foreach(TEST_NAME api api-fill arena bitmap secure stress-heaps stress-subprocs stress stress-pprof profile pprof fork)
+    if((TEST_NAME STREQUAL "arena" OR TEST_NAME STREQUAL "bitmap" OR TEST_NAME STREQUAL "secure") AND (NOT MI_BUILD_STATIC OR MI_DEBUG_TSAN))
       continue()
     endif()
     add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)

@@ -168,7 +168,7 @@ static size_t count_location_entries(const char* contents) {
 }
 
 // Parse the total inuse object count from the pprof header line, i.e. the
-// first number in `heap profile: <inuse_objects>: <inuse_bytes> [...] @ heapprofile`.
+// first number in `heap profile: <inuse_objects>: <inuse_bytes> [...] @ heap_v2/<rate>`.
 static int64_t parse_total_inuse_objects(const char* contents) {
   const char* p = (contents == NULL ? NULL : strstr(contents, "heap profile:"));
   if (p == NULL) return -1;
@@ -242,7 +242,7 @@ bool test_pprof_snapshot_format(void) {
       char* contents = read_file(fname);
       result = (contents != NULL &&
                 strncmp(contents, "heap profile:", 13) == 0 &&
-                strstr(contents, "@ heapprofile") != NULL &&
+                strstr(contents, "@ heap_v2/") != NULL &&
                 strstr(contents, "MAPPED_LIBRARIES:") != NULL);
       mi_free(contents);
 

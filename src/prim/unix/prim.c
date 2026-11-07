@@ -571,7 +571,12 @@ static int unix_mmap_fd(void) {
   #endif
 }
 
-#if defined(MAP_ALIGNED_SUPER) || defined(MAP_HUGETLB) || defined(MAP_HUGE_1GB) || defined(MAP_HUGE_2MB) || defined(VM_FLAGS_SUPERPAGE_SIZE_2MB)
+// macOS superpages are not supported on arm64 (with 16KiB pages)
+#if defined(VM_FLAGS_SUPERPAGE_SIZE_2MB) && !(defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__)))
+#define MI_OS_HAS_SUPERPAGES  1
+#endif
+
+#if defined(MAP_ALIGNED_SUPER) || defined(MAP_HUGETLB) || defined(MAP_HUGE_1GB) || defined(MAP_HUGE_2MB) || MI_OS_HAS_SUPERPAGES
 #define MI_OS_HAS_HUGE_PAGES  1
 #endif
 
@@ -652,7 +657,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
         lflags |= MAP_HUGE_2MB;
         #endif
       }
-      #ifdef VM_FLAGS_SUPERPAGE_SIZE_2MB
+      #if MI_OS_HAS_SUPERPAGES
       lfd |= VM_FLAGS_SUPERPAGE_SIZE_2MB;
       #endif
       if (large_only || lflags != flags) {
@@ -677,7 +682,8 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
     }
   } // huge pages
   #else
-  MI_UNUSED(large_only); MI_UNUSED(allow_huge);
+  MI_UNUSED(allow_huge);
+  if (large_only) { *is_large = false; errno = ENOMEM; return NULL; }  // no huge OS pages available
   #endif
   // regular allocation
   if (p == NULL) {
@@ -1158,21 +1164,15 @@ static char** mi_get_environ(void) {
 }
 #endif
 int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
-  if (name==NULL) return -1;
-  const size_t len = _mi_strlen(name);
-  if (len == 0) return -1;
+  return _mi_prim_getenv_by_visit(name, result, result_size);
+}
+bool _mi_prim_env_visit(mi_env_visit_fun* visit, void* arg) {
   char** env = mi_get_environ();
-  if (env == NULL) return -1;
-  // compare up to 10000 entries
+  if (env == NULL) return false;
   for (int i = 0; i < 10000 && env[i] != NULL; i++) {
-    const char* s = env[i];
-    if (_mi_strnicmp(name, s, len) == 0 && s[len] == '=') { // case insensitive
-      // found it
-      if (!_mi_strlcpy(result, s + len + 1, result_size)) return -1;
-      return 1;   // success
-    }
+    visit(env[i], arg);
   }
-  return 0; // not found
+  return true;
 }
 #else
 // fallback: use standard C `getenv` but this cannot be used while initializing the C runtime
@@ -1190,9 +1190,13 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
     buf[len] = 0;
     s = getenv(buf);
   }
-  if (s == NULL || _mi_strnlen(s,result_size) >= result_size) return 0; // not found
-  if (!_mi_strlcpy(result, s, result_size)) return -1;
+  if (s == NULL) return 0; // not found
+  if (!_mi_strlcpy(result, s, result_size)) return -2;  // too long
   return 1;  // success
+}
+bool _mi_prim_env_visit(mi_env_visit_fun* visit, void* arg) {
+  MI_UNUSED(visit); MI_UNUSED(arg);
+  return false;  // cannot iterate the environment
 }
 #endif  // !MI_USE_ENVIRON
 

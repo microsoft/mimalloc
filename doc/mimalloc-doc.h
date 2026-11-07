@@ -313,6 +313,11 @@ size_t mi_good_size(size_t size);
 /// Note that `alignment` always follows `size` for consistency with the unaligned
 /// allocation API, but unfortunately this differs from `posix_memalign` and `aligned_alloc` in the C library.
 ///
+/// Aligned and unaligned functions can be freely mixed: any pointer returned by mimalloc can be passed
+/// to `mi_realloc_aligned` (and `mi_realloc_aligned_at`) with any alignment (and offset), larger or smaller
+/// than the one it was originally allocated with. Similarly, pointers from the aligned API can be passed
+/// to `mi_free`, `mi_realloc`, `mi_usable_size`, etc.
+///
 /// \{
 
 /// Allocate \a size bytes aligned by \a alignment.
@@ -524,6 +529,9 @@ void* mi_heap_recalloc_aligned_at(mi_heap_t* heap, void* p, size_t newcount, siz
 ///    thread-local heaps. A v3 heap creates internally such theaps on demand
 ///    to efficiently allocate without needing taking locks for example.
 ///
+/// The heap argument of the heap functions must be a valid heap: `NULL` is not accepted (use mi_heap_main() for the main heap).
+/// (except for mi_unsafe_heap_page_is_under_utilized() where `NULL` matches any heap).
+///
 /// \{
 
 /// Type of first-class heaps.
@@ -543,20 +551,51 @@ typedef struct mi_heap_s mi_heap_t;
 /// Create a new heap that can be used for allocation.
 mi_heap_t* mi_heap_new();
 
-/// Delete a previously allocated heap.
+/// Delete a heap, releasing its internal resources but keeping live blocks intact.
+/// @param heap The heap to delete.
+///
+/// Other threads that allocated in the heap should first call
+/// mi_thread_heap_release() (or no longer allocate or free in the heap at all).
+/// In debug mode, a warning is given for threads that did not release the heap.
+///
 /// This will release internal resources but not free
-/// still allocated blocks in this heap (and should be
+/// still allocated blocks in this heap (and these should be
 /// `mi_free`'d later on as usual).
 ///
 /// Note: trying to delete the main heap of a subprocess is ignored.
+/// @see mi_heap_destroy() for destroying a heap.
+/// @see mi_thread_heap_release() for releasing a heap in the current thread.
 void mi_heap_delete(mi_heap_t* heap);
 
+/// @brief Release a heap in the calling thread -- promises to not allocate in that heap anymore.
+/// @param heap The heap to release in the calling thread.
+///
+/// After this call, allocation in the heap from this thread returns `NULL`.
+/// If using mi_heap_delete() it is recommended to first release the heap in all threads that allocated in it.
+/// In particular, for mi_heap_delete() it is not safe if any thread is concurrently freeing (or allocating)
+/// in that heap while it is being deleted. However, if each other thread that allocated in the heap first
+/// calls mi_thread_heap_release(), it is safe to delete the heap even with concurrent freeing.
+/// Using mi_thread_heap_release() is not needed for mi_heap_destroy() (where all blocks are freed) but
+/// it is still good practice. Calling this multiple times is allowed.
+///
+/// Note: trying to release the main heap of a subprocess is ignored.
+/// @see mi_heap_delete() for deleting a heap.
+/// @see mi_heap_destroy() for destroying a heap.
+void mi_thread_heap_release(mi_heap_t* heap);
+
 /// Destroy a heap, freeing all its still allocated blocks.
+/// @param heap The heap to destroy.
+///
+/// It is not safe to destroy a heap if other threads are still concurrently
+/// allocating or freeing in it!
+///
 /// Use with care as this will free all blocks still
 /// allocated in the heap. However, this can be an
 /// efficient way to free all heap memory in one go.
 ///
 /// Note: trying to destroy the main heap of a subprocess is ignored.
+/// @see mi_heap_delete() for deleting a heap.
+/// @see mi_thread_heap_release() for releasing a heap in the current thread.
 void mi_heap_destroy(mi_heap_t* heap);
 
 /// __v1__,__v2__: Set the default heap to use in the current thread for mi_malloc() et al.
@@ -737,8 +776,8 @@ typedef bool (mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* a
 /// @returns \a true if all areas and blocks were visited.
 ///
 /// Visits all areas and blocks in the heap.
-/// Other threads must not access this heap during the visit
-/// (but thread termination is synchronized internally). The visitor runs under the heap's
+/// Other threads must not access this heap during the visit: they may not allocate in it,
+/// nor free blocks that belong to it (but thread termination is synchronized internally). The visitor runs under the heap's
 /// lock and must not re-enter the heap (through allocating or free-ing).
 bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
@@ -1312,6 +1351,9 @@ void mi_options_print_out(mi_output_fun* out, void* arg);
 
 
 /// Runtime options.
+///
+/// Options prefixed with `mi_option_deprecated_...` have been
+/// removed from mimalloc and no longer have any effect.
 typedef enum mi_option_e {
   // stable options
   mi_option_show_errors,  ///< Print error messages.
@@ -1335,7 +1377,7 @@ typedef enum mi_option_e {
   // guard pages
   mi_option_guarded_min,              ///< only used when building with MI_GUARDED: minimal rounded object size for guarded objects (=0)
   mi_option_guarded_max,              ///< only used when building with MI_GUARDED: maximal rounded object size for guarded objects (=0)
-  mi_option_guarded_precise,          ///< disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
+  mi_option_unsafe_guarded_precise,   ///< disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
   mi_option_guarded_sample_rate,      ///< guard an object in the min/max range about every N requested bytes (=0)
   mi_option_guarded_sample_seed,      ///< can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0)
 
@@ -1353,7 +1395,7 @@ typedef enum mi_option_e {
   mi_option_abandoned_reclaim_on_free,  ///< __v1__,__v2__: allow to reclaim an abandoned segment on a free (=1)
   mi_option_purge_extend_delay,         ///< __v1__,__v2__: extend purge delay on each subsequent delay (=1)
   mi_option_disallow_arena_alloc,       ///< 1 = do not use arena's for allocation (except if using specific arena id's)
-  mi_option_visit_abandoned,            ///< allow visiting heap blocks from abandoned threads (=0)
+  mi_option_visit_abandoned,            ///< __v1__,__v2__: allow visiting heap blocks from abandoned threads (=0)
   mi_option_target_segments_per_thread, ///< __v1__,__v2__: experimental (=0)
 
   // v3 options
@@ -1412,6 +1454,10 @@ typedef struct mi_theap_s mi_theap_t;
 /// This can be used by runtime systems to request the thread-local theap
 /// once and then use it in its allocation functions (like mi_theap_malloc() or mi_theap_malloc_small() ) to avoid re-looking up
 /// the theap at each allocation call.
+///
+/// This is never NULL: if the theap could not be created, or if the current
+/// thread has already terminated (after mi_thread_done()), a special empty theap is
+/// returned instead. Allocation through such an empty theap returns NULL
 mi_theap_t* mi_heap_theap(mi_heap_t* heap);
 
 /// Release outstanding resources in a specific theap.
@@ -2066,8 +2112,8 @@ many system calls. Therefore, there are various environment variables (and optio
   page is considered (`0` and `1GiB` respectively). If you suspect a buffer overflow occurs with an object of size
   141, set the minimum and maximum to `148` and the sample rate to `1` to have all of those guarded.
 
-- `MIMALLOC_GUARDED_PRECISE=1`: If we have an object of size 13, we would usually place it an aligned 16 bytes in
-  front of the guard page. Using `MIMALLOC_GUARDED_PRECISE` places it exactly 13 bytes before a page so that even
+- `MIMALLOC_UNSAFE_GUARDED_PRECISE=1`: If we have an object of size 13, we would usually place it an aligned 16 bytes in
+  front of the guard page. Using `MIMALLOC_UNSAFE_GUARDED_PRECISE` places it exactly 13 bytes before a page so that even
   a 1 byte overflow is detected. This violates the C/C++ minimal alignment guarantees though so use with care.
 
 */

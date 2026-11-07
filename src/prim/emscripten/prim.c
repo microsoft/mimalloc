@@ -210,19 +210,16 @@ void _mi_prim_out_stderr( const char* msg) {
 extern char** environ;
 
 int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
-  if (name==NULL) return -1;
-  const size_t len = _mi_strlen(name);
-  if (len == 0) return -1;
+  return _mi_prim_getenv_by_visit(name, result, result_size);
+}
+
+bool _mi_prim_env_visit(mi_env_visit_fun* visit, void* arg) {
   char** env = environ;
-  if (env == NULL) return -1;  // not yet initialized; try again later
+  if (env == NULL) return false;  // not yet initialized
   for (int i = 0; i < 10000 && env[i] != NULL; i++) {
-    const char* s = env[i];
-    if (_mi_strnicmp(name, s, len) == 0 && s[len] == '=') { // case insensitive
-      if (!_mi_strlcpy(result, s + len + 1, result_size)) return -1;
-      return 1;
-    }
+    visit(env[i], arg);
   }
-  return 0; // not found
+  return true;
 }
 
 

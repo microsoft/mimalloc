@@ -249,6 +249,8 @@ mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new(void);
 
 mi_decl_export void mi_heap_delete(mi_heap_t* heap);            // move live blocks to the main heap
 mi_decl_export void mi_heap_destroy(mi_heap_t* heap);           // free all live blocks
+mi_decl_export void mi_thread_heap_release(mi_heap_t* heap) mi_attr_noexcept;  // the calling thread promises to no longer allocate in the heap (but blocks can still be freed)
+
 mi_decl_export void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node);
 mi_decl_export void mi_heap_set_debug_fill_preserve(mi_heap_t* heap, size_t preserve); // in debug mode, do not fill the first `preserve` bytes of blocks on allocation or free
 mi_decl_export void mi_heap_collect(mi_heap_t* heap, bool force);
@@ -325,7 +327,8 @@ typedef struct mi_heap_area_s {
 
 typedef bool (mi_cdecl mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg);
 
-// Heap visitors assume no concurrent heap access (except thread exit).
+// Heap visitors assume no concurrent heap access (except thread exit): no other thread may allocate in the heap,
+// or free blocks that belong to it, during the visit.
 mi_decl_export bool   mi_heap_visit_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 mi_decl_export bool   mi_heap_visit_abandoned_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
@@ -465,6 +468,7 @@ mi_decl_export void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_no
 
 // ------------------------------------------------------
 // Options
+// The deprecated options no longer have any effect.
 // ------------------------------------------------------
 
 typedef enum mi_option_e {
@@ -491,14 +495,14 @@ typedef enum mi_option_e {
   mi_option_os_tag,                     // tag used for OS logging (macOS only for now) (=100)
   mi_option_max_errors,                 // issue at most N error messages
   mi_option_max_warnings,               // issue at most N warning messages
-  mi_option_deprecated_max_segment_reclaim,  // max. percentage of the abandoned segments can be reclaimed per try (=10%)
+  mi_option_deprecated_max_segment_reclaim,
   mi_option_destroy_on_exit,            // if set, release all memory on exit; sometimes used for dynamic unloading but can be unsafe
   mi_option_arena_reserve,              // initial memory size for arena reservation (= 1 GiB on 64-bit) (internally, this value is in KiB; use `mi_option_get_size`)
   mi_option_arena_purge_mult,           // multiplier for `purge_delay` for the purging delay for arenas (=10)
   mi_option_deprecated_purge_extend_delay,
   mi_option_disallow_arena_alloc,       // 1 = do not use arena's for allocation (except if using specific arena id's)
   mi_option_retry_on_oom,               // retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries. (only on windows)
-  mi_option_deprecated_visit_abandoned, // allow visiting theap blocks from abandoned threads (=0)
+  mi_option_deprecated_visit_abandoned,
   mi_option_guarded_min,                // only used when building with MI_GUARDED: minimal rounded object size for guarded objects (=0)
   mi_option_guarded_max,                // only used when building with MI_GUARDED: maximal rounded object size for guarded objects (=0)
   mi_option_unsafe_guarded_precise,     // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)

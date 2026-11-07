@@ -436,6 +436,8 @@
     <ClCompile Include="..\..\src\arena\arena.c" />
     <ClCompile Include="..\..\src\arena\arena-alloc.c" />
     <ClCompile Include="..\..\src\arena\arena-page.c" />
+    <ClCompile Include="..\..\src\arena\arena-page-alloc.c" />
+    <ClCompile Include="..\..\src\arena\arena-heap.c" />
     <ClCompile Include="..\..\src\arena\bitmap.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">false</ExcludedFromBuild>
@@ -459,12 +461,15 @@
     <ClCompile Include="..\..\src\heap\heap.c" />
     <ClCompile Include="..\..\src\prim\prim-tls.c" />
     <ClCompile Include="..\..\src\profile\pprof.c" />
+    <ClCompile Include="..\..\src\profile\pprof-os.c" />
+    <ClCompile Include="..\..\src\profile\pprof-write.c" />
     <ClCompile Include="..\..\src\profile\sample-guarded.c" />
     <ClCompile Include="..\..\src\profile\sample-profile.c" />
     <ClCompile Include="..\..\src\heap\subproc.c" />
     <ClCompile Include="..\..\src\heap\theap.c" />
     <ClCompile Include="..\..\src\heap\process.c" />
     <ClCompile Include="..\..\src\util\libc.c" />
+    <ClCompile Include="..\..\src\util\memid.c" />
     <ClCompile Include="..\..\src\heap\page-map.c" />
     <ClCompile Include="..\..\src\prim\prim.c" />
     <ClCompile Include="..\..\src\prim\windows\prim.c">
@@ -496,6 +501,7 @@
     <ClInclude Include="..\..\include\mimalloc\arch.h" />
     <ClInclude Include="..\..\include\mimalloc\internal.h" />
     <ClInclude Include="..\..\include\mimalloc\util\libc.h" />
+    <ClInclude Include="..\..\include\mimalloc\util\memid.h" />
     <ClInclude Include="..\..\include\mimalloc\util\options.h" />
     <ClInclude Include="..\..\include\mimalloc\util\random.h" />
     <ClInclude Include="..\..\include\mimalloc\prim\prim-tls.h" />
@@ -522,6 +528,8 @@
     <ClInclude Include="..\..\src\arena\bitmap.h" />
     <ClInclude Include="..\..\src\arena\bitmap-chunk.h" />
     <ClInclude Include="..\..\src\arena\arena.h" />
+    <ClInclude Include="..\..\src\arena\arena-page.h" />
+    <ClInclude Include="..\..\src\profile\pprof.h" />
     <ClInclude Include="..\..\src\alloc\page-queue.h" />
     <ClInclude Include="..\..\src\alloc\page.h" />
   </ItemGroup>

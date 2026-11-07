@@ -12,6 +12,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/util/stats.h"
 #include "mimalloc/arena/arena-page.h"
 #include "mimalloc/alloc/page.h"
+#include "mimalloc/profile/sample-profile.h"
 #include "page-queue.h"
 #include "page.h"
 
@@ -150,6 +151,19 @@ bool _mi_page_is_valid(mi_page_t* page) {
   Page statistics
 ----------------------------------------------------------- */
 
+// Reset the `alloc_count` (and `last_alloc`), and set `last_used` to `used`
+static void mi_page_reset_alloc_count(mi_page_t* page) {
+  const size_t used = mi_page_used(page);
+  #if MI_SIZE_SIZE >= 8
+  page->xused.used_alloc = (used << 32) | used;
+  #else
+  page->xused.used_alloc = used;
+  page->xlast_used = (uint16_t)used;
+  page->xlast_alloc = 0;
+  #endif
+  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
+  mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
+}
 
 #if MI_STATS || (MI_SAMPLE==1)
 // Gets the theap belonging to a page.
@@ -179,13 +193,7 @@ static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page,
   const size_t bsize = mi_page_usable_block_size(page);  mi_assert_internal(bsize >= MI_PADDING_SIZE);
   const size_t alloc_diff = alloc_count - last_alloc;
   const uint64_t requested = (uint64_t)alloc_diff * (uint64_t)(bsize - MI_PADDING_SIZE);
-  if (requested <= SIZE_MAX && theap->sample_countdown >= (size_t)requested) {
-    theap->sample_countdown -= (size_t)requested;
-  }
-  else {
-    theap->sample_requested   += (requested - theap->sample_countdown);
-    theap->sample_countdown = 0;
-  }
+  mi_theap_sample_countdown_sub(theap, requested);
 }
 #endif
 
@@ -271,17 +279,7 @@ static void mi_theap_page_update_stats(mi_theap_t* theapx, mi_page_t* page) {
     return;
   }
 
-  // reset the `alloc_count` (and `last_alloc`), and set `last_used` to `used`
-  #if MI_SIZE_SIZE >= 8
-  page->xused.used_alloc = (used << 32) | used;
-  #else
-  page->xused.used_alloc = used;
-  page->xlast_used = (uint16_t)used;
-  page->xlast_alloc = 0;
-  #endif
-  mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
-  mi_assert_internal(mi_page_alloc_count(page) >= mi_page_last_alloc(page));
-
+  mi_page_reset_alloc_count(page);
   mi_theap_page_merge_stats(theapx, page, alloc_count, free_count);
 }
 
@@ -291,8 +289,13 @@ void _mi_page_update_stats(mi_page_t* page) {         // called on abandoned pag
 }
 
 #else
+// Without statistics we still reset the `alloc_count` so it cannot overflow (see `_mi_page_update_sample_countdown`)
 void _mi_page_update_stats(mi_page_t* page) {
-  MI_UNUSED(page);
+  #if MI_SAMPLE==1
+  mi_theap_t* const theap = mi_theap_of_page(page);
+  if (theap!=NULL) { mi_theap_adjust_sample_countdown(theap,page,mi_page_alloc_count(page)); }
+  #endif
+  mi_page_reset_alloc_count(page);
 }
 #endif
 
@@ -523,6 +526,8 @@ bool _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page)
   mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
+  mi_assert_internal(!mi_page_is_abandoned_mapped(page));  // already removed from the abandoned map
+  mi_assert_internal(mi_theap_is_initialized(theap));
 
   mi_page_set_theap(page,theap);
   _mi_page_free_collect(page, false); // ensure used count is up to date
@@ -732,12 +737,16 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
 }
 
 
-static void mi_theap_collect_full_pages(mi_theap_t* theap) {
-  // note: normally full pages get immediately abandoned and the full queue is always empty
-  // this path is only used if abandoning is disabled due to a destroy-able theap or options
-  // set by the user.
+#define MI_FULL_COLLECT_MAX_PAGES  (4)   /* visit at most N full pages per collect (unless forced) */
+
+// Collect pages in the full queue that had blocks freed by other threads.
+// Visits at most MI_FULL_COLLECT_MAX_PAGES pages (unless forced) and rotates the queue so the next call continues after them.
+// note: normally full pages get immediately abandoned and the full queue is always empty;
+// this is only used if abandoning is disabled for the theap (see `theap.c:mi_theap_options_init`).
+static void mi_theap_collect_full_pages(mi_theap_t* theap, bool force) {
   mi_page_queue_t* pq = &theap->pages[MI_BIN_FULL];
-  for (mi_page_t* page = pq->first; page != NULL; ) {
+  mi_page_t* page = pq->first;
+  for (size_t count = 0; page != NULL && (force || count < MI_FULL_COLLECT_MAX_PAGES); count++) {
     mi_page_t* next = page->next;         // get next in case we free the page
     _mi_page_free_collect(page, false);   // register concurrent free's
     // no longer full?
@@ -751,6 +760,7 @@ static void mi_theap_collect_full_pages(mi_theap_t* theap) {
     }
     page = next;
   }
+  if (page != NULL) { mi_page_queue_full_rotate_to(pq, page); }
 }
 
 static void mi_page_try_retire(mi_page_queue_t* pq, mi_page_t* page, size_t bin, bool force, size_t* min, size_t* max) {
@@ -772,23 +782,23 @@ static void mi_page_try_retire(mi_page_queue_t* pq, mi_page_t* page, size_t bin,
 }
 
 // free retired pages: we don't need to look at the entire queues
-// since we only retire pages that are at the head position in a queue.
+// since we only retire pages in queues of at most MI_RETIRE_MAX_PAGES pages.
 void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {
   size_t min = MI_BIN_FULL;
   size_t max = 0;
   for(size_t bin = theap->page_retired_min; bin <= theap->page_retired_max; bin++) {
     mi_page_queue_t* pq  = &theap->pages[bin];
     mi_page_t* page      = pq->first;
-    for (int i = 0; i<MI_RETIRE_MAX_PAGES && page!=NULL && page->retire_expire!=0; i++) {
+    for (int i = 0; i<MI_RETIRE_MAX_PAGES && page!=NULL; i++) {
       mi_page_t* next = page->next;
-      mi_page_try_retire(pq,page,bin,force,&min,&max);
+      if (page->retire_expire!=0) { mi_page_try_retire(pq,page,bin,force,&min,&max); }
       page = next;
     }
   }
   theap->page_retired_min = min;
   theap->page_retired_max = max;
   if (!theap->allow_page_abandon) {
-    mi_theap_collect_full_pages(theap);
+    mi_theap_collect_full_pages(theap, force);
   }
   _mi_theap_qsbr_collect_delayed(theap);
 }

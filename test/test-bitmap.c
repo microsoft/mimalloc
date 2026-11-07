@@ -132,11 +132,33 @@ static bool test_bbitmap_find(void) {
   return result;
 }
 
+// The free tail of a partially used last chunk of a multi-chunk claim must remain findable
+static bool test_bbitmap_find_tail(void) {
+  const size_t bits = 2 * MI_BCHUNK_BITS;
+  mi_bbitmap_t* bitmap = (mi_bbitmap_t*)mi_malloc_aligned(mi_bbitmap_size(bits, NULL), MI_BCHUNK_SIZE);
+  if (bitmap == NULL) return false;
+  const size_t sizes[] = { 1, 8, MI_BFIELD_BITS, MI_BCHUNK_BITS - 1 };
+  bool result = true;
+  for (size_t i = 0; result && i < sizeof(sizes)/sizeof(sizes[0]); i++) {
+    mi_bbitmap_init(_mi_subproc(), bitmap, bits, false);
+    mi_bbitmap_unsafe_setN(bitmap, 0, bits);
+    size_t huge_idx;
+    size_t idx;
+    const size_t n = sizes[i];
+    result = mi_bbitmap_try_find_and_clearN(bitmap, 0, MI_BCHUNK_BITS + 1, &huge_idx) && huge_idx == 0 &&
+             mi_bbitmap_try_find_and_clearN(bitmap, 0, n, &idx) && idx > MI_BCHUNK_BITS &&
+             mi_bbitmap_is_xsetN(MI_BIT_CLEAR, bitmap, idx, n);
+  }
+  mi_free(bitmap);
+  return result;
+}
+
 int main(void) {
   CHECK("bitmap-fields", test_fields());
   CHECK("bitmap-chunk-ranges", test_chunk_ranges());
   CHECK("bitmap-chunk-find", test_chunk_find());
   CHECK("bitmap-ranges", test_bitmap_ranges());
   CHECK("bitmap-binned-find", test_bbitmap_find());
+  CHECK("bitmap-binned-find-tail", test_bbitmap_find_tail());
   return print_test_summary();
 }

@@ -95,9 +95,8 @@ mi_decl_nodiscard void* mi_reallocarray( void* p, size_t count, size_t size ) mi
 }
 
 mi_decl_nodiscard int mi_reallocarr( void* ptrp, size_t count, size_t size ) mi_attr_noexcept { // NetBSD <https://man.netbsd.org/reallocarr.3>
-  mi_assert(size != 0);
   mi_assert(ptrp != NULL);
-  if (ptrp == NULL || size == 0) {
+  if (ptrp == NULL) {
     return (errno = EINVAL);
   }
   size_t total;

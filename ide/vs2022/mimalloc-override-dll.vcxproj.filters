@@ -22,6 +22,12 @@
     <ClCompile Include="..\..\src\arena\arena-page.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\arena\arena-page-alloc.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\arena\arena-heap.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\arena\bitmap.c">
       <Filter>Sources</Filter>
     </ClCompile>
@@ -35,6 +41,9 @@
       <Filter>Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\util\libc.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\util\memid.c">
       <Filter>Sources</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\util\options.c">
@@ -82,6 +91,12 @@
     <ClCompile Include="..\..\src\profile\pprof.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\profile\pprof-os.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\profile\pprof-write.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\heap\subproc.c">
       <Filter>Sources</Filter>
     </ClCompile>
@@ -105,6 +120,12 @@
     <ClInclude Include="..\..\src\arena\arena.h">
       <Filter>Headers</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\arena\arena-page.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\profile\pprof.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\src\alloc\page-queue.h">
       <Filter>Headers</Filter>
     </ClInclude>
@@ -115,6 +136,9 @@
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\mimalloc\util\libc.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\mimalloc\util\memid.h">
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\include\mimalloc\util\options.h">

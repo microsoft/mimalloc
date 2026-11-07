@@ -76,6 +76,12 @@ static void* pGetNumaNodeProcessorMask = NULL;
 static void* pGetNumaHighestNodeNumber = NULL;
 static void* pRtlDllShutdownInProgress = NULL;
 
+// To access the environment block in the PEB
+typedef VOID (__stdcall* PRtlAcquirePebLock)(VOID);
+typedef VOID (__stdcall* PRtlReleasePebLock)(VOID);
+static void* pRtlAcquirePebLock = NULL;  // (encoded)
+static void* pRtlReleasePebLock = NULL;
+
 // Not available on xbox
 typedef SIZE_T(__stdcall* PGetLargePageMinimum)(VOID);
 static void* pGetLargePageMinimum = NULL;  // encoded
@@ -229,6 +235,8 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   if (hDll != NULL) {
     pNtAllocateVirtualMemoryEx = mi_win_get_proc_encoded(hDll, "NtAllocateVirtualMemoryEx");
     pRtlDllShutdownInProgress = mi_win_get_proc_encoded(hDll, "RtlDllShutdownInProgress");
+    pRtlAcquirePebLock = mi_win_get_proc_encoded(hDll, "RtlAcquirePebLock");
+    pRtlReleasePebLock = mi_win_get_proc_encoded(hDll, "RtlReleasePebLock");
     mi_win_freelibrary(hDll, hDllFree);
   }
   // Try to use Win7+ numa API
@@ -717,7 +725,35 @@ void _mi_prim_out_stderr( const char* msg )
 int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   result[0] = 0;
   const size_t len = GetEnvironmentVariableA(name, result, (DWORD)result_size);
-  return (len < result_size ? (len > 0 ? 1 /* success */ : 0 /* not found */) : -1 /* error */);
+  return (len < result_size ? (len > 0 ? 1 /* success */ : 0 /* not found */) : -2 /* too long */);
+}
+
+// We read the environment block directly from the process parameters in the PEB (under the PEB lock)
+// as `GetEnvironmentStringsA` allocates from the process heap (which may be redirected to mimalloc itself).
+// The block is a sequence of `name=value\0` wide character entries ending with an empty entry.
+// Each entry is converted to the ANSI code page (as `GetEnvironmentStringsA` does) in a local buffer,
+// where entries that do not fit are skipped.
+// See <https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/api/pebteb/rtl_user_process_parameters.htm>
+bool _mi_prim_env_visit(mi_env_visit_fun* visit, void* arg) {
+  if (pRtlAcquirePebLock == NULL || pRtlReleasePebLock == NULL) return false;
+  char entry[512];
+  mi_win_call_proc_decoded(RtlAcquirePebLock)();
+  const RTL_USER_PROCESS_PARAMETERS* const params = NtCurrentTeb()->ProcessEnvironmentBlock->ProcessParameters;
+  // `Environment` directly follows `CommandLine` (at offset 0x48 on 32-bit, and 0x80 on 64-bit)
+  const WCHAR* const env = (params == NULL ? NULL : *(const WCHAR* const*)((const uint8_t*)&params->CommandLine + sizeof(UNICODE_STRING)));
+  if (env != NULL) {
+    int entries = 0;
+    for (const WCHAR* s = env; *s != 0 && entries < 10000; entries++) {
+      size_t len = 0;
+      while (s[len] != 0 && len < 32*MI_KiB) { len++; }  // entries are at most 32767 characters
+      if (s[len] != 0) break;                            // malformed environment block
+      const int n = WideCharToMultiByte(CP_ACP, 0, s, (int)len + 1, entry, (int)sizeof(entry), NULL, NULL);
+      if (n > 0) { visit(entry, arg); }
+      s += len + 1;
+    }
+  }
+  mi_win_call_proc_decoded(RtlReleasePebLock)();
+  return (env != NULL);
 }
 
 

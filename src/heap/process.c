@@ -11,6 +11,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim/prim-tls.h"
 #include "mimalloc/util/random.h"
 #include "mimalloc/util/stats.h"
+#include "mimalloc/util/memid.h"
 #include "mimalloc/heap/page-map.h"
 #include "mimalloc/alloc/free.h"
 #include "mimalloc/profile/pprof.h"
@@ -230,7 +231,7 @@ void _mi_process_seal_once(void) {
 #endif
 static void mi_process_sealed_init(void) {
   bool protect = false;
-  #if MI_SECURE_SEALED_PAGE
+  #if MI_SECURE_STATIC_SEALED
   mi_assert_internal(sizeof(mi_process_sealed_once_t) <= MI_OS_PROBABLE_PAGE_SIZE);
   mi_assert_internal(sizeof(mi_process_sealed_t) <= MI_OS_PROBABLE_PAGE_SIZE);
   if ((MI_OS_PROBABLE_PAGE_SIZE % _mi_os_page_size()) == 0) {
@@ -512,7 +513,8 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
       theap = _mi_theap_alloc(heap_main,tld);  // otherwise meta allocate
       if (theap==NULL) { mi_tld_free(tld); return NULL; } // out-of-memory on theap allocation
     }
-    _mi_theap_init(theap,heap_main,tld);
+    const bool attached = _mi_theap_init(theap,heap_main,tld);  // a main heap is never deleted while it is in use
+    mi_assert_internal(attached); MI_UNUSED_RELEASE(attached);
   }
 
   // now initialize the thread
@@ -829,7 +831,7 @@ static void mi_process_unwind_once(void)
       if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
         mi_theap_collect(subproc_main->theap_meta, false /* force */); // update stats of all pages in theap_meta
         _mi_theap_merge_stats(subproc_main->theap_meta);
-        _mi_theap_merge_stats(_mi_theap_default());  // _mi_thread_locals_done can free
+        mi_theap_stats_merge_to_heap(_mi_theap_default());  // _mi_thread_locals_done can free; NULL or empty if `exit` is called from a thread that never allocated
         mi_heap_stats_merge_to_subproc(subproc_main->heap_main);
         mi_subproc_stats_print_out(mi_subproc_main(), NULL, NULL); // note: can try to access (the now freed) thread_locals in mi_heap_theap_peek
       }

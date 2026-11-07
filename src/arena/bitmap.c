@@ -385,6 +385,7 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
       mi_bchunk_t* const chunk = &bitmap->chunks[chunk_idx];
       for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
         const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
+        if (mi_atomic_load_relaxed(&chunk->bfields[j]) == 0) continue;  // avoid writing to the field if it is clear
         mi_bfield_t b = mi_atomic_exchange_relaxed(&chunk->bfields[j], (mi_bfield_t)0);
         #if MI_DEBUG > 1
         const size_t bpopcount = mi_popcount(b);
@@ -412,6 +413,7 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
         }
         mi_assert_internal(rngcount == bpopcount);
       }
+      mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx);  // so we don't visit this chunk again if it stays clear
     }
   }
   return true;
@@ -444,6 +446,7 @@ bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_fo
       mi_bchunk_t* const chunk = &bitmap->chunks[chunk_idx];
       for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
         const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
+        if (mi_atomic_load_relaxed(&chunk->bfields[j]) == 0) continue;                    // avoid writing to the field if it is clear
         mi_bfield_t b = mi_atomic_exchange_relaxed(&chunk->bfields[j], (mi_bfield_t)0);   // atomic clear
         mi_bfield_t skipped = 0;                                                          // but track which bits we skip so we can restore them
         size_t shift;
@@ -478,6 +481,7 @@ bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_fo
           mi_atomic_or_relaxed(&chunk->bfields[j], skipped);
         }
       }
+      mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx);  // so we don't visit this chunk again if it stays clear
     }
   }
   return true;
@@ -543,10 +547,30 @@ bool mi_bbitmap_bsr_inv(mi_bbitmap_t* bbitmap, size_t* idx) {
  binned bitmap used to track free slices
 -------------------------------------------------------------------------------- */
 
+static bool mi_bchunkmap_is_set_relaxed(const mi_bchunkmap_t* cmap, size_t chunk_idx) {
+  const mi_bfield_t b = mi_atomic_load_relaxed(&cmap->bfields[chunk_idx / MI_BFIELD_BITS]);
+  return ((b & mi_bfield_mask(1, chunk_idx % MI_BFIELD_BITS)) != 0);
+}
+
+// The seq_cst loads in these two functions follow an atomic update and pair with each other (store-buffering)
+static bool mi_bchunkmap_is_set_seq_cst(const mi_bchunkmap_t* cmap, size_t chunk_idx) {
+  const mi_bfield_t b = mi_atomic_load_seq_cst(&cmap->bfields[chunk_idx / MI_BFIELD_BITS]);
+  return ((b & mi_bfield_mask(1, chunk_idx % MI_BFIELD_BITS)) != 0);
+}
+
+static bool mi_bchunk_all_are_clear_seq_cst(const mi_bchunk_t* chunk) {
+  for (size_t i = 0; i < MI_BCHUNK_FIELDS; i++) {
+    if (mi_atomic_load_seq_cst(&chunk->bfields[i]) != 0) return false;
+  }
+  return true;
+}
+
 // Assign a specific size bin to a chunk
 static void mi_bbitmap_set_chunk_bin(mi_bbitmap_t* bbitmap, size_t chunk_idx, mi_chunkbin_t bin) {
   mi_assert_internal(chunk_idx < mi_bbitmap_chunk_count(bbitmap));
   for (mi_chunkbin_t ibin = MI_CBIN_SMALL; ibin < MI_CBIN_NONE; ibin = mi_chunkbin_inc(ibin)) {
+    // avoid writing to the shared bin maps if the bit is already as required
+    if (mi_bchunkmap_is_set_relaxed(&bbitmap->chunkmap_bins[ibin], chunk_idx) == (ibin == bin)) continue;
     if (ibin == bin) {
       const bool was_clear = mi_bchunk_set(& bbitmap->chunkmap_bins[ibin], chunk_idx, NULL);
       if (was_clear) { mi_subproc_stat_increase(bbitmap->subproc, chunk_bins[ibin],1); }
@@ -584,7 +608,10 @@ static void mi_bbitmap_chunkmap_set(mi_bbitmap_t* bbitmap, size_t chunk_idx, boo
       mi_bbitmap_set_chunk_bin(bbitmap, chunk_idx, MI_CBIN_NONE);
     }
   }
-  mi_bchunk_set(&bbitmap->chunkmap, chunk_idx, NULL);
+  // avoid writing to the shared chunkmap if the bit is already set
+  if (!mi_bchunkmap_is_set_seq_cst(&bbitmap->chunkmap, chunk_idx)) {
+    mi_bchunk_set(&bbitmap->chunkmap, chunk_idx, NULL);
+  }
   mi_bbitmap_chunkmap_set_max(bbitmap, chunk_idx);
 }
 
@@ -595,8 +622,8 @@ static bool mi_bbitmap_chunkmap_try_clear(mi_bbitmap_t* bbitmap, size_t chunk_id
   // clear the chunkmap bit
   mi_bchunk_clear(&bbitmap->chunkmap, chunk_idx, NULL);
   // .. but a concurrent set may have happened in between our all-clear test and the clearing of the
-  // bit in the mask. We check again to catch this situation. (note: mi_bchunk_clear must be acq-rel)
-  if (!mi_bchunk_all_are_clear_relaxed(&bbitmap->chunks[chunk_idx])) {
+  // bit in the mask. We check again to catch this situation.
+  if (!mi_bchunk_all_are_clear_seq_cst(&bbitmap->chunks[chunk_idx])) {
     mi_bchunk_set(&bbitmap->chunkmap, chunk_idx, NULL);
     return false;
   }
@@ -892,8 +919,11 @@ bool mi_bbitmap_try_find_and_clearN_(mi_bbitmap_t* bbitmap, size_t tseq, size_t 
       // now try to claim it!
       if (mi_bbitmap_try_clearN_(bbitmap, chunk_idx, n)) {
         *pidx = (chunk_idx * MI_BCHUNK_BITS);
+        // fully used chunks are HUGE, but a partially used last chunk stays NONE so its tail can still be found
+        const bool last_is_full = ((n % MI_BCHUNK_BITS) == 0);
         for (size_t i = 0; i < count; i++) {
-          mi_bbitmap_set_chunk_bin(bbitmap, chunk_idx + i, MI_CBIN_HUGE);
+          const bool is_full = (i + 1 < count || last_is_full);
+          mi_bbitmap_set_chunk_bin(bbitmap, chunk_idx + i, (is_full ? MI_CBIN_HUGE : MI_CBIN_NONE));
         }
         mi_assert_internal(*pidx + n <= mi_bbitmap_max_bits(bbitmap));
         return true;

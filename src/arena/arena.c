@@ -21,6 +21,7 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 
 #include "mimalloc.h"
 #include "mimalloc/util/stats.h"
+#include "mimalloc/util/memid.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/heap/subproc.h"
 #include "mimalloc/arena/arena.h"
@@ -42,63 +43,6 @@ size_t _mi_slice_count_of_size(size_t size) {
 // Byte size of a number of blocks
 size_t _mi_size_of_slices(size_t bcount) {
   return (bcount * MI_ARENA_SLICE_SIZE);
-}
-
-mi_memid_t _mi_memid_create(mi_memkind_t memkind) {
-  mi_memid_t memid;
-  _mi_memzero_var(memid);
-  memid.memkind = memkind;
-  return memid;
-}
-
-mi_memid_t _mi_memid_none(void) {
-  return _mi_memid_create(MI_MEM_NONE);
-}
-
-mi_memid_t _mi_memid_create_os(void* base, size_t size, bool committed, bool is_zero, bool is_large) {
-  mi_memid_t memid = _mi_memid_create(MI_MEM_OS);
-  memid.mem.os.base = base;
-  memid.mem.os.size = size;
-  memid.initially_committed = committed;
-  memid.initially_zero = is_zero;
-  memid.is_pinned = is_large;
-  memid.is_memtag = (!is_large && _mi_os_has_memtag());
-  return memid;
-}
-
-mi_memid_t _mi_memid_create_static(void* p, size_t size) {
-  mi_memid_t memid = _mi_memid_create(MI_MEM_STATIC);
-  memid.mem.malloc.base = p;
-  memid.mem.malloc.size = size;
-  memid.initially_committed = true;
-  memid.is_pinned = true;
-  return memid;
-}
-
-mi_memid_t _mi_memid_create_malloc(void* p, size_t size, bool iszero) {
-  mi_memid_t memid = _mi_memid_create(MI_MEM_MALLOC);
-  memid.mem.malloc.base = p;
-  memid.mem.malloc.size = size;
-  memid.initially_committed = true;
-  memid.initially_zero = iszero;
-  memid.is_pinned = true;
-  return memid;
-}
-
-size_t _mi_memid_size(mi_memid_t memid) {
-  if (mi_memid_is_os(memid)) {
-    return memid.mem.os.size;
-  }
-  else if (memid.memkind == MI_MEM_ARENA) {
-    return _mi_size_of_slices(memid.mem.arena.slice_count);
-  }
-  else if (memid.memkind == MI_MEM_MALLOC) {
-    return memid.mem.malloc.size;
-  }
-  else {
-    mi_assert_internal(mi_memid_needs_no_free(memid));
-    return 0;
-  }
 }
 
 
@@ -686,6 +630,12 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
   if (memid.initially_committed) {
     mi_bitmap_unsafe_setN(arena->slices_committed, 0, arena->slice_count);
   }
+  #if MI_PAGE_META_IS_ALIGNED
+  else {
+    // the page meta array of the first area was committed as part of the arena meta data
+    mi_bitmap_unsafe_setN(arena->slices_committed, MI_ARENA_GUARD_SLICES, mi_arena_page_meta_aligned_array_slices());
+  }
+  #endif
   if (!memid.initially_zero) {
     mi_bitmap_unsafe_setN(arena->slices_dirty, 0, arena->slice_count);
   }
@@ -771,8 +721,8 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
 
 bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id) mi_attr_noexcept {
   mi_memid_t memid = _mi_memid_create(MI_MEM_EXTERNAL);
-  memid.mem.os.base = start;
-  memid.mem.os.size = size;
+  memid.mem.malloc.base = start;
+  memid.mem.malloc.size = size;
   memid.initially_committed = is_committed;
   memid.initially_zero = is_zero;
   memid.is_pinned = is_pinned;
@@ -782,8 +732,8 @@ bool mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is
 bool mi_manage_memory(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive, mi_commit_fun_t* commit_fun, void* commit_fun_arg, mi_arena_id_t* arena_id) mi_attr_noexcept
 {
   mi_memid_t memid = _mi_memid_create(MI_MEM_EXTERNAL);
-  memid.mem.os.base = start;
-  memid.mem.os.size = size;
+  memid.mem.malloc.base = start;
+  memid.mem.malloc.size = size;
   memid.initially_committed = is_committed;
   memid.initially_zero = is_zero;
   memid.is_pinned = is_pinned;
@@ -1176,7 +1126,7 @@ mi_decl_export bool mi_arena_unload(mi_arena_id_t arena_id, void** base, size_t*
   // find accessed size
   const size_t asize = _mi_size_of_slices(mi_arena_used_slices(arena));
   if (base != NULL) { *base = (void*)arena; }
-  if (full_size != NULL) { *full_size = arena->memid.mem.os.size;  }
+  if (full_size != NULL) { *full_size = arena->memid.mem.malloc.size;  }
   if (accessed_size != NULL) { *accessed_size = asize; }
 
   // adjust abandoned page count
@@ -1214,12 +1164,12 @@ mi_decl_export bool mi_arena_reload(void* start, size_t size, mi_commit_fun_t* c
     _mi_warning_message("can only reload arena's from external memory (%p)\n", arena);
     return false;
   }
-  if (memid.mem.os.base != start) {
+  if (memid.mem.malloc.base != start) {
     _mi_warning_message("the reloaded arena base address differs from the external memory (arena: %p, external: %p)\n", arena, start);
     return false;
   }
-  if (memid.mem.os.size != size) {
-    _mi_warning_message("the reloaded arena size differs from the external memory (arena size: %zu, external size: %zu)\n", arena->memid.mem.os.size, size);
+  if (memid.mem.malloc.size != size) {
+    _mi_warning_message("the reloaded arena size differs from the external memory (arena size: %zu, external size: %zu)\n", arena->memid.mem.malloc.size, size);
     return false;
   }
   if (!arena->is_exclusive) {

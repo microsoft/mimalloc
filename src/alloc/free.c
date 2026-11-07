@@ -322,12 +322,6 @@ static mi_decl_noinline mi_decl_cold bool mi_ptr_invalid(const char* msg, const 
 static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const char* msg, bool free_small, bool check_p_for_null, mi_page_t** ppage)
 {
   MI_UNUSED_RELEASE(msg); MI_UNUSED(free_small);
-  #if MI_DEBUG
-  if mi_unlikely(!mi_is_aligned(p,MI_SIZE_SIZE) && !mi_option_is_enabled(mi_option_unsafe_guarded_precise)) {
-    return mi_ptr_invalid(msg, p, " (unaligned)");
-  }
-  #endif
-
   mi_page_t* page;
   #if MI_PAGE_META_SMALL_IS_ALIGNED
     if (free_small) {
@@ -380,6 +374,12 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
 
   mi_assert_internal(page!=NULL);
   mi_assert(cpage==page /* page_map lookup should be the same as aligned lookup */ );
+  #if MI_DEBUG
+  // pointers allocated at an offset (`mi_malloc_aligned_at`) or guarded precise pointers can be unaligned
+  if mi_unlikely(!mi_is_aligned(p,MI_SIZE_SIZE) && !mi_page_has_interior_pointers(page) && !mi_option_is_enabled(mi_option_unsafe_guarded_precise)) {
+    return mi_ptr_invalid(msg, p, " (unaligned)");
+  }
+  #endif
   #if !MI_GUARDED
   if (free_small) { mi_assert_internal(page->block_size <= MI_SMALL_MAX_OBJ_SIZE); /* free small should only be called on small pages */ }
   #endif
@@ -644,15 +644,15 @@ static bool mi_abandoned_page_collect_empty(mi_page_t* page)
     _mi_arenas_page_free(page,NULL);
   }
   else {
-    mi_heap_t* const heap = mi_page_heap(page);
-    mi_theap_t* const theap = mi_heap_theap(heap);
-    if (theap != NULL) {
-      // reclaim such that it gets part of the theap's qsbr list.
+    // reclaim into our theap such that it becomes part of the theap's qsbr list (see `doc/qsbr.md`)
+    // note: this may create a theap and initialize the thread; it returns a sentinel theap for a deleted heap,
+    // or if the thread is terminated or released this heap (see `heap/heap.c:_mi_heap_theap_get_or_init`)
+    mi_theap_t* const theap = _mi_heap_theap(mi_page_heap(page));
+    if (mi_theap_is_initialized(theap)) {
       _mi_theap_page_reclaim(theap, page);
     }
     else {
-      mi_assert_internal(false);
-      // abandon as empty; it can only be collected by _mi_heap_collect_abandoned at this point
+      // abandon as empty; it is collected later by an allocation reclaim or `_mi_heap_collect_abandoned`
       _mi_arenas_page_abandon(page,NULL);
     }
   }

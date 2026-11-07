@@ -410,3 +410,16 @@ void mi_page_queue_move_to_back(mi_theap_t* theap, mi_page_queue_t* queue, mi_pa
   mi_page_queue_push_at_end(theap, queue, page);
   mi_assert_internal(queue->last == page);
 }
+
+// Rotate the full queue such that `page` becomes the first page (and the pages before it move to the back)
+void mi_page_queue_full_rotate_to(mi_page_queue_t* queue, mi_page_t* page) {
+  mi_assert_internal(mi_page_queue_is_full(queue));
+  mi_assert_expensive(mi_page_queue_contains(queue, page));
+  if (queue->first == page) return;
+  queue->last->next = queue->first;
+  queue->first->prev = queue->last;
+  queue->last = page->prev;
+  queue->last->next = NULL;
+  page->prev = NULL;
+  queue->first = page;
+}

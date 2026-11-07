@@ -281,14 +281,14 @@ static mi_page_t* mi_huge_page_alloc(mi_theap_t* theap, size_t size, size_t page
 // Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
 static mi_page_t* mi_find_page(mi_theap_t* theap, size_t size, size_t huge_alignment) mi_attr_noexcept {
   const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`
-  if mi_unlikely(req_size > MI_MAX_ALLOC_SIZE) {   // TODO: remove as we check in generic_fallback ?
+  if mi_unlikely(req_size > MI_MAX_ALLOC_SIZE) {   // todo: remove as we check in generic_fallback ?
     _mi_error_message(EOVERFLOW, "allocation request is too large (%zu bytes)\n", req_size);
     return NULL;
   }
   mi_page_queue_t* pq = mi_page_queue(theap, (huge_alignment > 0 ? MI_LARGE_MAX_OBJ_SIZE+1 : size));
   mi_page_t* page;
   // huge allocation?
-  if mi_unlikely(mi_page_queue_is_huge(pq) || req_size > MI_MAX_ALLOC_SIZE) {
+  if mi_unlikely(mi_page_queue_is_huge(pq)) {   // || req_size > MI_MAX_ALLOC_SIZE  (checked above)
     page = mi_huge_page_alloc(theap,size,huge_alignment,pq);
   }
   else {
@@ -340,19 +340,18 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
 /* -----------------------------------------------------------
   Admin
 ----------------------------------------------------------- */
+// Return an initialized and valid theap, or NULL if the allocation should fail.
+// Only the uninitialized default theap of the thread initializes the thread implicitly. Any other
+// uninitialized theap could not be created, was released, or its heap was deleted.
+// (the unavailable default theap of a done thread is handled before, see `mi_theap_is_thread_done`)
 static mi_theap_t* mi_theap_init(mi_theap_t* theap) {
   if mi_likely(mi_theap_is_initialized(theap)) {
     return (mi_theap_handle_is_valid(theap) ? theap : NULL);  // validate the theap handle (see `heap/heap.h:mi_theap_handle_is_valid`)
   }
-  if (_mi_theap_is_unavailable(theap) || _mi_thread_is_done()) {
-    // we were unable to allocate a theap for a first-class heap, or the thread is done (and we do not re-initialize implicitly)
-    return NULL;
-  }
-  // otherwise we initialize the thread and its default theap
+  if (theap != _mi_theap_default()) return NULL;
+  mi_assert_internal(!_mi_thread_is_done());
   theap = _mi_thread_init();
-  if mi_unlikely(!mi_theap_is_initialized(theap)) { return NULL; }
-  mi_assert_internal(mi_theap_is_initialized(theap));
-  return theap;
+  return (mi_theap_is_initialized(theap) ? theap : NULL);
 }
 
 static mi_theap_t* mi_malloc_generic_admin(mi_theap_t* theap)
@@ -573,8 +572,18 @@ mi_decl_restrict void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t si
   if (!mi_malloc_generic_check_size(size)) return NULL;
   const size_t sample_countdown = theap->sample_countdown;
   theap->sample_countdown = MI_SAMPLE_COUNTDOWN_MAX;  // don't count this allocation
-  void* p = mi_malloc_generic_from_page(theap, size, zero, 0, ppage, 0);
+  mi_page_t* page = NULL;
+  void* p = mi_malloc_generic_from_page(theap, size, zero, 0, &page, 0);
+  if (ppage!=NULL) { *ppage = page; }
+  // other allocations can be counted in batches during this allocation as well
+  const size_t counted = MI_SAMPLE_COUNTDOWN_MAX - theap->sample_countdown;
+  #if MI_SAMPLE==1
+  const size_t self = (p==NULL ? 0 : mi_page_usable_block_size(page) - MI_PADDING_SIZE);
+  #else
+  const size_t self = (p==NULL ? 0 : size - MI_PADDING_SIZE);
+  #endif
   // the sample rate may have changed (e.g. by a profiler `on_free` callback during a collect)
   theap->sample_countdown = (theap->sample_rate!=0 && sample_countdown > theap->sample_rate ? theap->sample_rate : sample_countdown);
+  if (counted > self) { mi_theap_sample_countdown_sub(theap, counted - self); }
   return p;
 }

@@ -189,6 +189,7 @@ static const mi_option_desc_t mi_option_descs[_mi_option_last] =
 };
 
 static void mi_option_init(mi_option_t option, mi_option_state_t* state);
+static bool mi_options_init_from_environ(void);
 
 static const mi_option_desc_t* mi_option_desc(mi_option_t option) {
   const mi_option_desc_t* desc = &mi_option_descs[option];
@@ -224,9 +225,12 @@ static bool mi_option_has_size_in_bytes(mi_option_t option) {
 
 void _mi_options_init(void) {
   // called on process load
-  for(int i = 0; i < _mi_option_last; i++ ) {
-    mi_option_t option = (mi_option_t)i;
-    long l = mi_option_get(option); MI_UNUSED(l); // initialize
+  if (!mi_options_init_from_environ()) {
+    // the full environment is not available: look up each option by name
+    for(int i = 0; i < _mi_option_last; i++ ) {
+      mi_option_t option = (mi_option_t)i;
+      long l = mi_option_get(option); MI_UNUSED(l); // initialize
+    }
   }
   #if MI_GUARDED
   if (mi_option_get(mi_option_guarded_sample_rate) > 0) {
@@ -578,7 +582,7 @@ static void mi_show_error_message(const char* fmt, va_list args) {
   if (!mi_option_is_enabled(mi_option_verbose)) {
     if (!mi_option_is_enabled(mi_option_show_errors)) return;
     const long max_errors = mi_option_get(mi_option_max_errors);
-    if (max_errors >= 0 && (long)mi_atomic_increment_acq_rel(&_mi_process.error_count) > max_errors) return;
+    if (max_errors >= 0 && (long)mi_atomic_increment_acq_rel(&_mi_process.error_count) >= max_errors) return;
   }
   mi_vfprintf_thread(NULL, NULL, "mimalloc: error: ", fmt, args);
 }
@@ -587,7 +591,7 @@ void _mi_warning_message(const char* fmt, ...) {
   if (!mi_option_is_enabled(mi_option_verbose)) {
     if (!mi_option_is_enabled(mi_option_show_errors)) return;
     const long max_warnings = mi_option_get(mi_option_max_warnings);
-    if (max_warnings >= 0 && (long)mi_atomic_increment_acq_rel(&_mi_process.warning_count) > max_warnings) return;
+    if (max_warnings >= 0 && (long)mi_atomic_increment_acq_rel(&_mi_process.warning_count) >= max_warnings) return;
   }
   va_list args;
   va_start(args,fmt);
@@ -703,95 +707,242 @@ mi_decl_noinline void _mi_error_ptr_pac_unaligned(const void* p) {
 }
 
 // --------------------------------------------------------
-// Initialize options by checking the environment
+// Initialize options from the environment
+//
+// If the platform can iterate the full environment (`_mi_env_visit`), all
+// options are initialized in a single pass over the environment (which also
+// detects unknown `MIMALLOC_` variables). Otherwise each option is looked up by name
+// (`_mi_getenv`) when it is first accessed. Both strategies produce a `mi_option_env_t`
+// that is applied to the option state using `mi_option_env_apply` and `mi_option_env_warn`.
 // --------------------------------------------------------
+
+// The result of reading an option from the environment
+typedef struct mi_option_env_s {
+  long  value;    // the parsed value (if `err==0`)
+  int   err;      // 0 (found), ENOENT (not found), EINVAL (invalid value), E2BIG (value too long), or EAGAIN (try again later)
+  bool  legacy;   // found under its legacy name?
+} mi_option_env_t;
+
+#define MI_OPTION_ENV_NOT_FOUND  { 0, ENOENT, false }
+
+// Parse an environment value `s` for an option; returns 0 on success, EINVAL if invalid, or E2BIG if too long.
+static int mi_option_parse(mi_option_t option, const char* s, long* result) {
+  char buf[64+1];
+  const size_t len = _mi_strnlen(s, sizeof(buf));
+  if (len >= sizeof(buf)) return E2BIG;
+  for (size_t i = 0; i < len; i++) {
+    buf[i] = _mi_toupper(s[i]);
+  }
+  buf[len] = 0;
+  if (buf[0] == 0 || _mi_streq(buf,"1") || _mi_streq(buf,"TRUE") || _mi_streq(buf,"YES") || _mi_streq(buf,"ON")) {
+    *result = 1;
+    return 0;
+  }
+  if (_mi_streq(buf,"0") || _mi_streq(buf,"FALSE") || _mi_streq(buf,"NO") || _mi_streq(buf,"OFF")) {
+    *result = 0;
+    return 0;
+  }
+  if (option == mi_option_mte && (_mi_streq(buf,"SYNC") || _mi_streq(buf,"ASYNC") || _mi_streq(buf,"PREFERRED"))) {
+    *result = (buf[0]=='S' ? MI_MEMTAG_MODE_SYNC : (buf[0]=='A' ? MI_MEMTAG_MODE_ASYNC : MI_MEMTAG_MODE_PREFERRED));
+    return 0;
+  }
+  const char* end = buf;
+  long value = 0;
+  if (!_mi_strntol(buf, sizeof(buf), &end, &value)) return EINVAL;
+  if (mi_option_has_size_in_kib(option) || mi_option_has_size_in_bytes(option)) {
+    // the size is interpreted in bytes.
+    size_t size = (value < 0 ? 0 : (size_t)value);
+    bool overflow = false;
+    if (*end == 'K') { overflow = mi_mul_overflow(size,MI_KiB,&size); end++; }
+    #if MI_SIZE_SIZE >= 4
+    else if (*end == 'M') { overflow = mi_mul_overflow(size,MI_MiB,&size); end++; }
+    else if (*end == 'G') { overflow = mi_mul_overflow(size,MI_GiB,&size); end++; }
+    #endif
+    #if MI_SIZE_SIZE >= 8
+    else if (*end == 'T') { overflow = mi_mul_overflow(size,MI_GiB * MI_KiB,&size); end++; }
+    #endif
+    if (end[0] == 'I' && end[1] == 'B') { end += 2; } // KiB, MiB, GiB, TiB
+    else if (*end == 'B') { end++; }                  // Kb, Mb, Gb, Tb
+    if (overflow || size > MI_MAX_ALLOC_SIZE) { size = MI_MAX_ALLOC_SIZE; }
+    if (mi_option_has_size_in_kib(option)) {
+      // This option is interpreted in KiB to prevent overflow of `long` for large allocations
+      // (long is 32-bit on 64-bit windows, which allows for 4TiB max.)
+      size = (size + MI_KiB - 1) / MI_KiB;  // no overflow due to check before this
+    }
+    value = (size > LONG_MAX ? LONG_MAX : (long)size);
+  }
+  if (*end != 0) return EINVAL;
+  *result = value;
+  return 0;
+}
+
+// Apply an environment result to a pending option state (without emitting warnings).
+static void mi_option_env_apply(mi_option_t option, mi_option_state_t* state, mi_option_env_t* env) {
+  if (env->err != ENOENT && env->err != EAGAIN && _mi_os_is_elevated()) {
+    // don't let an untrusted environment influence a privileged process (e.g. disable memory tagging)
+    env->err = ENOENT;
+    env->legacy = false;
+  }
+  if (env->err == 0) {
+    mi_option_set(option, env->value);
+  }
+  else if (env->err != EAGAIN) {
+    state->init = MI_OPTION_DEFAULTED;  // not found or invalid: use the default value
+  }
+  // on EAGAIN, keep pending to try again (can happen during preloading if getenv is not available)
+}
+
+// Emit warnings for an applied environment result (after `mi_option_env_apply` so we cannot recurse on a pending option).
+static void mi_option_env_warn(mi_option_t option, const mi_option_env_t* env) {
+  const mi_option_desc_t* const desc = mi_option_desc(option);
+  if (env->legacy && env->err != ENOENT) {
+    _mi_warning_message("environment option \"mimalloc_%s\" is deprecated -- use \"mimalloc_%s\" instead.\n", desc->legacy_name, desc->name);
+  }
+  if (env->err == EINVAL || env->err == E2BIG) {
+    // if the 'mimalloc_verbose' env var has a bogus value we'd never know
+    // (since the value defaults to 'off') so in that case briefly enable verbose
+    mi_option_state_t* const state = &_mi_process.options[option];
+    const bool force_verbose = (option == mi_option_verbose && state->value == 0);
+    if (force_verbose) { state->value = 1; }
+    _mi_warning_message("environment option mimalloc_%s %s.\n", desc->name, (env->err == E2BIG ? "has a value that is too long" : "has an invalid value"));
+    if (force_verbose) { state->value = 0; }
+  }
+}
+
+
+// --------------------------------------------------------
+// Strategy 1: look up a single option by name
+// --------------------------------------------------------
+
+static int mi_option_getenv(const char* name, char* result, size_t result_size) {
+  char buf[64+1];
+  _mi_strlcpy(buf, "mimalloc_", sizeof(buf));
+  _mi_strlcat(buf, name, sizeof(buf));
+  return _mi_getenv(buf, result, result_size);
+}
 
 static void mi_option_init(mi_option_t option, mi_option_state_t* state) {
   const mi_option_desc_t* const desc = mi_option_desc(option);
-  // Read option value from the environment
-  char s[64 + 1];
-  char buf[64+1];
-  _mi_strlcpy(buf, "mimalloc_", sizeof(buf));
-  _mi_strlcat(buf, desc->name, sizeof(buf));
-  int err = _mi_getenv(buf, s, sizeof(s));
-  if (err==ENOENT && desc->legacy_name != NULL) {
-    _mi_strlcpy(buf, "mimalloc_", sizeof(buf));
-    _mi_strlcat(buf, desc->legacy_name, sizeof(buf));
-    err = _mi_getenv(buf, s, sizeof(s));
-    if (err==0) {
-      _mi_warning_message("environment option \"mimalloc_%s\" is deprecated -- use \"mimalloc_%s\" instead.\n", desc->legacy_name, desc->name);
-    }
+  mi_option_env_t env = MI_OPTION_ENV_NOT_FOUND;
+  char s[64+1];
+  env.err = mi_option_getenv(desc->name, s, sizeof(s));
+  if (env.err == ENOENT && desc->legacy_name != NULL) {
+    env.err = mi_option_getenv(desc->legacy_name, s, sizeof(s));
+    env.legacy = (env.err != ENOENT && env.err != EAGAIN);
   }
-  if (err==0 && _mi_os_is_elevated()) {
-    err = ENOENT;  // don't let an untrusted environment influence a privileged process (e.g. disable memory tagging)
+  if (env.err == 0) {
+    env.err = mi_option_parse(option, s, &env.value);
   }
+  mi_option_env_apply(option, state, &env);
+  mi_option_env_warn(option, &env);
+}
 
-  if (err==0) {
-    size_t len = _mi_strnlen(s, sizeof(buf) - 1);
-    for (size_t i = 0; i < len; i++) {
-      buf[i] = _mi_toupper(s[i]);
+
+// --------------------------------------------------------
+// Strategy 2: initialize all options in one pass over the full environment
+// --------------------------------------------------------
+
+typedef struct mi_env_scan_s {
+  mi_option_env_t options[_mi_option_last];
+  size_t          unknown_count;
+  char            unknown[256];   // `;` separated names of unknown `MIMALLOC_` variables (only whole names that fit)
+} mi_env_scan_t;
+
+// Is `name` (of length `len`, not zero terminated) equal to `s` (case insensitive)?
+static bool mi_env_name_eq(const char* name, size_t len, const char* s) {
+  return (s != NULL && _mi_strnicmp(name, s, len) == 0 && s[len] == 0);
+}
+
+// Is `name` (without the `mimalloc_` prefix) a known environment variable that is not an option?
+static bool mi_env_is_extra(const char* name, size_t len) {
+  static const char* const extra_names[] = {
+    "profile",    // pprof profiler output (src/profile/pprof.c)
+    "defines",    // C defines for the Rust build script (contrib/rust/sys/build.rs)
+    "src_dir",    // mimalloc source directory for the Rust build script (contrib/rust/sys/build.rs)
+    "disable_redirect", "disable_override", "enable_redirect", "prioritize_load_order",  // used by mimalloc-redirect.dll
+    "patch_imports", "force_redirect", "patch_ntheap",
+  };
+  for (size_t i = 0; i < sizeof(extra_names)/sizeof(extra_names[0]); i++) {
+    if (mi_env_name_eq(name, len, extra_names[i])) return true;
+  }
+  return false;
+}
+
+// Append an unknown variable name (of length `len`) to the list of unknown names
+static void mi_env_scan_unknown(mi_env_scan_t* scan, const char* name, size_t len) {
+  scan->unknown_count++;
+  const size_t n = _mi_strnlen(scan->unknown, sizeof(scan->unknown));
+  const size_t sep = (n > 0 ? 1 : 0);
+  if (n + sep + len < sizeof(scan->unknown)) {
+    if (sep > 0) { scan->unknown[n] = ';'; }
+    mi_memcpy(scan->unknown + n + sep, name, len);
+    scan->unknown[n + sep + len] = 0;
+  }
+}
+
+// Visit an environment `entry` of the form `name=value`
+static void mi_env_scan_entry(const char* entry, void* arg) {
+  mi_env_scan_t* const scan = (mi_env_scan_t*)arg;
+  const size_t plen = 9;  // `mimalloc_`
+  if (_mi_strnicmp(entry, "mimalloc_", plen) != 0) return;
+  const char* const name = entry + plen;
+  size_t len = 0;
+  while (name[len] != 0 && name[len] != '=') { len++; }
+  if (name[len] != '=') return;
+  const char* const value = name + len + 1;
+  for (size_t i = 0; i < _mi_option_last; i++) {
+    const mi_option_desc_t* const desc = &mi_option_descs[i];
+    mi_option_env_t* const env = &scan->options[i];
+    if (mi_env_name_eq(name, len, desc->name)) {
+      // the first occurrence takes precedence (as with a lookup by name), but the current name overrides a legacy name
+      if (env->err == ENOENT || env->legacy) {
+        env->legacy = false;
+        env->err = mi_option_parse(desc->option, value, &env->value);
+      }
+      return;
     }
-    buf[len] = 0;
-    if (buf[0] == 0 || _mi_streq(buf,"1") || _mi_streq(buf,"TRUE") || _mi_streq(buf,"YES") || _mi_streq(buf,"ON")) {
-      state->value = 1;
-      state->init = MI_OPTION_INITIALIZED;
+    if (mi_env_name_eq(name, len, desc->legacy_name)) {
+      if (env->err == ENOENT) {
+        env->legacy = true;
+        env->err = mi_option_parse(desc->option, value, &env->value);
+      }
+      return;
     }
-    else if (_mi_streq(buf,"0") || _mi_streq(buf,"FALSE") || _mi_streq(buf,"NO") || _mi_streq(buf,"OFF")) {
-      state->value = 0;
-      state->init = MI_OPTION_INITIALIZED;
-    }
-    else if (option == mi_option_mte && (_mi_streq(buf,"SYNC") || _mi_streq(buf,"ASYNC") || _mi_streq(buf,"PREFERRED"))) {
-      state->value = (buf[0]=='S' ? MI_MEMTAG_MODE_SYNC : (buf[0]=='A' ? MI_MEMTAG_MODE_ASYNC : MI_MEMTAG_MODE_PREFERRED));
-      state->init = MI_OPTION_INITIALIZED;
+  }
+  if (!mi_env_is_extra(name, len)) {
+    mi_env_scan_unknown(scan, entry, plen + len);
+  }
+}
+
+// Initialize all pending options in a single pass over the environment.
+// Returns `false` if the full environment cannot be iterated.
+static bool mi_options_init_from_environ(void) {
+  mi_env_scan_t scan;
+  for (size_t i = 0; i < _mi_option_last; i++) {
+    const mi_option_env_t not_found = MI_OPTION_ENV_NOT_FOUND;
+    scan.options[i] = not_found;
+  }
+  scan.unknown_count = 0;
+  scan.unknown[0] = 0;
+  if (!_mi_env_visit(&mi_env_scan_entry, &scan)) return false;
+  // first apply all options (so warnings use the final values for `verbose`, `show_errors` etc.)
+  for (size_t i = 0; i < _mi_option_last; i++) {
+    const mi_option_t option = (mi_option_t)i;
+    mi_option_state_t* const state = mi_option_state(option);
+    if (state->init == MI_OPTION_PENDING) {
+      mi_option_env_apply(option, state, &scan.options[i]);
     }
     else {
-      const char* end = buf;
-      long value = 0;
-      const bool ok = _mi_strntol(buf, sizeof(buf), &end, &value);
-      if (ok && (mi_option_has_size_in_kib(option) || mi_option_has_size_in_bytes(option))) {
-        // the size is interpreted in bytes.
-        size_t size = (value < 0 ? 0 : (size_t)value);
-        bool overflow = false;
-        if (*end == 'K') { overflow = mi_mul_overflow(size,MI_KiB,&size); end++; }
-        #if MI_SIZE_SIZE >= 4
-        else if (*end == 'M') { overflow = mi_mul_overflow(size,MI_MiB,&size); end++; }
-        else if (*end == 'G') { overflow = mi_mul_overflow(size,MI_GiB,&size); end++; }
-        #endif
-        #if MI_SIZE_SIZE >= 8
-        else if (*end == 'T') { overflow = mi_mul_overflow(size,MI_GiB * MI_KiB,&size); end++; }
-        #endif
-        if (end[0] == 'I' && end[1] == 'B') { end += 2; } // KiB, MiB, GiB, TiB
-        else if (*end == 'B') { end++; }                  // Kb, Mb, Gb, Tb
-        if (overflow || size > MI_MAX_ALLOC_SIZE) { size = MI_MAX_ALLOC_SIZE; }
-        if (mi_option_has_size_in_kib(option)) {
-          // This option is interpreted in KiB to prevent overflow of `long` for large allocations
-          // (long is 32-bit on 64-bit windows, which allows for 4TiB max.)
-          size = (size + MI_KiB - 1) / MI_KiB;  // no overflow due to check before this
-        }
-        value = (size > LONG_MAX ? LONG_MAX : (long)size);
-      }
-      if (ok && *end == 0) {
-        mi_option_set(option, value);
-      }
-      else {
-        // set `init` first to avoid recursion through _mi_warning_message on mimalloc_verbose.
-        state->init = MI_OPTION_DEFAULTED;
-        if (option == mi_option_verbose && state->value == 0) {
-          // if the 'mimalloc_verbose' env var has a bogus value we'd never know
-          // (since the value defaults to 'off') so in that case briefly enable verbose
-          state->value = 1;
-          _mi_warning_message("environment option mimalloc_%s has an invalid value.\n", desc->name);
-          state->value = 0;
-        }
-        else {
-          _mi_warning_message("environment option mimalloc_%s has an invalid value.\n", desc->name);
-        }
-      }
+      scan.options[i].err = ENOENT;   // already initialized (e.g. set explicitly)
+      scan.options[i].legacy = false;
     }
-    mi_assert_internal(state->init >= MI_OPTION_DEFAULTED);
   }
-  else if (err==ENOENT) {
-    state->init = MI_OPTION_DEFAULTED;
+  // and then emit warnings
+  for (size_t i = 0; i < _mi_option_last; i++) {
+    mi_option_env_warn((mi_option_t)i, &scan.options[i]);
   }
-  // and on another error, keep pending to try again (can happen during preloading if getenv is not available)
+  if (scan.unknown_count > 0 && !_mi_os_is_elevated()) {
+    _mi_warning_message("unknown environment option(s) are ignored: %s\n", (scan.unknown[0] != 0 ? scan.unknown : "..."));
+  }
+  return true;
 }

@@ -60,6 +60,8 @@ static bool test_aligned_all(void);
 static bool test_heap_destroy_xthread_free(void);
 static bool test_heap_destroy_stale_theap(void);
 static bool test_thread_done_no_reinit(void);
+static bool test_thread_heap_release(void);
+static bool test_heap_delete_concurrent_free(void);
 #ifdef __cplusplus
 static bool test_new_first(void);
 #endif
@@ -391,6 +393,11 @@ int main(void) {
   CHECK_BODY("malloc-aligned-at2") {
     void* p = mi_malloc_aligned_at(50,32,8); result = (p != NULL && ((uintptr_t)(p) + 8) % 32 == 0); mi_free(p);
   };
+  CHECK_BODY("realloc-aligned-from-offset") {  // realloc to a small alignment must realign a pointer allocated at an offset
+    void* p = mi_malloc_aligned_at(16,16,4);
+    void* q = mi_realloc_aligned(p,16,sizeof(void*));
+    result = (p != NULL && q != NULL && (uintptr_t)q % sizeof(void*) == 0); mi_free(q);
+  };
   CHECK_BODY("memalign1") {
     void* p;
     bool ok = true;
@@ -534,6 +541,25 @@ int main(void) {
     }
   };
 
+  CHECK_BODY("reallocarr-zero-size") {
+    void* p = mi_malloc(32);
+    if (p == NULL) { result = false; }
+    else {
+      int err = mi_reallocarr(&p, 2, 0);
+      result = (err == 0 && p == NULL);
+      mi_free(p);
+    }
+  };
+
+  CHECK_BODY("realloc-aligned-other-heap") {
+    mi_heap_t* heap = mi_heap_new();
+    void* p = mi_heap_malloc_aligned(heap, 100, 64);
+    void* q = mi_realloc_aligned(p, 100, 64);  // fits in place but must move to the default heap
+    result = (q != NULL && mi_heap_of(q) != heap);
+    mi_free(q);
+    mi_heap_delete(heap);
+  };
+
   CHECK_BODY("reallocarr-overflow") {
     void* p = mi_malloc(32);
     if (p == NULL) { result = false; }
@@ -612,6 +638,11 @@ int main(void) {
       mi_ufree(p,&fsize);
       assert(fsize == post_size);
     }
+  }
+  CHECK_BODY("ucalloc-nomem") {
+    size_t bsize = 42;
+    void* p = mi_ucalloc(SIZE_MAX/4, 4, &bsize);
+    result = (p == NULL && bsize == 42);
   }
 
   #if (MI_SIZE_SIZE > 4)
@@ -754,6 +785,24 @@ int main(void) {
     }
   }
 
+  CHECK_BODY("subproc-destroy-keeps-thread-locals") {  // destroying another subproc must not release the caller's thread locals or the fast key
+    mi_heap_t* const h2 = mi_heap_new();
+    mi_theap_t* const t2 = mi_heap_theap(h2);
+    mi_theap_t* const tmain = mi_heap_theap(mi_heap_main());
+    mi_subproc_destroy(mi_subproc_new());
+    mi_heap_t* const h3 = mi_heap_new();
+    mi_theap_t* const t3 = mi_heap_theap(h3);
+    mi_subproc_destroy(mi_subproc_new());
+    mi_heap_t* const h4 = mi_heap_new();
+    mi_theap_t* const t4 = mi_heap_theap(h4);
+    result = (t2!=NULL && t3!=NULL && t4!=NULL && t2!=t3 && t3!=t4);
+    for (int i = 0; i < 100 && result; i++) {
+      result = (mi_heap_theap(h2)==t2 && mi_heap_theap(h3)==t3 && mi_heap_theap(h4)==t4 && mi_heap_theap(mi_heap_main())==tmain);
+    }
+    mi_heap_delete(h4);
+    mi_heap_delete(h3);
+    mi_heap_delete(h2);
+  }
   CHECK_THREADS_BODY("heap-destroy-xthread-free") {   // destroy a heap with live blocks and pending cross-thread frees
     result = test_heap_destroy_xthread_free();
   }
@@ -762,6 +811,12 @@ int main(void) {
   }
   CHECK_THREADS_BODY("thread-done-no-reinit") {      // allocation after `mi_thread_done` (e.g. in thread-local destructors) must not re-initialize the thread
     result = test_thread_done_no_reinit();
+  }
+  CHECK_THREADS_BODY("thread-heap-release") {        // after `mi_thread_heap_release` a thread can still free but no longer allocate in the heap
+    result = test_thread_heap_release();
+  }
+  CHECK_THREADS_BODY("heap-delete-concurrent-free") { // delete a heap while other threads free its blocks
+    result = test_heap_delete_concurrent_free();
   }
 
   //CHECK("theap_destroy", test_theap1());
@@ -1050,6 +1105,12 @@ static bool test_heap_destroy_xthread_free(void) {
 // pages were destroyed).
 // ---------------------------------------------------------------------------
 
+// run `fun(id)` on a fresh thread (see `test_thread_start`)
+typedef struct test_worker_s {
+  void (*fun)(size_t id);
+  size_t id;
+} test_worker_t;
+
 typedef struct test_gate_s {
   int step;
   #ifdef _WIN32
@@ -1074,10 +1135,9 @@ static void test_gate_wait(test_gate_t* g, int step) {
   LeaveCriticalSection(&g->lock);
 }
 typedef HANDLE test_thread_t;
-static void stale_theap_worker(void);
-static DWORD WINAPI test_thread_entry(LPVOID arg) { (void)arg; stale_theap_worker(); return 0; }
-static bool test_thread_start(test_thread_t* t) {
-  *t = CreateThread(NULL, 0, &test_thread_entry, NULL, 0, NULL);
+static DWORD WINAPI test_thread_entry(LPVOID arg) { const test_worker_t* w = (const test_worker_t*)arg; w->fun(w->id); return 0; }
+static bool test_thread_start(test_thread_t* t, const test_worker_t* w) {
+  *t = CreateThread(NULL, 0, &test_thread_entry, (LPVOID)w, 0, NULL);
   return (*t != NULL);
 }
 static void test_thread_join(test_thread_t t) { WaitForSingleObject(t, INFINITE); CloseHandle(t); }
@@ -1094,10 +1154,9 @@ static void test_gate_wait(test_gate_t* g, int step) {
   pthread_mutex_unlock(&g->lock);
 }
 typedef pthread_t test_thread_t;
-static void stale_theap_worker(void);
-static void* test_thread_entry(void* arg) { (void)arg; stale_theap_worker(); return NULL; }
-static bool test_thread_start(test_thread_t* t) {
-  return (pthread_create(t, NULL, &test_thread_entry, NULL) == 0);
+static void* test_thread_entry(void* arg) { const test_worker_t* w = (const test_worker_t*)arg; w->fun(w->id); return NULL; }
+static bool test_thread_start(test_thread_t* t, const test_worker_t* w) {
+  return (pthread_create(t, NULL, &test_thread_entry, (void*)w) == 0);
 }
 static void test_thread_join(test_thread_t t) { pthread_join(t, NULL); }
 #endif
@@ -1106,7 +1165,8 @@ static test_gate_t stale_gate;
 static mi_heap_t*  stale_heap;       // published through the gate
 static bool        stale_result;
 
-static void stale_theap_worker(void) {
+static void stale_theap_worker(size_t id) {
+  (void)id;
   void* p = mi_heap_malloc(stale_heap, 16);  // creates this thread's theap of `stale_heap` (may leave the main theap cached)
   mi_free(p);
   p = mi_heap_malloc(stale_heap, 16);        // now `_mi_theap_cached` is this thread's theap of `stale_heap`
@@ -1127,7 +1187,8 @@ static bool test_heap_destroy_stale_theap(void) {
   stale_result = false;
 
   test_thread_t thread;
-  if (!test_thread_start(&thread)) return false;
+  const test_worker_t worker = { &stale_theap_worker, 0 };
+  if (!test_thread_start(&thread, &worker)) return false;
   test_gate_wait(&stale_gate, 1);
   mi_heap_destroy(destroyed);
 
@@ -1193,4 +1254,92 @@ static bool thread_done_no_reinit_fun(void) {
 
 static bool test_thread_done_no_reinit(void) {
   return mi_run_on_thread(&thread_done_no_reinit_fun);
+}
+
+
+// ---------------------------------------------------------------------------
+// After `mi_thread_heap_release` a thread can still free blocks but no longer allocate in the heap
+// (and no theap is created again). The blocks can still be freed after the heap is deleted.
+// ---------------------------------------------------------------------------
+
+static mi_heap_t* release_heap;
+static void*      release_blocks[64];
+
+static bool thread_heap_release_fun(void) {
+  for (int i = 0; i < 64; i++) {
+    release_blocks[i] = mi_heap_malloc(release_heap, 16 + i);
+    if (release_blocks[i] == NULL) return false;
+  }
+  mi_free(release_blocks[0]); release_blocks[0] = NULL;
+  mi_thread_heap_release(release_heap);
+  bool ok = (mi_heap_malloc(release_heap, 16) == NULL && mi_heap_malloc(release_heap, 100000) == NULL);
+  mi_free(release_blocks[1]); release_blocks[1] = NULL;
+  mi_thread_heap_release(release_heap);  // releasing again is allowed
+  ok = ok && (mi_heap_malloc(release_heap, 16) == NULL);
+  return ok;
+}
+
+static bool test_thread_heap_release(void) {
+  release_heap = mi_heap_new();
+  if (release_heap == NULL) return false;
+  mi_thread_heap_release(release_heap);  // never used in this thread
+  bool ok = (mi_heap_malloc(release_heap, 16) == NULL);
+  ok = ok && mi_run_on_thread(&thread_heap_release_fun);
+  mi_heap_delete(release_heap);
+  for (int i = 0; i < 64; i++) { mi_free(release_blocks[i]); }
+  return ok;
+}
+
+
+// ---------------------------------------------------------------------------
+// Delete a heap while other threads concurrently free its blocks. The delete must
+// claim each page before moving it, and retry pages briefly owned by a concurrent free.
+// ---------------------------------------------------------------------------
+
+#define DELETE_FREE_THREADS (4)
+#define DELETE_FREE_BLOCKS  (4096)
+
+static mi_heap_t* delete_free_heap;
+static void*      delete_free_blocks[DELETE_FREE_THREADS][DELETE_FREE_BLOCKS];
+
+static void delete_free_alloc_worker(size_t id) {
+  for (size_t i = 0; i < DELETE_FREE_BLOCKS; i++) {
+    const size_t size = (i % 100 == 0 ? 100000 + i : (i % 10 == 0 ? 2000 + i : 8 + i % 256));
+    delete_free_blocks[id][i] = mi_heap_malloc(delete_free_heap, size);
+  }
+  for (size_t i = 0; i < DELETE_FREE_BLOCKS; i += 3) {
+    mi_free(delete_free_blocks[id][i]);
+    delete_free_blocks[id][i] = NULL;
+  }
+  mi_thread_heap_release(delete_free_heap);
+}
+
+static void delete_free_worker(size_t id) {
+  for (size_t i = 0; i < DELETE_FREE_BLOCKS; i++) {
+    mi_free(delete_free_blocks[id][i]);
+  }
+}
+
+static bool test_heap_delete_concurrent_free(void) {
+  const long disallow_arena_alloc = mi_option_get(mi_option_disallow_arena_alloc);
+  for (int iter = 0; iter < 20; iter++) {
+    mi_option_set(mi_option_disallow_arena_alloc, iter % 2);  // odd iterations use OS allocated pages
+    delete_free_heap = mi_heap_new();
+    if (delete_free_heap == NULL) return false;
+    test_thread_t threads[DELETE_FREE_THREADS];
+    test_worker_t workers[DELETE_FREE_THREADS];
+    for (size_t i = 0; i < DELETE_FREE_THREADS; i++) {
+      workers[i].fun = &delete_free_alloc_worker; workers[i].id = i;
+      if (!test_thread_start(&threads[i], &workers[i])) return false;
+    }
+    for (size_t i = 0; i < DELETE_FREE_THREADS; i++) { test_thread_join(threads[i]); }
+    for (size_t i = 0; i < DELETE_FREE_THREADS; i++) {
+      workers[i].fun = &delete_free_worker;
+      if (!test_thread_start(&threads[i], &workers[i])) return false;
+    }
+    mi_heap_delete(delete_free_heap);
+    for (size_t i = 0; i < DELETE_FREE_THREADS; i++) { test_thread_join(threads[i]); }
+  }
+  mi_option_set(mi_option_disallow_arena_alloc, disallow_arena_alloc);
+  return true;
 }

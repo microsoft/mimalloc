@@ -264,9 +264,14 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
     buf[len] = 0;
     s = getenv(buf);
   }
-  if (s == NULL || _mi_strnlen(s,result_size) >= result_size)  return 0; // not found
-  _mi_strlcpy(result, s, result_size);
+  if (s == NULL) return 0; // not found
+  if (!_mi_strlcpy(result, s, result_size)) return -2;  // too long
   return 1; // found
+}
+
+bool _mi_prim_env_visit(mi_env_visit_fun* visit, void* arg) {
+  MI_UNUSED(visit); MI_UNUSED(arg);
+  return false;  // cannot iterate the environment
 }
 
 

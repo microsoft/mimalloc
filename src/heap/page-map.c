@@ -6,6 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #include "mimalloc.h"
+#include "mimalloc/util/memid.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/arena/arena.h"
 #include "mimalloc/heap/subproc.h"
@@ -88,10 +89,15 @@ mi_decl_nodiscard static mi_decl_noinline bool mi_page_map_commit_entries(mi_pag
 mi_decl_nodiscard static bool mi_page_map_ensure_committed(mi_page_map_t* pmap, size_t idx, mi_submap_t* submap) {
   mi_assert_internal(submap!=NULL && *submap==NULL);
   if mi_unlikely(idx >= mi_page_map_committed()) {
-    if (idx >= mi_atomic_load_acquire(&mi_process_get_sealed()->page_map_committed)) {
-      if (!mi_page_map_commit_entries(pmap,idx)) return false;
-      mi_assert_internal(idx < mi_page_map_committed());
+    // commit under the lock so the committed count only increases
+    bool ok = true;
+    mi_lock(&pmap->lock) {
+      if (idx >= mi_atomic_load_acquire(&mi_process_get_sealed()->page_map_committed)) {
+        ok = mi_page_map_commit_entries(pmap,idx);
+      }
     }
+    if (!ok) return false;
+    mi_assert_internal(idx < mi_page_map_committed());
   }
   *submap = mi_page_map_at(pmap, idx);
   return true;
@@ -218,7 +224,8 @@ static mi_submap_t mi_page_map_alloc_submap(mi_subproc_t* subproc, mi_memid_t* m
 // We do not store the memid of a sub map but can recreate it (see `_mi_os_alloc_with_guards`)
 static mi_memid_t mi_page_map_submap_memid(mi_submap_t sub) {
   const size_t guard_size = _mi_os_secure_guard_page_size();
-  return _mi_memid_create_os((uint8_t*)mi_ptr_memtag_meta(sub) - guard_size, _mi_os_good_alloc_size(MI_PAGE_MAP_SUB_SIZE + 2*guard_size), true, false, false);
+  const size_t size = _mi_os_good_alloc_size(MI_PAGE_MAP_SUB_SIZE + 2*guard_size);
+  return _mi_memid_create_os((uint8_t*)mi_ptr_memtag_meta(sub) - guard_size, size, size, false, false);
 }
 
 void _mi_page_map_unsafe_destroy(void) {
@@ -285,9 +292,10 @@ static bool mi_page_map_set_range_prim(mi_page_map_t* pmap, mi_page_t* page, siz
       return false;
     };
     mi_assert_internal(sub!=NULL);
-    // set the offsets for the page
+    // set the offsets for the page; use atomic stores as the entries of a freed OS page can be set by another
+    // thread that reallocates the same address range (and the OS unmap and map do not synchronize for TSAN)
     while (slice_count > 0 && sub_idx < MI_PAGE_MAP_SUB_COUNT) {
-      mi_ptr_sign_at(&sub[sub_idx], page);
+      mi_atomic_ptr_sign_relaxed((_Atomic(mi_ptr_signed_t)*)&sub[sub_idx], page);
       slice_count--;
       sub_idx++;
     }
@@ -336,7 +344,7 @@ void _mi_page_map_unregister(mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_assert_internal(mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   mi_page_map_t* const pmap = mi_page_map();
-  // note: should proceed even if the page was not registered yet (for failure paths in page allocation in `arena/arena-page.c`)
+  // note: should proceed even if the page was not registered yet (for failure paths in page allocation in `arena/arena-page-alloc.c`)
   if mi_unlikely(pmap == NULL) return;
   // get index and count
   size_t slice_count;

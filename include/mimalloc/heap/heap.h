@@ -5,8 +5,8 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef MI_INTERNAL_HEAP_H
-#define MI_INTERNAL_HEAP_H
+#ifndef MI_HEAP_HEAP_H
+#define MI_HEAP_HEAP_H
 
 #include "../types.h"
 #include "process.h"
@@ -44,7 +44,7 @@ static inline mi_addr_t mi_heap_cookie(const mi_heap_t* heap) {
 }
 
 static inline bool mi_heap_handle_is_valid(const mi_heap_t* heap) {
-  return ((heap->cookie == mi_heap_cookie(heap)) || _mi_heap_invalid(heap));
+  return ((heap!=NULL && heap->cookie == mi_heap_cookie(heap)) || _mi_heap_invalid(heap));
 }
 
 static inline mi_addr_t mi_theap_cookie(const mi_theap_t* theap) {

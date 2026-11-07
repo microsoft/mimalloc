@@ -8,6 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc/prim/prim-tls.h"
 #include "mimalloc/util/stats.h"
+#include "mimalloc/util/memid.h"
 #include "mimalloc/arena/arena-alloc.h"
 #include "mimalloc/arena/arena.h"
 #include "mimalloc/heap/page-map.h"
@@ -234,8 +235,8 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
     }
     mi_assert_internal(subproc->heap_main==NULL || subproc->heaps == subproc->heap_main);
     if (subproc->heap_main!=NULL) {
-      _mi_thread_locals_thread_done(); // release thread locals that may have been allocated (safe as the main heap uses the fast key)
       if (_mi_subproc_is_main(subproc)) {
+        _mi_thread_locals_thread_done(); // release thread locals of the current thread (at process exit)
         _mi_thread_locals_done();
       }
       _mi_heap_force_destroy(subproc->heap_main, false /* don't re-acquire the heaps_lock */);  // no warning if destroying the main heap
@@ -362,7 +363,7 @@ void _mi_subproc_main_done(void) {
   the forking thread, and suspends reclaiming abandoned pages until the pthread child
   handler. (So on macOS the zone override is required for fork support.)
   It also marks the child as torn, since free arena slices may still have a guard
-  page of a page that was allocated concurrently with the fork (see `arena-page.c`).
+  page of a page that was allocated concurrently with the fork (see `arena/arena-page-alloc.c`).
 ----------------------------------------------------------- */
 
 

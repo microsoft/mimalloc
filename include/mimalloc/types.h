@@ -384,10 +384,14 @@ static inline bool mi_memkind_needs_no_free(mi_memkind_t memkind) {
   return (memkind <= MI_MEM_STATIC);
 }
 
+// OS memory sizes in a memid are counted in 32-bit 4 KiB pages (up to 16 TiB)
+#define MI_MEMID_OS_PAGE_SHIFT  (12)
+#define MI_MEMID_OS_PAGE_SIZE   (MI_ZU(1) << MI_MEMID_OS_PAGE_SHIFT)
+
 typedef struct mi_memid_os_info {
   void*         base;               // actual base address of the block (used for offset aligned allocations)
-  size_t        size;               // allocated full size
-  // size_t        alignment;       // alignment at allocation
+  uint32_t      psize;              // allocated full size in 4 KiB pages (see `mi_memid_os_size`)
+  uint32_t      pcommitted;         // committed size in 4 KiB pages as accounted in the statistics (see `mi_memid_os_committed`)
 } mi_memid_os_info_t;
 
 typedef struct mi_memid_arena_info {
@@ -405,35 +409,19 @@ typedef struct mi_memid_s {
   union {
     mi_memid_os_info_t     os;       // only used for MI_MEM_OS(_HUGE/_REMAP)
     mi_memid_arena_info_t  arena;    // only used for MI_MEM_ARENA
-    mi_memid_malloc_info_t malloc;   // only used for MI_MEM_MALLOC
+    mi_memid_malloc_info_t malloc;   // only used for MI_MEM_MALLOC, MI_MEM_STATIC, and MI_MEM_EXTERNAL
   } mem;
   mi_memkind_t  memkind;
   bool          is_pinned;          // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large (2Mib) or huge (1GiB) OS pages)
   bool          initially_committed;// `true` if the memory was originally allocated as committed
   bool          initially_zero;     // `true` if the memory was originally zero initialized
   bool          is_memtag : 1;      // `true` if the memory supports memory tagging (MTE)
-  bool          guard_front : 1;    // `true` if a page has a guard page in front of its blocks (see `arena-page.c:mi_theap_page_guards`)
+  bool          guard_front : 1;    // `true` if a page has a guard page in front of its blocks (see `arena/arena-page-alloc.c:mi_theap_page_guards`)
   bool          guard_end : 1;      // `true` if a page has a guard page right after its blocks
 } mi_memid_t;
 
-#define MI_MEMID_INIT(kind)   {{{NULL,0}}, kind, true /* pinned */, true /* committed */, false /* zero */, false /* memtag */, false, false /* guard front and end */ }
+#define MI_MEMID_INIT(kind)   {{{NULL,0,0}}, kind, true /* pinned */, true /* committed */, false /* zero */, false /* memtag */, false, false /* guard front and end */ }
 #define MI_MEMID_STATIC       MI_MEMID_INIT(MI_MEM_STATIC)
-
-static inline bool mi_memid_is_os(mi_memid_t memid) {
-  return mi_memkind_is_os(memid.memkind);
-}
-
-static inline bool mi_memid_needs_no_free(mi_memid_t memid) {
-  return mi_memkind_needs_no_free(memid.memkind);
-}
-
-// defined in arena.c
-mi_memid_t    _mi_memid_create(mi_memkind_t memkind);
-mi_memid_t    _mi_memid_none(void);
-mi_memid_t    _mi_memid_create_os(void* base, size_t size, bool committed, bool is_zero, bool is_large);
-mi_memid_t    _mi_memid_create_static(void* p, size_t size);
-mi_memid_t    _mi_memid_create_malloc(void* p, size_t size, bool iszero);
-size_t        _mi_memid_size(mi_memid_t memid);
 
 
 // ------------------------------------------------------
@@ -753,7 +741,7 @@ struct mi_theap_s {
   // sampling
   size_t                sample_countdown;                    // sample countdown in requested bytes (don't change the field order; see `internal.h:mi_theap_get_free_small_page`)
   size_t                sample_rate;                         // current sampling rate in requested bytes (or 0 to disable) (for profiling and guarded mode)
-  uint64_t              sample_requested;                    // total allocated/requested bytes since the last sample
+  uint64_t              sample_requested;                    // requested bytes beyond the sample countdown (when the countdown is adjusted in batches)
   size_t                profile_sample_rate;                 // sampling rate in requested bytes for profiling
   size_t                profile_sample_countdown;            // countdown in requested bytes for profiling
   size_t                guarded_sample_rate;                 // sampling rate in requested bytes for guarded objects
@@ -806,8 +794,13 @@ typedef struct mi_arena_pages_s mi_arena_pages_t;
 #define MI_MAX_ARENAS   (160)   // Limited for now (and takes up .bss).. but arena's scale up exponentially (see `_mi_arena_reserve`)
                                 // 160 arenas is enough for ~2 TiB memory
 
-// A dynamic thread-local variable; 0 for an invalid thread-local
-typedef size_t mi_thread_local_t;
+// A dynamic thread-local variable: a slot index and a version (see `util/threadlocal.c`); 0 for an invalid thread-local.
+// By default always 64-bit
+#if MI_TLS_KEY32
+typedef size_t   mi_thread_local_t;
+#else
+typedef uint64_t mi_thread_local_t;
+#endif
 
 typedef struct mi_heap_s {
   mi_addr_t             cookie;                         // keyed MAC of the heap address to validate heap handles (see `heap/heap.h:mi_heap_handle_is_valid`)
@@ -827,10 +820,12 @@ typedef struct mi_heap_s {
 
   mi_theap_t*           theaps;                         // list of all thread-local theaps belonging to this heap (using the `hnext`/`hprev` fields)
   mi_lock_t             theaps_lock;                    // protects the theaps list and serializes heap walks with thread-exit abandonment
+  bool                  is_deleted;                     // set once the heap is deleted or destroyed: no new theaps can be attached (protected by `theaps_lock`)
 
   _Atomic(mi_profiler_t*) profiler;
 
   _Atomic(size_t)       abandoned_count[MI_BIN_COUNT];  // total count of abandoned pages in this heap
+  _Atomic(size_t)       os_page_count;                  // count of OS allocated pages that belong to this heap
   mi_page_t*            os_abandoned_pages;             // list of pages that are OS allocated and not in an arena
   mi_lock_t             os_abandoned_pages_lock;        // lock for the os abandoned pages list (this lock protects list operations)
 
