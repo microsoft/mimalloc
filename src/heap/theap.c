@@ -325,7 +325,8 @@ bool _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   // push on the heap's theap list
   if (!mi_theap_attach_to_heap(theap, heap)) {
     // not on a heap list, so the thread lock suffices to unlink
-    mi_lock(&theap->tld->theaps_lock) { mi_theap_detach_from_tld(theap); }
+    // (use `tld` as the detach clears `theap->tld` before the lock is released)
+    mi_lock(&tld->theaps_lock) { mi_theap_detach_from_tld(theap); }
     return false;
   }
   return true;
