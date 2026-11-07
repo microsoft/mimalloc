@@ -192,6 +192,11 @@ static inline void* mi_theap_malloc_zero_aligned_at(mi_theap_t* const theap, siz
     return mi_error_bad_alignment(size, alignment, offset);
   }
 
+  // regular blocks are always aligned to the word size, and to MI_MAX_ALIGN_SIZE if at least that large
+  if (offset == 0 && (alignment <= sizeof(void*) || (alignment <= MI_MAX_ALIGN_SIZE && size >= alignment))) {
+    return _mi_theap_malloc_zero(theap, size, zero, 0, ppage);
+  }
+
   // Use a naturally aligned size class instead of over-allocating and adjusting the pointer.
   // Keep the requested size when padding is enabled for byte-precise overflow checks.
   if (MI_PADDING_SIZE == 0 && offset == 0 && size < alignment && alignment <= MI_PAGE_MAX_START_BLOCK_ALIGN2) {
