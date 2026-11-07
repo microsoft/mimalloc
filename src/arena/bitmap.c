@@ -385,6 +385,7 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
       mi_bchunk_t* const chunk = &bitmap->chunks[chunk_idx];
       for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
         const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
+        if (mi_atomic_load_relaxed(&chunk->bfields[j]) == 0) continue;  // avoid writing to the field if it is clear
         mi_bfield_t b = mi_atomic_exchange_relaxed(&chunk->bfields[j], (mi_bfield_t)0);
         #if MI_DEBUG > 1
         const size_t bpopcount = mi_popcount(b);
@@ -412,6 +413,7 @@ bool _mi_bitmap_forall_setc_ranges(mi_bitmap_t* bitmap, mi_forall_set_fun_t* vis
         }
         mi_assert_internal(rngcount == bpopcount);
       }
+      mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx);  // so we don't visit this chunk again if it stays clear
     }
   }
   return true;
@@ -444,6 +446,7 @@ bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_fo
       mi_bchunk_t* const chunk = &bitmap->chunks[chunk_idx];
       for (size_t j = 0; j < MI_BCHUNK_FIELDS; j++) {
         const size_t base_idx = (chunk_idx*MI_BCHUNK_BITS) + (j*MI_BFIELD_BITS);
+        if (mi_atomic_load_relaxed(&chunk->bfields[j]) == 0) continue;                    // avoid writing to the field if it is clear
         mi_bfield_t b = mi_atomic_exchange_relaxed(&chunk->bfields[j], (mi_bfield_t)0);   // atomic clear
         mi_bfield_t skipped = 0;                                                          // but track which bits we skip so we can restore them
         size_t shift;
@@ -478,6 +481,7 @@ bool _mi_bitmap_forall_setc_rangesn(mi_bitmap_t* bitmap, size_t rngslices, mi_fo
           mi_atomic_or_relaxed(&chunk->bfields[j], skipped);
         }
       }
+      mi_bitmap_chunkmap_try_clear(bitmap, chunk_idx);  // so we don't visit this chunk again if it stays clear
     }
   }
   return true;
