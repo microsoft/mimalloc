@@ -182,6 +182,11 @@ int _mi_getenv(const char* name, char* result, size_t result_size) {
   MI_UNUSED(result_size);
   return ENOENT;
 }
+bool _mi_env_visit(mi_env_visit_fun* visit, void* arg) {
+  MI_UNUSED(visit);
+  MI_UNUSED(arg);
+  return true;  // an empty environment
+}
 #else
 int _mi_getenv(const char* name, char* result, size_t result_size) {
   if (name==NULL || result == NULL || result_size < 64) return ENOENT;
@@ -189,24 +194,34 @@ int _mi_getenv(const char* name, char* result, size_t result_size) {
   const int res = _mi_prim_getenv(name,result,result_size);
   return (res > 0 ? 0 : (res == 0 ? ENOENT : (res == -2 ? E2BIG : EAGAIN)));
 }
+bool _mi_env_visit(mi_env_visit_fun* visit, void* arg) {
+  if (visit == NULL) return false;
+  return _mi_prim_env_visit(visit, arg);
+}
 #endif
 
-// Helper for `_mi_prim_getenv_prefixed`: if the environment `entry` (`name=value`) starts with `prefix`
-// (case insensitive) and is not known, append its name to the `;` separated list in `buf` (if it fits whole) and return 1.
-int _mi_env_append_prefixed(const char* entry, const char* prefix, mi_env_is_known_fun* is_known, char* buf, size_t buf_size) {
-  const size_t plen = _mi_strlen(prefix);
-  if (_mi_strnicmp(entry, prefix, plen) != 0) return 0;
-  size_t nlen = plen;
-  while (entry[nlen] != 0 && entry[nlen] != '=') { nlen++; }
-  if (is_known(entry + plen, nlen - plen)) return 0;
-  const size_t len = _mi_strnlen(buf, buf_size);
-  const size_t sep = (len > 0 ? 1 : 0);
-  if (len + sep + nlen < buf_size) {
-    if (sep > 0) { buf[len] = ';'; }
-    mi_memcpy(buf + len + sep, entry, nlen);
-    buf[len + sep + nlen] = 0;
+typedef struct mi_getenv_visit_s {
+  const char* name;
+  size_t      name_len;
+  char*       result;
+  size_t      result_size;
+  int         res;          // result of `_mi_prim_getenv`
+} mi_getenv_visit_t;
+
+static void mi_getenv_visit(const char* entry, void* arg) {
+  mi_getenv_visit_t* const v = (mi_getenv_visit_t*)arg;
+  if (v->res != 0) return;  // the first occurrence takes precedence
+  if (_mi_strnicmp(v->name, entry, v->name_len) == 0 && entry[v->name_len] == '=') {  // case insensitive
+    v->res = (_mi_strlcpy(v->result, entry + v->name_len + 1, v->result_size) ? 1 : -2 /* too long */);
   }
-  return 1;
+}
+
+int _mi_prim_getenv_by_visit(const char* name, char* result, size_t result_size) {
+  if (name == NULL) return -1;
+  mi_getenv_visit_t v = { name, _mi_strlen(name), result, result_size, 0 };
+  if (v.name_len == 0) return -1;
+  if (!_mi_prim_env_visit(&mi_getenv_visit, &v)) return -1;  // try again later
+  return v.res;
 }
 
 

@@ -428,7 +428,12 @@ static inline bool mi_memid_is_os(mi_memid_t memid) {
 }
 
 static inline bool mi_memid_os_size_fits(size_t size) {
-  return (((uint64_t)size >> MI_MEMID_OS_PAGE_SHIFT) <= UINT32_MAX);
+  #if (MI_SIZE_BITS <= 32 + MI_MEMID_OS_PAGE_SHIFT)
+  MI_UNUSED(size);
+  return true;   // always fits (and avoid a -Wtype-limits warning)
+  #else
+  return ((size >> MI_MEMID_OS_PAGE_SHIFT) <= UINT32_MAX);
+  #endif
 }
 
 static inline uint32_t mi_memid_os_pages(size_t size) {

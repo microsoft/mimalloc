@@ -210,30 +210,16 @@ void _mi_prim_out_stderr( const char* msg) {
 extern char** environ;
 
 int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
-  if (name==NULL) return -1;
-  const size_t len = _mi_strlen(name);
-  if (len == 0) return -1;
-  char** env = environ;
-  if (env == NULL) return -1;  // not yet initialized; try again later
-  for (int i = 0; i < 10000 && env[i] != NULL; i++) {
-    const char* s = env[i];
-    if (_mi_strnicmp(name, s, len) == 0 && s[len] == '=') { // case insensitive
-      if (!_mi_strlcpy(result, s + len + 1, result_size)) return -2;  // too long
-      return 1;
-    }
-  }
-  return 0; // not found
+  return _mi_prim_getenv_by_visit(name, result, result_size);
 }
 
-int _mi_prim_getenv_prefixed(const char* prefix, mi_env_is_known_fun* is_known, char* buf, size_t buf_size) {
-  buf[0] = 0;
+bool _mi_prim_env_visit(mi_env_visit_fun* visit, void* arg) {
   char** env = environ;
-  if (env == NULL) return 0;
-  int count = 0;
+  if (env == NULL) return false;  // not yet initialized
   for (int i = 0; i < 10000 && env[i] != NULL; i++) {
-    count += _mi_env_append_prefixed(env[i], prefix, is_known, buf, buf_size);
+    visit(env[i], arg);
   }
-  return count;
+  return true;
 }
 
 

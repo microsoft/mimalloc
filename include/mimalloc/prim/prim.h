@@ -135,17 +135,18 @@ void _mi_prim_out_stderr( const char* msg );
 // and -1 on error (for example, if `getenv` cannot be called yet during preloading).
 int _mi_prim_getenv(const char* name, char* result, size_t result_size);
 
-// Find all environment variables whose name starts with `prefix` (case insensitive) and for which
-// `is_known(name + prefix_len, len)` returns `false` (where `name` is not zero terminated).
-// Writes their names as a `;` separated list into `buf` (only whole names that fit),
-// and returns the total count of such variables. Returns 0 if the environment cannot be iterated.
-// prefix != NULL, is_known != NULL, buf != NULL, buf_size > 0
-typedef bool (mi_env_is_known_fun)(const char* name, size_t len);
-int _mi_prim_getenv_prefixed(const char* prefix, mi_env_is_known_fun* is_known, char* buf, size_t buf_size);
+// Visit all entries of the environment (only for options). Calls `visit(entry,arg)` for each
+// zero terminated `name=value` entry (which is only valid during the call). The environment may be locked
+// during the visit so `visit` should not call into the OS. Very long entries may be skipped.
+// Returns `false` if the platform cannot iterate the full environment (or not yet, e.g. during preloading);
+// in that case options are looked up one at a time using `_mi_prim_getenv`.
+// visit != NULL
+typedef void (mi_env_visit_fun)(const char* entry, void* arg);
+bool _mi_prim_env_visit(mi_env_visit_fun* visit, void* arg);
 
-// Helper to implement `_mi_prim_getenv_prefixed`: process a single `name=value` environment entry.
-// Returns 1 if the entry matched (and was appended to `buf` if it fits whole), 0 otherwise.
-int _mi_env_append_prefixed(const char* entry, const char* prefix, mi_env_is_known_fun* is_known, char* buf, size_t buf_size);
+// Generic implementation of `_mi_prim_getenv` using `_mi_prim_env_visit` (case insensitive).
+// Can be used on platforms where visiting the environment does not allocate (e.g. using `environ`).
+int _mi_prim_getenv_by_visit(const char* name, char* result, size_t result_size);
 
 
 // Fill a buffer with strong randomness; return `false` on error or if
