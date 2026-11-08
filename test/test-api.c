@@ -613,6 +613,12 @@ int main(void) {
     }
   }
 
+  CHECK_BODY("free_small_null") {  // the nullable variants accept NULL
+    mi_free_small(NULL);
+    mi_free_small_local(NULL);
+    result = (errno == 0);
+  }
+
   CHECK_BODY("free_small4") {
     for(size_t n = 1; n < MI_SMALL_SIZE_MAX/sizeof(int); n *=2) {
       const size_t size = n*sizeof(int);

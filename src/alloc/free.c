@@ -507,7 +507,7 @@ void mi_free_small_nonnull(void* p) mi_attr_noexcept {
 
 // For runtime systems: Free a pointer that is guaranteed to be small, and in a page owned by the current thread.
 static mi_decl_forceinline void mi_free_small_local_ex(void* p, bool check_p_for_null) mi_attr_noexcept {
-  mi_assert(p!=NULL);
+  mi_assert(check_p_for_null || p!=NULL);
   mi_page_t* page = NULL;
   if mi_likely(mi_ptr_page_is_valid_ex(p,"mi_free_small_local_ex", true /* is_small? */, check_p_for_null /*check p for null*/, &page)) {
     mi_assert_internal(mi_page_thread_id(page) == _mi_thread_id());
