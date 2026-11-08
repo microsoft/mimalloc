@@ -151,7 +151,7 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
   mi_assert_internal(!use_qsbr);
   MI_UNUSED(use_qsbr);
   #endif
-  heap->profiler = mi_atomic_load_ptr_acquire(mi_profiler_t,&subproc->profiler);
+  mi_atomic_store_ptr_relaxed(mi_profiler_t, &heap->profiler, NULL);  // set when the heap is linked into the subprocess
   mi_stats_header_init(&heap->stats);
   mi_lock_init(&heap->theaps_lock);
   mi_lock_init(&heap->os_abandoned_pages_lock);
@@ -159,6 +159,8 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
 
   // push onto the subproc heaps
   mi_lock(&heap->subproc->heaps_lock) {
+    // inherit the profiler under the lock so a concurrent `mi_subproc_profile` either sees this heap or we see its profiler
+    mi_atomic_store_ptr_relaxed(mi_profiler_t, &heap->profiler, mi_atomic_load_ptr_acquire(mi_profiler_t,&subproc->profiler));
     mi_heap_t* head = heap->subproc->heaps;
     heap->prev = NULL;
     heap->next = head;
