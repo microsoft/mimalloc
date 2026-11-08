@@ -28,11 +28,25 @@ static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* bl
 #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
 // Fill a block with a debug pattern, preserving the first `heap->debug_fill_preserve` bytes
 // (used by CPython to keep object headers intact that may be read by concurrent lock-free readers)
-static inline void mi_debug_fill(const mi_page_t* page, void* block, int c, size_t size) {
-  const size_t preserve = mi_atomic_load_relaxed(&mi_page_heap(page)->debug_fill_preserve);
+static inline void mi_debug_fill_prim(void* block, int c, size_t size, size_t preserve) {
   if (preserve < size) {
     mi_memset((uint8_t*)block + preserve, c, size - preserve);
   }
+}
+
+// Fill by the owning thread: the heap is alive so we use its current setting and refresh the page copy
+static inline void mi_debug_fill(mi_page_t* page, void* block, int c, size_t size) {
+  const size_t preserve = mi_atomic_load_relaxed(&mi_page_heap(page)->debug_fill_preserve);
+  if mi_unlikely(preserve != mi_atomic_load_relaxed(&page->debug_fill_preserve)) {
+    mi_atomic_store_relaxed(&page->debug_fill_preserve, preserve);
+  }
+  mi_debug_fill_prim(block, c, size, preserve);
+}
+
+// Fill by a non-owning thread: the page heap may be deleted concurrently (and the page moved),
+// so we use the copy in the page instead
+static inline void mi_debug_fill_mt(const mi_page_t* page, void* block, int c, size_t size) {
+  mi_debug_fill_prim(block, c, size, mi_atomic_load_relaxed(&page->debug_fill_preserve));
 }
 #endif
 
@@ -118,7 +132,7 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
   if (!was_guarded) {
     const size_t dbgsize = (usable_size > MI_MiB ? MI_MiB : usable_size);
-    mi_debug_fill(page, block, MI_DEBUG_FREED, dbgsize);
+    mi_debug_fill_mt(page, block, MI_DEBUG_FREED, dbgsize);
   }
   #endif
 

@@ -58,6 +58,9 @@ static const mi_page_t mi_page_empty = {
   NULL, NULL,             // qsbr_next, qsbr_prev
   mi_init_struct_zero,    // qsbr
   #endif
+  #if MI_DEBUG>0
+  MI_ATOMIC_VAR_INIT(0),  // debug_fill_preserve
+  #endif
 };
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&mi_page_empty)

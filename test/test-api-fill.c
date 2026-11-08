@@ -18,6 +18,13 @@ bool check_zero_init(uint8_t* p, size_t size);
 bool check_debug_fill_uninit(uint8_t* p, size_t size);
 bool check_debug_fill_freed(uint8_t* p, size_t size);
 #endif
+#if (MI_DEBUG >= 2) && !MI_TSAN && !(MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_GUARDED)
+static void* fill_xthread_block;
+static bool fill_free_xthread_block(void) {
+  mi_free(fill_xthread_block);
+  return true;
+}
+#endif
 
 // ---------------------------------------------------------------------------
 // Main testing
@@ -308,6 +315,21 @@ int main(void) {
       result &= check_debug_fill_uninit(q + preserve, malloc_size - preserve);
     }
     mi_free(q);
+    mi_free(keep_alive);
+    mi_heap_delete(heap);
+  };
+  CHECK_THREADS_BODY("fill-preserve-xthread") {   // a cross-thread free uses the preserve setting from the page
+    const size_t preserve = 3*sizeof(void*) + 3;
+    const size_t malloc_size = MI_SMALL_SIZE_MAX / 2;
+    mi_heap_t* heap = mi_heap_new();
+    void* keep_alive = mi_heap_malloc(heap, malloc_size);  // the page exists before setting the preserve
+    mi_heap_set_debug_fill_preserve(heap, preserve);
+    uint8_t* p = (uint8_t*)mi_heap_malloc(heap, malloc_size);  // updates the preserve in the page
+    memset(p, 0x42, malloc_size);
+    fill_xthread_block = p;
+    result &= mi_run_on_thread(&fill_free_xthread_block);
+    for (size_t i = sizeof(void*); i < preserve; i++) { result &= (p[i] == 0x42); }
+    result &= check_debug_fill_freed(p + preserve, malloc_size - preserve);
     mi_free(keep_alive);
     mi_heap_delete(heap);
   };

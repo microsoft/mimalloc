@@ -287,6 +287,9 @@ static void mi_heap_move_page(const mi_heap_move_info_t* info, mi_page_t* page) 
       mi_bitmap_set(arena_pages_target->pages, slice_index);
     }
     page->heap = heap_target;
+    #if MI_DEBUG>0
+    mi_atomic_store_relaxed(&page->debug_fill_preserve, mi_atomic_load_relaxed(&heap_target->debug_fill_preserve));
+    #endif
     mi_theap_stat_increase(theap_target, page_bins[sbin], 1);
     mi_theap_stat_increase(theap_target, pages, 1);
 

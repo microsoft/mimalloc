@@ -462,6 +462,9 @@ static void mi_arenas_page_init_meta(mi_theap_t* theap, mi_page_t* page, uint8_t
   page->slice_pcommitted = (uint16_t)(commit_size / _mi_os_page_size());
 
   page->heap = mi_theap_heap(theap);
+  #if MI_DEBUG>0
+  mi_atomic_store_relaxed(&page->debug_fill_preserve, mi_atomic_load_relaxed(&page->heap->debug_fill_preserve));
+  #endif
   if (block_size <= MI_LARGE_MAX_OBJ_SIZE && mi_memtag_use_for(memid.is_memtag, block_size)) {  // huge blocks are not tagged (but have an end guard page in secure mode); over-aligned singletons up to this size are tagged
     mi_page_flags_set(page, true, MI_PAGE_IS_MEMTAGGED);
   }

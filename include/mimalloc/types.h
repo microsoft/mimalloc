@@ -568,6 +568,9 @@ typedef struct mi_decl_memtag_unit_align mi_page_s {
   struct mi_page_s*         qsbr_prev;
   mi_page_qsbr_t            qsbr;
   #endif
+  #if MI_DEBUG>0
+  _Atomic(size_t)           debug_fill_preserve; // copy of `heap->debug_fill_preserve` (read by non-owning threads on free)
+  #endif
 } mi_page_t;
 
 
