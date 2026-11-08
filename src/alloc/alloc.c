@@ -813,12 +813,21 @@ with a C++ compiler we can implement this precisely. If we
 use a C compiler we cannot throw a `bad_alloc` exception
 but we call `abort` instead (i.e. not returning).
 Also, the standard requires calling the new handler until
-it returns false, but we limit the total calls.
+it returns false, but we limit the total calls; when the
+limit is reached we fail as if there is no new handler.
 -------------------------------------------------------*/
 #define MI_TRY_NEW_MAX (4)
 
 #ifdef __cplusplus
 #include <new>
+// throw `std::bad_alloc` (or return if exceptions are disabled)
+static void mi_new_fail(void) {
+  _mi_error_message(ENOMEM, "out of memory in 'new'");
+  #if defined(_CPPUNWIND) || defined(__cpp_exceptions)  // exceptions are not always enabled
+  throw std::bad_alloc();
+  #endif
+}
+
 static bool mi_try_new_handler(void) {
   #if defined(_MSC_VER) || (__cplusplus >= 201103L)
     std::new_handler h = std::get_new_handler();
@@ -827,10 +836,7 @@ static bool mi_try_new_handler(void) {
     std::set_new_handler(h);
   #endif
   if (h==NULL) {
-    _mi_error_message(ENOMEM, "out of memory in 'new'");
-    #if defined(_CPPUNWIND) || defined(__cpp_exceptions)  // exceptions are not always enabled
-    throw std::bad_alloc();
-    #endif
+    mi_new_fail();
     return false;
   }
   else {
@@ -857,11 +863,16 @@ static std_new_handler_t mi_get_new_handler(void) {
 }
 #endif
 
+// cannot throw in plain C, use abort
+static void mi_new_fail(void) {
+  _mi_error_message(ENOMEM, "out of memory in 'new'");
+  abort();
+}
+
 static bool mi_try_new_handler(void) {
   std_new_handler_t h = mi_get_new_handler();
   if (h==NULL) {
-    _mi_error_message(ENOMEM, "out of memory in 'new'");
-    abort();  // cannot throw in plain C, use abort
+    mi_new_fail();
     return false;
   }
   else {
@@ -871,19 +882,29 @@ static bool mi_try_new_handler(void) {
 }
 #endif
 
-static mi_decl_noinline mi_decl_restrict void* mi_try_new_handler_null(void) {
-  mi_try_new_handler();
+// Called when a `new` allocation cannot be retried after invoking the new handler.
+// Throws `std::bad_alloc` (or aborts in C) so a throwing `new` never returns NULL;
+// only returns NULL in C++ when exceptions are disabled.
+static mi_decl_noinline void* mi_new_fail_null(void) {
+  mi_new_fail();
   return NULL;
+}
+
+// on overflow we invoke the new handler once and then fail
+static mi_decl_noinline mi_decl_restrict void* mi_try_new_handler_null(void) {
+  if (!mi_try_new_handler()) return NULL;
+  return mi_new_fail_null();
 }
 
 // called when an allocation fails and the new handler needs to be invoked
 static mi_decl_noinline void* mi_theap_new_handler(mi_theap_t* theap, size_t size) {
-  void* p = NULL;
-  for(int i = 0; i < MI_TRY_NEW_MAX && p == NULL && mi_try_new_handler(); i++) {
-    if (size > MI_MAX_ALLOC_SIZE) return NULL; // call try_new_handler at least once
-    p = mi_theap_malloc(theap,size);
+  for(int i = 0; i < MI_TRY_NEW_MAX; i++) {
+    if (!mi_try_new_handler()) return NULL;
+    if (size > MI_MAX_ALLOC_SIZE) break; // call try_new_handler at least once
+    void* const p = mi_theap_malloc(theap,size);
+    if (p != NULL) return p;
   }
-  return p;
+  return mi_new_fail_null();
 }
 
 #if MI_SAMPLE==2
@@ -962,12 +983,13 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new_nothrow(size_t size) mi_attr_noe
 }
 
 static mi_decl_noinline void* mi_try_new_aligned(size_t size, size_t alignment) {
-  void* p = NULL;
-  for(int i = 0; i < MI_TRY_NEW_MAX && p==NULL && mi_try_new_handler(); i++) {
-    if (!mi_alignment_is_valid(alignment)) return NULL;
-    p = mi_malloc_aligned(size,alignment);
+  for(int i = 0; i < MI_TRY_NEW_MAX; i++) {
+    if (!mi_try_new_handler()) return NULL;
+    if (!mi_alignment_is_valid(alignment) || size > MI_MAX_ALLOC_SIZE) break;
+    void* const p = mi_malloc_aligned(size,alignment);
+    if (p != NULL) return p;
   }
-  return p;
+  return mi_new_fail_null();
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_new_aligned(size_t size, size_t alignment) {
@@ -981,12 +1003,13 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new_aligned_nothrow(size_t size, siz
 }
 
 static mi_decl_noinline void* mi_try_new_realloc(void* p, size_t newsize) {
-  void* q = NULL;
-  for(int i = 0; i < MI_TRY_NEW_MAX && q==NULL && mi_try_new_handler(); i++) {
-    if (newsize > MI_MAX_ALLOC_SIZE) return NULL;
-    q = mi_realloc(p,newsize);
+  for(int i = 0; i < MI_TRY_NEW_MAX; i++) {
+    if (!mi_try_new_handler()) return NULL;
+    if (newsize > MI_MAX_ALLOC_SIZE) break;
+    void* const q = mi_realloc(p,newsize);
+    if (q != NULL) return q;
   }
-  return q;
+  return mi_new_fail_null();
 }
 
 mi_decl_nodiscard void* mi_new_realloc(void* p, size_t newsize) {
