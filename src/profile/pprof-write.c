@@ -39,7 +39,8 @@ static bool mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname
 // if it is NULL, no snapshot is written and this function does nothing.
 void _mi_pprof_profiler_snapshot(mi_pprof_profiler_t* prof) {
   if (prof == NULL) return;
-  bool was_running = mi_profiler_stop(&prof->profiler);
+  // note: we do not stop the profiler while writing as a concurrent `mi_profiler_stop` by the user could then be undone;
+  // the location table is lock-free and only read here, and a nested (interval) snapshot is skipped by the snapshot guard.
   mi_locations_t* locations = &prof->locations;
   if (locations->buckets != NULL && prof->base_file_name != NULL) {
     const size_t seq = ++prof->snapshot_count;
@@ -63,7 +64,6 @@ void _mi_pprof_profiler_snapshot(mi_pprof_profiler_t* prof) {
       _mi_verbose_message("pprof profiler: unable to write snapshot (out of memory?)\n");
     }
   }
-  if (was_running) { mi_profiler_start(&prof->profiler); }
 }
 
 // ---------------------------------------------------------------------------
