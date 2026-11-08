@@ -565,7 +565,7 @@ static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, voi
     }
     if mi_likely(p != NULL) {
       mi_track_mem_defined(p,copy_size);  // _mi_useable_size may be too large for byte precise memory tracking..
-      mi_memcpy_aligned(newp, p, copy_size);
+      mi_memcpy(newp, p, copy_size);  // `p` may be unaligned if allocated with an offset (`mi_malloc_aligned_at`)
       mi_free(p); // only free the original pointer if successful
     }
   }
