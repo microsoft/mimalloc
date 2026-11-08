@@ -674,6 +674,7 @@ typedef struct mi_json_buf_s {
   size_t  size;
   size_t  used;
   bool    can_realloc;
+  bool    truncated;  // set if output was dropped
 } mi_json_buf_t;
 
 static bool mi_json_buf_expand(mi_json_buf_t* hbuf) {
@@ -692,11 +693,10 @@ static bool mi_json_buf_expand(mi_json_buf_t* hbuf) {
 
 static void mi_json_buf_print(mi_json_buf_t* hbuf, const char* msg) {
   if (msg==NULL || hbuf==NULL) return;
-  if (hbuf->used + 1 >= hbuf->size && !hbuf->can_realloc) return;
   for (const char* src = msg; *src != 0; src++) {
     char c = *src;
-    if (hbuf->used + 1 >= hbuf->size) {
-      if (!mi_json_buf_expand(hbuf)) return;
+    if (hbuf->used + 1 >= hbuf->size) {  // keep room for the terminating zero
+      if (!mi_json_buf_expand(hbuf)) { hbuf->truncated = true; return; }
     }
     mi_assert_internal(hbuf->used < hbuf->size);
     hbuf->buf[hbuf->used++] = c;
@@ -767,7 +767,7 @@ static void mi_json_buf_print_counter_value(mi_json_buf_t* hbuf, const char* nam
 
 static char* mi_stats_get_json_from(const mi_stats_t* stats, size_t output_size, char* output_buf) mi_attr_noexcept {
   if (stats==NULL || stats->size!=sizeof(mi_stats_t) || stats->version!=MI_STAT_VERSION) return NULL;
-  mi_json_buf_t hbuf = { NULL, 0, 0, true };
+  mi_json_buf_t hbuf = { NULL, 0, 0, true, false };
   if (output_size > 0 && output_buf != NULL) {
     mi_memzero(output_buf, output_size);
     hbuf.buf = output_buf;
@@ -828,7 +828,7 @@ static char* mi_stats_get_json_from(const mi_stats_t* stats, size_t output_size,
   }
   mi_json_buf_print(&hbuf, "  ]\n");
   mi_json_buf_print(&hbuf, "}\n");
-  if (hbuf.used + 1 >= hbuf.size) {
+  if (hbuf.truncated) {
     // failed
     if (hbuf.can_realloc) { mi_free(hbuf.buf); }
     return NULL;

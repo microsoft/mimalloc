@@ -27,6 +27,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 #include <stdbool.h>
 #include <stdint.h>
 #include <errno.h>
+#include <string.h>
 
 #ifdef __cplusplus
 #include <new>
@@ -34,6 +35,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 #endif
 
 #include "mimalloc.h"
+#include "mimalloc-stats.h"
 // #include "mimalloc/internal.h"
 #include "mimalloc/types.h" // for MI_DEBUG and MI_PAGE_MAX_OVERALLOC_ALIGN
 
@@ -719,6 +721,21 @@ int main(void) {
     }
   }
   #endif
+
+  CHECK_BODY("stats-json-exact-buffer") {  // the output fits exactly in a buffer of its length + 1
+    // (the process info in the output can change between calls so we retry until the length is the same)
+    bool exact = false;
+    for (int i = 0; i < 100 && !exact; i++) {
+      char* json = mi_stats_get_json(0, NULL);
+      if (json == NULL) break;
+      const size_t len = strlen(json);
+      char* buf = (char*)mi_malloc(len + 1);
+      exact = (buf != NULL && mi_stats_get_json(len + 1, buf) == buf && strlen(buf) == len);
+      mi_free(buf);
+      mi_free(json);
+    }
+    result = exact;
+  }
 
   // ---------------------------------------------------
   // Heaps
