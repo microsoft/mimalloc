@@ -104,7 +104,6 @@ void    _mi_pprof_profiler_snapshot(mi_pprof_profiler_t* prof);
 
 
 #if MI_PROFILE_USE_BUILTIN
-#include <stdio.h>      // FILE
 
 // A loaded module's address range and (if known) its file path; used both to
 // print the `MAPPED_LIBRARIES` trailer of the text format and to build the
@@ -123,11 +122,15 @@ typedef struct {
 } mi_pprof_modules_t;
 
 // defined in `pprof-os.c`
-FILE*   _mi_pprof_fopen(const char* fname, bool binary);
-void    _mi_pprof_fprintf(FILE* f, const char* fmt, ...);
+typedef struct mi_pprof_file_s mi_pprof_file_t;   // buffered snapshot file (does not use stdio)
+mi_pprof_file_t* _mi_pprof_fopen(mi_heap_t* heap, const char* fname, bool binary);
+void    _mi_pprof_fwrite(mi_pprof_file_t* f, const void* data, size_t size);
+void    _mi_pprof_fputs(mi_pprof_file_t* f, const char* s);
+void    _mi_pprof_fprintf(mi_pprof_file_t* f, const char* fmt, ...);
+bool    _mi_pprof_fclose(mi_pprof_file_t* f);  // returns `false` if any write failed
 void    _mi_pprof_collect_modules(mi_heap_t* heap, mi_pprof_modules_t* mods);
 void    _mi_pprof_modules_done(mi_pprof_modules_t* mods);
-void    _mi_pprof_write_mapped_libraries(FILE* f);
+void    _mi_pprof_write_mapped_libraries(mi_pprof_file_t* f);
 #endif
 
 #endif

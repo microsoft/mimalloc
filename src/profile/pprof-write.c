@@ -129,13 +129,12 @@ static void mi_pprof_unsample(int64_t* count, int64_t* bytes, size_t rate) {
 // symbolize the addresses).
 static bool mi_pprof_snapshot_text(mi_pprof_profiler_t* prof, const char* fname) {
   mi_locations_t* locations = &prof->locations;
-  FILE* f = _mi_pprof_fopen(fname, false);
+  mi_pprof_file_t* f = _mi_pprof_fopen(prof->profile_heap, fname, false);
   if (f == NULL) return false;
 
   // first pass: compute the totals over all locations
-  // (snapshot is assumed to run single-threaded while sampling is stopped, so
-  // `alloc_count`/`alloc_bytes` can be read directly; `inuse_count`/`inuse_bytes`
-  // are still `_Atomic` fields so we use a relaxed load for those)
+  // (sampling may continue concurrently so the totals are only approximately consistent;
+  // `inuse_count`/`inuse_bytes` are `_Atomic` fields so we use a relaxed load for those)
   uint64_t total_inuse_objects = 0;
   uint64_t total_inuse_bytes   = 0;
   uint64_t total_alloc_objects = 0;
@@ -164,14 +163,12 @@ static bool mi_pprof_snapshot_text(mi_pprof_profiler_t* prof, const char* fname)
       for (size_t j = 0; j < loc->callstack.count; j++) {
         _mi_pprof_fprintf(f, " 0x%tx", (size_t)(uintptr_t)loc->callstack.frames[j]);
       }
-      fprintf(f, "\n");
+      _mi_pprof_fputs(f, "\n");
     }
   }
 
   _mi_pprof_write_mapped_libraries(f);
-  const bool ok = (ferror(f) == 0);
-  if (fclose(f) != 0) return false;
-  return ok;
+  return _mi_pprof_fclose(f);
 }
 
 
@@ -240,7 +237,7 @@ static bool mi_pb_reserve(mi_pb_buf_t* b, size_t extra) {
 static void mi_pb_bytes(mi_pb_buf_t* b, const void* p, size_t n) {
   if (n == 0) return;  // avoid calling memcpy with a NULL source
   if (!mi_pb_reserve(b, n)) return;
-  memcpy(b->data + b->size, p, n);
+  mi_memcpy(b->data + b->size, p, n);
   b->size += n;
 }
 
@@ -362,7 +359,7 @@ static int64_t mi_pb_strings_intern(mi_pb_strings_t* strings, const char* s) {
   strings->entries[strings->count].str = copy;
   strings->entries[strings->count].index = index;
   strings->count++;
-  mi_pb_len_field(&strings->table, 6, s, strlen(s));
+  mi_pb_len_field(&strings->table, 6, s, _mi_strlen(s));
   if (strings->table.failed) { strings->failed = true; return 0; }
   return index;
 }
@@ -571,12 +568,11 @@ static bool mi_pprof_build_proto(mi_pprof_profiler_t* prof, mi_pb_buf_t* profile
   return true;
 }
 
-static bool mi_pprof_write_file(const char* fname, const mi_pb_buf_t* profile) {
-  FILE* f = _mi_pprof_fopen(fname, true);
+static bool mi_pprof_write_file(mi_heap_t* heap, const char* fname, const mi_pb_buf_t* profile) {
+  mi_pprof_file_t* f = _mi_pprof_fopen(heap, fname, true);
   if (f == NULL) return false;
-  bool ok = (fwrite(profile->data, 1, profile->size, f) == profile->size);
-  if (fclose(f) != 0) { ok = false; }
-  return ok;
+  _mi_pprof_fwrite(f, profile->data, profile->size);
+  return _mi_pprof_fclose(f);
 }
 
 // Write out the current profiler data as a protobuf `Profile` message.
@@ -603,7 +599,7 @@ static bool mi_pprof_snapshot_proto(mi_pprof_profiler_t* prof, const char* fname
   mi_pb_addr_map_done(&addr_map);
   _mi_pprof_modules_done(&mods);
   mi_pb_strings_done(&strings);
-  if (ok) { ok = mi_pprof_write_file(fname, &profile); }
+  if (ok) { ok = mi_pprof_write_file(heap, fname, &profile); }
   mi_pb_done(&profile);
   return ok;
 }

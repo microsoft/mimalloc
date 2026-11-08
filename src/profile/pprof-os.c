@@ -33,17 +33,19 @@ int64_t _mi_pprof_time_secs(void) {
 
 #else
 
-#include <stdio.h>      // FILE, fopen, fprintf, fclose
 #include <time.h>       // time
 #if defined(_WIN32)
 #include <fcntl.h>      // _O_CREAT, _O_TRUNC, _O_WRONLY, _O_BINARY, _O_TEXT
-#include <io.h>         // _sopen_s, _fdopen, _close
+#include <io.h>         // _sopen_s, _write, _close
 #include <share.h>      // _SH_DENYNO
 #include <sys/stat.h>   // _S_IREAD, _S_IWRITE
 #elif MI_HAS_UNISTDH
-#include <fcntl.h>      // open, O_CREAT, O_EXCL, O_NOFOLLOW
-#include <unistd.h>     // close
+#include <errno.h>      // EINTR
+#include <fcntl.h>      // open, O_CREAT, O_NOFOLLOW, O_CLOEXEC
+#include <unistd.h>     // write, read, close
 #include <sys/stat.h>   // S_IRUSR, S_IWUSR
+#else
+#include <stdio.h>      // FILE, fopen, fwrite, fclose
 #endif
 
 
@@ -53,32 +55,113 @@ int64_t _mi_pprof_time_secs(void) {
 }
 
 
+// ---------------------------------------------------------------------------
+// Snapshot files
+//
+// A snapshot can be taken from within an allocation (for interval snapshots in `on_alloc`),
+// and that allocation may be called from within the C library's stdio (e.g. when `puts`
+// allocates its buffer). As stdio is not reentrant, we never use it here but write
+// directly to a file descriptor through our own buffer (allocated in the profiler's heap).
+// ---------------------------------------------------------------------------
+
+#define MI_PPROF_FILE_BUF_SIZE  (16*MI_KiB)
+
+struct mi_pprof_file_s {
+  mi_heap_t* heap;
+  #if defined(_WIN32) || MI_HAS_UNISTDH
+  int        fd;
+  #else
+  FILE*      fp;
+  #endif
+  bool       failed;  // set if any write failed
+  size_t     len;     // bytes used in `buf`
+  uint8_t    buf[MI_PPROF_FILE_BUF_SIZE];
+};
+
 // Open a snapshot file for writing, refusing to follow a symlink at `fname` (to avoid an
 // attacker redirecting the write to an arbitrary target) and restricting the file's
 // permissions to the owner only (snapshots can contain sensitive address/callstack data).
-// On platforms without these POSIX/Win32 facilities (e.g. wasm/Emscripten), we fall
-// back to a fully portable plain `fopen` (without the symlink/permission hardening).
-FILE* _mi_pprof_fopen(const char* fname, bool binary) {
+// On platforms without these POSIX/Win32 facilities, we fall back to a plain `fopen`
+// (without the symlink/permission hardening and without protection against stdio reentrancy).
+mi_pprof_file_t* _mi_pprof_fopen(mi_heap_t* heap, const char* fname, bool binary) {
+  mi_pprof_file_t* const f = (mi_pprof_file_t*)mi_heap_malloc(heap, sizeof(mi_pprof_file_t));
+  if (f == NULL) return NULL;
+  f->heap = heap;
+  f->failed = false;
+  f->len = 0;
   #if defined(_WIN32)
     int oflag = _O_CREAT | _O_TRUNC | _O_WRONLY | (binary ? _O_BINARY : _O_TEXT);
     int fd = -1;
-    if (_sopen_s(&fd, fname, oflag, _SH_DENYNO, _S_IREAD | _S_IWRITE) != 0 || fd < 0) return NULL;
-    FILE* f = _fdopen(fd, binary ? "wb" : "w");
-    if (f == NULL) { _close(fd); }
-    return f;
+    if (_sopen_s(&fd, fname, oflag, _SH_DENYNO, _S_IREAD | _S_IWRITE) != 0 || fd < 0) { mi_free(f); return NULL; }
+    f->fd = fd;
   #elif MI_HAS_UNISTDH
+    MI_UNUSED(binary);
     int oflag = O_CREAT | O_TRUNC | O_WRONLY;
     #if defined(O_NOFOLLOW)
     oflag |= O_NOFOLLOW;   // fail (ELOOP) if `fname` is a symlink
     #endif
+    #if defined(O_CLOEXEC)
+    oflag |= O_CLOEXEC;
+    #endif
     const int fd = open(fname, oflag, S_IRUSR | S_IWUSR);  // restrict to owner read/write only
-    if (fd < 0) return NULL;
-    FILE* f = fdopen(fd, binary ? "wb" : "w");
-    if (f == NULL) { close(fd); }
-    return f;
+    if (fd < 0) { mi_free(f); return NULL; }
+    f->fd = fd;
   #else
-    return fopen(fname, binary ? "wb" : "w");  // fully portable fallback: no symlink/permission hardening available
+    f->fp = fopen(fname, binary ? "wb" : "w");
+    if (f->fp == NULL) { mi_free(f); return NULL; }
   #endif
+  return f;
+}
+
+static void mi_pprof_file_flush(mi_pprof_file_t* f) {
+  const uint8_t* p = f->buf;
+  size_t n = f->len;
+  f->len = 0;
+  while (n > 0 && !f->failed) {
+    #if defined(_WIN32)
+    const int w = _write(f->fd, p, (unsigned int)(n > MI_PPROF_FILE_BUF_SIZE ? MI_PPROF_FILE_BUF_SIZE : n));
+    #elif MI_HAS_UNISTDH
+    const ssize_t w = write(f->fd, p, n);
+    if (w < 0 && errno == EINTR) continue;
+    #else
+    const size_t w = fwrite(p, 1, n, f->fp);
+    #endif
+    if (w <= 0) { f->failed = true; break; }
+    p += (size_t)w;
+    n -= (size_t)w;
+  }
+}
+
+void _mi_pprof_fwrite(mi_pprof_file_t* f, const void* data, size_t size) {
+  const uint8_t* p = (const uint8_t*)data;
+  while (size > 0 && !f->failed) {
+    if (f->len == MI_PPROF_FILE_BUF_SIZE) { mi_pprof_file_flush(f); }
+    const size_t avail = MI_PPROF_FILE_BUF_SIZE - f->len;
+    const size_t n = (size < avail ? size : avail);
+    mi_memcpy(f->buf + f->len, p, n);
+    f->len += n;
+    p += n;
+    size -= n;
+  }
+}
+
+void _mi_pprof_fputs(mi_pprof_file_t* f, const char* s) {
+  _mi_pprof_fwrite(f, s, _mi_strlen(s));
+}
+
+// Flush and close the file; returns `false` if any write failed.
+bool _mi_pprof_fclose(mi_pprof_file_t* f) {
+  mi_pprof_file_flush(f);
+  bool ok = !f->failed;
+  #if defined(_WIN32)
+  if (_close(f->fd) != 0) { ok = false; }
+  #elif MI_HAS_UNISTDH
+  if (close(f->fd) != 0) { ok = false; }
+  #else
+  if (fclose(f->fp) != 0) { ok = false; }
+  #endif
+  mi_free(f);
+  return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +202,7 @@ mi_decl_noinline size_t _mi_pprof_backtrace(void** buffer, size_t max_depth, siz
   const size_t raw_depth = (size_t)backtrace(buffer, (int)(max_depth - skip));
   if (raw_depth <= skip) { *hash = 0; return 0; }
   const size_t depth = raw_depth - skip;
-  memmove(buffer, buffer + skip, depth * sizeof(void*));
+  for (size_t i = 0; i < depth; i++) { buffer[i] = buffer[i + skip]; }  // overlapping move down
   *hash = mi_backtrace_hash(buffer, depth);  // no platform-provided hash, compute our own
   return depth;
 }
@@ -200,17 +283,16 @@ void _mi_pprof_modules_done(mi_pprof_modules_t* mods) {
 
 // A small wrapper that formats with our own minimal `_mi_vsnprintf` (so call
 // sites can use its `%l8x`/`%l8d`/`%tx` extensions instead of <inttypes.h>'s
-// `PRIx64`/`PRIu64`/`PRIxPTR` macros) and writes the result directly to a `FILE*`.
+// `PRIx64`/`PRIu64`/`PRIxPTR` macros) and writes the result to a snapshot file.
 // (Distinct from the existing `_mi_fprintf(mi_output_fun*, void*, ...)`  in
-// `util/options.c`, which targets mimalloc's redirectable output callback instead
-// of an arbitrary `FILE*`.)
-void _mi_pprof_fprintf(FILE* f, const char* fmt, ...) {
+// `util/options.c`, which targets mimalloc's redirectable output callback instead.)
+void _mi_pprof_fprintf(mi_pprof_file_t* f, const char* fmt, ...) {
   char buf[512];
   va_list args;
   va_start(args, fmt);
   _mi_vsnprintf(buf, sizeof(buf), fmt, args);
   va_end(args);
-  fputs(buf, f);
+  _mi_pprof_fputs(f, buf);
 }
 
 #if defined(_WIN32)
@@ -265,11 +347,11 @@ static void mi_walk_modules_win32(void (*on_module)(void* ctx, uintptr_t base, u
 }
 
 static void mi_write_mapped_libraries_on_module_win32(void* ctx, uintptr_t base, uintptr_t end, const char* path) {
-  FILE* f = (FILE*)ctx;
+  mi_pprof_file_t* f = (mi_pprof_file_t*)ctx;
   _mi_pprof_fprintf(f, "%tx-%tx r-xp 00000000 00:00 0            %s\n", base, end, path);
 }
 
-static void mi_write_mapped_libraries_win32(FILE* f) {
+static void mi_write_mapped_libraries_win32(mi_pprof_file_t* f) {
   mi_walk_modules_win32(&mi_write_mapped_libraries_on_module_win32, f);
 }
 
@@ -317,7 +399,7 @@ static bool mi_macho_image_range(const struct mach_header* mh, intptr_t slide, u
   return false;  // no __TEXT segment found
 }
 
-static void mi_write_mapped_libraries_macos(FILE* f) {
+static void mi_write_mapped_libraries_macos(mi_pprof_file_t* f) {
   const uint32_t count = _dyld_image_count();
   for (uint32_t i = 0; i < count; i++) {
     const struct mach_header* mh = _dyld_get_image_header(i);
@@ -346,47 +428,86 @@ static void mi_pprof_collect_modules_macos(mi_heap_t* heap, mi_pprof_modules_t* 
 }
 
 #elif defined(__linux__)
-#include <stdlib.h>   // strtoull
+#include <errno.h>      // EINTR
+#include <fcntl.h>      // open, O_RDONLY, O_CLOEXEC
+#include <unistd.h>     // read, close
+
+// Call `on_line(ctx, line)` for each line of `/proc/self/maps` (without using stdio, see `_mi_pprof_fopen`).
+// The line is zero terminated and includes its newline; lines longer than 511 bytes are truncated.
+static void mi_read_maps_linux(void (*on_line)(void* ctx, char* line), void* ctx) {
+  int oflag = O_RDONLY;
+  #if defined(O_CLOEXEC)
+  oflag |= O_CLOEXEC;
+  #endif
+  const int fd = open("/proc/self/maps", oflag);
+  if (fd < 0) return;
+  char buf[4096];
+  char line[512];
+  size_t line_len = 0;
+  for (;;) {
+    const ssize_t n = read(fd, buf, sizeof(buf));
+    if (n < 0 && errno == EINTR) continue;
+    if (n <= 0) break;
+    for (ssize_t i = 0; i < n; i++) {
+      const char c = buf[i];
+      if (c == '\n') {
+        line[line_len++] = '\n';
+        line[line_len] = 0;
+        on_line(ctx, line);
+        line_len = 0;
+      }
+      else if (line_len < sizeof(line) - 2) {  // leave room for the newline and terminator
+        line[line_len++] = c;
+      }
+    }
+  }
+  if (line_len > 0) { line[line_len] = 0; on_line(ctx, line); }
+  close(fd);
+}
+
+static void mi_write_mapped_libraries_on_line_linux(void* ctx, char* line) {
+  _mi_pprof_fputs((mi_pprof_file_t*)ctx, line);
+}
 
 // Copy `/proc/self/maps` verbatim; this is exactly the format `pprof` expects.
-static void mi_write_mapped_libraries_linux(FILE* f) {
-  FILE* maps = fopen("/proc/self/maps", "r");
-  if (maps != NULL) {
-    char line[512];
-    while (fgets(line, sizeof(line), maps) != NULL) {
-      fputs(line, f);
-    }
-    fclose(maps);
-  }
+static void mi_write_mapped_libraries_linux(mi_pprof_file_t* f) {
+  mi_read_maps_linux(&mi_write_mapped_libraries_on_line_linux, f);
 }
+
+typedef struct { mi_heap_t* heap; mi_pprof_modules_t* mods; } mi_pprof_collect_modules_linux_ctx_t;
 
 // Parse `/proc/self/maps` lines of the form
 // `<start>-<end> <perms> <offset> <dev> <inode>  <path>` (path may be absent
 // for anonymous mappings, which are skipped here since they are not useful
 // for symbolization).
+static void mi_pprof_collect_modules_on_line_linux(void* ctx, char* line) {
+  mi_pprof_collect_modules_linux_ctx_t* const c = (mi_pprof_collect_modules_linux_ctx_t*)ctx;
+  mi_heap_t* const heap = c->heap;
+  mi_pprof_modules_t* const mods = c->mods;
+  const size_t line_len = _mi_strlen(line);
+  unsigned long long start = 0;
+  unsigned long long end = 0;
+  const char* end_ptr = NULL;
+  if (!_mi_strntoull(line, line_len, 16, &end_ptr, &start) || *end_ptr != '-') return;
+  end_ptr++;
+  if (!_mi_strntoull(end_ptr, line_len - (size_t)(end_ptr - line), 16, NULL, &end)) return;
+  // the path (if present) is the last whitespace-separated field on the line
+  const char* path = _mi_strrchr(line, ' ');
+  if (path == NULL) return;
+  while (*path == ' ') path++;
+  size_t len = _mi_strlen(path);
+  while (len > 0 && (path[len-1] == '\n' || path[len-1] == '\r')) { len--; }
+  if (len == 0 || path[0] == '[') return;  // skip anonymous mappings like `[heap]`, `[stack]`
+  char pathbuf[512];
+  if (len >= sizeof(pathbuf)) { len = sizeof(pathbuf) - 1; }
+  mi_memcpy(pathbuf, path, len);
+  pathbuf[len] = 0;
+  mi_pprof_modules_add(heap, mods, (uintptr_t)start, (uintptr_t)end, pathbuf);
+}
+
 static void mi_pprof_collect_modules_linux(mi_heap_t* heap, mi_pprof_modules_t* mods) {
-  FILE* maps = fopen("/proc/self/maps", "r");
-  if (maps == NULL) return;
-  char line[512];
-  while (fgets(line, sizeof(line), maps) != NULL) {
-    char* end_ptr = NULL;
-    const uintptr_t start = (uintptr_t)strtoull(line, &end_ptr, 16);
-    if (end_ptr == NULL || *end_ptr != '-') continue;
-    const uintptr_t end = (uintptr_t)strtoull(end_ptr + 1, &end_ptr, 16);
-    // the path (if present) is the last whitespace-separated field on the line
-    const char* path = strrchr(line, ' ');
-    if (path == NULL) continue;
-    while (*path == ' ') path++;
-    size_t len = strlen(path);
-    while (len > 0 && (path[len-1] == '\n' || path[len-1] == '\r')) { len--; }
-    if (len == 0 || path[0] == '[') continue;  // skip anonymous mappings like `[heap]`, `[stack]`
-    char pathbuf[512];
-    if (len >= sizeof(pathbuf)) { len = sizeof(pathbuf) - 1; }
-    memcpy(pathbuf, path, len);
-    pathbuf[len] = 0;
-    mi_pprof_modules_add(heap, mods, start, end, pathbuf);
-  }
-  fclose(maps);
+  mi_pprof_collect_modules_linux_ctx_t ctx = { heap, mods };
+  mi_read_maps_linux(&mi_pprof_collect_modules_on_line_linux, &ctx);
 }
 
 #elif defined(__FreeBSD__)
@@ -395,7 +516,6 @@ static void mi_pprof_collect_modules_linux(mi_heap_t* heap, mi_pprof_modules_t* 
 #include <sys/user.h>   // struct kinfo_vmentry
 #include <unistd.h>     // getpid
 #include <stddef.h>     // offsetof
-#include <string.h>     // memchr
 
 // FreeBSD does not reliably provide Linux's `/proc/self/maps` (procfs is optional and rarely
 // mounted by default); instead we use the `KERN_PROC_VMMAP` sysctl to enumerate the process's
@@ -420,7 +540,7 @@ static void mi_walk_mappings_freebsd(void (*on_mapping)(void* ctx, uintptr_t sta
       ofs += size;
       const char* const path = kve->kve_path;
       if (path[0] == 0) continue;  // skip anonymous mappings
-      if (memchr(path, 0, size - path_ofs) == NULL) continue;  // path is not terminated within the record
+      if (_mi_strnlen(path, size - path_ofs) == size - path_ofs) continue;  // path is not terminated within the record
       on_mapping(ctx, (uintptr_t)kve->kve_start, (uintptr_t)kve->kve_end, path);
     }
   }
@@ -428,10 +548,10 @@ static void mi_walk_mappings_freebsd(void (*on_mapping)(void* ctx, uintptr_t sta
 }
 
 static void mi_write_mapped_libraries_on_mapping_freebsd(void* ctx, uintptr_t start, uintptr_t end, const char* path) {
-  _mi_pprof_fprintf((FILE*)ctx, "%tx-%tx r-xp 00000000 00:00 0            %s\n", start, end, path);
+  _mi_pprof_fprintf((mi_pprof_file_t*)ctx, "%tx-%tx r-xp 00000000 00:00 0            %s\n", start, end, path);
 }
 
-static void mi_write_mapped_libraries_bsd(FILE* f) {
+static void mi_write_mapped_libraries_bsd(mi_pprof_file_t* f) {
   mi_walk_mappings_freebsd(&mi_write_mapped_libraries_on_mapping_freebsd, f);
 }
 
@@ -466,8 +586,8 @@ void _mi_pprof_collect_modules(mi_heap_t* heap, mi_pprof_modules_t* mods) {
   #endif
 }
 
-void _mi_pprof_write_mapped_libraries(FILE* f) {
-  fprintf(f, "MAPPED_LIBRARIES:\n");
+void _mi_pprof_write_mapped_libraries(mi_pprof_file_t* f) {
+  _mi_pprof_fputs(f, "MAPPED_LIBRARIES:\n");
   #if defined(__linux__)
   mi_write_mapped_libraries_linux(f);
   #elif defined(_WIN32)

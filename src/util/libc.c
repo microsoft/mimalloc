@@ -18,7 +18,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/util/options.h"
 #include "mimalloc/util/libc.h"
 #include "mimalloc/prim/os.h"          // _mi_os_is_elevated
-#include <limits.h>                   // LONG_MIN, LONG_MAX
+#include <limits.h>                   // LONG_MIN, LONG_MAX, ULLONG_MAX
 
 #if MI_DEBUG && NDEBUG
 #if defined(_MSC_VER)
@@ -133,46 +133,70 @@ static int mi_digit_value(char c, int base) {
 }
 
 // Parse up to max_len bytes without errno or requiring a terminator; skip at most 128 whitespace characters.
-// Allow at most 64 digits; leading zeros are allowed only in hexadecimal.
-// On failure, result is zero (clamped on overflow); end is s if no digits, otherwise the stopping point.
-bool _mi_strntol(const char* s, size_t max_len, const char** end, long* result) {
+// A sign is only allowed if `allow_sign`. A `0x` prefix selects hexadecimal if `base` is 0 (or is skipped if `base` is 16).
+// Allow at most 64 digits; leading zeros are allowed only in hexadecimal. The magnitude can be at most
+// `max_pos` (or `max_neg` if negative). On failure, result is zero (clamped on overflow); end is s if no digits,
+// otherwise the stopping point.
+static bool mi_strn_parse(const char* s, size_t max_len, int base, bool allow_sign,
+                          unsigned long long max_pos, unsigned long long max_neg,
+                          const char** end, bool* neg, unsigned long long* result) {
+  mi_assert_internal(base == 0 || base == 10 || base == 16);
   if (end != NULL) { *end = s; }
-  if (result != NULL) { *result = 0; }
+  *neg = false;
+  *result = 0;
   if (s == NULL) return false;
   size_t i = 0;
   while (i < max_len && i < 128 && mi_isspace(s[i])) { i++; }
   if (i == max_len) return false;
-  const bool neg = (s[i] == '-');
-  if (neg || s[i] == '+') { i++; }
-  if (i == max_len) return false;
-  int base = 10;
-  if (i + 1 < max_len && s[i] == '0' && (s[i+1] == 'x' || s[i+1] == 'X')) {
+  if (allow_sign && (s[i] == '-' || s[i] == '+')) {
+    *neg = (s[i] == '-');
+    i++;
+    if (i == max_len) return false;
+  }
+  if (base != 10 && i + 1 < max_len && s[i] == '0' && (s[i+1] == 'x' || s[i+1] == 'X')) {
     base = 16;
     i += 2;
   }
+  if (base == 0) { base = 10; }
   if (base == 10 && i + 1 < max_len && s[i] == '0' && mi_digit_value(s[i+1], base) >= 0) return false;
   const size_t start = i;
-  // Accumulate negatively so LONG_MIN is representable without unsigned arithmetic.
-  const long limit = (neg ? LONG_MIN : -LONG_MAX);
-  const long cutoff = limit / base;
-  const long cutlim = -(limit % base);
-  long acc = 0;
+  const unsigned long long max = (*neg ? max_neg : max_pos);
+  unsigned long long acc = 0;
   while (i < max_len && i - start < 64) {
     const int digit = mi_digit_value(s[i], base);
     if (digit < 0) break;
-    if (acc < cutoff || (acc == cutoff && digit > cutlim)) {
+    if (acc > (max - (unsigned)digit) / (unsigned)base) {  // acc*base + digit > max
       if (end != NULL) { *end = s + i; }
-      if (result != NULL) { *result = (neg ? LONG_MIN : LONG_MAX); }
+      *result = max;
       return false;
     }
-    acc = acc*base - digit;
+    acc = acc*(unsigned)base + (unsigned)digit;
     i++;
   }
   if (i == start) return false;
   if (end != NULL) { *end = s + i; }
   if (i < max_len && i - start == 64 && mi_digit_value(s[i], base) >= 0) return false;
-  if (result != NULL) { *result = (neg ? acc : -acc); }
+  *result = acc;
   return true;
+}
+
+// Parse a signed decimal or `0x` prefixed hexadecimal number (see `mi_strn_parse`).
+bool _mi_strntol(const char* s, size_t max_len, const char** end, long* result) {
+  const unsigned long long max_neg = (unsigned long long)LONG_MAX + 1;
+  bool neg;
+  unsigned long long x;
+  const bool ok = mi_strn_parse(s, max_len, 0, true, (unsigned long long)LONG_MAX, max_neg, end, &neg, &x);
+  if (result != NULL) { *result = (!neg ? (long)x : (x == max_neg ? LONG_MIN : -(long)x)); }
+  return ok;
+}
+
+// Parse an unsigned number without a sign in `base` 10 or 16, or in base 0 as decimal or `0x` prefixed hexadecimal (see `mi_strn_parse`).
+bool _mi_strntoull(const char* s, size_t max_len, int base, const char** end, unsigned long long* result) {
+  bool neg;
+  unsigned long long x;
+  const bool ok = mi_strn_parse(s, max_len, base, false, ULLONG_MAX, ULLONG_MAX, end, &neg, &x);
+  if (result != NULL) { *result = x; }
+  return ok;
 }
 
 #ifdef MI_NO_GETENV
