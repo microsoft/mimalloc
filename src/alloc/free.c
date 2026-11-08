@@ -820,8 +820,9 @@ mi_decl_nodiscard size_t mi_thread_id_of(const void* p) mi_attr_noexcept {
   const mi_page_t* const page = mi_ptr_page_validate(p,"mi_thread_id_of");
   if (page == NULL) return 0;
   #if MI_QSBR
-  // on qsbr we keep the last owning thread id around so we can provide it even when the page is abandoned
-  // (this is needed for cpython where the thread id gets restored this way inside object headers)
+  // on qsbr we keep the last owning thread id around so we can provide it even when a full page is abandoned
+  // (this is needed for cpython where the thread id gets restored this way inside object headers);
+  // it is 0 once the owning theap abandoned all its pages (e.g. when its thread terminated)
   return mi_page_qsbr_thread_id(page);
   #else
   const mi_thread_id_t tid = mi_page_thread_id(page);

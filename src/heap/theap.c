@@ -118,7 +118,7 @@ static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_pag
     }
   }
   if (collect == MI_ABANDON) {
-    _mi_page_abandon(page, pq);
+    _mi_page_abandon(page, pq, true);
   }
   return true; // don't break
 }
@@ -176,7 +176,7 @@ void _mi_theap_abandon_owned_pages(mi_theap_t* theap) {
       mi_page_t* const next = page->next;  // save as the page is removed from the queue
       _mi_page_free_collect(page, true);   // collect cross-thread frees so `used` is precise
       if (!mi_page_all_free(page) || !_mi_page_free(page, pq)) {
-        _mi_page_abandon(page, pq);
+        _mi_page_abandon(page, pq, true);
       }
       page = next;
     }

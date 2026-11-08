@@ -563,7 +563,7 @@ typedef struct mi_decl_memtag_unit_align mi_page_s {
   uint64_t                  block_recip;       // const: `ceil(2^64/block_size)` for division by `block_size` (or 1 if the page has a single block) (see `alloc/free.c`)
   #endif
   #if MI_QSBR
-  _Atomic(mi_thread_id_t)   qsbr_xthread_id;   // thread id of the last owning thread (`theap->tld->thread_id`) | `MI_PAGE_QSBR_IN_QUEUE` (written only by the owning thread)
+  _Atomic(mi_thread_id_t)   qsbr_xthread_id;   // thread id of the last owning thread (`theap->tld->thread_id`, or 0 after its theap abandoned all pages) | `MI_PAGE_QSBR_IN_QUEUE` (written only by the owning thread)
   struct mi_page_s*         qsbr_next;
   struct mi_page_s*         qsbr_prev;
   mi_page_qsbr_t            qsbr;

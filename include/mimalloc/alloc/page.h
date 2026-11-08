@@ -22,7 +22,7 @@ mi_decl_restrict void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t si
 void          _mi_page_retire(mi_page_t* page) mi_attr_noexcept;       // free the page if there are no other pages with many free blocks
 void          _mi_page_unfull(mi_page_t* page);
 bool          _mi_page_free(mi_page_t* page, mi_page_queue_t* pq);     // false if page release is delayed
-void          _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);  // abandon the page, to be picked up by another thread...
+void          _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq, bool owner_done);  // abandon the page, to be picked up by another thread...
 void          _mi_deferred_free(mi_theap_t* theap, bool force);
 bool          _mi_page_free_collect(mi_page_t* page, bool force);  // returns `true` if cross-thread free'd blocks were collected
 mi_block_t*   _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
@@ -400,7 +400,8 @@ static inline bool mi_page_is_zero_on_free(const mi_page_t* page) {
 }
 
 #if MI_QSBR
-// For qsbr, `qsbr_xthread_id` keeps the thread id of the last owning thread (so it is still available when the page is abandoned)
+// For qsbr, `qsbr_xthread_id` keeps the thread id of the last owning thread (so it is still available when a full page is abandoned)
+// It is cleared when the owning theap abandons all its pages (e.g. on thread termination).
 // The lowest bit is set if the page is in the qsbr queue of its theap. It is only written by the owning thread.
 #define MI_PAGE_QSBR_IN_QUEUE  MI_ZU(0x01)
 

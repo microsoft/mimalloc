@@ -117,7 +117,7 @@ static bool test_origin_reclaim(long mode) {
   require(p != NULL && q != NULL);
   mi_page_t* page = mi_ptr_page(p);
   require(mi_ptr_page(q) == page);
-  _mi_page_abandon(page, mi_page_queue_of(page));
+  _mi_page_abandon(page, mi_page_queue_of(page), false);
   require(mi_page_is_abandoned(page));
   mi_free(p);
   require(mi_page_is_abandoned(page) == (mode < 0));
@@ -169,7 +169,7 @@ static bool test_abandon_queued_page(void) {
   }
   require(qsbr_count(theap) == 3 && theap->qsbr_first == pages[0] && theap->qsbr_last == pages[2]);
   const uint64_t goal = pages[1]->qsbr.goal;
-  _mi_page_abandon(pages[1], mi_page_queue_of(pages[1]));
+  _mi_page_abandon(pages[1], mi_page_queue_of(pages[1]), false);
   require(mi_page_is_abandoned(pages[1]) && pages[1]->qsbr.goal == goal);
   require(!mi_page_qsbr_is_in_queue(pages[1]) && pages[1]->qsbr_prev == NULL && pages[1]->qsbr_next == NULL);
   require(qsbr_count(theap) == 2 && pages[0]->qsbr_next == pages[2] && pages[2]->qsbr_prev == pages[0]);
@@ -584,7 +584,7 @@ static bool test_full_page_free_during_unown(void) {
     require(full_page_blocks[i] != NULL && mi_ptr_page(full_page_blocks[i]) == page);
   }
   require(mi_page_is_full(page));
-  if (!mi_page_is_abandoned(page)) { _mi_page_abandon(page, mi_page_queue_of(page)); }
+  if (!mi_page_is_abandoned(page)) { _mi_page_abandon(page, mi_page_queue_of(page), false); }
   require(mi_page_is_abandoned(page) && !mi_page_is_abandoned_mapped(page));
   require(mi_page_claim_ownership(page));
   // Keep the frees pending until the unmapped page is unowned.
@@ -623,6 +623,57 @@ static bool test_destroy_empty_orphan(void) {
   return true;
 }
 
+static mi_thread_id_t owner_tid;
+static void* owner_full[512];
+static size_t owner_full_count;
+static void* owner_partial;
+
+static bool allocate_full_and_partial(void) {
+  owner_tid = mi_heap_theap(worker_heap)->tld->thread_id;
+  owner_full[0] = mi_heap_malloc(worker_heap, 1024);
+  require(owner_full[0] != NULL);
+  mi_page_t* page = mi_ptr_page(owner_full[0]);
+  owner_full_count = page->reserved;
+  require(owner_full_count <= sizeof(owner_full)/sizeof(owner_full[0]));
+  for (size_t i = 1; i < owner_full_count; i++) {
+    owner_full[i] = mi_heap_malloc(worker_heap, 1024);
+    require(owner_full[i] != NULL && mi_ptr_page(owner_full[i]) == page);
+  }
+  // the next allocation abandons the full page while its owner is still alive
+  owner_partial = mi_heap_malloc(worker_heap, 1024);
+  require(owner_partial != NULL && mi_ptr_page(owner_partial) != page);
+  require(mi_page_is_abandoned(page) && !mi_page_is_abandoned(mi_ptr_page(owner_partial)));
+  require(mi_thread_id_of(owner_full[0]) == owner_tid && mi_thread_id_of(owner_partial) == owner_tid);
+  return true;
+}
+
+static bool test_thread_id_of_owner_done(void) {
+  worker_heap = mi_heap_new_qsbr();
+  require(worker_heap != NULL);
+  const long previous = mi_option_get(mi_option_page_full_retain);
+  mi_option_set(mi_option_page_full_retain, 0);
+  const bool ok = mi_run_on_thread(&allocate_full_and_partial);
+  mi_option_set(mi_option_page_full_retain, previous);
+  require(ok);
+  // the owner thread terminated and abandoned all its pages
+  require(mi_page_is_abandoned(mi_ptr_page(owner_full[0])) && mi_page_is_abandoned(mi_ptr_page(owner_partial)));
+  // (the full page was abandoned before, while the owner was alive, and keeps its last owner)
+  require(mi_thread_id_of(owner_partial) == 0);
+  for (size_t i = 0; i < owner_full_count; i++) { mi_free(owner_full[i]); }
+  mi_free(owner_partial);
+  mi_heap_destroy(worker_heap);
+  // a quiescent abandon of a live thread also clears the owner
+  mi_heap_t* heap = mi_heap_new_qsbr();
+  require(heap != NULL);
+  void* p = mi_heap_malloc(heap, 1024);
+  require(p != NULL && mi_thread_id_of(p) == mi_heap_theap(heap)->tld->thread_id);
+  mi_theap_quiescent_abandon(mi_heap_theap(heap));
+  require(mi_page_is_abandoned(mi_ptr_page(p)) && mi_thread_id_of(p) == 0);
+  mi_free(p);
+  mi_heap_destroy(heap);
+  return true;
+}
+
 int main(void) {
   mi_option_set(mi_option_guarded_sample_rate, 0);
   mi_option_set(mi_option_page_reclaim_on_free, 1);
@@ -657,6 +708,7 @@ int main(void) {
   CHECK_THREADS("terminal destroy of an empty orphan without a prior sweep", test_destroy_empty_orphan());
   CHECK("protected delete rejected, terminal destroy unlinks", test_terminal_destroy(false));
   CHECK_THREADS("cross-thread terminal destroy unlinks before freeing the owner", test_terminal_destroy(true));
+  CHECK_THREADS("thread id of abandoned pages is kept while the owner lives and cleared when it is done", test_thread_id_of_owner_done());
   return print_test_summary();
 }
 #endif

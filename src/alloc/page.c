@@ -536,7 +536,9 @@ bool _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page)
   return (mi_page_all_free(page) && _mi_page_free(page, pq));
 }
 
-void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
+// Abandon a page. If `owner_done` is set, the owning theap abandons all its pages (e.g. as its thread terminates)
+// and `mi_thread_id_of` will return 0 for blocks in this page (until another thread reclaims it).
+void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq, bool owner_done) {
   _mi_page_free_collect(page, false); // ensure used count is up to date
   pq = mi_page_queue_of(page); // a preceding release attempt may have unfulled the page
   if (mi_page_all_free(page) && _mi_page_free(page, pq)) return;
@@ -544,6 +546,11 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   mi_page_queue_remove(pq, page);
   mi_theap_t* theap = page->theap;
   mi_page_qsbr_unlink(page);
+  #if MI_QSBR
+  if (owner_done) { mi_page_qsbr_set_thread_id(page, 0); }  // while we still own the page
+  #else
+  MI_UNUSED(owner_done);
+  #endif
   mi_page_set_theap(page, NULL);
   page->theap = theap; // don't actually set theap to NULL so we can reclaim_on_free within the same theap
   _mi_arenas_page_abandon(page, theap);
@@ -575,7 +582,7 @@ mi_page_t* _mi_page_fresh_alloc(mi_theap_t* theap, mi_page_queue_t* pq, size_t b
       if (mi_page_is_expandable(page)) {
         if (!_mi_page_extend_free(theap, page)) {
           // cannot commit
-          _mi_page_abandon(page,pq);
+          _mi_page_abandon(page,pq,false);
           return NULL;
         };
       }
@@ -632,7 +639,7 @@ void _mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
   mi_theap_t* theap = mi_page_theap(page);
   if (theap->allow_page_abandon) {
     // abandon full pages (this is the usual case in order to allow for sharing of memory between theaps)
-    _mi_page_abandon(page, pq);
+    _mi_page_abandon(page, pq, false);
   }
   else if (mi_page_queue_is_huge(pq)) {
     // keep huge pages in the huge queue: it is never searched for free blocks (and is collected before each huge allocation)

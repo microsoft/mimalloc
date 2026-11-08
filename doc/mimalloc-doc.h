@@ -283,7 +283,10 @@ size_t mi_usable_size(void* p);
 /// Return the current owner thread-id of the page containing a live allocation.
 /// @param p A mimalloc allocation, or \a NULL.
 /// @returns The mimalloc thread id, or 0 for \a NULL, abandoned pages, or
-///          pages belonging to a detached thread-local heap.
+///          pages belonging to a detached thread-local heap. For QSBR heaps
+///          (`MI_QSBR`), an abandoned full page still returns its last owner,
+///          and other abandoned pages return 0 once their owner abandoned all
+///          its pages (e.g. when its thread terminated).
 ///
 /// This is a snapshot of current page ownership, not the original allocating
 /// thread. This is mimalloc's internal thread identity scheme, not necessarily the native OS thread-id.
