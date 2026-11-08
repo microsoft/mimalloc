@@ -503,8 +503,15 @@ static int unix_madvise(void* addr, size_t size, int advice) {
 static void* unix_mmap_prim(void* addr, size_t size, int protect_flags, int flags, int fd) {
   void* p = mmap(addr, size, protect_flags, flags, fd, 0 /* offset */);
   #if defined(__linux__) && defined(PR_SET_VMA)
-  if (p!=MAP_FAILED && p!=NULL) {
-    prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, p, size, "mimalloc");
+  static _Atomic(size_t) no_set_vma_name; // = 0
+  if (p!=MAP_FAILED && p!=NULL && mi_atomic_load_relaxed(&no_set_vma_name)==0) {
+    const int err = errno;
+    if (prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, p, size, "mimalloc") != 0) {
+      // `EINVAL` means naming is not supported (Linux < 5.17, or without `CONFIG_ANON_VMA_NAME`)
+      // as our arguments are always valid; in that case don't call again.
+      if (errno == EINVAL) { mi_atomic_store_relaxed(&no_set_vma_name, (size_t)1); }
+      errno = err;  // don't modify errno on a successful mmap
+    }
   }
   #endif
   return p;
