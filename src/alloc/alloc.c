@@ -432,7 +432,7 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_calloc(mi_theap_
   // note: we don't use `mi_count_size_overflow` here as its error call prevents inlining into `mi_calloc`;
   // instead, on overflow we allocate `SIZE_MAX` bytes which fails in the generic path (and sets `errno`)
   size_t total = size;
-  if (count!=1 && mi_unlikely(mi_mul_overflow(count,size,&total))) { total = SIZE_MAX; }
+  if mi_unlikely(count!=1 && mi_mul_overflow(count,size,&total)) { total = SIZE_MAX; }
   return mi_theap_zalloc(theap,total);
 }
 
