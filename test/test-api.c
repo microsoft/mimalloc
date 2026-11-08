@@ -515,7 +515,7 @@ int main(void) {
       memset(p, 0x5A, 32);
       errno = 0;
       void* q = mi_reallocarray(p, SIZE_MAX / 2 + 1, 2);
-      result = (q == NULL && errno == EOVERFLOW && mem_has_vals(p, 32, 0x5A));
+      result = (q == NULL && errno == ENOMEM && mem_has_vals(p, 32, 0x5A));
       mi_free(q == NULL ? p : q);
     }
   };

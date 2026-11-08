@@ -633,9 +633,7 @@ static void mi_error_default(int err) {
       abort();
     }
   #endif
-  if (errno==0) {
-    errno = (err==EINVAL ? EINVAL : ENOMEM /* compatibility */ );
-  }
+  // note: we do not set `errno` here; allocation functions set it themselves on failure (and `free` should not modify it)
 }
 
 void mi_register_error(mi_error_fun* fun, void* arg) {

@@ -16,7 +16,9 @@ mi_decl_restrict void* _mi_page_malloc_zero(mi_theap_t* theap, mi_page_t* page, 
 mi_decl_restrict void* _mi_theap_malloc_zero(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage) mi_attr_noexcept;     // called from `_mi_theap_malloc_aligned`
 void*                  _mi_theap_realloc_zero(mi_theap_t* theap, void* p, size_t newsize, bool zero) mi_attr_noexcept;
 
-// Safe multiply `count*size` into `total`; return `true` on overflow.
+void                   _mi_error_count_size_overflow(size_t count, size_t size);   // sets `errno` to `ENOMEM`
+
+// Safe multiply `count*size` into `total`; return `true` on overflow (and set `errno` to `ENOMEM` as required by POSIX).
 static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* total) {
   if (count==1) {  // quick check for the case where count is one (common for C++ allocators)
     *total = size;
@@ -26,10 +28,8 @@ static inline bool mi_count_size_overflow(size_t count, size_t size, size_t* tot
     return false;
   }
   else {
-    #if MI_DEBUG > 0
-    _mi_error_message(EOVERFLOW, "allocation request is too large (%zu * %zu bytes)\n", count, size);
-    #endif
     *total = SIZE_MAX;
+    _mi_error_count_size_overflow(count, size);
     return true;
   }
 }

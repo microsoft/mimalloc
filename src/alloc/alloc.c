@@ -418,9 +418,21 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_zalloc(mi_heap_t* heap, size_t 
 // mi_calloc variants
 // ----------------------------------------------------------
 
+// Called from `mi_count_size_overflow` on overflow
+mi_decl_cold mi_decl_noinline void _mi_error_count_size_overflow(size_t count, size_t size) {
+  #if MI_DEBUG > 0
+  _mi_error_message(EOVERFLOW, "allocation request is too large (%zu * %zu bytes)\n", count, size);
+  #else
+  MI_UNUSED(count); MI_UNUSED(size);
+  #endif
+  errno = ENOMEM;
+}
+
 mi_decl_nodiscard extern inline mi_decl_restrict void* mi_theap_calloc(mi_theap_t* theap, size_t count, size_t size) mi_attr_noexcept {
-  size_t total;
-  if (mi_count_size_overflow(count,size,&total)) return NULL;
+  // note: we don't use `mi_count_size_overflow` here as its error call prevents inlining into `mi_calloc`;
+  // instead, on overflow we allocate `SIZE_MAX` bytes which fails in the generic path (and sets `errno`)
+  size_t total = size;
+  if (count!=1 && mi_unlikely(mi_mul_overflow(count,size,&total))) { total = SIZE_MAX; }
   return mi_theap_zalloc(theap,total);
 }
 
@@ -666,7 +678,7 @@ mi_decl_nodiscard void* mi_heap_recalloc(mi_heap_t* heap, void* p, size_t count,
 mi_decl_nodiscard static mi_decl_restrict char* mi_theap_strdup(mi_theap_t* xtheap, const char* s) mi_attr_noexcept {
   if (s == NULL) return NULL;
   size_t len = _mi_strlen(s);
-  if (len > MI_MAX_ALLOC_SIZE - 1) return NULL;  // prevent overflow on len+1
+  if (len > MI_MAX_ALLOC_SIZE - 1) { errno = ENOMEM; return NULL; }  // prevent overflow on len+1
   char* t = (char*)mi_theap_malloc(xtheap,len+1);
   if (t == NULL) return NULL;
   mi_memcpy(t, s, len);
@@ -686,7 +698,7 @@ mi_decl_nodiscard mi_decl_restrict char* mi_heap_strdup(mi_heap_t* heap, const c
 mi_decl_nodiscard static mi_decl_restrict char* mi_theap_strndup(mi_theap_t* xtheap, const char* s, size_t n) mi_attr_noexcept {
   if (s == NULL) return NULL;
   const size_t len = _mi_strnlen(s,n);  // len <= n
-  if (len > MI_MAX_ALLOC_SIZE - 1) return NULL;  // prevent overflow on len+1
+  if (len > MI_MAX_ALLOC_SIZE - 1) { errno = ENOMEM; return NULL; }  // prevent overflow on len+1
   char* t = (char*)mi_theap_malloc(xtheap, len+1);
   if (t == NULL) return NULL;
   mi_memcpy(t, s, len);

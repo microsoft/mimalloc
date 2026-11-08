@@ -51,7 +51,7 @@ static size_t mi_sample_countdown_next(size_t rate, uint64_t carry) {
 }
 
 // Called when the theap sample countdown <= req_size; should call guarded or profiled allocation.
-mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) mi_attr_noexcept
+static void* mi_theap_malloc_sampled_ex(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage)
 {
   // the size has not yet been counted against the countdown (and does not include MI_PADDING_SIZE)
   mi_assert_internal(req_size <= MI_MAX_ALLOC_SIZE);
@@ -117,6 +117,13 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* the
     p = _mi_malloc_generic_no_sample(theap,size,zero,ppage);
   }
   mi_theap_sample_countdown_restart(theap);
+  return p;
+}
+
+mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) mi_attr_noexcept
+{
+  void* const p = mi_theap_malloc_sampled_ex(theap, req_size, zero, ppage);
+  if mi_unlikely(p==NULL) { errno = ENOMEM; }  // as in `alloc/alloc-generic.c:mi_malloc_generic_fallback`
   return p;
 }
 

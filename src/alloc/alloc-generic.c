@@ -491,7 +491,7 @@ static bool mi_theap_is_thread_done(const mi_theap_t* theap) {
   return (_mi_theap_is_unavailable(theap) && _mi_thread_is_done());
 }
 
-static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage)
+static inline void* mi_malloc_generic_fallback_ex(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage)
 {
   if mi_unlikely(mi_theap_is_thread_done(theap)) {
     return mi_malloc_generic_thread_done(size, huge_alignment, ppage);
@@ -512,6 +512,16 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
     // direct allocation
     return mi_malloc_generic_from_page(theap, size, zero, huge_alignment, ppage, 0);
   }
+}
+
+// Every failing allocation that reaches the generic path ends here (or in `_mi_theap_malloc_sampled`).
+// We always set `errno` to `ENOMEM` (as required by POSIX), independent of the error code passed to
+// the error handler (which may be more specific, like `EOVERFLOW`).
+static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage)
+{
+  void* const p = mi_malloc_generic_fallback_ex(theap, size, zero, huge_alignment, ppage);
+  if mi_unlikely(p==NULL) { errno = ENOMEM; }
+  return p;
 }
 
 

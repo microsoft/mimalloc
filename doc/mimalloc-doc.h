@@ -1107,6 +1107,10 @@ typedef void (mi_error_fun)(int err, void* arg);
 /// * \a ENOMEM: Not enough memory available to satisfy the request.
 /// * \a EOVERFLOW: Too large a request, for example in mi_calloc(), the \a count and \a size parameters are too large.
 /// * \a EINVAL: Trying to free or re-allocate an invalid pointer.
+///
+/// Independent of the error code passed to \a errfun, allocation functions that return \a NULL
+/// set \a errno as required by POSIX: \a ENOMEM, or \a EINVAL for an invalid alignment.
+/// Other errors (like freeing an invalid pointer) do not modify \a errno.
 void mi_register_error(mi_error_fun* errfun, void* arg);
 
 /// Allocate a small object.
