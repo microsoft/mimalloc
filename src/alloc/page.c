@@ -190,9 +190,9 @@ static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page,
   if (alloc_count <= last_alloc) return;
 
   // update countdown
-  const size_t bsize = mi_page_usable_block_size(page);  mi_assert_internal(bsize >= MI_PADDING_SIZE);
+  const size_t bsize = mi_page_usable_block_size(page);  // (already excludes the padding)
   const size_t alloc_diff = alloc_count - last_alloc;
-  const uint64_t requested = (uint64_t)alloc_diff * (uint64_t)(bsize - MI_PADDING_SIZE);
+  const uint64_t requested = (uint64_t)alloc_diff * (uint64_t)bsize;
   mi_theap_sample_countdown_sub(theap, requested);
 }
 #endif
@@ -210,9 +210,6 @@ static void mi_theap_page_merge_stats(mi_theap_t* theapx, const mi_page_t* page,
   const size_t bsize = mi_page_usable_block_size(page);
   const uint64_t allocated = (uint64_t)alloc_count * (uint64_t)bsize;
   const uint64_t freed     = (uint64_t)free_count * (uint64_t)bsize;
-  #if MI_STATS==1
-  const uint64_t requested = allocated - ((uint64_t)alloc_count * MI_PADDING_SIZE);
-  #endif
   mi_assert_internal(allocated <= INT64_MAX);  // safe to cast to int64_t for stats
   mi_assert_internal(freed <= INT64_MAX);
 
@@ -224,8 +221,8 @@ static void mi_theap_page_merge_stats(mi_theap_t* theapx, const mi_page_t* page,
     mi_theapx_stat_increase(heap, theapx, malloc_bins[bin], alloc_count);
     if (bin==MI_BIN_HUGE) { mi_theapx_stat_increase(heap,theapx,malloc_huge,allocated); } // separate so we have a count and total
     #if MI_STATS==1
-    // use coarse total requested bytes
-    mi_theapx_stat_counter_increase(heap, theapx, malloc_requested, requested);
+    // use coarse total requested bytes (the usable block size, which already excludes the padding)
+    mi_theapx_stat_counter_increase(heap, theapx, malloc_requested, allocated);
     #endif
     // deprecated
     if (bin!=MI_BIN_HUGE) {

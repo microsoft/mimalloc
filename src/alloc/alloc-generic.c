@@ -576,7 +576,7 @@ mi_decl_restrict void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t si
   // other allocations can be counted in batches during this allocation as well
   const size_t counted = MI_SAMPLE_COUNTDOWN_MAX - theap->sample_countdown;
   #if MI_SAMPLE==1
-  const size_t self = (p==NULL ? 0 : mi_page_usable_block_size(page) - MI_PADDING_SIZE);
+  const size_t self = (p==NULL ? 0 : mi_page_usable_block_size(page));  // as counted by `mi_theap_adjust_sample_countdown`
   #else
   const size_t self = (p==NULL ? 0 : size - MI_PADDING_SIZE);
   #endif
