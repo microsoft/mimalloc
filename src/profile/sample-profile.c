@@ -266,12 +266,26 @@ static void mi_profiler_new_generation(mi_profiler_t* profiler) {
   mi_atomic_store_release(mi_profiler_pstate(profiler), generation << 1);
 }
 
+// Attach (or detach if `profiler==NULL`) a profiler to a heap or subprocess.
+// The new generation must be set before the profiler is published, as otherwise a concurrent free
+// could call `on_free` for a block sampled during a previous attachment (with the same generation).
+static bool mi_profiler_attach(_Atomic(mi_profiler_t*)* slot, mi_profiler_t* profiler) {
+  mi_profiler_stop(profiler);
+  mi_profiler_t* expected = NULL;
+  if (profiler==NULL) {
+    expected = mi_atomic_load_ptr_acquire(mi_profiler_t,slot);
+  }
+  else {
+    if (mi_atomic_load_ptr_relaxed(mi_profiler_t,slot) != NULL) return false;  // don't overwrite unless it is NULL
+    mi_profiler_new_generation(profiler);
+  }
+  return mi_atomic_cas_ptr_strong_release(mi_profiler_t, slot, &expected, profiler);
+}
+
 mi_decl_export bool mi_heap_profile(mi_heap_t* heap, mi_profiler_t* profiler) {
   // if (heap==NULL) { heap = mi_heap_main(); }
-  mi_profiler_stop(profiler);
-  if (!mi_heap_set_profiler(heap,profiler)) return false;
-  mi_profiler_new_generation(profiler);
-  return true;
+  if (!mi_heap_handle_is_valid(heap)) return false;
+  return mi_profiler_attach(&heap->profiler, profiler);
 }
 
 mi_decl_export void mi_heap_profile_disable(mi_heap_t* heap) {
@@ -284,10 +298,7 @@ mi_decl_export void mi_heap_profile_disable(mi_heap_t* heap) {
 mi_decl_export bool mi_subproc_profile(mi_subproc_id_t subproc_id, mi_profiler_t* profiler) {
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
   if (subproc==NULL) return false;
-  mi_profiler_stop(profiler);
-  mi_profiler_t* previous = (profiler==NULL ? mi_atomic_load_ptr_acquire(mi_profiler_t,&subproc->profiler) : NULL); // don't overwrite unless it is NULL
-  if (!mi_atomic_cas_ptr_strong_release(mi_profiler_t,&subproc->profiler, &previous, profiler)) { return false; }
-  mi_profiler_new_generation(profiler);
+  if (!mi_profiler_attach(&subproc->profiler, profiler)) { return false; }
   mi_lock(&subproc->heaps_lock) {
     for (mi_heap_t* heap = subproc->heaps; heap!=NULL; heap = heap->next) {
       mi_heap_set_profiler(heap,profiler);
