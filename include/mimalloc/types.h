@@ -847,7 +847,6 @@ struct mi_subproc_s {
   _Atomic(mi_profiler_t*) profiler;
 
   mi_memid_t            memid;                          // provenance of this memory block (meta or static)
-  mi_subproc_t*         parent;                         // subproc in which this one was allocated
   mi_decl_align(8)                                      // needed on some 32-bit platforms
   mi_stats_t            stats;                          // subprocess statistics; updated for arena/OS stats like committed,
                                                         // and otherwise merged with heap stats when those are deleted

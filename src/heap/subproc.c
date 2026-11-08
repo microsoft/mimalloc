@@ -144,8 +144,7 @@ mi_subproc_id_t mi_subproc_current(void) {
 ----------------------------------------------------------- */
 
 
-static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc, mi_subproc_t* parent) {
-  subproc->parent = parent;
+static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc) {
   subproc->subproc_seq = mi_atomic_increment_relaxed(&_mi_process.subprocs_created_count);
   mi_stats_header_init(&subproc->stats);
   mi_lock_init(&subproc->arena_reserve_lock);
@@ -165,37 +164,38 @@ static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc, mi_subproc_t* parent
 
 mi_subproc_id_t mi_subproc_new(void) {
   mi_thread_init();
-  mi_subproc_t* const parent = _mi_subproc();
+  // sub-process meta data is allocated in the main subprocess as that outlives all other subprocesses
+  mi_subproc_t* const subproc_main = _mi_subproc_main();
   mi_memid_t memid;
-  mi_subproc_t* const subproc = (mi_subproc_t*)_mi_meta_zalloc(parent, sizeof(mi_subproc_t), &memid);
+  mi_subproc_t* const subproc = (mi_subproc_t*)_mi_meta_zalloc(subproc_main, sizeof(mi_subproc_t), &memid);
   if (subproc == NULL) { return _mi_subproc_to_id(NULL); }
   subproc->memid  = memid;
 
   mi_memid_t theap_memid;
-  mi_theap_t* const theap_meta = (mi_theap_t*)_mi_meta_zalloc(parent, sizeof(mi_theap_t), &theap_memid);
+  mi_theap_t* const theap_meta = (mi_theap_t*)_mi_meta_zalloc(subproc_main, sizeof(mi_theap_t), &theap_memid);
   if (theap_meta==NULL) {
-    _mi_meta_free(parent, subproc, memid);
+    _mi_meta_free(subproc_main, subproc, memid);
     return _mi_subproc_to_id(NULL);
   }
   theap_meta->memid = theap_memid;
 
   // init subproc
-  mi_subproc_init(subproc,parent);
+  mi_subproc_init(subproc);
 
   // init main heap
   mi_heap_t* heap_main = _mi_heap_new_for_subproc(subproc,0,true,false);
   if (heap_main==NULL) {
-    _mi_meta_free(parent, theap_meta, theap_meta->memid);
+    _mi_meta_free(subproc_main, theap_meta, theap_meta->memid);
     mi_subproc_destroy(_mi_subproc_to_id(subproc));
     return _mi_subproc_to_id(NULL);
   }
   mi_assert_internal(subproc->heap_main == heap_main);
 
   // init meta theap
-  mi_assert_internal(parent->theap_meta!=NULL);
-  mi_assert_internal(parent->theap_meta->tld!=NULL);
-  mi_assert_internal(parent->theap_meta->tld->thread_id == MI_THREAD_ID_DETACHED);
-  _mi_theap_meta_init(theap_meta,heap_main,parent->theap_meta->tld /* detached tld */);
+  mi_assert_internal(subproc_main->theap_meta!=NULL);
+  mi_assert_internal(subproc_main->theap_meta->tld!=NULL);
+  mi_assert_internal(subproc_main->theap_meta->tld->thread_id == MI_THREAD_ID_DETACHED);
+  _mi_theap_meta_init(theap_meta,heap_main,subproc_main->theap_meta->tld /* detached tld */);
   subproc->theap_meta = theap_meta;
 
   return _mi_subproc_to_id(subproc);
@@ -263,7 +263,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
   mi_lock_done(&subproc->arena_reserve_lock);
   mi_lock_done(&subproc->heaps_lock);
   mi_lock_done(&subproc->theap_meta_lock);
-  _mi_meta_free( subproc->parent, subproc, subproc->memid);
+  _mi_meta_free(_mi_subproc_main(), subproc, subproc->memid);
   if (_mi_subproc_is_main(subproc)) {
     // for the main subproc, also release the global page map
     _mi_page_map_unsafe_destroy();
@@ -331,7 +331,7 @@ mi_subproc_t* _mi_subproc_main_init(void) {
   mi_lock_init(&_mi_process.subprocs_lock);
   mi_subproc_t* const subproc = _mi_subproc_main();
   subproc->memid = _mi_memid_create_static(subproc,sizeof(mi_subproc_t));
-  mi_subproc_init(subproc,NULL);
+  mi_subproc_init(subproc);
   _mi_os_stats_bootstrap_merge(subproc);  // account for the OS allocation of the process meta data
   return subproc;
 }
