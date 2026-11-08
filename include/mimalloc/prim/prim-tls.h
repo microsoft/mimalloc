@@ -187,11 +187,7 @@ static inline mi_thread_id_t __mi_prim_thread_id(void) {
 }
 #elif !MI_NO_THREAD_POINTER
 static inline mi_thread_id_t __mi_prim_thread_id(void) {
-  #if defined(__BIONIC__)
-  return (mi_thread_id_t)mi_addr(mi_prim_tls_slot(1));
-  #else
   return (mi_thread_id_t)(uintptr_t)mi_prim_thread_pointer();  // thread pointers are never memory tagged
-  #endif
 }
 #else
 // otherwise use portable C, taking the address of a thread local variable (this is still very fast on most platforms).
