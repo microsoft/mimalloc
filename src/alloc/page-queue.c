@@ -311,11 +311,13 @@ void mi_page_queue_push_at_end(mi_theap_t* theap, mi_page_queue_t* queue, mi_pag
   if (page->memid.memkind != MI_MEM_ARENA) { theap->page_count_os++; }
 }
 
+// Move a page from the `from` queue to the end (or front) of the `to` queue.
+// The queues can be the same in which case the page is moved within the queue.
 static void mi_page_queue_enqueue_from_ex(mi_page_queue_t* to, mi_page_queue_t* from, bool enqueue_at_end, mi_page_t* page) {
   mi_assert_internal(page != NULL);
   mi_assert_internal(from->count >= 1);
   mi_assert_expensive(mi_page_queue_contains(from, page));
-  mi_assert_expensive(!mi_page_queue_contains(to, page));
+  mi_assert_expensive(to == from || !mi_page_queue_contains(to, page));
   const size_t bsize = mi_page_block_size(page);
   MI_UNUSED(bsize);
   mi_assert_internal((bsize == to->block_size && bsize == from->block_size) ||
@@ -357,31 +359,23 @@ static void mi_page_queue_enqueue_from_ex(mi_page_queue_t* to, mi_page_queue_t* 
     }
   }
   else {
+    // enqueue at the front
+    page->prev = NULL;
+    page->next = to->first;
     if (to->first != NULL) {
-      // enqueue at 2nd place
       mi_assert_internal(theap == mi_page_theap(to->first));
-      mi_page_t* next = to->first->next;
-      page->prev = to->first;
-      page->next = next;
-      to->first->next = page;
-      if (next != NULL) {
-        next->prev = page;
-      }
-      else {
-        to->last = page;
-      }
+      to->first->prev = page;
     }
     else {
-      // enqueue at the head (singleton list)
-      page->prev = NULL;
-      page->next = NULL;
-      to->first = page;
       to->last = page;
-      mi_theap_queue_first_update(theap, to);
     }
+    to->first = page;
+    mi_theap_queue_first_update(theap, to);
   }
 
-  mi_page_set_in_full(page, mi_page_queue_is_full(to));
+  if (to != from) {  // avoid the atomic flag update when moving within a queue
+    mi_page_set_in_full(page, mi_page_queue_is_full(to));
+  }
 }
 
 void mi_page_queue_enqueue_from(mi_page_queue_t* to, mi_page_queue_t* from, mi_page_t* page) {
@@ -396,18 +390,18 @@ void mi_page_queue_enqueue_from_full(mi_page_queue_t* to, mi_page_queue_t* from,
 void mi_page_queue_move_to_front(mi_theap_t* theap, mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(mi_page_theap(page) == theap);
   mi_assert_internal(mi_page_queue_contains(queue, page));
+  MI_UNUSED(theap);
   if (queue->first == page) return;
-  mi_page_queue_remove(queue, page);
-  mi_page_queue_push(theap, queue, page);
+  mi_page_queue_enqueue_from_ex(queue, queue, false /* at the front */, page);
   mi_assert_internal(queue->first == page);
 }
 
 void mi_page_queue_move_to_back(mi_theap_t* theap, mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(mi_page_theap(page) == theap);
   mi_assert_internal(mi_page_queue_contains(queue, page));
+  MI_UNUSED(theap);
   if (queue->last == page) return;
-  mi_page_queue_remove(queue, page);
-  mi_page_queue_push_at_end(theap, queue, page);
+  mi_page_queue_enqueue_from_ex(queue, queue, true /* at the end */, page);
   mi_assert_internal(queue->last == page);
 }
 
