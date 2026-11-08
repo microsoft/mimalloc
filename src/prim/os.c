@@ -274,8 +274,9 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
   if (req_size > 32*MI_GiB) return NULL;  // guarantee the chance of fixed valid address is at most 1/(MI_HINT_AREA / 1<<34) = 1/256
   #endif
 
-  mi_addr_t hint = mi_atomic_add_relaxed(&_mi_process.os.aligned_base, req_size);
-  if (hint == 0 || hint > MI_HINT_MAX) {   // wrap or initialize
+  // initialize (or wrap) the base before advancing it so an early return leaves it unchanged
+  mi_addr_t base = mi_atomic_load_relaxed(&_mi_process.os.aligned_base);
+  if (base == 0 || base > MI_HINT_MAX) {
     mi_addr_t init = MI_HINT_BASE;
     #if (MI_SECURE || !MI_DEBUG)  // security: randomize start of aligned allocations unless in debug mode
     mi_theap_t* const theap = _mi_theap_default();     // don't use `mi_theap_get_default()` as that can cause allocation recursively (issue #1267)
@@ -283,11 +284,10 @@ void* _mi_os_get_aligned_hint(size_t try_alignment, size_t sze)
     const size_t r = _mi_theap_random_next(theap);
     init = init + ((MI_ADDR(MI_MiB) * ((r>>17) & 0x3FFFFF)) % MI_HINT_AREA);  // (randomly 22 bits)* 1MiB == 0 to 4TiB
     #endif
-    mi_addr_t expected = hint + req_size;
-    mi_atomic_cas_strong_relaxed(&_mi_process.os.aligned_base, &expected, init);
-    hint = mi_atomic_add_relaxed(&_mi_process.os.aligned_base, req_size); // this may still give 0 or > MI_HINT_MAX but that is ok, it is a hint after all
-    if (hint==0) return NULL;
+    mi_atomic_cas_strong_relaxed(&_mi_process.os.aligned_base, &base, init);  // if this fails, another thread initialized it
   }
+  const mi_addr_t hint = mi_atomic_add_relaxed(&_mi_process.os.aligned_base, req_size);
+  if (hint == 0 || hint > MI_HINT_MAX) return NULL;  // (rare) wrapped concurrently: the next call reinitializes
   const mi_addr_t hint_align = mi_addr_align_up(hint,try_alignment);
   mi_assert_internal(hint_align + sze < hint + req_size);
   return mi_ptr_from_addr(hint_align);
