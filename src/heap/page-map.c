@@ -320,7 +320,10 @@ static size_t mi_page_map_get_idx(mi_page_t* page, size_t* sub_idx, size_t* slic
   size_t page_size;
   uint8_t* page_start = mi_page_area(page, &page_size);
   if (page_size > MI_LARGE_PAGE_SIZE) { page_size = MI_LARGE_PAGE_SIZE - MI_ARENA_SLICE_SIZE; }  // furthest interior pointer
-  *slice_count = _mi_slice_count_of_size(page_size) + ((page_start - mi_page_slice_start(page))/MI_ARENA_SLICE_SIZE); // add for large aligned blocks
+  mi_assert_internal(page_size > 0);
+  // count the slices spanned by `[page_start, page_start + page_size)` exactly
+  const mi_addr_t start = mi_addr(page_start);
+  *slice_count = ((start + page_size - 1) / MI_ARENA_SLICE_SIZE) - (start / MI_ARENA_SLICE_SIZE) + 1;
   return mi_page_map_index(page_start, sub_idx);
 }
 
