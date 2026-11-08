@@ -368,13 +368,19 @@ static inline size_t mi_page_memtag_parity(const mi_page_t* page) {
 // Only the first unit of the neighbours is read (as a guarded block may end in a guard page), and only for blocks below the capacity
 // (as later blocks are not yet tagged and may not be committed). The first and the last block of the page use the tag class of `idx`
 // (as the adjacent memory cannot be read).
-// (note: the capacity can be read concurrently by a non-owning thread but it only grows while the page has a used block)
+// (note: the capacity is read concurrently by a non-owning thread (using the atomic `capacity_size`) but it only grows while the page
+//  has a used block; a stale capacity only means the next block is not considered, which is the same as a free just before an extension)
 // (note: we branch on the (rare) edge case instead of selecting the mask as this keeps it off the critical path of the retagging)
 static inline size_t mi_page_block_memtag_adjacent(const mi_page_t* page, const void* block, size_t bsize, size_t idx, const void** prev, const void** next) {
   const uint8_t* const ublock = (const uint8_t*)mi_ptr_memtag_meta(block);
   const size_t ofs = (size_t)(mi_addr(ublock) - mi_addr(mi_page_start(page)));
+  #if MI_FREE_IS_CHECKED
+  const size_t capacity_size = mi_atomic_load_relaxed(&page->capacity_size);
+  #else
+  const size_t capacity_size = (size_t)page->capacity * bsize;  // not reached as memory tagging implies `MI_FREE_IS_CHECKED`
+  #endif
   *prev = (ofs == 0 ? NULL : ublock - bsize);
-  *next = (ofs + bsize >= (size_t)page->capacity * bsize ? NULL : ublock + bsize);
+  *next = (ofs + bsize >= capacity_size ? NULL : ublock + bsize);
   if mi_unlikely(ofs == 0 || ofs + bsize >= (size_t)page->reserved * bsize) {
     return mi_memtag_exclude_base(idx, true);
   }
