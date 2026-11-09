@@ -30,7 +30,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #define TEST_THRESHOLD (1 * 1024)
 
 // with `MI_TEST_LIGHT` use fewer allocations (and thus fewer sampled backtraces)
-#if MI_TEST_LIGHT
+#if MI_TEST_LIGHT >= 2
+#define TEST_ALLOC_COUNT      (10000)
+#define TEST_SITE_ALLOC_COUNT (2000)
+#elif MI_TEST_LIGHT
 #define TEST_ALLOC_COUNT      (20000)
 #define TEST_SITE_ALLOC_COUNT (4000)
 #else
@@ -505,7 +508,9 @@ bool test_pprof_profiler_new_delete(void) {
 
 #define PROFILE_THREADS_BASE_NAME  "profile/test-pprof-profile-threads"
 #define MI_TEST_PPROF_THREAD_COUNT      8
-#if MI_TEST_LIGHT
+#if MI_TEST_LIGHT >= 2
+#define MI_TEST_PPROF_THREAD_ITERS      5000
+#elif MI_TEST_LIGHT
 #define MI_TEST_PPROF_THREAD_ITERS      10000
 #else
 #define MI_TEST_PPROF_THREAD_ITERS      50000

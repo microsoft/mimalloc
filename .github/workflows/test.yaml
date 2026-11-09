@@ -313,10 +313,10 @@ jobs:
             packages: ninja clang
             apk_tools_url: https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v3.0.7/x86_64/apk.static#!sha256!c07bf5356eacc9dd7a8c56bc537f46702f007170287403299d52a04264e74b3c
             cmake_args: -G Ninja
-            test_env: MI_TEST_LIGHT=1
+            test_env: MI_TEST_LIGHT=2
           - target: arm32
             arch: armv7  # or armhf for arm-v6 with hard float
-            test_env: MI_TEST_LIGHT=1
+            test_env: MI_TEST_LIGHT=2
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

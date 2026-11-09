@@ -60,6 +60,10 @@ static int ITER    = 100;
 static int THREADS = NTHREADS/4;
 static int SCALE   = 25;
 static int ITER    = 400;
+#elif MI_TEST_LIGHT >= 2       // reduce the load further (e.g. under slow emulation)
+static int THREADS = NTHREADS/4;
+static int SCALE   = 5;
+static int ITER    = 5;
 #elif MI_TEST_LIGHT            // reduce the load in test integration (e.g. under emulation)
 static int THREADS = NTHREADS/4;
 static int SCALE   = 10;

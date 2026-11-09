@@ -85,8 +85,12 @@ static bool mem_is_zero(const void* p, size_t size) {
 
 // size sweeps use a larger odd multiple of the step beyond the smallest sizes (so all residues
 // modulo the power-of-two alignments are still covered); with `MI_TEST_LIGHT` the steps are larger
-// and repeated tests run fewer iterations
-#if MI_TEST_LIGHT
+// and repeated tests run fewer iterations (and even fewer with `MI_TEST_LIGHT=2`)
+#if MI_TEST_LIGHT >= 2
+#define MI_TEST_SIZE_STEP(size,step)  ((size) < 64 ? (step) : 15*(step))
+#define MI_TEST_LARGE_STEP            (6*1024)
+#define MI_TEST_ITERS(n)              ((n)/8)
+#elif MI_TEST_LIGHT
 #define MI_TEST_SIZE_STEP(size,step)  ((size) < 128 ? (step) : 7*(step))
 #define MI_TEST_LARGE_STEP            (3*1024)
 #define MI_TEST_ITERS(n)              ((n)/4)

@@ -259,8 +259,14 @@ if(MI_OPT_ARCH STREQUAL "DEFAULT")
   endif()
 endif()
 
-if(DEFINED ENV{MI_TEST_LIGHT})
-  list(APPEND mi_defines MI_TEST_LIGHT=1)  # to lighten test load in test integration
+if(DEFINED ENV{MI_TEST_LIGHT})  # to lighten test load in test integration (use 2 to lighten further, e.g. under emulation)
+  if("$ENV{MI_TEST_LIGHT}" MATCHES "^[0-9]+$")
+    if(NOT "$ENV{MI_TEST_LIGHT}" EQUAL 0)
+      list(APPEND mi_defines MI_TEST_LIGHT=$ENV{MI_TEST_LIGHT})
+    endif()
+  else()
+    list(APPEND mi_defines MI_TEST_LIGHT=1)
+  endif()
 endif()
 
 # -----------------------------------------------------------------------------
