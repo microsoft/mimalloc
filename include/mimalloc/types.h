@@ -325,6 +325,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_PAGE_META_ALIGNED_COUNT    (MI_PAGE_META_ALIGNED_CHUNKS * MI_BCHUNK_BITS)
 #define MI_PAGE_META_ALIGNMENT        (MI_PAGE_META_ALIGNED_COUNT * MI_ARENA_SLICE_SIZE)  // 256 MiB (32 MiB on 32-bit)
 #define MI_PAGE_META_ALIGNED_OFFSET   (MI_ARENA_GUARD_SLICES * MI_ARENA_SLICE_SIZE)       // offset of the page meta data in an aligned area
+#if !defined(MI_PAGE_META_IDX_MUL)
+#define MI_PAGE_META_IDX_MUL          5   // spread the page meta entries of adjacent slices over the cache lines (see `mi_page_meta_aligned_index`)
+#endif
+#if (MI_PAGE_META_IDX_MUL % 2) == 0
+#error "MI_PAGE_META_IDX_MUL must be odd to map slices one-to-one onto the page meta entries"
+#endif
 #define MI_ARENA_ALIGNMENT            MI_PAGE_META_ALIGNMENT
 #else
 #define MI_ARENA_ALIGNMENT            MI_ARENA_SLICE_ALIGN

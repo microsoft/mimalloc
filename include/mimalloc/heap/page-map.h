@@ -123,13 +123,20 @@ static inline mi_page_t* mi_page_meta_load(mi_page_t* page) {
 #endif
 
 #if MI_PAGE_META_IS_ALIGNED
+// The index of the aligned page meta entry of the slice at `slice_idx`. Adjacent slices get entries `MI_PAGE_META_IDX_MUL` apart
+// to avoid cache line contention between adjacent pages. Since the multiplier is odd and `MI_PAGE_META_ALIGNED_COUNT`
+// is a power of 2, the multiplier has an inverse modulo the count and the mapping is one-to-one.
+static inline size_t mi_page_meta_aligned_index(size_t slice_idx) {
+  mi_assert_internal(mi_is_power_of_two(MI_PAGE_META_ALIGNED_COUNT));
+  return (slice_idx * MI_PAGE_META_IDX_MUL) % MI_PAGE_META_ALIGNED_COUNT;
+}
+
 // if the page meta data is aligned in front of pages we can find it efficiently
 // without needing to go through the page map (for valid pointers).
 // (note: the returned page meta data keeps the memory tag of `p` and needs `mi_page_meta_load` before access)
 static inline mi_page_t* mi_aligned_ptr_page0(const void* p) {
   mi_page_t* const page_metas = (mi_page_t*)mi_align_down_ptr(p,MI_PAGE_META_ALIGNMENT);
-  // const ptrdiff_t page_idx = ((uint8_t*)p - (uint8_t*)page_metas)/MI_ARENA_SLICE_SIZE;
-  const size_t page_idx       = (size_t)((mi_addr(p) / MI_ARENA_SLICE_SIZE) % (MI_PAGE_META_ALIGNMENT / MI_ARENA_SLICE_SIZE));
+  const size_t page_idx       = mi_page_meta_aligned_index((size_t)(mi_addr(p) / MI_ARENA_SLICE_SIZE));
   mi_assert_internal(page_idx <= MI_PAGE_META_ALIGNED_COUNT);
   #if MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_RISCV // better code on x64/x86/riscv64
   mi_page_t* const page = (mi_page_t*)(((uintptr_t)page_metas | (page_idx * sizeof(mi_page_t))) + MI_PAGE_META_ALIGNED_OFFSET);

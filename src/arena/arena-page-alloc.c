@@ -223,6 +223,18 @@ static uint8_t* mi_arenas_page_alloc_from_slices(mi_theap_t* theap, size_t slice
 }
 
 #if MI_PAGE_META_OS_IS_SEPARATED
+#if MI_PAGE_META_IS_ALIGNED
+// The size of the aligned page meta data up to and including the entries for a page at `page_offset` in an aligned OS area.
+static size_t mi_page_meta_os_aligned_size(size_t page_offset, size_t max_page_meta_count) {
+  size_t count = 0;
+  const size_t slice_end = mi_divide_up(page_offset + MI_ARENA_SLICE_SIZE, MI_ARENA_SLICE_SIZE) + max_page_meta_count;
+  for (size_t slice_idx = page_offset / MI_ARENA_SLICE_SIZE; slice_idx < slice_end; slice_idx++) {
+    count = mi_max(count, mi_page_meta_aligned_index(slice_idx) + 1);
+  }
+  return count * sizeof(mi_page_t);
+}
+#endif
+
 // Allocate slices from the OS with the (committed and zero'd) page meta data in front of the page area (returned in `*ppage_meta`).
 // The OS memory is `[guard slice | page meta data | guard slice | ... | page area]` where the guard slices are only reserved in secure mode.
 // With aligned page meta data, the OS memory is `MI_PAGE_META_ALIGNMENT` aligned and the page meta data is indexed by slice (see `mi_aligned_ptr_page`).
@@ -246,18 +258,23 @@ static uint8_t* mi_arenas_page_alloc_from_os(mi_heap_t* heap, size_t slice_count
   #endif
 
   // offset of the page area (leaving room for the guard slices around the page meta data)
-  const size_t page_offset = mi_align_up(_mi_size_of_slices(2*MI_ARENA_GUARD_SLICES + 1), page_alignment);
+  size_t page_offset = mi_align_up(_mi_size_of_slices(2*MI_ARENA_GUARD_SLICES + 1), page_alignment);
+  #if MI_PAGE_META_IS_ALIGNED
+  size_t page_meta_size = mi_page_meta_os_aligned_size(page_offset, max_page_meta_count);
+  while (_mi_size_of_slices(MI_ARENA_GUARD_SLICES) + mi_align_up(page_meta_size,_mi_os_page_size()) + _mi_os_secure_guard_page_size() > page_offset) {
+    // the spread page meta entries need more room in front of the page area
+    page_offset += page_alignment;
+    page_meta_size = mi_page_meta_os_aligned_size(page_offset, max_page_meta_count);
+  }
+  #else
+  const size_t page_meta_size = sizeof(mi_page_t);
+  #endif
   uint8_t* const os_start = (uint8_t*)_mi_arena_os_alloc_aligned(heap->subproc, alloc_size + page_offset, os_alignment, 0 /* align offset */, false /* commit */, false /* allow large */, req_arena, memid);
   if (os_start==NULL) return NULL;
   uint8_t* const start = os_start + page_offset;
 
   // commit the page meta data and page area
   uint8_t* const page_meta_start = os_start + _mi_size_of_slices(MI_ARENA_GUARD_SLICES);
-  #if MI_PAGE_META_IS_ALIGNED
-  const size_t page_meta_size = (mi_divide_up(page_offset + MI_ARENA_SLICE_SIZE,MI_ARENA_SLICE_SIZE) + max_page_meta_count) * sizeof(mi_page_t);
-  #else
-  const size_t page_meta_size = sizeof(mi_page_t);
-  #endif
   mi_assert_internal(page_meta_start + mi_align_up(page_meta_size,_mi_os_page_size()) + _mi_os_secure_guard_page_size() <= start);
   bool is_zero;
   bool ok = _mi_arena_commit(heap->subproc,req_arena,page_meta_start,page_meta_size,&is_zero,page_meta_size /* don't count in stats? */);
@@ -480,8 +497,9 @@ static void mi_arenas_page_link_aligned_meta(mi_page_t* page, uint8_t* slice_sta
   mi_atomic_store_ptr_release(mi_page_t,&mi_page_meta_load(page_meta)->self,page);
   if (slice_count > 1) {
     // at least two for large singleton blocks as guard pages can have a large offset beyond a single slice
+    // (note: the entries of adjacent slices are not adjacent, see `mi_page_meta_aligned_index`)
     for(size_t i = 1; i < max_page_meta_count; i++) {
-      mi_page_t* const meta = mi_page_meta_load(&page_meta[i]);
+      mi_page_t* const meta = mi_page_meta_load(mi_aligned_ptr_page0(slice_start + _mi_size_of_slices(i)));
       mi_assert_internal(meta->block_size == 0);
       mi_atomic_store_ptr_release(mi_page_t,&meta->self,page);
     }
