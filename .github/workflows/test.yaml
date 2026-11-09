@@ -448,9 +448,9 @@ jobs:
     env:
       CC: clang
       CXX: clang++
-      MI_TEST_LIGHT: 1
       CI_PARALLEL: 8
       CI_CTEST_TIMEOUT: 360
+      # MI_TEST_LIGHT: 1
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
