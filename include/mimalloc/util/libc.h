@@ -155,12 +155,12 @@ static inline bool mi_mul_overflow(size_t count, size_t size, size_t* total) {
 // initialize a local variable to zero; use memset as compilers optimize constant sized memset's
 #define _mi_memzero_var(x)  memset(&x,0,sizeof(x))
 
-// Is memory zero initialized?
+// Is memory zero initialized? (Only used in debug mode)
 static inline bool mi_mem_is_zero(const void* p, size_t size) {
-  for (size_t i = 0; i < size; i++) {
-    if (((uint8_t*)p)[i] != 0) return false;
-  }
-  return true;
+  // byte wise compare is a too slow for certain debug tests so we use memcmp instead.
+  if (size == 0) return true;
+  const uint8_t* b = (const uint8_t*)p;
+  return (b[0] == 0 && memcmp(b, b + 1, size - 1) == 0);
 }
 
 // ---------------------------------------------------------------------------------

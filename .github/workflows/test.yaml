@@ -343,10 +343,11 @@ jobs:
           path: out/release-clang/CMakeFiles/mimalloc-static.dir/src/*.s
 
       - name: Release
+        if: matrix.target != 'riscv64'  # (riscv64 uses clang only as building under emulation is slow)
         run: ${{ matrix.test_env }} sh .github/ci/cmake-test.sh release Release -DMI_OPT_ARCH=ON -DMI_SEE_ASM=ON
 
       - name: Release, Asm
-        if: matrix.target != 'x64'
+        if: matrix.target != 'x64' && matrix.target != 'riscv64'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: alpine-${{ matrix.target }}-asm
@@ -356,6 +357,7 @@ jobs:
         run: ${{ matrix.test_env }} sh .github/ci/cmake-test.sh debug Debug -DMI_DEBUG=FULL
 
       - name: Secure
+        if: matrix.target != 'riscv64'
         run: ${{ matrix.test_env }} sh .github/ci/cmake-test.sh secure Release -DMI_SECURE=ON
 
   # Linux arm64 with memory tagging (MTE) emulated by QEMU (`-cpu max` as QEMU user mode faults on `dc zva` with tagged pointers, which glibc and bionic use in `memset` on `neoverse-n2`)
