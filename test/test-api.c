@@ -76,14 +76,23 @@ static void mi_cdecl qsbr_record_error(int err, void* arg) {
 
 static bool mem_has_vals(const uint8_t* p, size_t size, uint8_t val) {
   if (p==NULL) return false;
-  for (size_t i = 0; i < size; ++i) {
-    if (p[i] != val) return false;
-  }
-  return true;
+  if (size==0) return true;
+  return (p[0] == val && memcmp(p, p + 1, size - 1) == 0);  // all bytes equal the first one (fast even in debug builds)
 }
 static bool mem_is_zero(const void* p, size_t size) {
   return mem_has_vals((const uint8_t*)p,size,0);
 }
+
+// with `MI_TEST_LIGHT` size sweeps use a larger (odd multiple) step beyond the smallest sizes, and repeated tests run fewer iterations
+#if MI_TEST_LIGHT
+#define MI_TEST_SIZE_STEP(size,step)  ((size) < 128 ? (step) : 7*(step))
+#define MI_TEST_LARGE_STEP            (3*1024)
+#define MI_TEST_ITERS(n)              ((n)/4)
+#else
+#define MI_TEST_ITERS(n)              (n)
+#define MI_TEST_LARGE_STEP            (1024)
+#define MI_TEST_SIZE_STEP(size,step)  (step)
+#endif
 
 // ---------------------------------------------------------------------------
 // Main testing
@@ -356,7 +365,7 @@ int main(void) {
 
   CHECK_BODY("mimalloc-aligned13") {
     bool ok = true;
-    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size++ ) {
+    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size += MI_TEST_SIZE_STEP(size,1) ) {
       for(size_t align = 1; align <= size && ok; align *= 2 ) {
         void* p[10];
         for(int i = 0; i < 10 && ok; i++) {
@@ -372,7 +381,7 @@ int main(void) {
   }
   CHECK_BODY("mimalloc-size-aligned14") {
     bool ok = true;
-    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size++ ) {
+    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size += MI_TEST_SIZE_STEP(size,1) ) {
       for(size_t align = 1; align <= 16*size && ok; align *= 2) {
         void* p[10];
         for(int i = 0; i < 10 && ok; i++) {
@@ -576,7 +585,7 @@ int main(void) {
 
   CHECK_BODY("realloc-guarded") {      // issue #1304
  	  void* shared_ptr = NULL;
-    for (int iterations = 0; iterations < 64; ++iterations) {
+    for (int iterations = 0; iterations < MI_TEST_ITERS(64); ++iterations) {
       for (int i = 0; i < 1024; ++i) {
         shared_ptr = mi_realloc(shared_ptr, i * 64);
       }
@@ -1061,12 +1070,12 @@ static bool test_aligned_check(size_t size, size_t align, bool zero) {
 
 static bool test_aligned_all(void) {
   bool ok = true;
-  for (size_t size = 0; size <= 300*1024 && ok; size += (size < 16*1024 ? 8 : 512)) {
+  for (size_t size = 0; size <= 300*1024 && ok; size += MI_TEST_SIZE_STEP(size, (size < 16*1024 ? 8 : 512))) {
     for (size_t align = 8; align <= 4096 && ok; align *= 2) {
       ok = test_aligned_check(size, align, ((size/8) & 1) != 0);
     }
   }
-  for (size_t size = 4*1024*1024 - 4096; size <= 4*1024*1024 + 3*4096 && ok; size += 1024) {
+  for (size_t size = 4*1024*1024 - 4096; size <= 4*1024*1024 + 3*4096 && ok; size += MI_TEST_LARGE_STEP) {
     for (size_t align = 8; align <= 4096 && ok; align *= 2) {
       ok = test_aligned_check(size, align, false);
     }
@@ -1345,7 +1354,7 @@ static void delete_free_worker(size_t id) {
 
 static bool test_heap_delete_concurrent_free(void) {
   const long disallow_arena_alloc = mi_option_get(mi_option_disallow_arena_alloc);
-  for (int iter = 0; iter < 20; iter++) {
+  for (int iter = 0; iter < MI_TEST_ITERS(20); iter++) {
     mi_option_set(mi_option_disallow_arena_alloc, iter % 2);  // odd iterations use OS allocated pages
     delete_free_heap = mi_heap_new();
     if (delete_free_heap == NULL) return false;

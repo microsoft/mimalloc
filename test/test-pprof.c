@@ -28,6 +28,15 @@ terms of the MIT license. A copy of the license can be found in the file
 // ---------------------------------------------------------------------------
 
 #define TEST_THRESHOLD (1 * 1024)
+
+// with `MI_TEST_LIGHT` use fewer allocations (and thus fewer sampled backtraces)
+#if MI_TEST_LIGHT
+#define TEST_ALLOC_COUNT      (20000)
+#define TEST_SITE_ALLOC_COUNT (4000)
+#else
+#define TEST_ALLOC_COUNT      (200000)
+#define TEST_SITE_ALLOC_COUNT (20000)
+#endif
 #define PROFILE_BASE_NAME "profile/test-pprof-profile"
 
 // Build the name of the `seq`-th snapshot file for `base`, matching the
@@ -205,7 +214,7 @@ bool test_pprof_snapshot_creates_file(void) {
     if (result) {
       mi_profile(prof);
       mi_profiler_start(prof);
-      allocate_and_free(200000, 64);
+      allocate_and_free(TEST_ALLOC_COUNT, 64);
       mi_profiler_stop(prof);
 
       mi_profiler_snapshot(prof);
@@ -232,7 +241,7 @@ bool test_pprof_snapshot_format(void) {
     if (result) {
       mi_profile(prof);
       mi_profiler_start(prof);
-      allocate_and_free(200000, 64);
+      allocate_and_free(TEST_ALLOC_COUNT, 64);
       mi_profiler_stop(prof);
 
       mi_profiler_snapshot(prof);
@@ -310,7 +319,7 @@ bool test_pprof_snapshot_proto_format(void) {
     if (result) {
       mi_profile(prof);
       mi_profiler_start(prof);
-      allocate_and_free(200000, 64);
+      allocate_and_free(TEST_ALLOC_COUNT, 64);
       mi_profiler_stop(prof);
 
       mi_profiler_snapshot(prof);
@@ -354,7 +363,7 @@ bool test_pprof_snapshot_interval(void) {
       // note: `mi_profiler_snapshot` is never called explicitly here -- any
       // snapshot files that appear must have been triggered automatically by
       // `on_alloc` once `TEST_INTERVAL_SIZE` sampled bytes have accumulated.
-      allocate_and_free(200000, 64);
+      allocate_and_free(TEST_ALLOC_COUNT, 64);
       mi_profiler_stop(prof);
 
       // the first snapshot should exist...
@@ -401,9 +410,9 @@ bool test_pprof_snapshot_records_samples(void) {
       mi_profiler_start(prof);
       // allocate plenty from each of the 10 distinct call sites so every
       // site accumulates enough bytes to trigger at least one sample.
-      allocate_and_free_multi_site(prof, 20000, 64);
+      allocate_and_free_multi_site(prof, TEST_SITE_ALLOC_COUNT, 64);
       mi_profiler_snapshot(prof);
-      allocate_and_free_multi_site(prof, 20000, 64);
+      allocate_and_free_multi_site(prof, TEST_SITE_ALLOC_COUNT, 64);
       mi_profiler_snapshot(prof);
       allocate_and_free_multi_site_cleanup();  // free any allocations still kept alive by the ring buffers
       mi_profiler_snapshot(prof);  // final snapshot, taken after everything was freed
@@ -496,7 +505,11 @@ bool test_pprof_profiler_new_delete(void) {
 
 #define PROFILE_THREADS_BASE_NAME  "profile/test-pprof-profile-threads"
 #define MI_TEST_PPROF_THREAD_COUNT      8
+#if MI_TEST_LIGHT
+#define MI_TEST_PPROF_THREAD_ITERS      10000
+#else
 #define MI_TEST_PPROF_THREAD_ITERS      50000
+#endif
 #define MI_TEST_PPROF_THREAD_POOL_SIZE  1024
 // number of snapshot files to retain: 3 taken while threads are running, plus 1 final one
 #define MI_TEST_PPROF_THREAD_SNAPSHOT_COUNT 4
