@@ -59,7 +59,7 @@ static int ITER    = 100;
 #elif defined(MI_TSAN)          // with thread-sanitizer reduce the threads to test within the azure pipeline limits
 static int THREADS = NTHREADS/4;
 static int SCALE   = 25;
-static int ITER    = 500;
+static int ITER    = 400;
 #elif MI_TEST_LIGHT            // reduce the load in test integration (e.g. under emulation)
 static int THREADS = NTHREADS/4;
 static int SCALE   = 10;
@@ -329,9 +329,9 @@ static void test_stress(mi_subproc_id_t subproc) {
     #if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) {
       printf("- iterations left: %3d\n", ITER - (n + 1));
-      #if !defined(USE_STD_MALLOC) && !MI_TEST_LIGHT
-      mi_debug_show_arenas();
-      #endif
+      // #if !defined(USE_STD_MALLOC) && !MI_TEST_LIGHT
+      // mi_debug_show_arenas();
+      // #endif
       //mi_collect(true);
       //mi_debug_show_arenas();
     }

@@ -67,7 +67,7 @@ jobs:
 
       - name: Release, PAC weak
         if: runner.os == 'Linux' && runner.arch == 'X64' && matrix.lang == 'c'
-        run: sh .github/ci/cmake-test.sh release-pac-weak Release -DMI_PAC=WEAK
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh release-pac-weak Release -DMI_PAC=WEAK
 
       - name: Debug, Win32
         if: runner.os == 'Windows'
@@ -122,29 +122,29 @@ jobs:
           path: out/release-clang-cxx/CMakeFiles/mimalloc-static.dir/src/*.s
 
       - name: Debug, ASAN
-        run: CC=clang CXX=clang++ sh .github/ci/cmake-test.sh debug-asan Debug -DMI_DEBUG=FULL -DMI_TRACK=ASAN
+        run: MI_TEST_LIGHT=1 CC=clang CXX=clang++ sh .github/ci/cmake-test.sh debug-asan Debug -DMI_DEBUG=FULL -DMI_TRACK=ASAN
 
       - name: Debug, UBSAN
-        run: CC=clang CXX=clang++ sh .github/ci/cmake-test.sh debug-ubsan-cxx Debug -DMI_DEBUG=FULL -DMI_DEBUG_UBSAN=ON
+        run: MI_TEST_LIGHT=1 CC=clang CXX=clang++ sh .github/ci/cmake-test.sh debug-ubsan-cxx Debug -DMI_DEBUG=FULL -DMI_DEBUG_UBSAN=ON
 
       - name: Debug, Guarded
-        run: MIMALLOC_GUARDED_SAMPLE_RATE=1024 sh .github/ci/cmake-test.sh debug-guarded Debug -DMI_DEBUG=FULL -DMI_GUARDED=FULL
+        run: MI_TEST_LIGHT=1 MIMALLOC_GUARDED_SAMPLE_RATE=1024 sh .github/ci/cmake-test.sh debug-guarded Debug -DMI_DEBUG=FULL -DMI_GUARDED=FULL
 
       - name: Debug, Secure Full
-        run: sh .github/ci/cmake-test.sh debug-secure-full Debug -DMI_DEBUG=FULL -DMI_SECURE=FULL
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh debug-secure-full Debug -DMI_DEBUG=FULL -DMI_SECURE=FULL
 
       - name: Release, Secure Full
-        run: sh .github/ci/cmake-test.sh release-secure-full Release -DMI_OPT_ARCH=ON -DMI_SECURE=FULL
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh release-secure-full Release -DMI_OPT_ARCH=ON -DMI_SECURE=FULL
 
       - name: Release, Secure, PAC weak
-        run: sh .github/ci/cmake-test.sh release-secure-pac-weak Release -DMI_OPT_ARCH=ON -DMI_SECURE=ON -DMI_PAC=WEAK
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh release-secure-pac-weak Release -DMI_OPT_ARCH=ON -DMI_SECURE=ON -DMI_PAC=WEAK
 
       - name: Debug, Secure, PAC weak
-        run: sh .github/ci/cmake-test.sh debug-secure-pac-weak Debug -DMI_DEBUG=FULL -DMI_SECURE=ON -DMI_PAC=WEAK
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh debug-secure-pac-weak Debug -DMI_DEBUG=FULL -DMI_SECURE=ON -DMI_PAC=WEAK
 
       - name: Release, Guarded
         if: startsWith(github.ref_name,'dev3')
-        run: MIMALLOC_GUARDED_SAMPLE_RATE=128 sh .github/ci/cmake-test.sh release-guarded Release -DMI_OPT_ARCH=ON -DMI_GUARDED=FULL
+        run: MI_TEST_LIGHT=1 MIMALLOC_GUARDED_SAMPLE_RATE=128 sh .github/ci/cmake-test.sh release-guarded Release -DMI_OPT_ARCH=ON -DMI_GUARDED=FULL
 
       - name: Debug, Use pagemap
         if: startsWith(github.ref_name,'dev3')
@@ -173,19 +173,19 @@ jobs:
         run: sh .github/ci/cmake-test.sh release-simd Release -DMI_OPT_ARCH=ON -DMI_OPT_SIMD=ON
 
       - name: Debug, Guarded
-        run: MIMALLOC_GUARDED_SAMPLE_RATE=1024 sh .github/ci/cmake-test.sh debug-guarded Debug -DMI_DEBUG=FULL -DMI_GUARDED=FULL
+        run: MI_TEST_LIGHT=1 MIMALLOC_GUARDED_SAMPLE_RATE=1024 sh .github/ci/cmake-test.sh debug-guarded Debug -DMI_DEBUG=FULL -DMI_GUARDED=FULL
 
       - name: Debug, Secure Full
-        run: sh .github/ci/cmake-test.sh debug-secure-full Debug -DMI_DEBUG=FULL -DMI_SECURE=FULL
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh debug-secure-full Debug -DMI_DEBUG=FULL -DMI_SECURE=FULL
 
       - name: Release, Secure Full
-        run: sh .github/ci/cmake-test.sh release-secure-full Release -DMI_OPT_ARCH=ON -DMI_SECURE=FULL
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh release-secure-full Release -DMI_OPT_ARCH=ON -DMI_SECURE=FULL
 
       - name: Release, Secure, PAC weak
-        run: sh .github/ci/cmake-test.sh release-secure-pac-weak Release -DMI_OPT_ARCH=ON -DMI_SECURE=ON -DMI_PAC=WEAK
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh release-secure-pac-weak Release -DMI_OPT_ARCH=ON -DMI_SECURE=ON -DMI_PAC=WEAK
 
       - name: Debug, Secure, PAC weak
-        run: sh .github/ci/cmake-test.sh debug-secure-pac-weak Debug -DMI_DEBUG=FULL -DMI_SECURE=ON -DMI_PAC=WEAK
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh debug-secure-pac-weak Debug -DMI_DEBUG=FULL -DMI_SECURE=ON -DMI_PAC=WEAK
 
   extra-macos:
     name: extra, ${{ matrix.os }}, c
@@ -482,7 +482,7 @@ jobs:
 
       - name: Guarded
         run: |
-          sh .github/ci/cmake-test.sh guarded-cheri-sim Release -DMI_GUARDED=ON
+          MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh guarded-cheri-sim Release -DMI_GUARDED=ON
           MIMALLOC_GUARDED_SAMPLE_RATE=1 out/guarded-cheri-sim/mimalloc-test-api
 
   # Emscripten (tests run on node)

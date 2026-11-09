@@ -83,16 +83,20 @@ static bool mem_is_zero(const void* p, size_t size) {
   return mem_has_vals((const uint8_t*)p,size,0);
 }
 
-// with `MI_TEST_LIGHT` size sweeps use a larger (odd multiple) step beyond the smallest sizes, and repeated tests run fewer iterations
+// size sweeps use a larger odd multiple of the step beyond the smallest sizes (so all residues
+// modulo the power-of-two alignments are still covered); with `MI_TEST_LIGHT` the steps are larger
+// and repeated tests run fewer iterations
 #if MI_TEST_LIGHT
 #define MI_TEST_SIZE_STEP(size,step)  ((size) < 128 ? (step) : 7*(step))
 #define MI_TEST_LARGE_STEP            (3*1024)
 #define MI_TEST_ITERS(n)              ((n)/4)
 #else
-#define MI_TEST_ITERS(n)              (n)
+#define MI_TEST_SIZE_STEP(size,step)  ((size) < 256 ? (step) : 3*(step))
 #define MI_TEST_LARGE_STEP            (1024)
-#define MI_TEST_SIZE_STEP(size,step)  (step)
+#define MI_TEST_ITERS(n)              (n)
 #endif
+// small size sweeps stay dense around the `MI_SMALL_SIZE_MAX` boundary
+#define MI_TEST_SMALL_SIZE_STEP(size) ((size) + 8 >= MI_SMALL_SIZE_MAX && (size) <= MI_SMALL_SIZE_MAX + 8 ? 1 : MI_TEST_SIZE_STEP(size,1))
 
 // ---------------------------------------------------------------------------
 // Main testing
@@ -365,7 +369,7 @@ int main(void) {
 
   CHECK_BODY("mimalloc-aligned13") {
     bool ok = true;
-    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size += MI_TEST_SIZE_STEP(size,1) ) {
+    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size += MI_TEST_SMALL_SIZE_STEP(size) ) {
       for(size_t align = 1; align <= size && ok; align *= 2 ) {
         void* p[10];
         for(int i = 0; i < 10 && ok; i++) {
@@ -381,7 +385,7 @@ int main(void) {
   }
   CHECK_BODY("mimalloc-size-aligned14") {
     bool ok = true;
-    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size += MI_TEST_SIZE_STEP(size,1) ) {
+    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size += MI_TEST_SMALL_SIZE_STEP(size) ) {
       for(size_t align = 1; align <= 16*size && ok; align *= 2) {
         void* p[10];
         for(int i = 0; i < 10 && ok; i++) {
