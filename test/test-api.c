@@ -196,7 +196,7 @@ int main(void) {
   CHECK_BODY("mi_urealloc_invalid") {
     void* p = mi_malloc(64);
     size_t pre, post;
-    void* q = mi_urealloc((char*)p + 3, 40, &pre, &post);
+    void* q = mi_urealloc((char*)p + 3, 58, &pre, &post);  // stays in place in release (no interior pointer check)
     mi_free(p);
     result = (q==NULL || q==(uint8_t*)p+3);
   }
@@ -519,6 +519,20 @@ int main(void) {
     void* q = mi_realloc(p, 0);
     result = (q != NULL);
     mi_free(q);
+  };
+
+  CHECK_BODY("realloc-shrink") {  // issue #1488
+    void* p = mi_malloc(4096);
+    const size_t size = mi_usable_size(p);
+    void* q = mi_realloc(p, size - size/16);          // little waste: stays in place
+    result = (q == p);
+    void* r = mi_realloc(q, size/2 + 16);              // too much waste: shrinks
+    result = result && (r != NULL && mi_usable_size(r) < size - size/8);
+    void* s = mi_realloc_aligned(r, 4096, 64);
+    const size_t asize = mi_usable_size(s);
+    void* t = mi_realloc_aligned(s, asize/2 + 16, 64);
+    result = result && (t != NULL && mi_usable_size(t) < asize - asize/8 && ((uintptr_t)t % 64) == 0);
+    mi_free(t);
   };
 
   CHECK_BODY("reallocarray-null-sizezero") {

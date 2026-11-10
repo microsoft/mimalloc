@@ -544,7 +544,7 @@ static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, voi
     if (pblock_size_pre!=NULL) { *pblock_size_pre = mi_page_block_size(page); }
   }
   // check if we can reuse the existing block
-  if mi_unlikely(newsize<=size && newsize>=(size/2) && newsize>0) { // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
+  if mi_unlikely(newsize<=size && newsize>=(size - (size/8)) && newsize>0) { // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
     mi_assert_internal(page!=NULL); // note: page!=NULL (since if p==NULL, we have size=0 and size>=newsize>0
     #if MI_THEAP_INITASNULL
     if (theap!=NULL)
@@ -556,7 +556,7 @@ static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, voi
         // mi_track_resize(p,size,newsize)
         // if (newsize < size) { mi_track_mem_noaccess((uint8_t*)p + newsize, size - newsize); }
         if (pblock_size_post!=NULL) { *pblock_size_post = mi_page_block_size(page); }
-        return mi_ptr_bounded(p, mi_bounds_user_size(newsize));  // reallocation still fits and not more than 50% waste
+        return mi_ptr_bounded(p, mi_bounds_user_size(newsize));  // reallocation still fits and not more than 12.5% waste
       }
     }
   }

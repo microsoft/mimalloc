@@ -343,15 +343,8 @@ jobs:
           path: out/release-clang/CMakeFiles/mimalloc-static.dir/src/*.s
 
       - name: Release
-        if: matrix.target != 'riscv64'  # (riscv64 uses clang only as building under emulation is slow)
+        if: matrix.target != 'riscv64' && matrix.target != 'arm32'  # (building under emulation is slow)
         run: ${{ matrix.test_env }} sh .github/ci/cmake-test.sh release Release -DMI_OPT_ARCH=ON -DMI_SEE_ASM=ON
-
-      - name: Release, Asm
-        if: matrix.target != 'x64' && matrix.target != 'riscv64'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: alpine-${{ matrix.target }}-asm
-          path: out/release/CMakeFiles/mimalloc-static.dir/src/*.s
 
       - name: Debug
         run: ${{ matrix.test_env }} sh .github/ci/cmake-test.sh debug Debug -DMI_DEBUG=FULL
