@@ -184,14 +184,14 @@ static const mi_option_desc_t mi_option_descs[_mi_option_last] =
   { 512*MI_KiB, MI_OPTION(profile_sample_rate) }, // sample rate in bytes for the `MIMALLOC_PROFILE` heap profiler (use `option_get_size`) (=512 KiB)
   { MI_DEFAULT_STATS_MERGE_THRESHOLD, MI_OPTION(stats_merge_threshold) },    // on a page stats update, merge theap stats into the heap if N bytes were freed/allocated; 0 disables (=4 MiB)
   { MI_DEFAULT_ARENA_PURGE_IMMEDIATE_SIZE, MI_OPTION(arena_purge_immediate_size) }, // ranges above this size are purged immediately
-  { 1, MI_OPTION(mte) },                      // use memory tagging (MTE) if available (and built with `MI_MTE=PREFER` or `ON`); on Linux the tag check mode can be set as well (sync, async, preferred)
-
+  { 1, MI_OPTION(mte) }                       // use memory tagging (MTE) if available (and built with `MI_MTE=PREFER` or `ON`); on Linux the tag check mode can be set as well (sync, async, preferred)
 };
 
 static void mi_option_init(mi_option_t option, mi_option_state_t* state);
 static bool mi_options_init_from_environ(void);
 
 static const mi_option_desc_t* mi_option_desc(mi_option_t option) {
+  mi_assert_internal((int)option >= 0 && (int)option < (int)_mi_option_last);
   const mi_option_desc_t* desc = &mi_option_descs[option];
   mi_assert(desc->option == option);  // index should match the option
   return desc;
@@ -787,6 +787,7 @@ static void mi_option_env_apply(mi_option_t option, mi_option_state_t* state, mi
     case mi_option_mte:
     #endif
     case mi_option_unsafe_guarded_precise:
+    case mi_option_destroy_on_exit:
       ignore_env = true;
       break;
     default:
@@ -795,6 +796,9 @@ static void mi_option_env_apply(mi_option_t option, mi_option_state_t* state, mi
   #endif
   if (env->err != ENOENT && env->err != EAGAIN && (ignore_env || _mi_os_is_elevated())) {
     // don't let environment overrides weaken secure builds or influence a privileged process
+    if ((int)option>=0 && (int)option < (int)_mi_option_last) {
+      _mi_warning_message("MIMALLOC_%s is ignored in %s\n", mi_option_desc(option)->name, (ignore_env ? "secure mode" : "an elevated process"));
+    }
     env->err = ENOENT;
     env->legacy = false;
   }

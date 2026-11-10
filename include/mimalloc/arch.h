@@ -398,6 +398,9 @@ typedef uintptr_t           mi_ptr_signed_t;
 #elif defined(MI_PAC) && (MI_CHERI || (MI_INTPTR_SIZE != 8))
 #warning "pointer authentication (MI_PAC=ON) is not supported on CHERI or non-64-bit systems"
 #undef MI_PAC
+#define MI_PAC  0
+#elif !defined(MI_PAC)
+#define MI_PAC  0
 #endif
 
 

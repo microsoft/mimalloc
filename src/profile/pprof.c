@@ -51,14 +51,17 @@ static inline mi_pprof_profiler_t* downcast( mi_profiler_t* prof ) {
 // while the program is running).
 // ---------------------------------------------------------------------------
 
-#if MI_PROFILE_USE_BUILTIN   // todo: also disable profiling in secure mode?
+#if MI_PROFILE_USE_BUILTIN
 
 // Called once at process initialization (see `mi_process_init` in `heap/process.c`).
 void _mi_pprof_profiler_init(void) {
   #if MI_PROFILE
-  if (_mi_os_is_elevated()) return;  // don't let an untrusted environment influence a privileged process
   char fname[1024];
   if (_mi_getenv("mimalloc_profile", fname, sizeof(fname)) != 0 || fname[0] == 0) return;  // `MIMALLOC_PROFILE` not set
+  if (MI_SECURE > 0 || _mi_os_is_elevated()) {
+    _mi_warning_message("MIMALLOC_PROFILE is ignored in %s\n", (MI_SECURE > 0 ? "secure mode" : "an elevated process"));
+    return;
+  }
   const size_t sample_rate   = mi_option_get_size(mi_option_profile_sample_rate);           // 512 KiB by default
   const size_t alloc_interval_size = mi_option_get_size(mi_option_profile_alloc_interval);        // 1 GiB by default
   const size_t inuse_interval_size = mi_option_get_size(mi_option_profile_inuse_interval);        // 0 by default (no automatic interval snapshots)
