@@ -907,8 +907,8 @@ static inline bool mi_page_decode_padding(const mi_page_t* page, const mi_block_
   const uint32_t canary = padding->canary;
   const bool ok = (mi_ptr_encode_canary(page,block) == canary && *delta <= *bsize);
   if (double_free!=NULL) {
-    if mi_unlikely(!ok) { *double_free = mi_ptr_decode_canary_is_freed(canary); }   // double free?
-                   else { padding->canary = mi_ptr_encode_canary_freed(); }         // mark as freed
+    *double_free = (!ok && mi_ptr_decode_canary_is_freed(canary));
+    if (ok) { padding->canary = mi_ptr_encode_canary_freed(); }  // mark as freed
   }
   mi_track_mem_noaccess(padding,sizeof(mi_padding_t));
   return ok;
