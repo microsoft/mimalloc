@@ -101,6 +101,33 @@ static void allocate_past_threshold(void) {
 // Tests
 // ---------------------------------------------------------------------------
 
+#if MI_GUARDED >= 2
+static void test_profiler_restart_with_guarded_sampling(void) {
+  CHECK_BODY("profiler: restart accounts for the shared guarded countdown") {
+    mi_theap_t* theap = mi_theap_get_default();
+    mi_theap_guarded_set_sample_rate(theap, 1024, 1);
+    mi_theap_guarded_set_size_bound(theap, 0, SIZE_MAX);
+    void* sampled = mi_malloc(1024 * 1024);
+    // Let a guarded sample restart the shared countdown before restarting profiling.
+    void* guarded = mi_malloc(64);
+    mi_profiler_stop(&my_profiler.profiler);
+    mi_profiler_start(&my_profiler.profiler);
+    const uint64_t before = my_profiler.alloc_count;
+    void* p = mi_malloc(4096);
+    result = (sampled != NULL && guarded != NULL && p != NULL &&
+              my_profiler.alloc_count == before + 1 &&
+              my_profiler.last_size == 4096 && my_profiler.last_upscaled >= 4096);
+    mi_free(p);
+    mi_free(guarded);
+    mi_free(sampled);
+    mi_theap_guarded_set_sample_rate(theap, (size_t)mi_option_get(mi_option_guarded_sample_rate),
+                                   (size_t)mi_option_get(mi_option_guarded_sample_seed));
+    mi_theap_guarded_set_size_bound(theap, (size_t)mi_option_get(mi_option_guarded_min),
+                                   (size_t)mi_option_get(mi_option_guarded_max));
+  }
+}
+#endif
+
 bool test_profiler_samples(void) {
   CHECK_BODY("profiler: on_alloc called after threshold") {
     uint64_t before = my_profiler.alloc_count;
@@ -269,6 +296,9 @@ int main(void) {
   mi_profile(&my_profiler.profiler);
   mi_profiler_start(&my_profiler.profiler);
 
+  #if MI_GUARDED >= 2
+  test_profiler_restart_with_guarded_sampling();
+  #endif
   test_profiler_upscaled_at_least_size();
   test_profiler_samples();
   test_profiler_record_fields();

@@ -252,10 +252,12 @@ void _mi_page_profile_on_free(mi_page_t* page, mi_block_t* block, void* p) {
 size_t _mi_theap_set_profile_sample_rate(mi_theap_t* theap, size_t sample_rate) {
   const size_t old_sample_rate = theap->profile_sample_rate;
   theap->profile_sample_rate = (sample_rate > MI_SAMPLE_RATE_MAX ? MI_SAMPLE_RATE_MAX : sample_rate);
-  if (theap->profile_sample_countdown > theap->profile_sample_rate) {
-    theap->profile_sample_countdown = theap->profile_sample_rate;  // todo: adjust difference?
-  }
   _mi_theap_update_sample_rate(theap);
+  // The shared countdown is already deducted from the profile countdown.
+  const size_t max_countdown = mi_sample_countdown_next(theap->profile_sample_rate, theap->sample_countdown);
+  if (theap->profile_sample_countdown > max_countdown) {
+    theap->profile_sample_countdown = max_countdown;
+  }
   return old_sample_rate;
 }
 
