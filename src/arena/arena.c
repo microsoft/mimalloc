@@ -103,7 +103,8 @@ size_t mi_arena_min_size(void) {
 // fixed limit for the maximum object size in an arena
 static size_t mi_arena_max_fixed_object_size(void) {
   #if MI_PAGE_META_IS_ALIGNED
-  return (MI_PAGE_META_ALIGNMENT - _mi_size_of_slices(mi_arena_page_meta_aligned_slice_count()));
+  // Huge allocations require fully free chunks; the first chunk of each aligned area contains metadata.
+  return ((MI_PAGE_META_ALIGNED_CHUNKS - 1) * MI_ARENA_CHUNK_SIZE);
   #else
   return (MI_ARENA_MAX_SIZE - MI_ARENA_CHUNK_SIZE); // minus an initial chunk to accommodate meta info
   #endif

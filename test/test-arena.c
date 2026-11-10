@@ -186,6 +186,24 @@ static bool test_arena_result(void) {
   return (mi_forall_suitable_arenas(&test_heap, NULL, 0, true, -1, false, &arena_find, &index, &found) && found == NULL);
 }
 
+#if MI_PAGE_META_IS_ALIGNED
+static bool test_arena_oversized_alloc(void) {
+  void* warm = mi_malloc(64);
+  if (warm == NULL) return false;
+  mi_free(warm);
+  mi_subproc_t* subproc = mi_theap_subproc(mi_theap_get_default());
+  const size_t arena_count = mi_arenas_get_count(subproc);
+  const size_t size = (MI_PAGE_META_ALIGNED_CHUNKS - 1) * MI_ARENA_CHUNK_SIZE + MI_ARENA_SLICE_SIZE;
+  bool result = true;
+  for (size_t i = 0; i < 2; i++) {
+    void* p = mi_malloc(size);
+    if (p == NULL || mi_arenas_get_count(subproc) != arena_count) { result = false; }
+    mi_free(p);
+  }
+  return result;
+}
+#endif
+
 static mi_heap_t* visit_heap;
 
 static bool allocate_pages(void) {
@@ -879,6 +897,9 @@ static bool test_efault(bool (*test)(void)) {
 }
 
 int main(void) {
+  #if MI_PAGE_META_IS_ALIGNED
+  CHECK("arena-oversized-alloc", test_arena_oversized_alloc());
+  #endif
   #if MI_PAC
   CHECK("page-map-tamper", test_efault(&test_page_map_tamper));
   #endif
