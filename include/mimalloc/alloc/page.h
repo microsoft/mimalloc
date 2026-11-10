@@ -638,12 +638,14 @@ cannot be copied). We use one of three encodings:
    We store the 32-bit page offset `v` of the next block (with `NULL` as
    the reserved offset `MI_BLOCK_OFS_NULL`) together with a keyed 32-bit tag:
 
-     x      = (T(b,v) << 32) | (v ^ m)
-     T(b,v) = let t = mulxor64(v ^ keys[0], b ^ keys[1]) in t ^ (t >> 32)
+     x      = (M(b,v) & H) | (v ^ m)
+     M(b,v) = mulxor64(v ^ keys[0], b ^ keys[1])
 
-   where `mulxor64` xor's the low and high halves of the full 128-bit
+   where `H` selects the upper 32 bits, `mulxor64` xor's the low and high halves of the full 128-bit
    product, and the mask `m` (the upper 32 bits of `keys[0]`) hides the
-   (randomized) free list order. Decoding is just an xor and an add; the tag
+   (randomized) free list order. (With memory tagging, the offset `v` is 24 bits and includes the
+   memory tag of the next block, and `H` selects all other bits; see `MI_BLOCK_OFS_MASK`).
+   Decoding is just an xor and an add; the tag
    is verified alongside with a predictable branch so the multiply mostly costs
    throughput. A corrupted or forged link validates with
    probability 2^-32, and it is difficult to recover the keys
@@ -655,13 +657,17 @@ cannot be copied). We use one of three encodings:
    As the tagged offsets, but the tag is computed with the (unreadable)
    hardware pointer authentication key:
 
-     x      = (T(b,v) << 32) | v
-     T(b,v) = let t = pacga(v, b ^ keys[0]) in t | (t >> 32)
+     x      = (M(b,v) & H) | (v ^ keys[1])
+     M(b,v) = let t = pacga(v, b ^ keys[0]) in t | (t >> 32)
 
-   The page keys need not be secret anymore: the offset is not masked, and
-   `keys[0]` only serves as a nonce such that links from a previous use of the
-   page do not validate. A forged link validates with probability 2^-32 even
-   if the page keys are known.
+   where `H` is as in the tagged offsets (the upper 32 bits, or with memory tagging all bits
+   outside the 24-bit offset), and `pacga` returns a 32-bit code in the upper 32 bits (and zeros
+   in the lower bits); the copy in the lower half provides the tag bits below bit 32 with memory tagging.
+   The integrity of the links does not depend on the page keys: `keys[0]` serves as a nonce
+   such that links from a previous use of the page do not validate, and a forged link validates
+   with probability 2^-32 even if the page keys are known. The mask `keys[1]` still hides the
+   (randomized) free list order (and the memory tags of the free blocks) from an attacker that
+   can only read freed memory.
 
 3. Xor-shift (the default on 32-bit, where we lack a cheap wide multiply).
    We store the full next address `p` (with `NULL` encoded as the page address):
@@ -707,8 +713,7 @@ static inline mi_addr_t mi_ptr_mac(const mi_page_t* page, mi_addr_t baddr, mi_ad
   return mi_keyed_mac(d, baddr ^ page->keys[0]);
 }
 static inline mi_addr_t mi_ptr_ofs_key(const mi_page_t* page) {
-  MI_UNUSED(page);
-  return 0;
+  return page->keys[1];
 }
 #else
 static inline mi_addr_t mi_ptr_mac(const mi_page_t* page, mi_addr_t baddr, mi_addr_t d) {
