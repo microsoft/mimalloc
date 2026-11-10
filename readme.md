@@ -622,7 +622,8 @@ at the end so overflows still fault (this is done as tagging memory is linear in
 
 It depends on the hardware and workload,
 but on an M5 an MTE build is usually within about 15% of a release build (but can be 2 to 3x slower).
-When building with `-DMI_MTE=ON`, _mimalloc_ requires that the CPU and OS support MTE at runtime otherwise aborts at initialization (and, on Linux, if tag checking cannot be enabled for all threads).
+When building with `-DMI_MTE=ON`, _mimalloc_ requires that the CPU and OS support MTE at runtime and
+otherwise aborts at initialization (and, on Linux, if tag checking cannot be enabled for all threads).
 You can also build with `-DMI_MTE=PREFER` which uses MTE when both the hardware and OS support it, and
 otherwise runs untagged. An MTE build running untagged is very close in performance to a regular release build.
 Every MTE build gets the `-mte` suffixed to the library name (e.g. `mimalloc-mte.o`).
@@ -632,7 +633,7 @@ Since MTE catches (most) use-after-free, double-free, and heap block overflows, 
 similar and often stronger guarantees as `-DMI_SECURE=ON` (and there is no need to use them together).
 
 - __macOS__: requires an Apple M5 (or later) with macOS 26+. MTE is only enabled for executables signed with
-  the hardened-process entitlements (the tests are signed automatically):
+  the hardened-process entitlements (the mimalloc tests are signed automatically):
   ```
   > cmake -DMI_MTE=ON ../.. && make -j
   > codesign -s - -f --entitlements ../../cmake/mte-entitlements.plist myprogram
@@ -670,7 +671,7 @@ The PAC extension provides secret hardware keys that _mimalloc_ uses to sign roo
 are validated and prevent tampering. On an M5, the overhead is usually ~10% but can be 1 to 2x slower.
 
 _This is most effective together with MTE, and the combined options_ `-DMI_MTE=ON -DMI_PAC=ON`
-_provide a strong mitigation against common heap explotation techniques_.
+_provide strong mitigation against common heap explotation techniques_.
 The performance combined is usually within 5% of just MTE.
 The following are signed:
 - The free list links, such that a heap block overflow or use-after-free write cannot forge a free list pointer
