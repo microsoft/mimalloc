@@ -202,11 +202,10 @@ static bool mi_page_map_init_once(void) {
 }
 
 bool _mi_page_map_init(void) {
-  bool ok = true;
   mi_atomic_do_once {
-    ok = mi_page_map_init_once();
+    mi_page_map_init_once();
   }
-  return ok;
+  return (mi_page_map() != NULL);
 }
 
 // Sub maps are allocated with guard pages around them in secure mode

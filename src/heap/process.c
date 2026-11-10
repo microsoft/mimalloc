@@ -738,7 +738,7 @@ static void mi_process_init_once(void) {
   _mi_process_metadata_init();  // after os_init so the OS page size is known
   mi_process_guard_init();   // after os_init so the OS page size is known
   mi_heap_main_init();       // before page_map_init so stats are working
-  _mi_page_map_init();       // todo: this could fail.. should we abort in that case?
+  if (!_mi_page_map_init()) { _mi_fatal_error("unable to initialize the allocation page map\n"); }
   mi_process_sealed_init();  // after page_map_init so the page map is stored before sealing (no sealed-once writes are allowed after this)
   mi_thread_init();
 
