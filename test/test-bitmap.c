@@ -153,6 +153,40 @@ static bool test_bbitmap_find_tail(void) {
   return result;
 }
 
+static bool test_bbitmap_find_sparse(void) {
+  const size_t chunks = 2 * MI_BFIELD_BITS + 3;
+  const size_t bits = chunks * MI_BCHUNK_BITS;
+  mi_bbitmap_t* bitmap = (mi_bbitmap_t*)mi_malloc_aligned(mi_bbitmap_size(bits, NULL), MI_BCHUNK_SIZE);
+  if (bitmap == NULL) return false;
+  const size_t starts[] = { 0, MI_BFIELD_BITS - 1, MI_BFIELD_BITS, 2 * MI_BFIELD_BITS, chunks - 2 };
+  const size_t sizes[] = { MI_BCHUNK_BITS + 1, 2 * MI_BCHUNK_BITS };
+  bool result = true;
+  for (size_t i = 0; result && i < sizeof(starts)/sizeof(starts[0]); i++) {
+    for (size_t j = 0; result && j < sizeof(sizes)/sizeof(sizes[0]); j++) {
+      mi_bbitmap_init(_mi_subproc(), bitmap, bits, false);
+      size_t idx;
+      const size_t start = starts[i] * MI_BCHUNK_BITS;
+      const size_t n = sizes[j];
+      result = !mi_bbitmap_try_find_and_clearN(bitmap, 0, n, &idx);
+      mi_bbitmap_setN(bitmap, start, 2 * MI_BCHUNK_BITS);
+      result = result && mi_bbitmap_try_find_and_clearN(bitmap, 0, n, &idx) && idx == start &&
+               mi_bbitmap_is_xsetN(MI_BIT_CLEAR, bitmap, idx, n) &&
+               !mi_bbitmap_try_find_and_clearN(bitmap, 0, n, &idx);
+      result = result && mi_bbitmap_setN(bitmap, start, n);
+      // Stale set hints must still be checked against the actual chunks.
+      mi_bchunk_set(&bitmap->chunkmap, 0, NULL);
+      result = result && mi_bbitmap_try_find_and_clearN(bitmap, 0, n, &idx) && idx == start;
+    }
+  }
+  // A candidate in the last chunk cannot satisfy a multi-chunk request.
+  mi_bbitmap_init(_mi_subproc(), bitmap, bits, false);
+  mi_bbitmap_setN(bitmap, bits - MI_BCHUNK_BITS, MI_BCHUNK_BITS);
+  size_t idx;
+  result = result && !mi_bbitmap_try_find_and_clearN(bitmap, 0, MI_BCHUNK_BITS + 1, &idx);
+  mi_free(bitmap);
+  return result;
+}
+
 int main(void) {
   CHECK("bitmap-fields", test_fields());
   CHECK("bitmap-chunk-ranges", test_chunk_ranges());
@@ -160,5 +194,6 @@ int main(void) {
   CHECK("bitmap-ranges", test_bitmap_ranges());
   CHECK("bitmap-binned-find", test_bbitmap_find());
   CHECK("bitmap-binned-find-tail", test_bbitmap_find_tail());
+  CHECK("bitmap-binned-find-sparse", test_bbitmap_find_sparse());
   return print_test_summary();
 }

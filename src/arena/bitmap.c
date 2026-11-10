@@ -888,7 +888,6 @@ rollback:
 // Since these are very large object allocations we always search from the start and only consider starting at the start
 // of a chunk (for fragmentation and efficiency).
 // Todo: for now we try to find full empty chunks to cover `n` but we can allow a partial chunk at the end
-// Todo: This scans directly through the chunks -- we might want to consult the cmap as well?
 bool mi_bbitmap_try_find_and_clearN_(mi_bbitmap_t* bbitmap, size_t tseq, size_t n, size_t* pidx) {
   MI_UNUSED(tseq);
   mi_assert(n > 0); if (n==0) { return false; }
@@ -897,8 +896,18 @@ bool mi_bbitmap_try_find_and_clearN_(mi_bbitmap_t* bbitmap, size_t tseq, size_t 
   const size_t chunk_req = mi_divide_up(n, MI_BCHUNK_BITS);  // minimal number of chunks needed
   if (chunk_max < chunk_req) { return false; }
 
-  // iterate through the chunks
+  // Use the chunkmap to skip the unavailable prefix before scanning the chunks.
   size_t chunk_idx = 0;
+  while (chunk_idx <= chunk_max - chunk_req) {
+    const mi_bfield_t cmap_entry = mi_atomic_load_relaxed(&bbitmap->chunkmap.bfields[chunk_idx / MI_BFIELD_BITS]);
+    size_t skip;
+    if (mi_bfield_find_least_bit(cmap_entry, &skip)) {
+      chunk_idx += skip;
+      break;
+    }
+    chunk_idx += MI_BFIELD_BITS;
+  }
+
   while (chunk_idx <= chunk_max - chunk_req)
   {
     size_t count = 0;  // chunk count
