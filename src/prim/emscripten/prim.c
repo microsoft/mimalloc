@@ -56,6 +56,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config) {
   config->has_overcommit = false;
   config->has_partial_free = false;
   config->has_virtual_reserve = false;
+  config->has_reset = false;
 }
 
 // Use the builtin allocator (dlmalloc by default) rather than requiring

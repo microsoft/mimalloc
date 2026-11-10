@@ -522,6 +522,21 @@ void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
   #endif
 }
 
+// Can we reset the unused tail of a block in `page` when shrinking in place? Only for singleton pages, and not
+// for pinned memory, memory tagged pages (as the OS may lose the tags of the reset part), or if the OS cannot reset.
+bool _mi_page_can_reset_tail(const mi_page_t* page) {
+  return (mi_page_is_singleton(page) && !page->memid.is_pinned && !mi_page_is_memtag(page) && _mi_os_has_reset());
+}
+
+// Reset the OS pages of the unused tail of a block that is shrunk in place to release the memory.
+// The tail stays accessible since the usable size is unchanged; any padding or guard page comes after the usable
+// size and is never touched.
+void _mi_page_reset_tail(const mi_page_t* page, void* p, size_t newsize, size_t usable) {
+  mi_assert_internal(newsize <= usable);
+  if (usable - newsize < _mi_os_page_size() || !_mi_page_can_reset_tail(page)) return;
+  _mi_os_reset(mi_page_subproc(page), (uint8_t*)p + newsize, usable - newsize);  // aligns inward to whole OS pages
+}
+
 static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, void* p, size_t newsize, bool zero, size_t* pblock_size_pre, size_t* pblock_size_post) mi_attr_noexcept {
   // if p == NULL then behave as malloc.
   // else if size == 0 then reallocate to a zero-sized block (and don't return NULL, just as mi_malloc(0)).
@@ -544,7 +559,7 @@ static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, voi
     if (pblock_size_pre!=NULL) { *pblock_size_pre = mi_page_block_size(page); }
   }
   // check if we can reuse the existing block
-  if mi_unlikely(newsize<=size && newsize>=(size - (size/8)) && newsize>0) { // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
+  if mi_unlikely(mi_realloc_is_in_place(page,size,newsize) && newsize>0) { // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
     mi_assert_internal(page!=NULL); // note: page!=NULL (since if p==NULL, we have size=0 and size>=newsize>0
     #if MI_THEAP_INITASNULL
     if (theap!=NULL)
@@ -555,8 +570,9 @@ static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, voi
         // todo: do not track as the usable size is still the same in the free; adjust potential padding?
         // mi_track_resize(p,size,newsize)
         // if (newsize < size) { mi_track_mem_noaccess((uint8_t*)p + newsize, size - newsize); }
+        mi_realloc_shrink_in_place(page, p, newsize, size);
         if (pblock_size_post!=NULL) { *pblock_size_post = mi_page_block_size(page); }
-        return mi_ptr_bounded(p, mi_bounds_user_size(newsize));  // reallocation still fits and not more than 12.5% waste
+        return mi_ptr_bounded(p, mi_bounds_user_size(newsize));
       }
     }
   }

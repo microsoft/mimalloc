@@ -356,9 +356,12 @@ static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t
   }
   if (p == NULL) return mi_theap_malloc_zero_aligned_at(theap,newsize,alignment,offset,zero,NULL);
   const size_t size = mi_usable_size(p);
-  if (newsize <= size && newsize >= (size - (size / 8)) && ((mi_addr(p) + offset) & (alignment-1)) == 0 &&
-      theap != NULL && mi_page_heap(mi_ptr_page(p)) == mi_theap_heap_peek(theap)) {
-    return mi_ptr_bounded(p, mi_bounds_user_size(newsize));  // reallocation still fits, is aligned, not more than 12.5% waste, and in the same heap
+  const mi_page_t* const page = mi_ptr_page(p);
+  if (mi_realloc_is_in_place(page,size,newsize) && ((mi_addr(p) + offset) & (alignment-1)) == 0 &&
+      theap != NULL && mi_page_heap(page) == mi_theap_heap_peek(theap)) {
+    // reallocation still fits, is aligned, in the same heap, and has not too much waste
+    mi_realloc_shrink_in_place(page, p, newsize, size);
+    return mi_ptr_bounded(p, mi_bounds_user_size(newsize));
   }
   else {
     // note: we don't zero allocate upfront so we only zero initialize the expanded part (at the cost of calling mi_usable_size)

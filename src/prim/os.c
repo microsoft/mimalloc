@@ -44,6 +44,7 @@ static const mi_os_mem_config_t mi_os_mem_config_default = {
   true,     // has overcommit?  (if true we use MAP_NORESERVE on mmap systems)
   false,    // can we partially free allocated blocks? (on mmap systems we can free anywhere in a mapped range, but on Windows we must free the entire span)
   true,     // has virtual reserve? (if true we can reserve virtual address space without using commit or physical memory)
+  true,     // has reset? (if false, `_mi_prim_reset` is a no-op)
   false,    // has aligned allocation? (if true the OS can directly allocate at a requested alignment)
   false,    // has transparent huge pages? (if true we purge in (aligned) large page size chunks only to not fragment such pages)
   false,    // is elevated? (set in `_mi_os_init`)
@@ -81,6 +82,10 @@ bool _mi_os_has_overcommit(void) {
 
 bool _mi_os_has_virtual_reserve(void) {
   return mi_os_mem_config()->has_virtual_reserve;
+}
+
+bool _mi_os_has_reset(void) {
+  return mi_os_mem_config()->has_reset;
 }
 
 bool _mi_os_has_thp(void) {

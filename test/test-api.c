@@ -535,6 +535,24 @@ int main(void) {
     mi_free(t);
   };
 
+  CHECK_BODY("realloc-shrink-huge") {
+    const size_t size = 8*MI_MiB;
+    uint8_t* p = (uint8_t*)mi_malloc(size);
+    memset(p, 1, size);
+    const size_t half = mi_usable_size(p)/2 + 1;      // (the usable size can be larger with guarded sampling)
+    uint8_t* q = (uint8_t*)mi_realloc(p, half);       // huge and at least half: stays in place and resets the tail
+    #if defined(__wasi__) || defined(__EMSCRIPTEN__)
+    const bool in_place = false;                        // unless the OS cannot reset memory
+    #else
+    const bool in_place = true;
+    #endif
+    result = ((q == p) == in_place && q[0] == 1 && q[half - 1] == 1);
+    memset(q, 2, mi_usable_size(q));                   // the tail stays accessible
+    uint8_t* r = (uint8_t*)mi_realloc(q, size/8);      // less than half: copies
+    result = result && (r != NULL && r != q && r[0] == 2 && r[size/8 - 1] == 2);
+    mi_free(r);
+  };
+
   CHECK_BODY("reallocarray-null-sizezero") {
     void* p = mi_reallocarray(NULL,0,16);  // issue #574
     result = (p != NULL && errno == 0);

@@ -33,6 +33,7 @@ typedef struct mi_os_mem_config_s {
   bool    has_overcommit;         // can we reserve more memory than can be actually committed?
   bool    has_partial_free;       // can allocated blocks be freed partially? (true for mmap, false for VirtualAlloc)
   bool    has_virtual_reserve;    // supports virtual address space reservation? (if true we can reserve virtual address space without using commit or physical memory)
+  bool    has_reset;              // can memory be reset? (if false, `_mi_prim_reset` is a no-op, e.g. on WebAssembly)
   bool    has_aligned_alloc;      // can the OS directly allocate at a requested alignment? (e.g. `VirtualAlloc2`, or `mmap` with `MAP_ALIGNED`)
   bool    has_transparent_huge_pages;  // true if transparent huge pages are enabled (on Linux)
   bool    is_elevated;            // running with elevated privileges (e.g. setuid)? (set in `_mi_os_init`)
