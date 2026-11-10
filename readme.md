@@ -577,6 +577,7 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
 - The start address of OS allocated memory is randomized
   (if possible), and mimalloc aborts on corrupted meta data detection.
 - Large blocks (> 512 KiB) are followed by a guard page.
+- Does not allocate or reserve large OS pages as pinned memory cannot hold a guard page.
 
 With `CHECKED` (the default with `-DMI_MTE` and `-DMI_PAC`), the performance and memory impact
 is still relatively small (usually less than 10%, but can be 2x slower):

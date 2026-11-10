@@ -93,7 +93,7 @@ pub const mi_option_disallow_arena_alloc: mi_option_t = 26;
 pub const mi_option_retry_on_oom: mi_option_t = 27;
 pub const mi_option_guarded_min: mi_option_t = 29;
 pub const mi_option_guarded_max: mi_option_t = 30;
-
+pub const mi_option_deprecated_unsafe_guarded_precise: mi_option_t = 31;
 pub const mi_option_guarded_sample_rate: mi_option_t = 32;
 pub const mi_option_guarded_sample_seed: mi_option_t = 33;
 pub const mi_option_generic_collect: mi_option_t = 34;

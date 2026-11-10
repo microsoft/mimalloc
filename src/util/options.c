@@ -719,9 +719,10 @@ typedef struct mi_option_env_s {
   long  value;    // the parsed value (if `err==0`)
   int   err;      // 0 (found), ENOENT (not found), EINVAL (invalid value), E2BIG (value too long), or EAGAIN (try again later)
   bool  legacy;   // found under its legacy name?
+  const char* ignore_reason;
 } mi_option_env_t;
 
-#define MI_OPTION_ENV_NOT_FOUND  { 0, ENOENT, false }
+#define MI_OPTION_ENV_NOT_FOUND  { 0, ENOENT, false, NULL }
 
 // Parse an environment value `s` for an option; returns 0 on success, EINVAL if invalid, or E2BIG if too long.
 static int mi_option_parse(mi_option_t option, const char* s, long* result) {
@@ -796,9 +797,7 @@ static void mi_option_env_apply(mi_option_t option, mi_option_state_t* state, mi
   #endif
   if (env->err != ENOENT && env->err != EAGAIN && (ignore_env || _mi_os_is_elevated())) {
     // don't let environment overrides weaken secure builds or influence a privileged process
-    if ((int)option>=0 && (int)option < (int)_mi_option_last) {
-      _mi_warning_message("MIMALLOC_%s is ignored in %s\n", mi_option_desc(option)->name, (ignore_env ? "secure mode" : "an elevated process"));
-    }
+    env->ignore_reason = (ignore_env ? "secure mode" : "an elevated process");
     env->err = ENOENT;
     env->legacy = false;
   }
@@ -814,6 +813,9 @@ static void mi_option_env_apply(mi_option_t option, mi_option_state_t* state, mi
 // Emit warnings for an applied environment result (after `mi_option_env_apply` so we cannot recurse on a pending option).
 static void mi_option_env_warn(mi_option_t option, const mi_option_env_t* env) {
   const mi_option_desc_t* const desc = mi_option_desc(option);
+  if (env->ignore_reason != NULL) {
+    _mi_warning_message("MIMALLOC_%s is ignored in %s\n", desc->name, env->ignore_reason);
+  }
   if (env->legacy && env->err != ENOENT) {
     _mi_warning_message("environment option \"mimalloc_%s\" is deprecated -- use \"mimalloc_%s\" instead.\n", desc->legacy_name, desc->name);
   }
