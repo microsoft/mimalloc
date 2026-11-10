@@ -38,8 +38,12 @@ static inline my_profiler_t* downcast( mi_profiler_t* prof ) {
 
 #define TEST_THRESHOLD (16 * 1024)
 
+static mi_heap_t* observed_heap;
+static uint64_t observed_heap_allocs;
+
 static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, mi_heap_t* heap) {
-  MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(requested_size);
+  MI_UNUSED(threshold); MI_UNUSED(requested_size);
+  if (heap == observed_heap) { observed_heap_allocs++; }
   my_profiler_t* prof = downcast(profiler);
   assert(bytes_since_last_sample >= requested_size);
   prof->alloc_count++;
@@ -226,6 +230,41 @@ bool test_profiler_switch(void) {
 // main
 // ---------------------------------------------------------------------------
 
+static bool allocate_from_heap(mi_heap_t* heap) {
+  for (size_t i = 0; i < 4096; i++) {
+    void* p = mi_heap_malloc(heap, 1024 * 1024);
+    if (p == NULL) return false;
+    mi_free(p);
+  }
+  return true;
+}
+
+static void test_profiler_disabled_heap(void) {
+  CHECK_BODY("profiler: disabled heap stays excluded after detach and reattach") {
+    mi_heap_t* disabled = mi_heap_new();
+    mi_heap_t* enabled = mi_heap_new();
+    result = (disabled != NULL && enabled != NULL);
+    if (result) {
+      mi_heap_profile_disable(disabled);
+      for (size_t i = 0; result && i < 2; i++) {
+        result = mi_profile(&my_profiler.profiler);
+        mi_profiler_start(&my_profiler.profiler);
+        observed_heap = disabled;
+        uint64_t before = observed_heap_allocs;
+        result = allocate_from_heap(disabled) && observed_heap_allocs == before && result;
+        observed_heap = enabled;
+        before = observed_heap_allocs;
+        result = allocate_from_heap(enabled) && observed_heap_allocs > before && result;
+        mi_profiler_stop(&my_profiler.profiler);
+        result = mi_profile(NULL) && result;
+      }
+    }
+    if (disabled != NULL) { mi_heap_delete(disabled); }
+    if (enabled != NULL) { mi_heap_delete(enabled); }
+    observed_heap = NULL;
+  }
+}
+
 int main(void) {
   mi_profile(&my_profiler.profiler);
   mi_profiler_start(&my_profiler.profiler);
@@ -236,6 +275,7 @@ int main(void) {
   test_profiler_on_free_called();
   test_profiler_free_count_le_alloc_count();
   test_profiler_switch();
+  test_profiler_disabled_heap();
 
   return print_test_summary();
 }

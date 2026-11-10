@@ -259,9 +259,12 @@ size_t _mi_theap_set_profile_sample_rate(mi_theap_t* theap, size_t sample_rate) 
   return old_sample_rate;
 }
 
+static const mi_profiler_t mi_nosample_profiler = { NULL, 0, MI_SAMPLE_RATE_MAX, NULL, NULL, NULL, NULL };
+
 static bool mi_heap_set_profiler(mi_heap_t* heap, mi_profiler_t* profiler) {
   if (!mi_heap_handle_is_valid(heap)) return false;
   mi_profiler_t* previous = (profiler==NULL ? mi_atomic_load_ptr_acquire(mi_profiler_t,&heap->profiler) : NULL); // don't overwrite unless it is NULL
+  if (previous == &mi_nosample_profiler) return false;
   return mi_atomic_cas_ptr_strong_release(mi_profiler_t, &heap->profiler, &previous, profiler);
 }
 
@@ -296,7 +299,6 @@ mi_decl_export bool mi_heap_profile(mi_heap_t* heap, mi_profiler_t* profiler) {
 }
 
 mi_decl_export void mi_heap_profile_disable(mi_heap_t* heap) {
-  static const mi_profiler_t mi_nosample_profiler = { NULL, 0, MI_SAMPLE_RATE_MAX, NULL, NULL, NULL, NULL };
   // if (heap==NULL) { heap = mi_heap_main(); }
   mi_heap_set_profiler(heap,NULL);                   // first clear any previous one
   mi_heap_set_profiler(heap,(mi_profiler_t*)&mi_nosample_profiler);  // and then install the nosample one
