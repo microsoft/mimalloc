@@ -547,7 +547,8 @@ int main(void) {
     const bool in_place = true;
     #endif
     result = ((q == p) == in_place && q[0] == 1 && q[half - 1] == 1);
-    memset(q, 2, mi_usable_size(q));                   // the tail stays accessible
+    uint8_t* volatile qv = q;                           // hide the alloc_size of `q` from fortified `memset`
+    memset(qv, 2, mi_usable_size(q));                   // the tail stays accessible
     uint8_t* r = (uint8_t*)mi_realloc(q, size/8);      // less than half: copies
     result = result && (r != NULL && r != q && r[0] == 2 && r[size/8 - 1] == 2);
     mi_free(r);
