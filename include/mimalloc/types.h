@@ -332,9 +332,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // spread the page meta entries of adjacent slices over the cache lines (within aligned areas or arena bitmap chunks)
 #if !defined(MI_PAGE_META_IDX_MUL)
-#define MI_PAGE_META_IDX_MUL          5    // must be odd; use 1 for a direct mapping; 7 or 33 works also well.
+#define MI_PAGE_META_IDX_MUL          5    // must be odd; use 1 for a direct mapping; 9 or 33 work also well.
 #endif
-#if (MI_PAGE_META_IDX_MUL % 2) == 0
+#if (MI_PAGE_META_IDX_MUL % 2) == 0        // (gcd(MI_PAGE_META_ALIGNED_COUNT, MI_PAGE_META_IDX_MUL)==1) => one-to-one mapping
 #error "MI_PAGE_META_IDX_MUL must be odd to map slices one-to-one onto the page meta entries"
 #endif
 

@@ -127,7 +127,7 @@ static inline mi_page_t* mi_page_meta_load(mi_page_t* page) {
 // to avoid cache line contention between adjacent pages. Since the multiplier is odd and `MI_PAGE_META_ALIGNED_COUNT`
 // is a power of 2, the multiplier has an inverse modulo the count and the mapping is one-to-one.
 static inline size_t mi_page_meta_aligned_index(size_t slice_idx) {
-  mi_assert_internal(mi_is_power_of_two(MI_PAGE_META_ALIGNED_COUNT));
+  mi_assert_internal(mi_is_power_of_two(MI_PAGE_META_ALIGNED_COUNT) && (MI_PAGE_META_IDX_MUL % 2) == 1);  // (gcd(MI_PAGE_META_ALIGNED_COUNT, MI_PAGE_META_IDX_MUL) == 1) => one-to-one mapping
   return (slice_idx * MI_PAGE_META_IDX_MUL) % MI_PAGE_META_ALIGNED_COUNT;
 }
 

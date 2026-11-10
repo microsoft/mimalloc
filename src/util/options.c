@@ -776,8 +776,25 @@ static int mi_option_parse(mi_option_t option, const char* s, long* result) {
 
 // Apply an environment result to a pending option state (without emitting warnings).
 static void mi_option_env_apply(mi_option_t option, mi_option_state_t* state, mi_option_env_t* env) {
-  if (env->err != ENOENT && env->err != EAGAIN && _mi_os_is_elevated()) {
-    // don't let an untrusted environment influence a privileged process (e.g. disable memory tagging)
+  bool ignore_env = false;
+  #if MI_SECURE >= 1
+  switch (option) {
+    #if MI_OS_HAS_GUARD_PAGES
+    case mi_option_allow_large_os_pages:
+    case mi_option_reserve_huge_os_pages:
+    #endif
+    #if MI_MTE
+    case mi_option_mte:
+    #endif
+    case mi_option_unsafe_guarded_precise:
+      ignore_env = true;
+      break;
+    default:
+      break;
+  }
+  #endif
+  if (env->err != ENOENT && env->err != EAGAIN && (ignore_env || _mi_os_is_elevated())) {
+    // don't let environment overrides weaken secure builds or influence a privileged process
     env->err = ENOENT;
     env->legacy = false;
   }
