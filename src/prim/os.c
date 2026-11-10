@@ -390,13 +390,17 @@ bool _mi_os_secure_guard_pages_set_within(void* area, size_t area_size, size_t o
 
 static void mi_os_free_huge_os_pages(mi_subproc_t* subproc, void* p, size_t size);
 
-static void mi_os_prim_free(mi_subproc_t* subproc, void* addr, size_t size, size_t commit_size, bool adjust) {
-  mi_assert_internal((size % _mi_os_page_size()) == 0);
-  if (addr == NULL) return; // || _mi_os_is_huge_reserved(addr)
+static void mi_os_prim_free_no_stat(void* addr, size_t size) {
   int err = _mi_prim_free(addr, size);  // allow size==0 (issue #1041)
   if (err != 0) {
     _mi_warning_message("unable to free OS memory (error: %d (0x%x), size: 0x%zx bytes, address: %p)\n", err, err, size, addr);
   }
+}
+
+static void mi_os_prim_free(mi_subproc_t* subproc, void* addr, size_t size, size_t commit_size, bool adjust) {
+  mi_assert_internal((size % _mi_os_page_size()) == 0);
+  if (addr == NULL) return; // || _mi_os_is_huge_reserved(addr)
+  mi_os_prim_free_no_stat(addr, size);
   if (adjust) {
     if (commit_size>0) { mi_os_stat_adjust_decrease(subproc, committed, commit_size); }
     mi_os_stat_adjust_decrease(subproc, reserved, size);
@@ -964,7 +968,7 @@ void* _mi_os_alloc_huge_os_pages(mi_subproc_t* subproc, size_t pages, int numa_n
       // no success, issue a warning and break
       if (p != NULL) {
         _mi_warning_message("could not allocate contiguous huge OS page %zu at %p\n", page, addr);
-        mi_os_prim_free(subproc, p, MI_HUGE_OS_PAGE_SIZE, MI_HUGE_OS_PAGE_SIZE, true /* adjust */);
+        mi_os_prim_free_no_stat(p, MI_HUGE_OS_PAGE_SIZE);  // not yet accounted
       }
       break;
     }
