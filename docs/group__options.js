@@ -18,7 +18,7 @@ var group__options =
       [ "mi_option_allow_thp", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca04c45931ce2c82a20d08ca1471e74087", null ],
       [ "mi_option_guarded_min", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca00734c528aae52784654a8db996ae62b", null ],
       [ "mi_option_guarded_max", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca96077da4e5c841edeec0c4d6e45a5ffa", null ],
-      [ "mi_option_guarded_precise", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca1eaf89bb1698f988cec27b66e546760c", null ],
+      [ "mi_option_unsafe_guarded_precise", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca43b79b760b200e99c3c64e9d2c09719b", null ],
       [ "mi_option_guarded_sample_rate", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884caeb3c75b1a838eb42106750979d0888ec", null ],
       [ "mi_option_guarded_sample_seed", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca7b1e41ece69f9abbe5ba81d9ea7a3dc0", null ],
       [ "mi_option_eager_commit", "group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca1e8de72c93da7ff22d91e1e27b52ac2b", null ],

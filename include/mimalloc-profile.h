@@ -72,10 +72,10 @@ mi_decl_export bool mi_subproc_profile(mi_subproc_id_t subproc_id, mi_profiler_t
 // attach a profiler to any heaps in the main sub-process (use NULL to detach)
 mi_decl_export bool mi_profile(mi_profiler_t* profiler);
 
-// start sampling
+// start sampling; returns whether the profiler was already running (not a success flag)
 mi_decl_export bool mi_profiler_start(mi_profiler_t* profiler);
 
-// end sampling (but `on_free` is still called for sampled allocations until the profiler is detached).
+// end sampling; returns whether the profiler was running (but `on_free` is still called for sampled allocations until the profiler is detached).
 // Note: a profiler can only be deleted once it is detached and no other threads may still use it (call `on_free`).
 mi_decl_export bool mi_profiler_stop(mi_profiler_t* profiler);
 
@@ -83,7 +83,41 @@ mi_decl_export bool mi_profiler_stop(mi_profiler_t* profiler);
 mi_decl_export void mi_profiler_snapshot(mi_profiler_t* profiler);
 
 // builtin pprof compatible profiler
-// with MI_SECURE=0 (and MI_SECURE_ENV=0), the builtin profiler can also be activated using environment variables (see [`pprof.c`](/src/profile/pprof.c))
+//
+// With MI_SECURE=0 (and MI_SECURE_ENV=0), the builtin profiler can also be activated using environment variables as:
+// `MIMALLOC_PROFILE=<base_file_name>`
+// (and optionally `MIMALLOC_PROFILE_ALLOC_INTERVAL=<bytes>`, `MIMALLOC_PROFILE_INUSE_INTERVAL=<bytes>`, or
+//   `MIMALLOC_PROFILE_TIME_INTERVAL=<seconds>` to periodically snapshot while the program is running).
+//
+// You can also start it programmatically using `mi_pprof_profiler_new` and `mi_profiler_start`:
+// ```c
+// #include <mimalloc.h>
+// #include <mimalloc-profile.h>
+
+// int main(void) {
+//   mi_profiler_t* prof = mi_pprof_profiler_new(
+//       512 * 1024,    // sample roughly every 512 KiB
+//       "myprofile",   // output basename; protobuf format
+//       0, 0, 0);      // no automatic snapshots
+//   if (prof == NULL) return 1;
+//
+//   if (!mi_profile(prof)) {
+//     mi_profile(NULL);
+//     mi_pprof_profiler_delete(prof);
+//     return 1;
+//   }
+//   mi_profiler_start(prof);
+//
+//   // Run your workload here; join worker threads before cleanup.
+//
+//   mi_profiler_stop(prof);
+//   mi_profiler_snapshot(prof);
+//   mi_profile(NULL);                 // detach before deleting
+//   mi_pprof_profiler_delete(prof);
+//   return 0;
+// }
+// ```
+//
 // `base_file_name` selects the text snapshot format if it ends in `.heap` or `.text` (the extension is
 // stripped); any other extension, or none, uses the default (protobuf) snapshot format.
 // `alloc_interval_size`, if >0, automatically snapshots every that many allocated bytes.

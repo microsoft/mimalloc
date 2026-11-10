@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -96,8 +96,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('index.html',''
 <li><b>free list multi-sharding</b>: the big idea! Not only do we shard the free list per mimalloc page, but for each page we have multiple free lists. In particular, there is one list for thread-local <span class="tt">free</span> operations, and another one for concurrent <span class="tt">free</span> operations. Free-ing from another thread can now be a single CAS without needing sophisticated coordination between threads. Since there will be thousands of separate free lists, contention is naturally distributed over the heap, and the chance of contending on a single location will be low &ndash; this is quite similar to randomized algorithms like skip lists where adding a random oracle removes the need for a more complex algorithm.</li>
 <li><b>eager page purging</b>: when a "page" becomes empty (with increased chance due to free list sharding) the memory is marked to the OS as unused (reset or decommitted) reducing (real) memory pressure and fragmentation, especially in long running programs.</li>
 <li><b>secure</b>: <em>mimalloc</em> can be built in secure mode, adding guard pages, randomized allocation, encrypted free lists, etc. to protect against various heap vulnerabilities. The performance penalty is usually around 10% on average over our benchmarks.</li>
-<li><b>first-class heaps</b>: efficiently create and use multiple heaps to allocate across different regions. A heap can be destroyed at once instead of deallocating each object separately. v3.2+ has true first-class heaps where one can allocate in a heap from any thread. <br  />
-</li>
+<li><b>first-class heaps</b>: efficiently create and use multiple heaps to allocate across different regions. A heap can be destroyed at once instead of deallocating each object separately. v3.2+ has true first-class heaps where one can allocate in a heap from any thread.</li>
 <li><b>bounded</b>: it does not suffer from <em>blowup</em> [1], has bounded worst-case allocation times (<em>wcat</em>) (upto OS primitives), bounded space overhead (~0.2% meta-data, with low internal fragmentation), and has no internal points of contention using only atomic operations.</li>
 <li><b>fast</b>: In our benchmarks (see <a class="el" href="bench.html" title="Performance">below</a>), <em>mimalloc</em> outperforms other leading allocators (<em>jemalloc</em>, <em>tcmalloc</em>, <em>Hoard</em>, etc), and often uses less memory. A nice property is that it does consistently well over a wide range of benchmarks. There is also good huge OS page support for larger server programs.</li>
 </ul>
@@ -131,6 +130,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('index.html',''
 <li><a class="el" href="group__subproc.html" title="Subprocesses">Subprocesses</a></li>
 <li><a class="el" href="group__extended.html" title="Extended Functions">Extended Functions</a></li>
 <li><a class="el" href="group__stats.html" title="Statistics">Statistics</a></li>
+<li><a class="el" href="group__profiling.html" title="Heap Profiling">Heap Profiling</a></li>
 <li><a class="el" href="group__options.html" title="Runtime Options">Runtime Options</a></li>
 <li><a class="el" href="group__theap.html" title="Thread-local heaps">Thread-local heaps</a></li>
 <li><a class="el" href="group__posix.html" title="Posix">Posix</a></li>

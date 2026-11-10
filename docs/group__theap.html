@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('group__theap.h
 </div><!--header-->
 <div class="contents">
 
-<p><b>v3</b>: Thread local heaps.
+<p><b>v3</b>: Thread local heaps.  
 <a href="#details">More...</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-typedef-members" class="groupheader"><a id="typedef-members" name="typedef-members"></a>
@@ -163,7 +163,8 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>The theap that serves thread-local allocations for the given <span class="tt"><a class="el" href="group__heap.html" title="First-class heaps.">Heaps</a></span>. This can be used by runtime systems to request the thread-local theap once and then use it in its allocation functions (like <a class="el" href="#gac7308e029c59e6675dd5ab5ec54f304a" title="Allocate in a specific theap.">mi_theap_malloc()</a> or <a class="el" href="#ga1fc65302a212daaecb21abda96ff247c" title="Allocate a small object in a specific theap.">mi_theap_malloc_small()</a> ) to avoid re-looking up the theap at each allocation call. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>The theap that serves thread-local allocations for the given <span class="tt"><a class="el" href="group__heap.html" title="First-class heaps.">Heaps</a></span>. This can be used by runtime systems to request the thread-local theap once and then use it in its allocation functions (like <a class="el" href="#gac7308e029c59e6675dd5ab5ec54f304a" title="Allocate in a specific theap.">mi_theap_malloc()</a> or <a class="el" href="#ga1fc65302a212daaecb21abda96ff247c" title="Allocate a small object in a specific theap.">mi_theap_malloc_small()</a> ) to avoid re-looking up the theap at each allocation call.</dd></dl>
+<p>This is never NULL: if the theap could not be created, or if the current thread has already terminated (after <a class="el" href="group__extended.html#ga0ae4581e85453456a0d658b2b98bf7bf" title="Uninitialize mimalloc on a thread.">mi_thread_done()</a>), a special empty theap is returned instead. Allocation through such an empty theap returns NULL </p>
 
 </div>
 </div>

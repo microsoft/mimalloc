@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('group__posix.h
 </div><!--header-->
 <div class="contents">
 
-<p><span class="tt">mi_</span> prefixed implementations of various Posix, Unix, and C++ allocation functions.
+<p><span class="tt">mi_</span> prefixed implementations of various Posix, Unix, and C++ allocation functions.  
 <a href="#details">More...</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
@@ -104,6 +104,11 @@ Functions</h2></td></tr>
 <tr class="memitem:ga50cafb9722020402f065de93799f64ca" id="r_ga50cafb9722020402f065de93799f64ca"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga50cafb9722020402f065de93799f64ca">mi_valloc</a> (size_t size)</td></tr>
 <tr class="memitem:ga644bebccdbb2821542dd8c7e7641f476" id="r_ga644bebccdbb2821542dd8c7e7641f476"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga644bebccdbb2821542dd8c7e7641f476">mi_pvalloc</a> (size_t size)</td></tr>
 <tr class="memitem:ga430ed1513f0571ff83be00ec58a98ee0" id="r_ga430ed1513f0571ff83be00ec58a98ee0"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga430ed1513f0571ff83be00ec58a98ee0">mi_aligned_alloc</a> (size_t alignment, size_t size)</td></tr>
+<tr class="memdesc:ga430ed1513f0571ff83be00ec58a98ee0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Corresponds to C11 <a href="https://en.cppreference.com/w/c/memory/aligned_alloc">aligned_alloc</a>.  <br /></td></tr>
+<tr class="memitem:gabf9f3fe37c89da1d678785f90c411350" id="r_gabf9f3fe37c89da1d678785f90c411350"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#gabf9f3fe37c89da1d678785f90c411350">mi_free_sized</a> (void *p, size_t size)</td></tr>
+<tr class="memdesc:gabf9f3fe37c89da1d678785f90c411350"><td class="mdescLeft">&#160;</td><td class="mdescRight">Corresponds to C23 <a href="https://en.cppreference.com/w/c/memory/free_sized">free_sized</a>.  <br /></td></tr>
+<tr class="memitem:ga3959f6735a09fa3e3f800e968ad08a33" id="r_ga3959f6735a09fa3e3f800e968ad08a33"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga3959f6735a09fa3e3f800e968ad08a33">mi_free_aligned_sized</a> (void *p, size_t alignment, size_t size)</td></tr>
+<tr class="memdesc:ga3959f6735a09fa3e3f800e968ad08a33"><td class="mdescLeft">&#160;</td><td class="mdescRight">Corresponds to C23 <a href="https://en.cppreference.com/w/c/memory/free_aligned_sized">free_aligned_sized</a>.  <br /></td></tr>
 <tr class="memitem:gaa9fd7f25c9ac3a20e89b33bd6e383fcf" id="r_gaa9fd7f25c9ac3a20e89b33bd6e383fcf"><td class="memItemLeft">unsigned short *&#160;</td><td class="memItemRight"><a class="el" href="#gaa9fd7f25c9ac3a20e89b33bd6e383fcf">mi_wcsdup</a> (const unsigned short *s)</td></tr>
 <tr class="memitem:ga7b82a44094fdec4d2084eb4288a979b0" id="r_ga7b82a44094fdec4d2084eb4288a979b0"><td class="memItemLeft">unsigned char *&#160;</td><td class="memItemRight"><a class="el" href="#ga7b82a44094fdec4d2084eb4288a979b0">mi_mbsdup</a> (const unsigned char *s)</td></tr>
 <tr class="memitem:gab41369c1a1da7504013a7a0b1d4dd958" id="r_gab41369c1a1da7504013a7a0b1d4dd958"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#gab41369c1a1da7504013a7a0b1d4dd958">mi_dupenv_s</a> (char **buf, size_t *size, const char *name)</td></tr>
@@ -192,6 +197,9 @@ Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
+
+<p>Corresponds to C11 <a href="https://en.cppreference.com/w/c/memory/aligned_alloc">aligned_alloc</a>. </p>
+<p>Same as <a class="el" href="group__aligned.html#ga69578ff1a98ca16e1dcd02c0995cd65c" title="Allocate size bytes aligned by alignment.">mi_malloc_aligned()</a>. </p>
 
 </div>
 </div>
@@ -318,6 +326,35 @@ Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="ga3959f6735a09fa3e3f800e968ad08a33" name="ga3959f6735a09fa3e3f800e968ad08a33"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga3959f6735a09fa3e3f800e968ad08a33">&#9670;&#160;</a></span>mi_free_aligned_sized()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_free_aligned_sized </td>
+          <td>(</td>
+          <td class="paramtype">void *</td>          <td class="paramname"><span class="paramname"><em>p</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>alignment</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>size</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Corresponds to C23 <a href="https://en.cppreference.com/w/c/memory/free_aligned_sized">free_aligned_sized</a>. </p>
+<p>Same as <a class="el" href="#ga72e9d7ffb5fe94d69bc722c8506e27bc" title="Free an object that was allocated aligned.">mi_free_size_aligned()</a> (but note the switched <em class="arg">alignment</em> and <em class="arg">size</em> arguments!). </p>
+
+</div>
+</div>
 <a id="gae01389eedab8d67341ff52e2aad80ebb" name="gae01389eedab8d67341ff52e2aad80ebb"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#gae01389eedab8d67341ff52e2aad80ebb">&#9670;&#160;</a></span>mi_free_size()</h2>
 
@@ -420,7 +457,33 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__typed.html#gafc80000c300f02bdd4fe695eb53ca70a" title="Free an object of type tp.">mi_free_tp()</a> </dd>
 <dd>
-<a class="el" href="group__constantsize.html#ga7a421e302074e598527c3eb052a6a3c5" title="v3: Free a pointer with a known constant size.">mi_free_csize()</a> </dd></dl>
+<a class="el" href="group__constantsize.html#ga7a421e302074e598527c3eb052a6a3c5" title="v3: Free a pointer with a known constant size.">mi_free_csize()</a> </dd>
+<dd>
+<a class="el" href="#ga72e9d7ffb5fe94d69bc722c8506e27bc" title="Free an object that was allocated aligned.">mi_free_size_aligned()</a> </dd></dl>
+
+</div>
+</div>
+<a id="gabf9f3fe37c89da1d678785f90c411350" name="gabf9f3fe37c89da1d678785f90c411350"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gabf9f3fe37c89da1d678785f90c411350">&#9670;&#160;</a></span>mi_free_sized()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_free_sized </td>
+          <td>(</td>
+          <td class="paramtype">void *</td>          <td class="paramname"><span class="paramname"><em>p</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>size</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Corresponds to C23 <a href="https://en.cppreference.com/w/c/memory/free_sized">free_sized</a>. </p>
+<p>Same as <a class="el" href="#gae01389eedab8d67341ff52e2aad80ebb" title="Free a block that was allocated with a known size.">mi_free_size()</a>. </p>
 
 </div>
 </div>

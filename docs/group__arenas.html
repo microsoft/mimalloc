@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('group__arenas.
 </div><!--header-->
 <div class="contents">
 
-<p>Arenas are large memory areas (usually 1GiB+) from which mimalloc allocates memory.
+<p>Arenas are large memory areas (usually 1GiB+) from which mimalloc allocates memory.  
 <a href="#details">More...</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-typedef-members" class="groupheader"><a id="typedef-members" name="typedef-members"></a>
@@ -172,7 +172,7 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>base address of the arena. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>base address of the arena (on CHERI this pointer has zero-length bounds and cannot be dereferenced). </dd></dl>
 
 </div>
 </div>

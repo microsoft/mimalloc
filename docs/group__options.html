@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('group__options
 </div><!--header-->
 <div class="contents">
 
-<p>Set runtime parameters.
+<p>Set runtime parameters.  
 <a href="#details">More...</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-enum-members" class="groupheader"><a id="enum-members" name="enum-members"></a>
@@ -116,7 +116,7 @@ Enumerations</h2></td></tr>
 , <a class="el" href="#ggafebf7ed116adb38ae5218bc3ce06884ca00734c528aae52784654a8db996ae62b">mi_option_guarded_min</a>
 , <br />
 &#160;&#160;<a class="el" href="#ggafebf7ed116adb38ae5218bc3ce06884ca96077da4e5c841edeec0c4d6e45a5ffa">mi_option_guarded_max</a>
-, <a class="el" href="#ggafebf7ed116adb38ae5218bc3ce06884ca1eaf89bb1698f988cec27b66e546760c">mi_option_guarded_precise</a>
+, <a class="el" href="#ggafebf7ed116adb38ae5218bc3ce06884ca43b79b760b200e99c3c64e9d2c09719b">mi_option_unsafe_guarded_precise</a>
 , <a class="el" href="#ggafebf7ed116adb38ae5218bc3ce06884caeb3c75b1a838eb42106750979d0888ec">mi_option_guarded_sample_rate</a>
 , <a class="el" href="#ggafebf7ed116adb38ae5218bc3ce06884ca7b1e41ece69f9abbe5ba81d9ea7a3dc0">mi_option_guarded_sample_seed</a>
 , <br />
@@ -189,6 +189,7 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Runtime options. </p>
+<p>Options prefixed with <span class="tt">mi_option_deprecated_...</span> have been removed from mimalloc and no longer have any effect. </p>
 <table class="fieldtable">
 <tr><th colspan="2">Enumerator</th></tr><tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884cafbf4822e5c00732c5984b32a032837f0" name="ggafebf7ed116adb38ae5218bc3ce06884cafbf4822e5c00732c5984b32a032837f0"></a>mi_option_show_errors&#160;</td><td class="fielddoc"><p>Print error messages. </p>
 </td></tr>
@@ -224,9 +225,9 @@ Functions</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca96077da4e5c841edeec0c4d6e45a5ffa" name="ggafebf7ed116adb38ae5218bc3ce06884ca96077da4e5c841edeec0c4d6e45a5ffa"></a>mi_option_guarded_max&#160;</td><td class="fielddoc"><p>only used when building with MI_GUARDED: maximal rounded object size for guarded objects (=0) </p>
 </td></tr>
-<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca1eaf89bb1698f988cec27b66e546760c" name="ggafebf7ed116adb38ae5218bc3ce06884ca1eaf89bb1698f988cec27b66e546760c"></a>mi_option_guarded_precise&#160;</td><td class="fielddoc"><p>disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0) </p>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca43b79b760b200e99c3c64e9d2c09719b" name="ggafebf7ed116adb38ae5218bc3ce06884ca43b79b760b200e99c3c64e9d2c09719b"></a>mi_option_unsafe_guarded_precise&#160;</td><td class="fielddoc"><p>disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0) </p>
 </td></tr>
-<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884caeb3c75b1a838eb42106750979d0888ec" name="ggafebf7ed116adb38ae5218bc3ce06884caeb3c75b1a838eb42106750979d0888ec"></a>mi_option_guarded_sample_rate&#160;</td><td class="fielddoc"><p>1 out of N allocations in the min/max range will be guarded (=1000) </p>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884caeb3c75b1a838eb42106750979d0888ec" name="ggafebf7ed116adb38ae5218bc3ce06884caeb3c75b1a838eb42106750979d0888ec"></a>mi_option_guarded_sample_rate&#160;</td><td class="fielddoc"><p>guard an object in the min/max range about every N requested bytes (=0) </p>
 </td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca7b1e41ece69f9abbe5ba81d9ea7a3dc0" name="ggafebf7ed116adb38ae5218bc3ce06884ca7b1e41ece69f9abbe5ba81d9ea7a3dc0"></a>mi_option_guarded_sample_seed&#160;</td><td class="fielddoc"><p>can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0) </p>
 </td></tr>
@@ -256,7 +257,7 @@ Functions</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884caeae1696100e4057ffc4182730cc04e40" name="ggafebf7ed116adb38ae5218bc3ce06884caeae1696100e4057ffc4182730cc04e40"></a>mi_option_disallow_arena_alloc&#160;</td><td class="fielddoc"><p>1 = do not use arena's for allocation (except if using specific arena id's) </p>
 </td></tr>
-<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca38c67733a3956a1f4eeaca89fab9e78e" name="ggafebf7ed116adb38ae5218bc3ce06884ca38c67733a3956a1f4eeaca89fab9e78e"></a>mi_option_visit_abandoned&#160;</td><td class="fielddoc"><p>allow visiting heap blocks from abandoned threads (=0) </p>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca38c67733a3956a1f4eeaca89fab9e78e" name="ggafebf7ed116adb38ae5218bc3ce06884ca38c67733a3956a1f4eeaca89fab9e78e"></a>mi_option_visit_abandoned&#160;</td><td class="fielddoc"><p><b>v1</b>,<b>v2</b>: allow visiting heap blocks from abandoned threads (=0) </p>
 </td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca874f36a7a1e51f7baee4a78b2830b643" name="ggafebf7ed116adb38ae5218bc3ce06884ca874f36a7a1e51f7baee4a78b2830b643"></a>mi_option_target_segments_per_thread&#160;</td><td class="fielddoc"><p><b>v1</b>,<b>v2</b>: experimental (=0) </p>
 </td></tr>

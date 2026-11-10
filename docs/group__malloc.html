@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('group__malloc.
 </div><!--header-->
 <div class="contents">
 
-<p>The basic allocation interface.
+<p>The basic allocation interface.  
 <a href="#details">More...</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
@@ -122,6 +122,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:ga94c3afcc086e85d75a57e9f76b9b71dd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolve a file path name.  <br /></td></tr>
 <tr class="memitem:ga089c859d9eddc5f9b4bd946cd53cebee" id="r_ga089c859d9eddc5f9b4bd946cd53cebee"><td class="memItemLeft">size_t&#160;</td><td class="memItemRight"><a class="el" href="#ga089c859d9eddc5f9b4bd946cd53cebee">mi_usable_size</a> (void *p)</td></tr>
 <tr class="memdesc:ga089c859d9eddc5f9b4bd946cd53cebee"><td class="mdescLeft">&#160;</td><td class="mdescRight">Return the available bytes in a memory block.  <br /></td></tr>
+<tr class="memitem:ga22252f0d9e380047d3684a6c99d330ae" id="r_ga22252f0d9e380047d3684a6c99d330ae"><td class="memItemLeft">size_t&#160;</td><td class="memItemRight"><a class="el" href="#ga22252f0d9e380047d3684a6c99d330ae">mi_thread_id_of</a> (const void *p)</td></tr>
+<tr class="memdesc:ga22252f0d9e380047d3684a6c99d330ae"><td class="mdescLeft">&#160;</td><td class="mdescRight">Return the current owner thread-id of the page containing a live allocation.  <br /></td></tr>
 <tr class="memitem:gac057927cd06c854b45fe7847e921bd47" id="r_gac057927cd06c854b45fe7847e921bd47"><td class="memItemLeft">size_t&#160;</td><td class="memItemRight"><a class="el" href="#gac057927cd06c854b45fe7847e921bd47">mi_good_size</a> (size_t size)</td></tr>
 <tr class="memdesc:gac057927cd06c854b45fe7847e921bd47"><td class="mdescLeft">&#160;</td><td class="mdescRight">Return the probable allocation block size for a given required size.  <br /></td></tr>
 </table>
@@ -522,6 +524,33 @@ mi_zallocn() </dd></dl>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>a pointer to newly allocated memory initialized to string <em class="arg">s</em> up to the first <em class="arg">n</em> bytes (and always zero terminated), or <em class="arg">NULL</em> if either out of memory or if <em class="arg">s</em> is <em class="arg">NULL</em>.</dd></dl>
 <p>Replacement for the standard <a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/strndup.html">strndup()</a> such that <a class="el" href="#gaf2c7b89c327d1f60f59e68b9ea644d95" title="Free previously allocated memory.">mi_free()</a> can be used on the returned result. </p>
+
+</div>
+</div>
+<a id="ga22252f0d9e380047d3684a6c99d330ae" name="ga22252f0d9e380047d3684a6c99d330ae"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga22252f0d9e380047d3684a6c99d330ae">&#9670;&#160;</a></span>mi_thread_id_of()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t mi_thread_id_of </td>
+          <td>(</td>
+          <td class="paramtype">const void *</td>          <td class="paramname"><span class="paramname"><em>p</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Return the current owner thread-id of the page containing a live allocation. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">p</td><td>A mimalloc allocation, or <em class="arg">NULL</em>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The mimalloc thread id, or 0 for <em class="arg">NULL</em>, abandoned pages, or pages belonging to a detached thread-local heap. For QSBR heaps (<span class="tt">MI_QSBR</span>), an abandoned full page still returns its last owner, and other abandoned pages return 0 once their owner abandoned all its pages (e.g. when its thread terminated).</dd></dl>
+<p>This is a snapshot of current page ownership, not the original allocating thread. This is mimalloc's internal thread identity scheme, not necessarily the native OS thread-id. </p>
 
 </div>
 </div>

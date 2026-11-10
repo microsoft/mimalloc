@@ -109,6 +109,7 @@ Further information:
 
 - \ref extended
 - \ref stats
+- \ref profiling
 - \ref options
 - \ref theap
 - \ref posix
@@ -1333,6 +1334,132 @@ void mi_stats_reset(void);
 
 /// __v1__,__v2__: Merge thread local statistics with the main statistics and reset.
 void mi_stats_merge(void);
+
+/// \}
+
+// ------------------------------------------------------
+// Heap Profiling
+// ------------------------------------------------------
+
+/// \defgroup profiling Heap Profiling
+/// __v3__: Sample allocations using the built-in pprof-compatible profiler or custom profiling hooks.
+///
+/// Include `<mimalloc-profile.h>` and build with profiling support (`-DMI_PROFILE=ON`).
+/// The profiling API is experimental and may still change.
+///
+/// **Programmatic profiling**
+///
+/// Explicit profiler APIs remain available in secure builds and when environment-based
+/// activation is disabled. Create a profiler, attach it, and then start sampling:
+///
+/// ```c
+/// #include <mimalloc.h>
+/// #include <mimalloc-profile.h>
+///
+/// int main(void) {
+///   mi_profiler_t* prof = mi_pprof_profiler_new(
+///       512 * 1024,    // sample roughly every 512 KiB
+///       "myprofile",   // output basename; protobuf format
+///       0, 0, 0);      // no automatic snapshots
+///   if (prof == NULL) return 1;
+///
+///   if (!mi_profile(prof)) {
+///     mi_profile(NULL);
+///     mi_pprof_profiler_delete(prof);
+///     return 1;
+///   }
+///   mi_profiler_start(prof);
+///
+///   // Run your workload here; join worker threads before cleanup.
+///
+///   mi_profiler_stop(prof);
+///   mi_profiler_snapshot(prof);
+///   mi_profile(NULL);                 // detach before deleting
+///   mi_pprof_profiler_delete(prof);
+///   return 0;
+/// }
+/// ```
+///
+/// Stopping sampling does not detach the profiler: its `on_free` callback can still
+/// be invoked for sampled allocations. Before deleting a profiler, detach it from
+/// all associated heaps and subprocesses, and ensure no other thread can still
+/// invoke its callbacks.
+///
+/// **Environment-based profiling**
+///
+/// When both `MI_SECURE=0` and `MI_SECURE_ENV=0`, `MIMALLOC_PROFILE=<basename>`
+/// activates the built-in profiler for the main subprocess. Elevated processes
+/// ignore this environment variable regardless of build settings.
+///
+/// - `MIMALLOC_PROFILE_SAMPLE_RATE`: approximate number of allocated bytes between samples
+///   (default: `512KiB`).
+/// - `MIMALLOC_PROFILE_ALLOC_INTERVAL`: allocated bytes between automatic snapshots
+///   (default: `1GiB`; `0` disables).
+/// - `MIMALLOC_PROFILE_INUSE_INTERVAL`: growth in in-use bytes between automatic snapshots
+///   (default: `0`, disabled).
+/// - `MIMALLOC_PROFILE_TIME_INTERVAL`: seconds between automatic snapshots, checked
+///   on allocation events (default: `0`, disabled).
+///
+/// Snapshots use protobuf format by default. A basename ending in `.heap` or `.text`
+/// selects the text heap-profile format instead.
+///
+/// \{
+
+/// Profiler type. Custom profiler fields and callback types are defined in `<mimalloc-profile.h>`.
+typedef struct mi_profiler_s mi_profiler_t;
+
+/// @brief Create the built-in pprof-compatible profiler.
+/// @param initial_threshold Approximate number of allocated bytes between samples (for example, `512 * 1024`).
+/// @param base_file_name Output basename. A `.heap` or `.text` extension selects text format;
+/// any other extension, or none, selects protobuf format. A filename extension is stripped.
+/// @param alloc_interval_size Allocated bytes between automatic snapshots, or `0` to disable.
+/// @param inuse_interval_size Growth in in-use bytes between automatic snapshots, or `0` to disable.
+/// @param time_interval_secs Seconds between automatic snapshots, or `0` to disable.
+/// Time intervals are checked on allocation events, not by a background timer.
+/// @return A profiler, or \a NULL on failure.
+/// The returned profiler must be attached and started before it samples allocations.
+/// @see mi_profile(), mi_profiler_start(), mi_pprof_profiler_delete()
+mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, size_t alloc_interval_size, size_t inuse_interval_size, size_t time_interval_secs);
+
+/// Delete a built-in profiler created by mi_pprof_profiler_new().
+/// First detach the profiler and ensure no other thread can still invoke its callbacks.
+/// Deleting a profiler does not take a final snapshot; use mi_profiler_snapshot() explicitly.
+void mi_pprof_profiler_delete(mi_profiler_t* profiler);
+
+/// Attach a profiler to the current and future heaps of the main subprocess.
+/// Heaps excluded by mi_heap_profile_disable() remain excluded.
+/// Pass \a NULL to detach. Attaching stops sampling; use mi_profiler_start() to start it.
+/// @return \a true on success.
+bool mi_profile(mi_profiler_t* profiler);
+
+/// Attach a profiler to the current and future heaps of a particular subprocess.
+/// Heaps excluded by mi_heap_profile_disable() remain excluded.
+/// Pass \a NULL as the profiler to detach. Attaching stops sampling.
+/// @return \a true on success.
+bool mi_subproc_profile(mi_subproc_id_t subproc_id, mi_profiler_t* profiler);
+
+/// Attach a profiler to a particular heap, or pass \a NULL as the profiler to detach.
+/// Attaching stops sampling. The `on_free` callback is only invoked for allocations
+/// sampled by this profiler since it was last attached.
+/// @return \a true on success.
+bool mi_heap_profile(mi_heap_t* heap, mi_profiler_t* profiler);
+
+/// Exclude a heap from profiling, even when a profiler is subsequently attached to its subprocess.
+/// Useful for a heap used by a custom profiler to allocate its own metadata.
+void mi_heap_profile_disable(mi_heap_t* heap);
+
+/// Start sampling with an attached profiler.
+/// @return Whether the profiler was already running; \a false on the first start is normal.
+bool mi_profiler_start(mi_profiler_t* profiler);
+
+/// Stop sampling. The `on_free` callback can still run until the profiler is detached.
+/// @return Whether the profiler was running before this call.
+bool mi_profiler_stop(mi_profiler_t* profiler);
+
+/// Take a snapshot of the current profile.
+/// May be called while sampling is stopped. Concurrent calls may skip a snapshot
+/// if another snapshot callback is already running.
+void mi_profiler_snapshot(mi_profiler_t* profiler);
 
 /// \}
 

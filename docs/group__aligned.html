@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('group__aligned
 </div><!--header-->
 <div class="contents">
 
-<p>Allocating aligned memory blocks.
+<p>Allocating aligned memory blocks.  
 <a href="#details">More...</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
@@ -107,7 +107,8 @@ Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Allocating aligned memory blocks. </p>
-<p>Note that <span class="tt">alignment</span> always follows <span class="tt">size</span> for consistency with the unaligned allocation API, but unfortunately this differs from <span class="tt">posix_memalign</span> and <span class="tt">aligned_alloc</span> in the C library. </p>
+<p>Note that <span class="tt">alignment</span> always follows <span class="tt">size</span> for consistency with the unaligned allocation API, but unfortunately this differs from <span class="tt">posix_memalign</span> and <span class="tt">aligned_alloc</span> in the C library.</p>
+<p>Aligned and unaligned functions can be freely mixed: any pointer returned by mimalloc can be passed to <span class="tt"><a class="el" href="#ga5d7a46d054b4d7abe9d8d2474add2edf">mi_realloc_aligned</a></span> (and <span class="tt"><a class="el" href="#gad06dcf2bb8faadb2c8ea61ee5d24bbf6">mi_realloc_aligned_at</a></span>) with any alignment (and offset), larger or smaller than the one it was originally allocated with. Similarly, pointers from the aligned API can be passed to <span class="tt"><a class="el" href="group__malloc.html#gaf2c7b89c327d1f60f59e68b9ea644d95" title="Free previously allocated memory.">mi_free</a></span>, <span class="tt"><a class="el" href="group__malloc.html#ga0621af6a5e3aa384e6a1b548958bf583" title="Re-allocate memory to newsize bytes.">mi_realloc</a></span>, <span class="tt"><a class="el" href="group__malloc.html#ga089c859d9eddc5f9b4bd946cd53cebee" title="Return the available bytes in a memory block.">mi_usable_size</a></span>, etc. </p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
 <a id="ga424ef386fb1f9f8e0a86ab53f16eaaf1" name="ga424ef386fb1f9f8e0a86ab53f16eaaf1"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ga424ef386fb1f9f8e0a86ab53f16eaaf1">&#9670;&#160;</a></span>mi_calloc_aligned()</h2>

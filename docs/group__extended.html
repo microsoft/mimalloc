@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('group__extende
 </div><!--header-->
 <div class="contents">
 
-<p>Internal functionality.
+<p>Internal functionality.  
 <a href="#details">More...</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-define-members" class="groupheader"><a id="define-members" name="define-members"></a>
@@ -438,13 +438,14 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<p>The <em class="arg">errfun</em> function is called on an error in mimalloc after emitting an error message (through the output function). It as always legal to just return from the <em class="arg">errfun</em> function in which case allocation functions generally return <em class="arg">NULL</em> or ignore the condition. The default function only calls abort() when compiled in secure mode with an <em class="arg">EFAULT</em> error. The possible error codes are:</p><ul>
+<p>The <em class="arg">errfun</em> function is called on an error in mimalloc after emitting an error message (through the output function). It as always legal to just return from the <em class="arg">errfun</em> function in which case allocation functions generally return <em class="arg">NULL</em> or ignore the condition. An <em class="arg">EFAULT</em> error message is always shown, and when compiled in secure mode, mimalloc always calls abort() after an <em class="arg">EFAULT</em> error (even if the error function returns). The possible error codes are:</p><ul>
 <li><em class="arg">EAGAIN:</em> Double free was detected (only in debug and secure mode).</li>
 <li><em class="arg">EFAULT:</em> Corrupted free list or meta-data was detected (only in debug and secure mode).</li>
 <li><em class="arg">ENOMEM:</em> Not enough memory available to satisfy the request.</li>
 <li><em class="arg">EOVERFLOW:</em> Too large a request, for example in <a class="el" href="group__malloc.html#ga6686568014b54d1e6c7ac64a076e4f56" title="Allocate zero-initialized count elements of size bytes.">mi_calloc()</a>, the <em class="arg">count</em> and <em class="arg">size</em> parameters are too large.</li>
-<li><em class="arg">EINVAL:</em> Trying to free or re-allocate an invalid pointer. </li>
+<li><em class="arg">EINVAL:</em> Trying to free or re-allocate an invalid pointer.</li>
 </ul>
+<p>Independent of the error code passed to <em class="arg">errfun</em>, allocation functions that return <em class="arg">NULL</em> set <em class="arg">errno</em> as required by POSIX: <em class="arg">ENOMEM</em>, or <em class="arg">EINVAL</em> for an invalid alignment. Other errors (like freeing an invalid pointer) do not modify <em class="arg">errno</em>. </p>
 
 </div>
 </div>
@@ -495,7 +496,7 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Uninitialize mimalloc on a thread. </p>
-<p>Should not be used as on most systems (pthreads, windows) this is done automatically. Ensures that any memory that is not freed yet (but will be freed by other threads in the future) is properly handled. </p>
+<p>Should not be used as on most systems (pthreads, windows) this is done automatically. Ensures that any memory that is not freed yet (but will be freed by other threads in the future) is properly handled. Afterwards, the thread is not implicitly re-initialized: allocations (for example in thread-local destructors) use a shared fallback heap until <a class="el" href="#gaf8e73efc2cbca9ebfdfb166983a04c17" title="Initialize mimalloc on a thread.">mi_thread_init()</a> is called explicitly. </p>
 
 </div>
 </div>

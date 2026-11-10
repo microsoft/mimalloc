@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -89,26 +89,20 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('group__constan
 </div><!--header-->
 <div class="contents">
 
-<p>Inlined definitions for onstant size allocation and freeing.
+<p>Inlined definitions for onstant size allocation and freeing.  
 <a href="#details">More...</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
-<tr class="memitem:ga9cd44d925d34f7180922e12bbf594571" id="r_ga9cd44d925d34f7180922e12bbf594571"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga9cd44d925d34f7180922e12bbf594571">mi_malloc_csize</a> (size_t size)</td></tr>
+<tr class="memitem:ga9cd44d925d34f7180922e12bbf594571" id="r_ga9cd44d925d34f7180922e12bbf594571"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga9cd44d925d34f7180922e12bbf594571">mi_malloc_csize</a> (size_t size)</td></tr>
 <tr class="memdesc:ga9cd44d925d34f7180922e12bbf594571"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Allocate a constant size object.  <br /></td></tr>
-<tr class="separator:ga9cd44d925d34f7180922e12bbf594571"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:gadca6d340ee15b5c70695ed82d95c6cec" id="r_gadca6d340ee15b5c70695ed82d95c6cec"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#gadca6d340ee15b5c70695ed82d95c6cec">mi_zalloc_csize</a> (size_t size)</td></tr>
-<tr class="separator:gadca6d340ee15b5c70695ed82d95c6cec"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga105bd667da91a15d113fe79be04d625c" id="r_ga105bd667da91a15d113fe79be04d625c"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga105bd667da91a15d113fe79be04d625c">mi_theap_malloc_csize</a> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
-<tr class="separator:ga105bd667da91a15d113fe79be04d625c"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga1addf755829380581dd9c3c9175e376f" id="r_ga1addf755829380581dd9c3c9175e376f"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga1addf755829380581dd9c3c9175e376f">mi_theap_zalloc_csize</a> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
-<tr class="separator:ga1addf755829380581dd9c3c9175e376f"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga7a421e302074e598527c3eb052a6a3c5" id="r_ga7a421e302074e598527c3eb052a6a3c5"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga7a421e302074e598527c3eb052a6a3c5">mi_free_csize</a> (void *p, size_t size)</td></tr>
+<tr class="memitem:gadca6d340ee15b5c70695ed82d95c6cec" id="r_gadca6d340ee15b5c70695ed82d95c6cec"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#gadca6d340ee15b5c70695ed82d95c6cec">mi_zalloc_csize</a> (size_t size)</td></tr>
+<tr class="memitem:ga105bd667da91a15d113fe79be04d625c" id="r_ga105bd667da91a15d113fe79be04d625c"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga105bd667da91a15d113fe79be04d625c">mi_theap_malloc_csize</a> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
+<tr class="memitem:ga1addf755829380581dd9c3c9175e376f" id="r_ga1addf755829380581dd9c3c9175e376f"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga1addf755829380581dd9c3c9175e376f">mi_theap_zalloc_csize</a> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
+<tr class="memitem:ga7a421e302074e598527c3eb052a6a3c5" id="r_ga7a421e302074e598527c3eb052a6a3c5"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga7a421e302074e598527c3eb052a6a3c5">mi_free_csize</a> (void *p, size_t size)</td></tr>
 <tr class="memdesc:ga7a421e302074e598527c3eb052a6a3c5"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Free a pointer with a known constant size.  <br /></td></tr>
-<tr class="separator:ga7a421e302074e598527c3eb052a6a3c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga38a93d373a9dc8edc8bca83edb6af5c5" id="r_ga38a93d373a9dc8edc8bca83edb6af5c5"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga38a93d373a9dc8edc8bca83edb6af5c5">mi_free_csize_nonnull</a> (void *p, size_t size)</td></tr>
+<tr class="memitem:ga38a93d373a9dc8edc8bca83edb6af5c5" id="r_ga38a93d373a9dc8edc8bca83edb6af5c5"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga38a93d373a9dc8edc8bca83edb6af5c5">mi_free_csize_nonnull</a> (void *p, size_t size)</td></tr>
 <tr class="memdesc:ga38a93d373a9dc8edc8bca83edb6af5c5"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Free a non-null pointer with a known constant size.  <br /></td></tr>
-<tr class="separator:ga38a93d373a9dc8edc8bca83edb6af5c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Inlined definitions for onstant size allocation and freeing. </p>
@@ -208,7 +202,7 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>A pointer to an allocated block of size <em>size</em> bytes. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>A pointer to an allocated block of size <em class="arg">size</em> bytes. </dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga7a421e302074e598527c3eb052a6a3c5" title="v3: Free a pointer with a known constant size.">mi_free_csize()</a> </dd>
 <dd>
 <a class="el" href="group__malloc.html#gae1dd97b542420c87ae085e822b1229e8" title="Allocate size bytes.">mi_malloc()</a> </dd></dl>

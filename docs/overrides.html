@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -125,6 +125,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('overrides.html
 <div class="line"><span class="keywordtype">char</span>*  strndup(<span class="keyword">const</span> <span class="keywordtype">char</span>* s, <span class="keywordtype">size_t</span> n);</div>
 <div class="line"><span class="keywordtype">char</span>*  realpath(<span class="keyword">const</span> <span class="keywordtype">char</span>* fname, <span class="keywordtype">char</span>* resolved_name);</div>
 <div class="line"> </div>
+<div class="line"><span class="comment">// C23</span></div>
+<div class="line"><span class="keywordtype">void</span>   free_sized(<span class="keywordtype">void</span>* p, <span class="keywordtype">size_t</span> size);</div>
+<div class="line"><span class="keywordtype">void</span>   free_aligned_sized(<span class="keywordtype">void</span>* p, <span class="keywordtype">size_t</span> alignment, <span class="keywordtype">size_t</span> size);</div>
 <div class="line"> </div>
 <div class="line"><span class="comment">// C++</span></div>
 <div class="line"><span class="keywordtype">void</span>   <span class="keyword">operator</span> <span class="keyword">delete</span>(<span class="keywordtype">void</span>* p);</div>

@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('group__heap.ht
 </div><!--header-->
 <div class="contents">
 
-<p>First-class heaps.
+<p>First-class heaps.  
 <a href="#details">More...</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-typedef-members" class="groupheader"><a id="typedef-members" name="typedef-members"></a>
@@ -102,7 +102,9 @@ Functions</h2></td></tr>
 <tr class="memitem:gaa718bb226ec0546ba6d1b6cb32179f3a" id="r_gaa718bb226ec0546ba6d1b6cb32179f3a"><td class="memItemLeft"><a class="el" href="#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *&#160;</td><td class="memItemRight"><a class="el" href="#gaa718bb226ec0546ba6d1b6cb32179f3a">mi_heap_new</a> ()</td></tr>
 <tr class="memdesc:gaa718bb226ec0546ba6d1b6cb32179f3a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Create a new heap that can be used for allocation.  <br /></td></tr>
 <tr class="memitem:ga2ab1af8d438819b55319c7ef51d1e409" id="r_ga2ab1af8d438819b55319c7ef51d1e409"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga2ab1af8d438819b55319c7ef51d1e409">mi_heap_delete</a> (<a class="el" href="#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap)</td></tr>
-<tr class="memdesc:ga2ab1af8d438819b55319c7ef51d1e409"><td class="mdescLeft">&#160;</td><td class="mdescRight">Delete a previously allocated heap.  <br /></td></tr>
+<tr class="memdesc:ga2ab1af8d438819b55319c7ef51d1e409"><td class="mdescLeft">&#160;</td><td class="mdescRight">Delete a heap, releasing its internal resources but keeping live blocks intact.  <br /></td></tr>
+<tr class="memitem:ga5774713972f49144861270241f458864" id="r_ga5774713972f49144861270241f458864"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga5774713972f49144861270241f458864">mi_thread_heap_release</a> (<a class="el" href="#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap)</td></tr>
+<tr class="memdesc:ga5774713972f49144861270241f458864"><td class="mdescLeft">&#160;</td><td class="mdescRight">Release a heap in the calling thread &ndash; promises to not allocate in that heap anymore.  <br /></td></tr>
 <tr class="memitem:ga9f9c0844edb9717f4feacd79116b8e0d" id="r_ga9f9c0844edb9717f4feacd79116b8e0d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga9f9c0844edb9717f4feacd79116b8e0d">mi_heap_destroy</a> (<a class="el" href="#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap)</td></tr>
 <tr class="memdesc:ga9f9c0844edb9717f4feacd79116b8e0d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Destroy a heap, freeing all its still allocated blocks.  <br /></td></tr>
 <tr class="memitem:ga349b677dec7da5eacdbc7a385bd62a4a" id="r_ga349b677dec7da5eacdbc7a385bd62a4a"><td class="memItemLeft"><a class="el" href="#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *&#160;</td><td class="memItemRight"><a class="el" href="#ga349b677dec7da5eacdbc7a385bd62a4a">mi_heap_set_default</a> (<a class="el" href="#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap)</td></tr>
@@ -165,7 +167,8 @@ Functions</h2></td></tr>
 <div class="textblock"><p>First-class heaps. </p>
 <p>Heaps allow allocations to be grouped, and for example be destroyed in one go. Heaps can also be associated with a specific allocation arena (<span class="tt"><a class="el" href="group__arenas.html#gaaf2d9976576d5efd5544be12848af949" title="Create a new heap that only allocates in the specified arena.">mi_heap_new_in_arena()</a></span>).</p>
 <p><b>v1</b>,<b>v2</b>: heaps are only semi-first-class and <b>one can only use heap allocation functions from the thread that created the heap</b>. (of course, <a class="el" href="group__malloc.html#gaf2c7b89c327d1f60f59e68b9ea644d95" title="Free previously allocated memory.">mi_free()</a> can always be used from any thread to free objects from any heap).</p>
-<p><b>v3</b>: heaps are fully first-class and can be used to allocate efficiently from from any thread. In v3, the old v1/v2 heaps still exist but are now called <em>theaps</em> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8" title="Type of thread-local heaps.">mi_theap_t()</a>) for thread-local heaps. A v3 heap creates internally such theaps on demand to efficiently allocate without needing taking locks for example. </p>
+<p><b>v3</b>: heaps are fully first-class and can be used to allocate efficiently from from any thread. In v3, the old v1/v2 heaps still exist but are now called <em>theaps</em> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8" title="Type of thread-local heaps.">mi_theap_t()</a>) for thread-local heaps. A v3 heap creates internally such theaps on demand to efficiently allocate without needing taking locks for example.</p>
+<p>The heap argument of the heap functions must be a valid heap: <span class="tt">NULL</span> is not accepted (use <a class="el" href="#ga8fc318a65dc79ee8778c6a0e52d12477" title="v3: the main heap (of the current sub-process)">mi_heap_main()</a> for the main heap). (except for mi_unsafe_heap_page_is_under_utilized() where <span class="tt">NULL</span> matches any heap). </p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Typedef Documentation</h2>
 <a id="ga34a47cde5a5b38c29f1aa3c5e76943c2" name="ga34a47cde5a5b38c29f1aa3c5e76943c2"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ga34a47cde5a5b38c29f1aa3c5e76943c2">&#9670;&#160;</a></span>mi_heap_t</h2>
@@ -465,9 +468,18 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Delete a previously allocated heap. </p>
-<p>This will release internal resources but not free still allocated blocks in this heap (and should be <span class="tt"><a class="el" href="group__malloc.html#gaf2c7b89c327d1f60f59e68b9ea644d95" title="Free previously allocated memory.">mi_free</a></span>'d later on as usual).</p>
-<p>Note: trying to delete the main heap of a subprocess is ignored. </p>
+<p>Delete a heap, releasing its internal resources but keeping live blocks intact. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">heap</td><td>The heap to delete.</td></tr>
+  </table>
+  </dd>
+</dl>
+<p>Other threads that allocated in the heap should first call <a class="el" href="#ga5774713972f49144861270241f458864" title="Release a heap in the calling thread – promises to not allocate in that heap anymore.">mi_thread_heap_release()</a> (or no longer allocate or free in the heap at all). In debug mode, a warning is given for threads that did not release the heap.</p>
+<p>This will release internal resources but not free still allocated blocks in this heap (and these should be <span class="tt"><a class="el" href="group__malloc.html#gaf2c7b89c327d1f60f59e68b9ea644d95" title="Free previously allocated memory.">mi_free</a></span>'d later on as usual).</p>
+<p>Note: trying to delete the main heap of a subprocess is ignored. </p><dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga9f9c0844edb9717f4feacd79116b8e0d" title="Destroy a heap, freeing all its still allocated blocks.">mi_heap_destroy()</a> for destroying a <a class="el" href="group__heap.html" title="First-class heaps.">Heaps</a>. </dd>
+<dd>
+<a class="el" href="#ga5774713972f49144861270241f458864" title="Release a heap in the calling thread – promises to not allocate in that heap anymore.">mi_thread_heap_release()</a> for releasing a <a class="el" href="group__heap.html" title="First-class heaps.">Heaps</a> in the current thread. </dd></dl>
 
 </div>
 </div>
@@ -487,8 +499,17 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Destroy a heap, freeing all its still allocated blocks. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">heap</td><td>The heap to destroy.</td></tr>
+  </table>
+  </dd>
+</dl>
+<p>It is not safe to destroy a heap if other threads are still concurrently allocating or freeing in it!</p>
 <p>Use with care as this will free all blocks still allocated in the heap. However, this can be an efficient way to free all heap memory in one go.</p>
-<p>Note: trying to destroy the main heap of a subprocess is ignored. </p>
+<p>Note: trying to destroy the main heap of a subprocess is ignored. </p><dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga2ab1af8d438819b55319c7ef51d1e409" title="Delete a heap, releasing its internal resources but keeping live blocks intact.">mi_heap_delete()</a> for deleting a <a class="el" href="group__heap.html" title="First-class heaps.">Heaps</a>. </dd>
+<dd>
+<a class="el" href="#ga5774713972f49144861270241f458864" title="Release a heap in the calling thread – promises to not allocate in that heap anymore.">mi_thread_heap_release()</a> for releasing a <a class="el" href="group__heap.html" title="First-class heaps.">Heaps</a> in the current thread. </dd></dl>
 
 </div>
 </div>
@@ -1150,6 +1171,35 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><em class="arg">true</em> if this is a pointer into our heap. This function is relatively fast. </dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga29589f427702a1b873de8efb884a611b" title="v3: is a pointer pointing into mimalloc managed memory?">mi_any_heap_contains()</a> for <b>v3</b>. </dd></dl>
+
+</div>
+</div>
+<a id="ga5774713972f49144861270241f458864" name="ga5774713972f49144861270241f458864"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga5774713972f49144861270241f458864">&#9670;&#160;</a></span>mi_thread_heap_release()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_thread_heap_release </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *</td>          <td class="paramname"><span class="paramname"><em>heap</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Release a heap in the calling thread &ndash; promises to not allocate in that heap anymore. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">heap</td><td>The heap to release in the calling thread.</td></tr>
+  </table>
+  </dd>
+</dl>
+<p>After this call, allocation in the heap from this thread returns <span class="tt">NULL</span>. If using <a class="el" href="#ga2ab1af8d438819b55319c7ef51d1e409" title="Delete a heap, releasing its internal resources but keeping live blocks intact.">mi_heap_delete()</a> it is recommended to first release the heap in all threads that allocated in it. In particular, for <a class="el" href="#ga2ab1af8d438819b55319c7ef51d1e409" title="Delete a heap, releasing its internal resources but keeping live blocks intact.">mi_heap_delete()</a> it is not safe if any thread is concurrently freeing (or allocating) in that heap while it is being deleted. However, if each other thread that allocated in the heap first calls <a class="el" href="#ga5774713972f49144861270241f458864" title="Release a heap in the calling thread – promises to not allocate in that heap anymore.">mi_thread_heap_release()</a>, it is safe to delete the heap even with concurrent freeing. Using <a class="el" href="#ga5774713972f49144861270241f458864" title="Release a heap in the calling thread – promises to not allocate in that heap anymore.">mi_thread_heap_release()</a> is not needed for <a class="el" href="#ga9f9c0844edb9717f4feacd79116b8e0d" title="Destroy a heap, freeing all its still allocated blocks.">mi_heap_destroy()</a> (where all blocks are freed) but it is still good practice. Calling this multiple times is allowed.</p>
+<p>Note: trying to release the main heap of a subprocess is ignored. </p><dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga2ab1af8d438819b55319c7ef51d1e409" title="Delete a heap, releasing its internal resources but keeping live blocks intact.">mi_heap_delete()</a> for deleting a <a class="el" href="group__heap.html" title="First-class heaps.">Heaps</a>. </dd>
+<dd>
+<a class="el" href="#ga9f9c0844edb9717f4feacd79116b8e0d" title="Destroy a heap, freeing all its still allocated blocks.">mi_heap_destroy()</a> for destroying a <a class="el" href="group__heap.html" title="First-class heaps.">Heaps</a>. </dd></dl>
 
 </div>
 </div>

@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('group__analysi
 </div><!--header-->
 <div class="contents">
 
-<p>Walk areas and blocks of the heap at runtime.
+<p>Walk areas and blocks of the heap at runtime.  
 <a href="#details">More...</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
@@ -239,7 +239,7 @@ bytes in use by allocated blocks </td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><em class="arg">true</em> if all areas and blocks were visited.</dd></dl>
-<p>Note: requires the option <a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca38c67733a3956a1f4eeaca89fab9e78e" title="allow visiting heap blocks from abandoned threads (=0)">mi_option_visit_abandoned()</a> to be set at the start of the program. </p>
+<p>Note: requires the option <a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca38c67733a3956a1f4eeaca89fab9e78e" title="v1,v2: allow visiting heap blocks from abandoned threads (=0)">mi_option_visit_abandoned()</a> to be set at the start of the program. </p>
 
 </div>
 </div>
@@ -283,7 +283,7 @@ bytes in use by allocated blocks </td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><em class="arg">true</em> if all areas and blocks were visited.</dd></dl>
-<p>Note: requires the option <a class="el" href="group__options.html#ggafebf7ed116adb38ae5218bc3ce06884ca38c67733a3956a1f4eeaca89fab9e78e" title="allow visiting heap blocks from abandoned threads (=0)">mi_option_visit_abandoned()</a> to be set at the start of the program to visit all abandoned blocks as well. </p>
+<p>Visits all areas and blocks in the heap. Other threads must not access this heap during the visit: they may not allocate in it, nor free blocks that belong to it (but thread termination is synchronized internally). The visitor runs under the heap's lock and must not re-enter the heap (through allocating or free-ing). </p>
 
 </div>
 </div>
