@@ -356,9 +356,9 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
 
   mi_assert_internal(page!=NULL);
   mi_assert(cpage==page /* page_map lookup should be the same as aligned lookup */ );
-  #if MI_DEBUG
+  #if MI_DEBUG && !MI_UNSAFE_GUARDED_PRECISE
   // pointers allocated at an offset (`mi_malloc_aligned_at`) or guarded precise pointers can be unaligned
-  if mi_unlikely(!mi_is_aligned(p,MI_SIZE_SIZE) && !mi_page_has_interior_pointers(page) && !mi_option_is_enabled(mi_option_unsafe_guarded_precise)) {
+  if mi_unlikely(!mi_is_aligned(p,MI_SIZE_SIZE) && !mi_page_has_interior_pointers(page)) {
     return mi_ptr_invalid(msg, p, " (unaligned)");
   }
   #endif

@@ -161,7 +161,7 @@ static const mi_option_desc_t mi_option_descs[_mi_option_last] =
   { 1, MI_OPTION(deprecated_visit_abandoned) },
   { 0, MI_OPTION(guarded_min) },              // only used when building with MI_GUARDED: minimal rounded object size for guarded objects
   { MI_GiB, MI_OPTION(guarded_max) },           // only used when building with MI_GUARDED: maximal rounded object size for guarded objects
-  { 0, MI_OPTION(unsafe_guarded_precise) },          // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
+  { 0, MI_OPTION(deprecated_unsafe_guarded_precise) },          // deprecated, see MI_UNSAFE_GUARDED_PRECISE macro
   { MI_DEFAULT_GUARDED_SAMPLE_RATE, MI_OPTION(guarded_sample_rate)},       // guard an object in the min/max range about every N requested bytes (=0)
   { 0, MI_OPTION(guarded_sample_seed)},
   { 10000, MI_OPTION(generic_collect) },        // collect theaps every N (=10000) generic allocation calls
@@ -786,7 +786,7 @@ static void mi_option_env_apply(mi_option_t option, mi_option_state_t* state, mi
     #if MI_MTE
     case mi_option_mte:
     #endif
-    case mi_option_unsafe_guarded_precise:
+    case mi_option_deprecated_unsafe_guarded_precise:
     case mi_option_destroy_on_exit:
       ignore_env = true;
       break;

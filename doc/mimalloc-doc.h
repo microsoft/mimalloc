@@ -2118,11 +2118,6 @@ many system calls. Therefore, there are various environment variables (and optio
 - `MIMALLOC_GUARDED_MIN=N`, `MIMALLOC_GUARDED_MAX=N`: Minimal and maximal _rounded_ object sizes for which a guard
   page is considered (`0` and `1GiB` respectively). If you suspect a buffer overflow occurs with an object of size
   141, set the minimum and maximum to `148` and the sample rate to `1` to have all of those guarded.
-
-- `MIMALLOC_UNSAFE_GUARDED_PRECISE=1`: If we have an object of size 13, we would usually place it an aligned 16 bytes in
-  front of the guard page. Using `MIMALLOC_UNSAFE_GUARDED_PRECISE` places it exactly 13 bytes before a page so that even
-  a 1 byte overflow is detected. This violates the C/C++ minimal alignment guarantees though so use with care.
-
 */
 
 /*! \page tools Tools
