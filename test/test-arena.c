@@ -2,6 +2,7 @@
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/heap/theap.h"
 #include "mimalloc/prim/prim.h"
+#include "mimalloc/prim/os.h"
 #include "testhelper.h"
 
 static mi_subproc_t test_subproc;
@@ -199,6 +200,30 @@ static bool test_arena_oversized_alloc(void) {
     void* p = mi_malloc(size);
     if (p == NULL || mi_arenas_get_count(subproc) != arena_count) { result = false; }
     mi_free(p);
+  }
+  return result;
+}
+#endif
+
+#if MI_STATS
+static bool test_os_aligned_offset_stats(void) {
+  mi_subproc_t* subproc = mi_theap_subproc(mi_theap_get_default());
+  const size_t page_size = _mi_os_page_size();
+  const size_t alignment = 16 * page_size;
+  const size_t size = 2 * alignment;
+  const size_t offsets[] = { page_size, page_size + 1, alignment - 1 };
+  bool result = true;
+  for (size_t commit = 0; commit < 2; commit++) {
+    for (size_t i = 0; i < sizeof(offsets)/sizeof(offsets[0]); i++) {
+      const int64_t committed = subproc->stats.committed.current;
+      const int64_t reserved = subproc->stats.reserved.current;
+      mi_memid_t memid;
+      void* p = _mi_os_alloc_aligned_at_offset(subproc, size, alignment, offsets[i], commit != 0, false, &memid);
+      if (p == NULL) return false;
+      result = result && ((mi_addr(p) + offsets[i]) % alignment == 0);
+      _mi_os_free(subproc, p, size, memid);
+      result = result && subproc->stats.committed.current == committed && subproc->stats.reserved.current == reserved;
+    }
   }
   return result;
 }
@@ -897,6 +922,9 @@ static bool test_efault(bool (*test)(void)) {
 }
 
 int main(void) {
+  #if MI_STATS
+  CHECK("os-aligned-offset-stats", test_os_aligned_offset_stats());
+  #endif
   #if MI_PAGE_META_IS_ALIGNED
   CHECK("arena-oversized-alloc", test_arena_oversized_alloc());
   #endif

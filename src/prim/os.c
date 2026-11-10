@@ -665,6 +665,8 @@ void _mi_os_free_with_guards(mi_subproc_t* subproc, mi_memid_t memid) {
   to use the actual start of the memory region.
 ----------------------------------------------------------- */
 
+static bool mi_os_decommit_ex(mi_subproc_t* subproc, void* addr, size_t size, bool* needs_recommit, size_t stat_size);
+
 void* _mi_os_alloc_aligned_at_offset(mi_subproc_t* subproc, size_t size, size_t alignment, size_t offset, bool commit, bool allow_large, mi_memid_t* memid) {
   mi_assert(offset <= size);
   mi_assert((alignment % _mi_os_page_size()) == 0);
@@ -686,8 +688,11 @@ void* _mi_os_alloc_aligned_at_offset(mi_subproc_t* subproc, size_t size, size_t 
     mi_assert(mi_is_aligned((uint8_t*)p + offset, alignment));
     // decommit the overallocation at the start
     if (commit && extra >= _mi_os_page_size()) {
-      _mi_os_decommit(subproc, start, extra);
-      mi_memid_os_set_committed(memid, mi_memid_os_committed(*memid) - extra);
+      const size_t decommit_size = mi_align_down(extra, _mi_os_page_size());
+      bool needs_recommit = false;
+      if (mi_os_decommit_ex(subproc, start, decommit_size, &needs_recommit, decommit_size) && needs_recommit) {
+        mi_memid_os_set_committed(memid, mi_memid_os_committed(*memid) - decommit_size);
+      }
     }
     return p;
   }
