@@ -11,6 +11,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/profile/sample-guarded.h"
 
 static void mi_theap_guarded_set_sample_rate_ex(mi_theap_t* theap, size_t sample_rate, size_t seed) {
+  #if !MI_GUARDED
+  sample_rate = 0;
+  #endif
   theap->guarded_sample_rate  = (sample_rate > MI_SAMPLE_RATE_MAX ? MI_SAMPLE_RATE_MAX : sample_rate);
   if (theap->guarded_sample_rate > 1) {
     if (seed == 0) {

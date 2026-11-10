@@ -637,6 +637,28 @@ int main(void) {
   // ---------------------------------------------------
   // Small allocations
   // ---------------------------------------------------
+  CHECK_BODY("guarded-api-small-free") {
+    mi_heap_t* heap = mi_heap_new();
+    mi_theap_t* theap = (heap == NULL ? NULL : mi_heap_theap(heap));
+    if (theap == NULL) { result = false; }
+    else {
+      void* blocks[128];
+      mi_theap_guarded_set_size_bound(theap, 0, MI_SMALL_SIZE_MAX);
+      mi_theap_guarded_set_sample_rate(theap, 1, 1);
+      for (size_t i = 0; i < 128; i++) {
+        blocks[i] = mi_theap_malloc(theap, MI_SMALL_SIZE_MAX);
+        if (blocks[i] == NULL) { result = false; }
+        else { memset(blocks[i], 0x5A, MI_SMALL_SIZE_MAX); }
+      }
+      mi_theap_guarded_set_sample_rate(theap, 0, 0);
+      for (size_t i = 0; i < 128; i++) {
+        if (i % 2 == 0) { mi_free_small(blocks[i]); }
+        else { mi_free_size(blocks[i], MI_SMALL_SIZE_MAX); }
+      }
+    }
+    if (heap != NULL) { mi_heap_delete(heap); }
+  }
+
   CHECK_BODY("free_small1") {
     for(size_t n = 1; n < MI_SMALL_SIZE_MAX; n *=2) {
       const size_t size = n*sizeof(int);
