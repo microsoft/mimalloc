@@ -477,6 +477,7 @@ static bool mi_pprof_build_proto(mi_pprof_profiler_t* prof, mi_pb_buf_t* profile
     mi_pb_uint64_field(&mapping, 1, (uint64_t)(i + 1));    // id
     mi_pb_uint64_field(&mapping, 2, (uint64_t)m->start);   // memory_start
     mi_pb_uint64_field(&mapping, 3, (uint64_t)m->end);     // memory_limit
+    mi_pb_uint64_field(&mapping, 4, m->file_offset);       // file_offset
     if (m->path != NULL) {
       mi_pb_int64_field(&mapping, 5, mi_pb_strings_intern(strings, m->path));  // filename
     }

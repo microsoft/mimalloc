@@ -111,6 +111,7 @@ void    _mi_pprof_profiler_snapshot(mi_pprof_profiler_t* prof);
 typedef struct {
   uintptr_t start;
   uintptr_t end;
+  uint64_t  file_offset;
   char*     path;  // heap-allocated (owned), or NULL if unknown
 } mi_pprof_module_t;
 

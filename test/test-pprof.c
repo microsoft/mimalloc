@@ -281,6 +281,35 @@ static uint64_t pb_read_varint(const uint8_t** p, const uint8_t* end) {
   return v;
 }
 
+#if defined(__linux__)
+static bool pb_mapping_matches_file_offset(const uint8_t* p, const uint8_t* end) {
+  uint64_t start = 0, limit = 0, offset = 0;
+  while (p < end) {
+    const uint64_t tag = pb_read_varint(&p, end);
+    if ((tag & 7) != 0) return false;
+    const uint64_t value = pb_read_varint(&p, end);
+    if ((tag >> 3) == 2) start = value;
+    if ((tag >> 3) == 3) limit = value;
+    if ((tag >> 3) == 4) offset = value;
+  }
+  if (offset == 0) return false;
+  FILE* maps = fopen("/proc/self/maps", "r");
+  if (maps == NULL) return false;
+  char line[1024];
+  bool matched = false;
+  while (fgets(line, sizeof(line), maps) != NULL) {
+    unsigned long long map_start, map_limit, map_offset;
+    if (sscanf(line, "%llx-%llx %*s %llx", &map_start, &map_limit, &map_offset) == 3 &&
+        map_start == start && map_limit == limit && map_offset == offset) {
+      matched = true;
+      break;
+    }
+  }
+  fclose(maps);
+  return matched;
+}
+#endif
+
 // A very small sanity check that the captured bytes are plausible protobuf: no
 // C-side protobuf parser is available, so we just walk the top-level
 // `(tag, value)` pairs and check they are well-formed and that at least one
@@ -291,6 +320,9 @@ static bool pb_looks_like_valid_profile(const uint8_t* data, size_t size) {
   const uint8_t* end = data + size;
   bool saw_sample = false;
   bool saw_location = false;
+  #if defined(__linux__)
+  bool saw_file_offset = false;
+  #endif
   while (p < end) {
     const uint64_t tag = pb_read_varint(&p, end);
     const uint32_t field = (uint32_t)(tag >> 3);
@@ -303,12 +335,18 @@ static bool pb_looks_like_valid_profile(const uint8_t* data, size_t size) {
     else if (wiretype == 2) {   // length-delimited
       const uint64_t len = pb_read_varint(&p, end);
       if ((size_t)(end - p) < len) return false;
+      #if defined(__linux__)
+      if (field == 3 && pb_mapping_matches_file_offset(p, p + len)) saw_file_offset = true;
+      #endif
       p += len;
     }
     else {
       return false;  // no other wiretypes are used by this writer
     }
   }
+  #if defined(__linux__)
+  if (!saw_file_offset) return false;
+  #endif
   return (p == end && saw_sample && saw_location);
 }
 

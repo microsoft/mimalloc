@@ -245,7 +245,7 @@ size_t _mi_pprof_backtrace(void** buffer, size_t max_depth, size_t* hash) {
 // Write out mapped libraries
 // ---------------------------------------------------------------------------
 
-mi_decl_maybe_unused static void mi_pprof_modules_add(mi_heap_t* heap, mi_pprof_modules_t* mods, uintptr_t start, uintptr_t end, const char* path) {
+mi_decl_maybe_unused static void mi_pprof_modules_add(mi_heap_t* heap, mi_pprof_modules_t* mods, uintptr_t start, uintptr_t end, uint64_t file_offset, const char* path) {
   if (mods->failed) return;
   if (mods->count == mods->capacity) {
     const size_t new_capacity = (mods->capacity == 0 ? 16 : mods->capacity * 2);
@@ -259,6 +259,7 @@ mi_decl_maybe_unused static void mi_pprof_modules_add(mi_heap_t* heap, mi_pprof_
   mi_pprof_module_t* m = &mods->modules[mods->count++];
   m->start = start;
   m->end = end;
+  m->file_offset = file_offset;
   m->path = copy;
 }
 
@@ -359,7 +360,7 @@ typedef struct { mi_heap_t* heap; mi_pprof_modules_t* mods; } mi_pprof_collect_m
 
 static void mi_pprof_collect_modules_win32_on_module(void* ctx, uintptr_t base, uintptr_t end, const char* path) {
   mi_pprof_collect_modules_win32_ctx_t* c = (mi_pprof_collect_modules_win32_ctx_t*)ctx;
-  mi_pprof_modules_add(c->heap, c->mods, base, end, (path[0] != 0 ? path : NULL));
+  mi_pprof_modules_add(c->heap, c->mods, base, end, 0, (path[0] != 0 ? path : NULL));
 }
 
 static void mi_pprof_collect_modules_win32(mi_heap_t* heap, mi_pprof_modules_t* mods) {
@@ -423,7 +424,7 @@ static void mi_pprof_collect_modules_macos(mi_heap_t* heap, mi_pprof_modules_t* 
     uintptr_t start = 0;
     uintptr_t end = 0;
     if (!mi_macho_image_range(mh, slide, &start, &end)) continue;
-    mi_pprof_modules_add(heap, mods, start, end, name);
+    mi_pprof_modules_add(heap, mods, start, end, 0, name);
   }
 }
 
@@ -487,13 +488,24 @@ static void mi_pprof_collect_modules_on_line_linux(void* ctx, char* line) {
   const size_t line_len = _mi_strlen(line);
   unsigned long long start = 0;
   unsigned long long end = 0;
+  unsigned long long offset = 0;
   const char* end_ptr = NULL;
   if (!_mi_strntoull(line, line_len, 16, &end_ptr, &start) || *end_ptr != '-') return;
   end_ptr++;
-  if (!_mi_strntoull(end_ptr, line_len - (size_t)(end_ptr - line), 16, NULL, &end)) return;
-  // the path (if present) is the last whitespace-separated field on the line
-  const char* path = _mi_strrchr(line, ' ');
-  if (path == NULL) return;
+  if (!_mi_strntoull(end_ptr, line_len - (size_t)(end_ptr - line), 16, &end_ptr, &end)) return;
+  // Skip permissions, device, and inode; preserve the offset and the entire pathname.
+  for (size_t field = 0; field < 4; field++) {
+    while (*end_ptr == ' ') end_ptr++;
+    if (*end_ptr == 0 || *end_ptr == '\n') return;
+    if (field == 1) {
+      if (!_mi_strntoull(end_ptr, line_len - (size_t)(end_ptr - line), 16, &end_ptr, &offset)) return;
+    }
+    else {
+      while (*end_ptr != 0 && *end_ptr != ' ' && *end_ptr != '\n') end_ptr++;
+    }
+    if (*end_ptr != ' ' && *end_ptr != '\n' && *end_ptr != 0) return;
+  }
+  const char* path = end_ptr;
   while (*path == ' ') path++;
   size_t len = _mi_strlen(path);
   while (len > 0 && (path[len-1] == '\n' || path[len-1] == '\r')) { len--; }
@@ -502,7 +514,7 @@ static void mi_pprof_collect_modules_on_line_linux(void* ctx, char* line) {
   if (len >= sizeof(pathbuf)) { len = sizeof(pathbuf) - 1; }
   mi_memcpy(pathbuf, path, len);
   pathbuf[len] = 0;
-  mi_pprof_modules_add(heap, mods, (uintptr_t)start, (uintptr_t)end, pathbuf);
+  mi_pprof_modules_add(heap, mods, (uintptr_t)start, (uintptr_t)end, (uint64_t)offset, pathbuf);
 }
 
 static void mi_pprof_collect_modules_linux(mi_heap_t* heap, mi_pprof_modules_t* mods) {
@@ -559,7 +571,7 @@ typedef struct { mi_heap_t* heap; mi_pprof_modules_t* mods; } mi_pprof_collect_m
 
 static void mi_pprof_collect_modules_freebsd_on_mapping(void* ctx, uintptr_t start, uintptr_t end, const char* path) {
   mi_pprof_collect_modules_freebsd_ctx_t* c = (mi_pprof_collect_modules_freebsd_ctx_t*)ctx;
-  mi_pprof_modules_add(c->heap, c->mods, start, end, path);
+  mi_pprof_modules_add(c->heap, c->mods, start, end, 0, path);
 }
 
 static void mi_pprof_collect_modules_bsd(mi_heap_t* heap, mi_pprof_modules_t* mods) {
