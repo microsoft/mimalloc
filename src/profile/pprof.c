@@ -58,8 +58,9 @@ void _mi_pprof_profiler_init(void) {
   #if MI_PROFILE
   char fname[1024];
   if (_mi_getenv("mimalloc_profile", fname, sizeof(fname)) != 0 || fname[0] == 0) return;  // `MIMALLOC_PROFILE` not set
-  if (MI_SECURE > 0 || _mi_os_is_elevated()) {
-    _mi_warning_message("MIMALLOC_PROFILE is ignored in %s\n", (MI_SECURE > 0 ? "secure mode" : "an elevated process"));
+  if (MI_SECURE_ENV || MI_SECURE > 0 || _mi_os_is_elevated()) {
+    _mi_warning_message("MIMALLOC_PROFILE is ignored in %s\n",
+                        (MI_SECURE_ENV ? "secure environment mode" : (MI_SECURE > 0 ? "secure mode" : "an elevated process")));
     return;
   }
   const size_t sample_rate   = mi_option_get_size(mi_option_profile_sample_rate);           // 512 KiB by default

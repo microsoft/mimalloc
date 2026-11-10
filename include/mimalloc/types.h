@@ -82,6 +82,15 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
+// Restrict environment options by default in secure, PAC, and MTE builds.
+#if !defined(MI_SECURE_ENV)
+#if MI_SECURE >= 1 || MI_PAC || MI_MTE
+#define MI_SECURE_ENV 1
+#else
+#define MI_SECURE_ENV 0
+#endif
+#endif
+
 // MTE, PAC, or secure level 2 and higher always check for invalid pointers in `mi_free`
 #if (MI_MTE || MI_PAC || MI_SECURE>=2) && !MI_FREE_IS_CHECKED
 #undef  MI_FREE_IS_CHECKED

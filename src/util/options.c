@@ -778,7 +778,17 @@ static int mi_option_parse(mi_option_t option, const char* s, long* result) {
 // Apply an environment result to a pending option state (without emitting warnings).
 static void mi_option_env_apply(mi_option_t option, mi_option_state_t* state, mi_option_env_t* env) {
   bool ignore_env = false;
-  #if MI_SECURE >= 1
+  #if MI_SECURE_ENV
+  switch (option) {
+    case mi_option_show_stats:
+    case mi_option_verbose:
+    case mi_option_allow_thp:
+      break;
+    default:
+      ignore_env = true;
+      break;
+  }
+  #elif MI_SECURE >= 1
   switch (option) {
     #if MI_OS_HAS_GUARD_PAGES
     case mi_option_allow_large_os_pages:
@@ -797,7 +807,7 @@ static void mi_option_env_apply(mi_option_t option, mi_option_state_t* state, mi
   #endif
   if (env->err != ENOENT && env->err != EAGAIN && (ignore_env || _mi_os_is_elevated())) {
     // don't let environment overrides weaken secure builds or influence a privileged process
-    env->ignore_reason = (ignore_env ? "secure mode" : "an elevated process");
+    env->ignore_reason = (ignore_env ? (MI_SECURE_ENV ? "secure environment mode" : "secure mode") : "an elevated process");
     env->err = ENOENT;
     env->legacy = false;
   }

@@ -372,8 +372,9 @@ completely and redirect all calls to the _mimalloc_ library instead .
 
 ## Environment Options
 
-You can set further options either programmatically (using [`mi_option_set`](https://microsoft.github.io/mimalloc/group__options.html)), or via environment variables
-(which are ignored in processes with elevated privileges, like a `setuid` executable):
+You can set further options either programmatically (using [`mi_option_set`](https://microsoft.github.io/mimalloc/group__options.html)), or via environment variables (most of which are ignored in processes with elevated privileges, like a `setuid` executable).
+
+Common options:
 
 - `MIMALLOC_SHOW_STATS=1`: show statistics when the program terminates.
 - `MIMALLOC_VERBOSE=1`: show verbose messages (including statistics).
@@ -563,6 +564,13 @@ to patch the executable's import tables.
 
 There are various build options to make mimalloc more secure.
 
+## Environment Options
+
+With `-DMI_SECURE_ENV=ON`, only `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, and
+`MIMALLOC_ALLOW_THP` are accepted from the environment; other options are ignored.
+This is by default enabled for [secure mode](#secure-mode), [MTE](#memory-tagging-mte),
+and [PAC](#pointer-authentication-pac).
+
 ## Secure Mode
 
 _mimalloc_ can be build in secure mode by using the `-DMI_SECURE=OFF|MINIMAL|CHECKED|ON|FULL` flags in `cmake`. This build mode
@@ -578,6 +586,7 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
   (if possible), and mimalloc aborts on corrupted meta data detection.
 - Large blocks (> 512 KiB) are followed by a guard page.
 - Does not allocate or reserve large OS pages as pinned memory cannot hold a guard page.
+- Enables `MI_SECURE_ENV`
 
 With `CHECKED` (the default with `-DMI_MTE` and `-DMI_PAC`), the performance and memory impact
 is still relatively small (usually less than 10%, but can be 2x slower):
@@ -629,7 +638,7 @@ You can also build with `-DMI_MTE=PREFER` which uses MTE when both the hardware 
 otherwise runs untagged. An MTE build running untagged is very close in performance to a regular release build.
 Every MTE build gets the `-mte` suffixed to the library name (e.g. `mimalloc-mte.o`).
 
-Building with MTE also enables `-DMI_SECURE=CHECKED` by default (including encoded free lists).
+Building with MTE also enables `-DMI_SECURE=CHECKED` (and `-DMI_SECURE_ENV=ON`) by default (including encoded free lists).
 Since MTE catches (most) use-after-free, double-free, and heap block overflows, an MTE build gives
 similar and often stronger guarantees as `-DMI_SECURE=ON` (and there is no need to use them together).
 
@@ -680,7 +689,7 @@ The following are signed:
 - The page map entries, the thread local theap pointers, and other root pointers that might reside
   adjacent to user memory.
 
-Any authentication failure aborts the program. Building with PAC also enables `-DMI_SECURE=CHECKED` by default (just like MTE).
+Any authentication failure aborts the program. Building with PAC also enables `-DMI_SECURE=CHECKED` (and `-DMI_SECURE_ENV=ON`)  by default (just like MTE).
 When building with `-DMI_PAC=ON`, _mimalloc_ requires that the CPU and OS support PAC and aborts at initialization otherwise.
 On other platforms (or with MSVC) you can build with `-DMI_PAC=WEAK` instead, which signs the same pointers using a
 random process key in software. This is weaker (an attacker who can read memory may recover the key) but still

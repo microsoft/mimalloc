@@ -9,6 +9,9 @@ endif()
 set(MI_SECURE "DEFAULT" CACHE STRING "Use security mitigations (like meta data guard pages, allocation randomization, double-free mitigation, and free-list corruption detection): OFF, MINIMAL, CHECKED, ON, FULL, DEFAULT. The FULL setting adds guard pages at the end of each mimalloc page (which may be expensive). MINIMAL only uses guard pages around metadata and after huge blocks (and randomizes OS allocation addresses). CHECKED adds validation of pointers passed to free, encoded free lists, and randomized free lists. DEFAULT is CHECKED with MI_MTE or MI_PAC enabled, level 3 on CHERI (CHECKED plus zero-on-free and double-free checks), and OFF otherwise.")
 set_property(CACHE MI_SECURE PROPERTY STRINGS "DEFAULT" "OFF" "MINIMAL" "CHECKED" "ON" "FULL")
 
+set(MI_SECURE_ENV "DEFAULT" CACHE STRING "Restrict environment options to show_stats, verbose, and allow_thp: DEFAULT, ON, or OFF. DEFAULT enables this with MI_SECURE>=1, MI_PAC, or MI_MTE. OFF preserves the existing MI_SECURE environment restrictions.")
+set_property(CACHE MI_SECURE_ENV PROPERTY STRINGS "DEFAULT" "ON" "OFF")
+
 option(MI_OVERRIDE          "Override the standard malloc interface (i.e. define entry points for 'malloc', 'free', etc)" ON)
 option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
 option(MI_SHOW_ERRORS       "Show error and warning messages by default (only enabled by default in DEBUG mode)" OFF)
@@ -365,6 +368,16 @@ if(WIN32)
     # use a negative define for backward compatibility
     list(APPEND mi_defines MI_WIN_NOREDIRECT=1)
   endif()
+endif()
+
+if(MI_SECURE_ENV STREQUAL "DEFAULT")
+  # Resolve in types.h, also for direct builds and Rust.
+elseif(MI_SECURE_ENV STREQUAL "ON")
+  list(APPEND mi_defines MI_SECURE_ENV=1)
+elseif(MI_SECURE_ENV STREQUAL "OFF")
+  list(APPEND mi_defines MI_SECURE_ENV=0)
+else()
+  message(FATAL_ERROR "Invalid value for MI_SECURE_ENV: ${MI_SECURE_ENV} (expecting: DEFAULT, ON, or OFF)")
 endif()
 
 if(MI_SECURE_FULL)
@@ -1466,7 +1479,7 @@ if (MI_BUILD_TESTS)
     # pass the exact security levels (like `MI_SECURE=2` or `MI_MTE=1`) that have no corresponding feature
     set(mi_cargo_defines "")
     foreach(mi_define IN LISTS mi_defines)
-      if(mi_define MATCHES "^MI_(SECURE|MTE|PAC)=")
+      if(mi_define MATCHES "^MI_(SECURE|SECURE_ENV|MTE|PAC)=")
         string(APPEND mi_cargo_defines " ${mi_define}")
       endif()
     endforeach()
