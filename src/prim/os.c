@@ -452,6 +452,9 @@ static void* mi_os_prim_alloc_at(mi_subproc_t* subproc, void* hint_addr, size_t 
     return NULL;
   }
   if (!commit) { allow_large = false; }
+  #if MI_SECURE > 0 && MI_OS_HAS_GUARD_PAGES
+  allow_large = false;  // pinned memory cannot support guard pages
+  #endif
   if (try_alignment == 0) { try_alignment = 1; } // avoid 0 to ensure there will be no divide by zero when aligning
 
   // try to align along large OS page size for larger allocations
@@ -941,6 +944,10 @@ void* _mi_os_alloc_huge_os_pages(mi_subproc_t* subproc, size_t pages, int numa_n
   *memid = _mi_memid_none();
   if (psize != NULL) *psize = 0;
   if (pages_reserved != NULL) *pages_reserved = 0;
+  #if MI_SECURE > 0 && MI_OS_HAS_GUARD_PAGES
+  _mi_warning_message("cannot allocate huge OS pages in secure mode as pinned memory cannot support guard pages\n");
+  return NULL;
+  #endif
   size_t size = 0;
   uint8_t* const start = mi_os_claim_huge_pages(pages, &size);
   if (start == NULL) return NULL; // or 32-bit systems

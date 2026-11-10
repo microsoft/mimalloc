@@ -658,6 +658,12 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
   mi_assert(start!=NULL);
   if (arena_id != NULL) { *arena_id = _mi_arena_id_none(); }
   if (start==NULL) return false;
+  #if MI_SECURE > 0 && MI_OS_HAS_GUARD_PAGES
+  if (memid.is_pinned) {
+    _mi_warning_message("cannot manage pinned memory in secure mode as it cannot support guard pages\n");
+    return false;
+  }
+  #endif
   if (!mi_is_aligned(start, MI_ARENA_ALIGNMENT)) {
     // we can align the start since the memid tracks the real base of the memory.
     void* const aligned_start = mi_align_up_ptr(start, MI_ARENA_ALIGNMENT);

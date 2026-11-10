@@ -266,6 +266,69 @@ static bool test_os_aligned_offset_stats(void) {
 }
 #endif
 
+static bool test_os_allow_large(void) {
+  const long allow_large = mi_option_get(mi_option_allow_large_os_pages);
+  mi_option_enable(mi_option_allow_large_os_pages);
+  mi_subproc_t* subproc = mi_theap_subproc(mi_theap_get_default());
+  const size_t size = mi_align_up(2 * MI_MiB, _mi_os_large_page_size());
+  mi_memid_t memid;
+  void* p = _mi_os_alloc_aligned(subproc, size, _mi_os_large_page_size(), true, true, &memid);
+  mi_option_set(mi_option_allow_large_os_pages, allow_large);
+  if (p == NULL) return false;
+  bool result = true;
+  #if MI_SECURE > 0 && MI_OS_HAS_GUARD_PAGES
+  result = !memid.is_pinned;
+  #endif
+  memset(p, 0x5A, size);
+  _mi_os_free(subproc, p, size, memid);
+  return result;
+}
+
+#if MI_SECURE > 0 && MI_OS_HAS_GUARD_PAGES
+static bool record_pinned_commit(bool commit, void* start, size_t size, bool* is_zero, void* arg) {
+  MI_UNUSED(commit); MI_UNUSED(start); MI_UNUSED(size); MI_UNUSED(is_zero);
+  (*(size_t*)arg)++;
+  return false;
+}
+
+static bool test_arena_reject_pinned(void) {
+  mi_subproc_t* subproc = mi_theap_subproc(mi_theap_get_default());
+  const size_t arena_count = mi_arenas_get_count(subproc);
+  const size_t size = MI_ARENA_MIN_SIZE;
+  mi_memid_t memid;
+  void* p = _mi_os_alloc_aligned(subproc, size, MI_ARENA_ALIGNMENT, false, false, &memid);
+  if (p == NULL) return false;
+  // Leave the memory uncommitted: rejection must not access the supplied area.
+  if (mi_manage_os_memory(p, size, true, true, true, -1)) return false;
+  mi_arena_id_t arena_id = &test_arenas[0];
+  if (mi_manage_os_memory_ex(p, size, true, true, true, -1, true, &arena_id)) return false;
+  bool result = (arena_id == NULL);
+  size_t commits = 0;
+  arena_id = &test_arenas[0];
+  if (mi_manage_memory(p, size, false, true, true, -1, true, &record_pinned_commit, &commits, &arena_id)) return false;
+  result = (result && arena_id == NULL && commits == 0 && mi_arenas_get_count(subproc) == arena_count);
+  _mi_os_free(subproc, p, size, memid);
+  return result;
+}
+
+static bool test_os_reject_huge_pages(void) {
+  mi_subproc_t* subproc = mi_theap_subproc(mi_theap_get_default());
+  size_t pages = 1;
+  size_t size = 1;
+  mi_memid_t memid;
+  void* p = _mi_os_alloc_huge_os_pages(subproc, 1, -1, 0, &pages, &size, &memid);
+  if (p != NULL) {
+    _mi_os_free(subproc, p, size, memid);
+    return false;
+  }
+  if (pages != 0 || size != 0 || memid.memkind != MI_MEM_NONE) return false;
+  mi_arena_id_t arena_id = &test_arenas[0];
+  if (mi_reserve_huge_os_pages_at_ex(1, -1, 0, true, &arena_id) == 0 || arena_id != NULL) return false;
+  return (mi_reserve_huge_os_pages_interleave(1, 1, 0) != 0 &&
+          mi_reserve_huge_os_pages_at_ex(0, -1, 0, true, &arena_id) == 0 && arena_id == NULL);
+}
+#endif
+
 static mi_heap_t* visit_heap;
 
 static bool allocate_pages(void) {
@@ -959,6 +1022,11 @@ static bool test_efault(bool (*test)(void)) {
 }
 
 int main(void) {
+  CHECK("os-allow-large", test_os_allow_large());
+  #if MI_SECURE > 0 && MI_OS_HAS_GUARD_PAGES
+  CHECK("arena-reject-pinned", test_arena_reject_pinned());
+  CHECK("os-reject-huge-pages", test_os_reject_huge_pages());
+  #endif
   #if MI_STATS
   CHECK("os-aligned-offset-stats", test_os_aligned_offset_stats());
   #endif
