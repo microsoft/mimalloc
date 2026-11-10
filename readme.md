@@ -567,9 +567,14 @@ There are various build options to make mimalloc more secure.
 ## Environment Options
 
 With `-DMI_SECURE_ENV=ON`, only `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, and
-`MIMALLOC_ALLOW_THP` are accepted from the environment; other options are ignored.
+`MIMALLOC_ALLOW_THP` are accepted from the environment -- all other options are ignored.
+
 This is by default enabled for [secure mode](#secure-mode), [MTE](#memory-tagging-mte),
-and [PAC](#pointer-authentication-pac).
+and [PAC](#pointer-authentication-pac). This can be overridden by explicitly building
+with `-DMI_SECURE_ENV=OFF`. Note: even with `OFF`, an elevated process ignores
+all environment options. Moreover, a program build with secure mode always ignores
+settings for large- or huge OS pages (as pinned memory cannot be guarded).
+You can still set options programmatically for trusted programs.
 
 ## Secure Mode
 
