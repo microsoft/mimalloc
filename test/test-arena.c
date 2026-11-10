@@ -1,4 +1,5 @@
 #include "../src/arena/arena.h"
+#include "../src/arena/arena-page.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/heap/theap.h"
 #include "mimalloc/prim/prim.h"
@@ -202,6 +203,42 @@ static bool test_arena_oversized_alloc(void) {
     mi_free(p);
   }
   return result;
+}
+#endif
+
+#if MI_PAGE_META_IS_SEPARATED && !MI_PAGE_META_IS_ALIGNED
+static bool test_arena_page_meta_permutation(void) {
+  mi_arena_id_t arena_id;
+  if (mi_reserve_os_memory_ex(5 * MI_ARENA_CHUNK_SIZE, false, false, true, &arena_id) != 0) return false;
+  mi_arena_t* arena = _mi_arena_from_id(arena_id);
+  if (arena == NULL || arena->pages_meta == NULL || arena->slice_count != 5 * MI_BCHUNK_BITS) return false;
+  bool seen[5 * MI_BCHUNK_BITS] = { false };
+  for (size_t i = 0; i < arena->slice_count; i++) {
+    const mi_page_t* entry = mi_arena_page_meta_at_slice(arena, i);
+    const size_t idx = (size_t)(entry - arena->pages_meta);
+    if (idx >= arena->slice_count || seen[idx] || idx / MI_BCHUNK_BITS != i / MI_BCHUNK_BITS) return false;
+    seen[idx] = true;
+  }
+
+  mi_heap_t* heap = mi_heap_new_in_arena(arena_id);
+  if (heap == NULL) return false;
+  void* blocks[MI_BCHUNK_BITS / 4 + 1] = { NULL };
+  bool result = true;
+  bool crossed_chunk = false;
+  for (size_t i = 0; result && i < sizeof(blocks)/sizeof(blocks[0]); i++) {
+    blocks[i] = mi_heap_malloc(heap, MI_MEDIUM_PAGE_SIZE / 2);
+    if (blocks[i] == NULL) { result = false; break; }
+    mi_page_t* page = mi_ptr_page(blocks[i]);
+    result = (page != NULL && page->memid.memkind == MI_MEM_ARENA && mi_memid_arena(page->memid) == arena);
+    if (!result) break;
+    const size_t slice_index = page->memid.mem.arena.slice_index;
+    result = (mi_addr(page) == mi_addr(mi_arena_page_meta_at_slice(arena, slice_index)) &&
+              mi_arena_page_at_slice(arena, slice_index) == page);
+    if (slice_index >= MI_BCHUNK_BITS) crossed_chunk = true;
+  }
+  for (size_t i = 0; i < sizeof(blocks)/sizeof(blocks[0]); i++) { mi_free(blocks[i]); }
+  mi_heap_destroy(heap);
+  return (result && crossed_chunk);
 }
 #endif
 
@@ -927,6 +964,9 @@ int main(void) {
   #endif
   #if MI_PAGE_META_IS_ALIGNED
   CHECK("arena-oversized-alloc", test_arena_oversized_alloc());
+  #endif
+  #if MI_PAGE_META_IS_SEPARATED && !MI_PAGE_META_IS_ALIGNED
+  CHECK("arena-page-meta-permutation", test_arena_page_meta_permutation());
   #endif
   #if MI_PAC
   CHECK("page-map-tamper", test_efault(&test_page_map_tamper));

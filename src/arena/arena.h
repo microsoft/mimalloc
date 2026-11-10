@@ -66,6 +66,16 @@ static inline uint8_t* mi_arena_slice_start(mi_arena_t* arena, size_t slice_inde
   return (mi_arena_start(arena) + _mi_size_of_slices(slice_index));
 }
 
+// Permute within chunks: arena slice counts need not be powers of two.
+static inline mi_page_t* mi_arena_page_meta_at_slice(mi_arena_t* arena, size_t slice_index) {
+  mi_assert_internal(arena->pages_meta != NULL);
+  mi_assert_internal(slice_index < arena->slice_count);
+  mi_assert_internal((arena->slice_count % MI_BCHUNK_BITS) == 0);
+  mi_assert_internal(mi_is_power_of_two(MI_BCHUNK_BITS));
+  const size_t idx = mi_align_down(slice_index,MI_BCHUNK_BITS) + (slice_index * MI_PAGE_META_IDX_MUL) % MI_BCHUNK_BITS;
+  return &arena->pages_meta[idx];
+}
+
 // get the arena and slice span
 static inline mi_arena_t* mi_arena_from_memid(mi_memid_t memid, size_t* slice_index, size_t* slice_count) {
   mi_assert_internal(memid.memkind == MI_MEM_ARENA);

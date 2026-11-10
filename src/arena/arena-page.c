@@ -38,7 +38,7 @@ mi_page_t* mi_arena_page_at_slice(mi_arena_t* arena, size_t slice_index) {
   return page;
   #else
   if (arena->pages_meta != NULL) {
-    mi_page_t* const page = mi_page_meta_load(&arena->pages_meta[slice_index]);
+    mi_page_t* const page = mi_page_meta_load(mi_arena_page_meta_at_slice(arena, slice_index));
     #if MI_PAGE_META_SMALL_IS_ALIGNED
     // pages with small blocks still have the page at the start of the slice (and set the `block_size` in pages_meta to 0)
     if (page->block_size>0) return mi_page_meta_bounded(page);

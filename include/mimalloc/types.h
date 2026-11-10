@@ -330,7 +330,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ARENA_ALIGNMENT            MI_ARENA_SLICE_ALIGN
 #endif
 
-// spread the page meta entries of adjacent slices over the cache lines (see `mi_page_meta_aligned_index`)
+// spread the page meta entries of adjacent slices over the cache lines (within aligned areas or arena bitmap chunks)
 #if !defined(MI_PAGE_META_IDX_MUL)
 #define MI_PAGE_META_IDX_MUL          5    // must be odd; use 1 for a direct mapping; 7 or 33 works also well.
 #endif

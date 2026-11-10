@@ -217,7 +217,7 @@ static uint8_t* mi_arenas_page_alloc_from_slices(mi_theap_t* theap, size_t slice
   *ppage_meta = mi_aligned_ptr_page0(start);
   #else
   mi_assert_internal(MI_PAGE_META_IS_SEPARATED!=0 || arena->pages_meta == NULL);
-  *ppage_meta = (arena->pages_meta == NULL ? NULL : mi_page_meta_load(&arena->pages_meta[memid->mem.arena.slice_index]));
+  *ppage_meta = (arena->pages_meta == NULL ? NULL : mi_page_meta_load(mi_arena_page_meta_at_slice(arena, memid->mem.arena.slice_index)));
   #endif
   return start;
 }
@@ -428,7 +428,7 @@ static mi_page_t* mi_page_meta_memtag(mi_page_t* page, uint8_t* slice_start, mi_
   }
   mi_arena_t* const arena = mi_memid_arena(memid);
   if (arena != NULL && arena->pages_meta != NULL) {
-    mi_assert_internal(mi_addr(page) == mi_addr(&arena->pages_meta[memid.mem.arena.slice_index]));
+    mi_assert_internal(mi_addr(page) == mi_addr(mi_arena_page_meta_at_slice(arena, memid.mem.arena.slice_index)));
     return mi_page_meta_bounded(mi_arena_page_meta_memtag(arena, page));
   }
   #if MI_PAGE_META_IS_ALIGNED
