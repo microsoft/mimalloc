@@ -325,15 +325,17 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_PAGE_META_ALIGNED_COUNT    (MI_PAGE_META_ALIGNED_CHUNKS * MI_BCHUNK_BITS)
 #define MI_PAGE_META_ALIGNMENT        (MI_PAGE_META_ALIGNED_COUNT * MI_ARENA_SLICE_SIZE)  // 256 MiB (32 MiB on 32-bit)
 #define MI_PAGE_META_ALIGNED_OFFSET   (MI_ARENA_GUARD_SLICES * MI_ARENA_SLICE_SIZE)       // offset of the page meta data in an aligned area
-#if !defined(MI_PAGE_META_IDX_MUL)
-#define MI_PAGE_META_IDX_MUL          5   // spread the page meta entries of adjacent slices over the cache lines (see `mi_page_meta_aligned_index`)
-#endif
-#if (MI_PAGE_META_IDX_MUL % 2) == 0
-#error "MI_PAGE_META_IDX_MUL must be odd to map slices one-to-one onto the page meta entries"
-#endif
 #define MI_ARENA_ALIGNMENT            MI_PAGE_META_ALIGNMENT
 #else
 #define MI_ARENA_ALIGNMENT            MI_ARENA_SLICE_ALIGN
+#endif
+
+// spread the page meta entries of adjacent slices over the cache lines (see `mi_page_meta_aligned_index`)
+#if !defined(MI_PAGE_META_IDX_MUL)
+#define MI_PAGE_META_IDX_MUL          5    // must be odd; use 1 for a direct mapping; 7 or 33 works also well.
+#endif
+#if (MI_PAGE_META_IDX_MUL % 2) == 0
+#error "MI_PAGE_META_IDX_MUL must be odd to map slices one-to-one onto the page meta entries"
 #endif
 
 // ------------------------------------------------------
@@ -596,9 +598,9 @@ typedef struct mi_decl_memtag_unit_align mi_page_s {
 #endif
 #define MI_PAGE_CACHE_OFFSET_UNIT         (128)                                                     // offset granularity (power of 2 between 16 and 4KiB)
 #define MI_PAGE_CACHE_OFFSET_MAX          (MI_PAGE_OSPAGE_BLOCK_ALIGN2 - MI_PAGE_CACHE_OFFSET_UNIT) // maximal offset (32 possible offsets)
-// Offset the first block in pages with small blocks (< 512)
+// Offset the first block in pages with small blocks
 #define MI_PAGE_SMALL_CACHE_OFFSET_UNIT   (64)
-#define MI_PAGE_SMALL_CACHE_OFFSET_MAX    (15*MI_PAGE_SMALL_CACHE_OFFSET_UNIT)  // up to 1 KiB (16 offsets)
+#define MI_PAGE_SMALL_CACHE_OFFSET_MAX    (7*MI_PAGE_SMALL_CACHE_OFFSET_UNIT)  // up to 512B (7+1 offsets) (using 15+1 offsets upto 1KiB works well too)
 
 // The max object sizes are intended to not waste more than ~ 12.5% internally over the page sizes.
 #define MI_SMALL_MAX_OBJ_SIZE             ((MI_SMALL_PAGE_SIZE-MI_PAGE_OSPAGE_BLOCK_ALIGN2)/6)   // = 10 KiB
