@@ -84,7 +84,7 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
   // initialize thread first in case this is the main heap
   // (which may allocate the default theap already for the main heap)
   if (!_mi_thread_is_initialized()) {
-    mi_thread_init();
+    if (_mi_thread_init() == NULL) return NULL;
   }
 
   // get the thread local theap
