@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.6/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -115,6 +115,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:gac6ac9f0e7be9ab4ff70acfc8dad1235a"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v1</b>,<b>v2</b>: Get the backing heap.  <br /></td></tr>
 <tr class="memitem:gaab93abbc0624f570e2900f95cac18591" id="r_gaab93abbc0624f570e2900f95cac18591"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#gaab93abbc0624f570e2900f95cac18591">mi_heap_set_numa_affinity</a> (<a class="el" href="#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap, int numa_node)</td></tr>
 <tr class="memdesc:gaab93abbc0624f570e2900f95cac18591"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: set NUMA affinity for a heap.  <br /></td></tr>
+<tr class="memitem:ga3309f6db82d14343dd84d9d71ec93e64" id="r_ga3309f6db82d14343dd84d9d71ec93e64"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga3309f6db82d14343dd84d9d71ec93e64">mi_heap_set_debug_fill_preserve</a> (<a class="el" href="#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap, size_t preserve)</td></tr>
+<tr class="memdesc:ga3309f6db82d14343dd84d9d71ec93e64"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Exclude the first <em class="arg">preserve</em> bytes of each block from debug filling on allocation and free.  <br /></td></tr>
 <tr class="memitem:ga8fc318a65dc79ee8778c6a0e52d12477" id="r_ga8fc318a65dc79ee8778c6a0e52d12477"><td class="memItemLeft"><a class="el" href="#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *&#160;</td><td class="memItemRight"><a class="el" href="#ga8fc318a65dc79ee8778c6a0e52d12477">mi_heap_main</a> (void)</td></tr>
 <tr class="memdesc:ga8fc318a65dc79ee8778c6a0e52d12477"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: the main heap (of the current sub-process)  <br /></td></tr>
 <tr class="memitem:ga424b69f285109b2515631d59f5eecb1b" id="r_ga424b69f285109b2515631d59f5eecb1b"><td class="memItemLeft"><a class="el" href="#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *&#160;</td><td class="memItemRight"><a class="el" href="#ga424b69f285109b2515631d59f5eecb1b">mi_heap_of</a> (const void *p)</td></tr>
@@ -168,7 +170,7 @@ Functions</h2></td></tr>
 <p>Heaps allow allocations to be grouped, and for example be destroyed in one go. Heaps can also be associated with a specific allocation arena (<span class="tt"><a class="el" href="group__arenas.html#gaaf2d9976576d5efd5544be12848af949" title="Create a new heap that only allocates in the specified arena.">mi_heap_new_in_arena()</a></span>).</p>
 <p><b>v1</b>,<b>v2</b>: heaps are only semi-first-class and <b>one can only use heap allocation functions from the thread that created the heap</b>. (of course, <a class="el" href="group__malloc.html#gaf2c7b89c327d1f60f59e68b9ea644d95" title="Free previously allocated memory.">mi_free()</a> can always be used from any thread to free objects from any heap).</p>
 <p><b>v3</b>: heaps are fully first-class and can be used to allocate efficiently from from any thread. In v3, the old v1/v2 heaps still exist but are now called <em>theaps</em> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8" title="Type of thread-local heaps.">mi_theap_t()</a>) for thread-local heaps. A v3 heap creates internally such theaps on demand to efficiently allocate without needing taking locks for example.</p>
-<p>The heap argument of the heap functions must be a valid heap: <span class="tt">NULL</span> is not accepted (use <a class="el" href="#ga8fc318a65dc79ee8778c6a0e52d12477" title="v3: the main heap (of the current sub-process)">mi_heap_main()</a> for the main heap). (except for mi_unsafe_heap_page_is_under_utilized() where <span class="tt">NULL</span> matches any heap). </p>
+<p>The heap argument of the heap functions must be a valid heap: <span class="tt">NULL</span> is not accepted (use <a class="el" href="#ga8fc318a65dc79ee8778c6a0e52d12477" title="v3: the main heap (of the current sub-process)">mi_heap_main()</a> for the main heap). (except for <a class="el" href="group__analysis.html#ga5c759c77e81e6beb69f32431f87111d0" title="v3, experimental: Test whether an eligible page containing p is at most perc_threshold percent utiliz...">mi_unsafe_heap_page_is_under_utilized()</a> where <span class="tt">NULL</span> matches any heap). </p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Typedef Documentation</h2>
 <a id="ga34a47cde5a5b38c29f1aa3c5e76943c2" name="ga34a47cde5a5b38c29f1aa3c5e76943c2"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ga34a47cde5a5b38c29f1aa3c5e76943c2">&#9670;&#160;</a></span>mi_heap_t</h2>
@@ -675,7 +677,7 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Allocate a small object in a specific heap. </p>
-<p><em class="arg">size</em> must be smaller or equal to <a class="el" href="group__extended.html#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size allowed for small allocations in mi_malloc_small, mi_zalloc_small, mi_heap_malloc_small,...">MI_SMALL_SIZE_MAX()</a>. </p><dl class="section see"><dt>See also</dt><dd><a class="el" href="group__extended.html#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small()</a> </dd></dl>
+<p><em class="arg">size</em> must be smaller or equal to <a class="el" href="group__extended.html#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size in bytes allowed for small allocations in mi_malloc_small, mi_zalloc_small,...">MI_SMALL_SIZE_MAX()</a>. </p><dl class="section see"><dt>See also</dt><dd><a class="el" href="group__extended.html#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small()</a> </dd></dl>
 
 </div>
 </div>
@@ -932,6 +934,30 @@ Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="ga3309f6db82d14343dd84d9d71ec93e64" name="ga3309f6db82d14343dd84d9d71ec93e64"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga3309f6db82d14343dd84d9d71ec93e64">&#9670;&#160;</a></span>mi_heap_set_debug_fill_preserve()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_heap_set_debug_fill_preserve </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *</td>          <td class="paramname"><span class="paramname"><em>heap</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>preserve</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>: Exclude the first <em class="arg">preserve</em> bytes of each block from debug filling on allocation and free. </p>
+<p>This does not prevent allocator metadata, zero-initialization, or security mitigations from changing those bytes. </p>
+
+</div>
+</div>
 <a id="ga349b677dec7da5eacdbc7a385bd62a4a" name="ga349b677dec7da5eacdbc7a385bd62a4a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ga349b677dec7da5eacdbc7a385bd62a4a">&#9670;&#160;</a></span>mi_heap_set_default()</h2>
 
@@ -1143,7 +1169,7 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Allocate a small object in a specific heap. </p>
-<p><em class="arg">size</em> must be smaller or equal to <a class="el" href="group__extended.html#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size allowed for small allocations in mi_malloc_small, mi_zalloc_small, mi_heap_malloc_small,...">MI_SMALL_SIZE_MAX()</a>. </p><dl class="section see"><dt>See also</dt><dd><a class="el" href="group__extended.html#ga51c47637e81df0e2f13a2d7a2dec123e" title="Allocate a zero initialized small object.">mi_zalloc_small()</a> </dd></dl>
+<p><em class="arg">size</em> must be smaller or equal to <a class="el" href="group__extended.html#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size in bytes allowed for small allocations in mi_malloc_small, mi_zalloc_small,...">MI_SMALL_SIZE_MAX()</a>. </p><dl class="section see"><dt>See also</dt><dd><a class="el" href="group__extended.html#ga51c47637e81df0e2f13a2d7a2dec123e" title="Allocate a zero initialized small object.">mi_zalloc_small()</a> </dd></dl>
 
 </div>
 </div>

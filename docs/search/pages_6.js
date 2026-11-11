@@ -1,5 +1,5 @@
 var searchData=
 [
-  ['the_20library_0',['Using the Library',['../using.html',1,'']]],
-  ['tools_1',['Tools',['../tools.html',1,'']]]
+  ['library_0',['Using the Library',['../using.html',1,'']]],
+  ['list_1',['Deprecated List',['../deprecated.html',1,'']]]
 ];

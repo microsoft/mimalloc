@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.6/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -106,6 +106,10 @@ Macros</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:gaf653d33dc50c2e4fd5a3293f7862be5e" id="r_gaf653d33dc50c2e4fd5a3293f7862be5e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#gaf653d33dc50c2e4fd5a3293f7862be5e">mi_stats_header_init</a> (mi_stats_t *stats)</td></tr>
+<tr class="memdesc:gaf653d33dc50c2e4fd5a3293f7862be5e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Initialize only the size and version fields of <em class="arg">stats</em>, leaving counters unchanged.  <br /></td></tr>
+<tr class="memitem:ga6b09b30867f2fa4244e7363e92e44cc7" id="r_ga6b09b30867f2fa4244e7363e92e44cc7"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga6b09b30867f2fa4244e7363e92e44cc7">mi_stats_init</a> (mi_stats_t *stats)</td></tr>
+<tr class="memdesc:ga6b09b30867f2fa4244e7363e92e44cc7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Zero all counters and initialize the size and version fields of <em class="arg">stats</em>.  <br /></td></tr>
 <tr class="memitem:gaf887e7aa75f13242c4e7ab95d8390536" id="r_gaf887e7aa75f13242c4e7ab95d8390536"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#gaf887e7aa75f13242c4e7ab95d8390536">mi_process_info_print</a> (void)</td></tr>
 <tr class="memdesc:gaf887e7aa75f13242c4e7ab95d8390536"><td class="mdescLeft">&#160;</td><td class="mdescRight">Print out all process info.  <br /></td></tr>
 <tr class="memitem:ga03ac88d3efee2ae7c34f5340502f4732" id="r_ga03ac88d3efee2ae7c34f5340502f4732"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga03ac88d3efee2ae7c34f5340502f4732">mi_process_info_print_out</a> (<a class="el" href="group__extended.html#gadf31cea7d0332a81c8b882cbbdbadb8d">mi_output_fun</a> *out, void *arg)</td></tr>
@@ -116,6 +120,7 @@ Functions</h2></td></tr>
 <tr class="memdesc:ga2d126e5c62d3badc35445e5d84166df2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Deprecated.  <br /></td></tr>
 <tr class="memitem:ga537f13b299ddf801e49a5a94fde02c79" id="r_ga537f13b299ddf801e49a5a94fde02c79"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga537f13b299ddf801e49a5a94fde02c79">mi_stats_print_out</a> (<a class="el" href="group__extended.html#gadf31cea7d0332a81c8b882cbbdbadb8d">mi_output_fun</a> *out, void *arg)</td></tr>
 <tr class="memdesc:ga537f13b299ddf801e49a5a94fde02c79"><td class="mdescLeft">&#160;</td><td class="mdescRight">Print statistics of the current subprocess aggregated over all its heaps.  <br /></td></tr>
+<tr class="memitem:gab1dac8476c46cb9eecab767eb40c1525" id="r_gab1dac8476c46cb9eecab767eb40c1525"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#gab1dac8476c46cb9eecab767eb40c1525">mi_thread_stats_print_out</a> (<a class="el" href="group__extended.html#gadf31cea7d0332a81c8b882cbbdbadb8d">mi_output_fun</a> *out, void *arg)</td></tr>
 <tr class="memitem:gaa26d5060ad21b1331a150bb92f6f7086" id="r_gaa26d5060ad21b1331a150bb92f6f7086"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#gaa26d5060ad21b1331a150bb92f6f7086">mi_stats_get</a> (mi_stats_t *stats)</td></tr>
 <tr class="memdesc:gaa26d5060ad21b1331a150bb92f6f7086"><td class="mdescLeft">&#160;</td><td class="mdescRight">Get the statistics for the current subprocess aggregated over all its heaps.  <br /></td></tr>
 <tr class="memitem:gadaa3be15899cc82e314fa7d3f8e2afbd" id="r_gadaa3be15899cc82e314fa7d3f8e2afbd"><td class="memItemLeft">char *&#160;</td><td class="memItemRight"><a class="el" href="#gadaa3be15899cc82e314fa7d3f8e2afbd">mi_stats_get_json</a> (size_t buf_size, char *buf)</td></tr>
@@ -132,6 +137,12 @@ Functions</h2></td></tr>
 <tr class="memdesc:ga5a34328f846c661aa560f4769cfc15f1"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: xplicitly merge the statistics of the current heap with the subprocess.  <br /></td></tr>
 <tr class="memitem:ga5ec3f9058eec804924711ab38ba64b51" id="r_ga5ec3f9058eec804924711ab38ba64b51"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ga5ec3f9058eec804924711ab38ba64b51">mi_subproc_stats_get</a> (<a class="el" href="group__subproc.html#ga8c0bcd1fee27c7641e9c3c0d991b3b7d">mi_subproc_id_t</a> subproc_id, mi_stats_t *stats)</td></tr>
 <tr class="memdesc:ga5ec3f9058eec804924711ab38ba64b51"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Get statistics for a given subprocess aggregated over all its heaps.  <br /></td></tr>
+<tr class="memitem:ga8e237e9970723fcb5fdbfe094cee862a" id="r_ga8e237e9970723fcb5fdbfe094cee862a"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ga8e237e9970723fcb5fdbfe094cee862a">mi_subproc_stats_get_exclusive</a> (<a class="el" href="group__subproc.html#ga8c0bcd1fee27c7641e9c3c0d991b3b7d">mi_subproc_id_t</a> subproc_id, mi_stats_t *stats)</td></tr>
+<tr class="memdesc:ga8e237e9970723fcb5fdbfe094cee862a"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Get subprocess statistics without aggregating its heaps.  <br /></td></tr>
+<tr class="memitem:ga796d06376a6c8166e791aec4bbd55548" id="r_ga796d06376a6c8166e791aec4bbd55548"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ga796d06376a6c8166e791aec4bbd55548">mi_theap_stats_get</a> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, mi_stats_t *stats)</td></tr>
+<tr class="memdesc:ga796d06376a6c8166e791aec4bbd55548"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Get statistics for a theap belonging to the calling thread.  <br /></td></tr>
+<tr class="memitem:ga13a431ecfe86d9c7e65aa6605511590b" id="r_ga13a431ecfe86d9c7e65aa6605511590b"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga13a431ecfe86d9c7e65aa6605511590b">mi_theap_stats_merge_to_heap</a> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap)</td></tr>
+<tr class="memdesc:ga13a431ecfe86d9c7e65aa6605511590b"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Merge a theap's statistics into its parent heap and clear the theap counters.  <br /></td></tr>
 <tr class="memitem:gad1cf918f08b6506e65ae134423477a0b" id="r_gad1cf918f08b6506e65ae134423477a0b"><td class="memItemLeft">char *&#160;</td><td class="memItemRight"><a class="el" href="#gad1cf918f08b6506e65ae134423477a0b">mi_subproc_stats_get_json</a> (<a class="el" href="group__subproc.html#ga8c0bcd1fee27c7641e9c3c0d991b3b7d">mi_subproc_id_t</a> subproc_id, size_t buf_size, char *buf)</td></tr>
 <tr class="memdesc:gad1cf918f08b6506e65ae134423477a0b"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Show the subproc statistics aggregated over all its heaps as JSON.  <br /></td></tr>
 <tr class="memitem:ga59ec89969837db414a6bce8b58915624" id="r_ga59ec89969837db414a6bce8b58915624"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga59ec89969837db414a6bce8b58915624">mi_subproc_stats_print_out</a> (<a class="el" href="group__subproc.html#ga8c0bcd1fee27c7641e9c3c0d991b3b7d">mi_subproc_id_t</a> subproc_id, <a class="el" href="group__extended.html#gadf31cea7d0332a81c8b882cbbdbadb8d">mi_output_fun</a> *out, void *arg)</td></tr>
@@ -215,7 +226,7 @@ initialize with `MI_STAT_VERSION (so linking dynamically with a separately compi
 <div class="line"><span class="keywordflow">if</span> (<a class="code hl_function" href="#gaa26d5060ad21b1331a150bb92f6f7086">mi_stats_get</a>(&amp;stats)) {</div>
 <div class="line">  ...</div>
 <div class="line">}</div>
-<div class="ttc" id="agroup__stats_html_ga961d0f9f0327ebc9bd8a0b84f6dcb410"><div class="ttname"><a href="#ga961d0f9f0327ebc9bd8a0b84f6dcb410">mi_stats_t_decl</a></div><div class="ttdeci">#define mi_stats_t_decl(name)</div><div class="ttdoc">Helper to declare a properly initialized mi_stats_t() local variable as name where the size and versi...</div><div class="ttdef"><b>Definition</b> mimalloc-doc.h:1198</div></div>
+<div class="ttc" id="agroup__stats_html_ga961d0f9f0327ebc9bd8a0b84f6dcb410"><div class="ttname"><a href="#ga961d0f9f0327ebc9bd8a0b84f6dcb410">mi_stats_t_decl</a></div><div class="ttdeci">#define mi_stats_t_decl(name)</div><div class="ttdoc">Helper to declare a properly initialized mi_stats_t() local variable as name where the size and versi...</div><div class="ttdef"><b>Definition</b> mimalloc-doc.h:1351</div></div>
 <div class="ttc" id="agroup__stats_html_gaa26d5060ad21b1331a150bb92f6f7086"><div class="ttname"><a href="#gaa26d5060ad21b1331a150bb92f6f7086">mi_stats_get</a></div><div class="ttdeci">bool mi_stats_get(mi_stats_t *stats)</div><div class="ttdoc">Get the statistics for the current subprocess aggregated over all its heaps.</div></div>
 </div><!-- fragment --> 
 </div>
@@ -581,6 +592,45 @@ initialize with `MI_STAT_VERSION (so linking dynamically with a separately compi
 
 </div>
 </div>
+<a id="gaf653d33dc50c2e4fd5a3293f7862be5e" name="gaf653d33dc50c2e4fd5a3293f7862be5e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaf653d33dc50c2e4fd5a3293f7862be5e">&#9670;&#160;</a></span>mi_stats_header_init()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_stats_header_init </td>
+          <td>(</td>
+          <td class="paramtype">mi_stats_t *</td>          <td class="paramname"><span class="paramname"><em>stats</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Initialize only the size and version fields of <em class="arg">stats</em>, leaving counters unchanged. </p>
+
+</div>
+</div>
+<a id="ga6b09b30867f2fa4244e7363e92e44cc7" name="ga6b09b30867f2fa4244e7363e92e44cc7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga6b09b30867f2fa4244e7363e92e44cc7">&#9670;&#160;</a></span>mi_stats_init()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_stats_init </td>
+          <td>(</td>
+          <td class="paramtype">mi_stats_t *</td>          <td class="paramname"><span class="paramname"><em>stats</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Zero all counters and initialize the size and version fields of <em class="arg">stats</em>. </p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga961d0f9f0327ebc9bd8a0b84f6dcb410" title="Helper to declare a properly initialized mi_stats_t() local variable as name where the size and versi...">mi_stats_t_decl()</a> </dd></dl>
+
+</div>
+</div>
 <a id="ga854b1de8cb067c7316286c28b2fcd3d1" name="ga854b1de8cb067c7316286c28b2fcd3d1"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ga854b1de8cb067c7316286c28b2fcd3d1">&#9670;&#160;</a></span>mi_stats_merge()</h2>
 
@@ -743,6 +793,30 @@ initialize with `MI_STAT_VERSION (so linking dynamically with a separately compi
 
 </div>
 </div>
+<a id="ga8e237e9970723fcb5fdbfe094cee862a" name="ga8e237e9970723fcb5fdbfe094cee862a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga8e237e9970723fcb5fdbfe094cee862a">&#9670;&#160;</a></span>mi_subproc_stats_get_exclusive()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool mi_subproc_stats_get_exclusive </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__subproc.html#ga8c0bcd1fee27c7641e9c3c0d991b3b7d">mi_subproc_id_t</a></td>          <td class="paramname"><span class="paramname"><em>subproc_id</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">mi_stats_t *</td>          <td class="paramname"><span class="paramname"><em>stats</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>: Get subprocess statistics without aggregating its heaps. </p>
+<p>Initialize <em class="arg">stats</em> with <a class="el" href="#ga6b09b30867f2fa4244e7363e92e44cc7" title="Zero all counters and initialize the size and version fields of stats.">mi_stats_init()</a> or <a class="el" href="#ga961d0f9f0327ebc9bd8a0b84f6dcb410" title="Helper to declare a properly initialized mi_stats_t() local variable as name where the size and versi...">mi_stats_t_decl()</a> first. </p><dl class="section return"><dt>Returns</dt><dd><em class="arg">false</em> for an invalid subprocess or incompatible statistics size/version. </dd></dl>
+
+</div>
+</div>
 <a id="gad1cf918f08b6506e65ae134423477a0b" name="gad1cf918f08b6506e65ae134423477a0b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#gad1cf918f08b6506e65ae134423477a0b">&#9670;&#160;</a></span>mi_subproc_stats_get_json()</h2>
 
@@ -813,6 +887,72 @@ initialize with `MI_STAT_VERSION (so linking dynamically with a separately compi
   </table>
   </dd>
 </dl>
+
+</div>
+</div>
+<a id="ga796d06376a6c8166e791aec4bbd55548" name="ga796d06376a6c8166e791aec4bbd55548"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga796d06376a6c8166e791aec4bbd55548">&#9670;&#160;</a></span>mi_theap_stats_get()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool mi_theap_stats_get </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *</td>          <td class="paramname"><span class="paramname"><em>theap</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">mi_stats_t *</td>          <td class="paramname"><span class="paramname"><em>stats</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>: Get statistics for a theap belonging to the calling thread. </p>
+<p>Initialize <em class="arg">stats</em> with <a class="el" href="#ga6b09b30867f2fa4244e7363e92e44cc7" title="Zero all counters and initialize the size and version fields of stats.">mi_stats_init()</a> or <a class="el" href="#ga961d0f9f0327ebc9bd8a0b84f6dcb410" title="Helper to declare a properly initialized mi_stats_t() local variable as name where the size and versi...">mi_stats_t_decl()</a> first. </p><dl class="section return"><dt>Returns</dt><dd><em class="arg">false</em> if the statistics cannot be copied or their size/version is incompatible. </dd></dl>
+
+</div>
+</div>
+<a id="ga13a431ecfe86d9c7e65aa6605511590b" name="ga13a431ecfe86d9c7e65aa6605511590b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga13a431ecfe86d9c7e65aa6605511590b">&#9670;&#160;</a></span>mi_theap_stats_merge_to_heap()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_theap_stats_merge_to_heap </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *</td>          <td class="paramname"><span class="paramname"><em>theap</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>: Merge a theap's statistics into its parent heap and clear the theap counters. </p>
+<p>The theap must belong to the calling thread. </p>
+
+</div>
+</div>
+<a id="gab1dac8476c46cb9eecab767eb40c1525" name="gab1dac8476c46cb9eecab767eb40c1525"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gab1dac8476c46cb9eecab767eb40c1525">&#9670;&#160;</a></span>mi_thread_stats_print_out()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_thread_stats_print_out </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__extended.html#gadf31cea7d0332a81c8b882cbbdbadb8d">mi_output_fun</a> *</td>          <td class="paramname"><span class="paramname"><em>out</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *</td>          <td class="paramname"><span class="paramname"><em>arg</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<dl class="deprecated"><dt><b><a class="el" href="deprecated.html#_deprecated000003">Deprecated</a></b></dt><dd>Print the current default theap's statistics, then merge them into its parent heap. <em class="arg">out</em> may be <em class="arg">NULL</em> for the default output. Prefer <a class="el" href="#gafea365d7842f5f5bc1f235bbc303d585" title="v3: Show the heap statistics as JSON.">mi_heap_stats_print_out()</a>. </dd></dl>
 
 </div>
 </div>

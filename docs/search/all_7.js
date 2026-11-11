@@ -1,5 +1,5 @@
 var searchData=
 [
-  ['initialized_20re_20allocation_0',['Zero initialized re-allocation',['../group__zeroinit.html',1,'']]],
-  ['introspection_1',['Heap Introspection',['../group__analysis.html',1,'']]]
+  ['getting_20the_20best_20performance_0',['Getting the Best Performance',['../tuning.html',1,'']]],
+  ['guarded_20mode_1',['Guarded Mode',['../guarded.html',1,'']]]
 ];

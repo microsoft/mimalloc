@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['performance_0',['Performance',['../bench.html',1,'']]]
+  ['getting_20the_20best_20performance_0',['Getting the Best Performance',['../tuning.html',1,'']]],
+  ['guarded_20mode_1',['Guarded Mode',['../guarded.html',1,'']]]
 ];

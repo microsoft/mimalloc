@@ -29,9 +29,13 @@ var NAVTREE =
     [ "Using the Library", "using.html", null ],
     [ "Environment Options", "environment.html", null ],
     [ "Overriding Malloc", "overrides.html", null ],
-    [ "Build Modes", "modes.html", null ],
+    [ "Security", "security.html", null ],
+    [ "Getting the Best Performance", "tuning.html", null ],
+    [ "Guarded Mode", "guarded.html", null ],
+    [ "Profiling", "profiling_guide.html", null ],
     [ "Tools", "tools.html", null ],
     [ "Performance", "bench.html", null ],
+    [ "Deprecated List", "deprecated.html", null ],
     [ "Topics", "topics.html", "topics" ],
     [ "Data Structures", "annotated.html", [
       [ "Data Structures", "annotated.html", "annotated_dup" ],
@@ -47,7 +51,7 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "annotated.html",
-"group__stats.html#gaf887e7aa75f13242c4e7ab95d8390536"
+"group__profiling.html#gaa3be0ee40c382b0633b10284857f4b1c"
 ];
 
 const SYNCONMSG = 'click to disable panel synchronization';

@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.6/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -150,7 +150,14 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('using.html',''
 <div class="line">  elapsed   :     0.553 s</div>
 <div class="line">  process   : user: 0.557 s, system: 0.013 s, faults: 29, peak rss: 2.1 MiB, peak commit: 4.8 MiB</div>
 </div><!-- fragment --><p>The above model of using the <span class="tt">mi_</span> prefixed API is not always possible though in existing programs that already use the standard malloc interface, and another option is to override the standard malloc interface completely and redirect all calls to the <em>mimalloc</em> library instead.</p>
-<p>See <a class="el" href="overrides.html" title="Overriding Malloc">Overriding Malloc</a> for more info. </p>
+<p>See <a class="el" href="overrides.html" title="Overriding Malloc">Overriding Malloc</a> for more info.</p>
+<h2>Debug Mode</h2>
+<p>When <em>mimalloc</em> is built using debug mode (<span class="tt">-DCMAKE_BUILD_TYPE=Debug</span>), or with <span class="tt">-DMI_DEBUG=ON</span> explicitly, various checks are done at runtime to catch development errors.</p>
+<ul>
+<li>All objects have padding at the end to detect byte-precise heap block overflows.</li>
+<li>Double frees and freeing invalid heap pointers are detected.</li>
+<li>Corrupted free lists and some forms of use-after-free are detected. </li>
+</ul>
 </div></div><!-- contents -->
 </div><!-- PageDoc -->
 </div><!-- doc-content -->

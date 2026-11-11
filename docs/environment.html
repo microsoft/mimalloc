@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.6/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -88,7 +88,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('environment.ht
   <div class="headertitle"><div class="title">Environment Options </div></div>
 </div><!--header-->
 <div class="contents">
-<div class="textblock"><p>You can set further options either programmatically (using <a class="el" href="group__options.html#gaf84921c32375e25754dc2ee6a911fa60">mi_option_set()</a>, see <a class="el" href="group__options.html" title="Runtime Options">Runtime Options</a>), or via environment variables:</p>
+<div class="textblock"><p>You can set further options either programmatically (using <a class="el" href="group__options.html#gaf84921c32375e25754dc2ee6a911fa60">mi_option_set()</a>, see <a class="el" href="group__options.html" title="Runtime Options">Runtime Options</a>), or via environment variables. Elevated processes ignore all environment options. Secure builds also restrict which environment options are accepted; see <a class="el" href="security.html#security_environment" title="Environment Options">Environment Options</a>.</p>
+<p>Common options:</p>
 <ul>
 <li><span class="tt">MIMALLOC_SHOW_STATS=1</span>: show statistics when the program terminates.</li>
 <li><span class="tt">MIMALLOC_VERBOSE=1</span>: show verbose messages (including statistics).</li>

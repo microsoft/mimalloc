@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.6/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -106,6 +106,10 @@ Typedefs</h2></td></tr>
 Functions</h2></td></tr>
 <tr class="memitem:gae69fcff3324f8e419af850e34cf54c46" id="r_gae69fcff3324f8e419af850e34cf54c46"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#gae69fcff3324f8e419af850e34cf54c46">mi_heap_visit_blocks</a> (const <a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap, bool visit_blocks, <a class="el" href="#ga8255dc9371e6b299d9802a610c4e34ec">mi_block_visit_fun</a> *visitor, void *arg)</td></tr>
 <tr class="memdesc:gae69fcff3324f8e419af850e34cf54c46"><td class="mdescLeft">&#160;</td><td class="mdescRight">Visit all areas and blocks in a heap.  <br /></td></tr>
+<tr class="memitem:ga9de0049491f636b8edc3d0bae0f194de" id="r_ga9de0049491f636b8edc3d0bae0f194de"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ga9de0049491f636b8edc3d0bae0f194de">mi_heap_visit_abandoned_blocks</a> (<a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap, bool visit_blocks, <a class="el" href="#ga8255dc9371e6b299d9802a610c4e34ec">mi_block_visit_fun</a> *visitor, void *arg)</td></tr>
+<tr class="memdesc:ga9de0049491f636b8edc3d0bae0f194de"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Visit only abandoned pages of <em class="arg">heap</em>, optionally visiting their allocated blocks.  <br /></td></tr>
+<tr class="memitem:ga5c759c77e81e6beb69f32431f87111d0" id="r_ga5c759c77e81e6beb69f32431f87111d0"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ga5c759c77e81e6beb69f32431f87111d0">mi_unsafe_heap_page_is_under_utilized</a> (<a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap, void *p, size_t perc_threshold)</td></tr>
+<tr class="memdesc:ga5c759c77e81e6beb69f32431f87111d0"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>, <b>experimental</b>: Test whether an eligible page containing <em class="arg">p</em> is at most <em class="arg">perc_threshold</em> percent utilized.  <br /></td></tr>
 <tr class="memitem:ga6a4865a887b2ec5247854af61562503c" id="r_ga6a4865a887b2ec5247854af61562503c"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ga6a4865a887b2ec5247854af61562503c">mi_abandoned_visit_blocks</a> (<a class="el" href="group__subproc.html#ga8c0bcd1fee27c7641e9c3c0d991b3b7d">mi_subproc_id_t</a> subproc_id, int heap_tag, bool visit_blocks, <a class="el" href="#ga8255dc9371e6b299d9802a610c4e34ec">mi_block_visit_fun</a> *visitor, void *arg)</td></tr>
 <tr class="memdesc:ga6a4865a887b2ec5247854af61562503c"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v1</b>,<b>v2</b>: Visit all areas and blocks in abandoned heaps.  <br /></td></tr>
 </table>
@@ -243,6 +247,40 @@ bytes in use by allocated blocks </td></tr>
 
 </div>
 </div>
+<a id="ga9de0049491f636b8edc3d0bae0f194de" name="ga9de0049491f636b8edc3d0bae0f194de"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga9de0049491f636b8edc3d0bae0f194de">&#9670;&#160;</a></span>mi_heap_visit_abandoned_blocks()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool mi_heap_visit_abandoned_blocks </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *</td>          <td class="paramname"><span class="paramname"><em>heap</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>visit_blocks</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#ga8255dc9371e6b299d9802a610c4e34ec">mi_block_visit_fun</a> *</td>          <td class="paramname"><span class="paramname"><em>visitor</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *</td>          <td class="paramname"><span class="paramname"><em>arg</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>: Visit only abandoned pages of <em class="arg">heap</em>, optionally visiting their allocated blocks. </p>
+<p>The callback rules and synchronization requirements are the same as <a class="el" href="#gae69fcff3324f8e419af850e34cf54c46" title="Visit all areas and blocks in a heap.">mi_heap_visit_blocks()</a>. </p><dl class="section return"><dt>Returns</dt><dd><em class="arg">true</em> if the visit completed, or <em class="arg">false</em> if the visitor stopped it or the arguments were invalid. </dd></dl>
+
+</div>
+</div>
 <a id="gae69fcff3324f8e419af850e34cf54c46" name="gae69fcff3324f8e419af850e34cf54c46"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#gae69fcff3324f8e419af850e34cf54c46">&#9670;&#160;</a></span>mi_heap_visit_blocks()</h2>
 
@@ -284,6 +322,35 @@ bytes in use by allocated blocks </td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><em class="arg">true</em> if all areas and blocks were visited.</dd></dl>
 <p>Visits all areas and blocks in the heap. Other threads must not access this heap during the visit: they may not allocate in it, nor free blocks that belong to it (but thread termination is synchronized internally). The visitor runs under the heap's lock and must not re-enter the heap (through allocating or free-ing). </p>
+
+</div>
+</div>
+<a id="ga5c759c77e81e6beb69f32431f87111d0" name="ga5c759c77e81e6beb69f32431f87111d0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga5c759c77e81e6beb69f32431f87111d0">&#9670;&#160;</a></span>mi_unsafe_heap_page_is_under_utilized()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool mi_unsafe_heap_page_is_under_utilized </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *</td>          <td class="paramname"><span class="paramname"><em>heap</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *</td>          <td class="paramname"><span class="paramname"><em>p</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>perc_threshold</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>, <b>experimental</b>: Test whether an eligible page containing <em class="arg">p</em> is at most <em class="arg">perc_threshold</em> percent utilized. </p>
+<p><em class="arg">heap</em> may be <em class="arg">NULL</em> to match any heap. Full, partially extended, and active allocation pages are excluded. Only the calling thread may access the page during this call. </p>
 
 </div>
 </div>

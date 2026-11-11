@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.6/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -113,6 +113,16 @@ Functions</h2></td></tr>
 <tr class="memdesc:ga6867d89baf992728e0cc20a1f47db4d0"><td class="mdescLeft">&#160;</td><td class="mdescRight">like <a class="el" href="group__malloc.html#ga0621af6a5e3aa384e6a1b548958bf583" title="Re-allocate memory to newsize bytes.">mi_realloc()</a>, but when out of memory, use <span class="tt">std::get_new_handler</span> and raise <span class="tt">std::bad_alloc</span> exception on failure.  <br /></td></tr>
 <tr class="memitem:gaace912ce086682d56f3ce9f7638d9d67" id="r_gaace912ce086682d56f3ce9f7638d9d67"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#gaace912ce086682d56f3ce9f7638d9d67">mi_new_reallocn</a> (void *p, size_t newcount, size_t size)</td></tr>
 <tr class="memdesc:gaace912ce086682d56f3ce9f7638d9d67"><td class="mdescLeft">&#160;</td><td class="mdescRight">like <a class="el" href="group__malloc.html#ga8bddfb4a1270a0854bbcf44cb3980467" title="Re-allocate memory to count elements of size bytes.">mi_reallocn()</a>, but when out of memory, use <span class="tt">std::get_new_handler</span> and raise <span class="tt">std::bad_alloc</span> exception on failure.  <br /></td></tr>
+<tr class="memitem:ga753efa8cc03dccc15a845e65b007bef3" id="r_ga753efa8cc03dccc15a845e65b007bef3"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga753efa8cc03dccc15a845e65b007bef3">mi_heap_alloc_new</a> (<a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap, size_t size)</td></tr>
+<tr class="memdesc:ga753efa8cc03dccc15a845e65b007bef3"><td class="mdescLeft">&#160;</td><td class="mdescRight">As <a class="el" href="#ga633d96e3bc7011f960df9f3b2731fc6a" title="like mi_malloc(), but when out of memory, use std::get_new_handler and raise std::bad_alloc exception...">mi_new()</a>, allocating from the specified heap.  <br /></td></tr>
+<tr class="memitem:ga5ebce0536d0f09f833e56dc9d57e8f11" id="r_ga5ebce0536d0f09f833e56dc9d57e8f11"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga5ebce0536d0f09f833e56dc9d57e8f11">mi_heap_alloc_new_n</a> (<a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *heap, size_t count, size_t size)</td></tr>
+<tr class="memdesc:ga5ebce0536d0f09f833e56dc9d57e8f11"><td class="mdescLeft">&#160;</td><td class="mdescRight">As <a class="el" href="#gadd11b85c15d21d308386844b5233856c" title="like mi_mallocn(), but when out of memory, use std::get_new_handler and raise std::bad_alloc exceptio...">mi_new_n()</a>, allocating <em class="arg">count</em> elements of <em class="arg">size</em> bytes from the specified heap.  <br /></td></tr>
+<tr class="memitem:ga05a7b3982d0b038411a91f7f6281ce18" id="r_ga05a7b3982d0b038411a91f7f6281ce18"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga05a7b3982d0b038411a91f7f6281ce18">mi_theap_alloc_new</a> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
+<tr class="memdesc:ga05a7b3982d0b038411a91f7f6281ce18"><td class="mdescLeft">&#160;</td><td class="mdescRight">As <a class="el" href="#ga633d96e3bc7011f960df9f3b2731fc6a" title="like mi_malloc(), but when out of memory, use std::get_new_handler and raise std::bad_alloc exception...">mi_new()</a>, using a theap belonging to the calling thread.  <br /></td></tr>
+<tr class="memitem:gac418458e7514e24a54409e394d821fbd" id="r_gac418458e7514e24a54409e394d821fbd"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#gac418458e7514e24a54409e394d821fbd">mi_theap_alloc_new_n</a> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t count, size_t size)</td></tr>
+<tr class="memdesc:gac418458e7514e24a54409e394d821fbd"><td class="mdescLeft">&#160;</td><td class="mdescRight">As <a class="el" href="#gadd11b85c15d21d308386844b5233856c" title="like mi_mallocn(), but when out of memory, use std::get_new_handler and raise std::bad_alloc exceptio...">mi_new_n()</a>, using a theap belonging to the calling thread.  <br /></td></tr>
+<tr class="memitem:ga4c50cf162abfa03981b2057026c6405c" id="r_ga4c50cf162abfa03981b2057026c6405c"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga4c50cf162abfa03981b2057026c6405c">mi_theap_alloc_new_nothrow</a> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
+<tr class="memdesc:ga4c50cf162abfa03981b2057026c6405c"><td class="mdescLeft">&#160;</td><td class="mdescRight">As <a class="el" href="#ga5cb4f120d1f7296074256215aa9a9e54" title="like mi_malloc, but when out of memory, use std::get_new_handler but return NULL on failure.">mi_new_nothrow()</a>, using a theap belonging to the calling thread.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt">mi_</span> prefixed implementations of various C++ allocation functions. </p>
@@ -139,6 +149,57 @@ struct mi_stl_allocator&lt; T &gt;</div><p><em class="arg">std::allocator</em> i
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
+<a id="ga753efa8cc03dccc15a845e65b007bef3" name="ga753efa8cc03dccc15a845e65b007bef3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga753efa8cc03dccc15a845e65b007bef3">&#9670;&#160;</a></span>mi_heap_alloc_new()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void * mi_heap_alloc_new </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *</td>          <td class="paramname"><span class="paramname"><em>heap</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>size</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>As <a class="el" href="#ga633d96e3bc7011f960df9f3b2731fc6a" title="like mi_malloc(), but when out of memory, use std::get_new_handler and raise std::bad_alloc exception...">mi_new()</a>, allocating from the specified heap. </p>
+
+</div>
+</div>
+<a id="ga5ebce0536d0f09f833e56dc9d57e8f11" name="ga5ebce0536d0f09f833e56dc9d57e8f11"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga5ebce0536d0f09f833e56dc9d57e8f11">&#9670;&#160;</a></span>mi_heap_alloc_new_n()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void * mi_heap_alloc_new_n </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *</td>          <td class="paramname"><span class="paramname"><em>heap</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>count</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>size</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>As <a class="el" href="#gadd11b85c15d21d308386844b5233856c" title="like mi_mallocn(), but when out of memory, use std::get_new_handler and raise std::bad_alloc exceptio...">mi_new_n()</a>, allocating <em class="arg">count</em> elements of <em class="arg">size</em> bytes from the specified heap. </p>
+
+</div>
+</div>
 <a id="ga633d96e3bc7011f960df9f3b2731fc6a" name="ga633d96e3bc7011f960df9f3b2731fc6a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ga633d96e3bc7011f960df9f3b2731fc6a">&#9670;&#160;</a></span>mi_new()</h2>
 
@@ -294,6 +355,81 @@ struct mi_stl_allocator&lt; T &gt;</div><p><em class="arg">std::allocator</em> i
 </div><div class="memdoc">
 
 <p>like <a class="el" href="group__malloc.html#ga8bddfb4a1270a0854bbcf44cb3980467" title="Re-allocate memory to count elements of size bytes.">mi_reallocn()</a>, but when out of memory, use <span class="tt">std::get_new_handler</span> and raise <span class="tt">std::bad_alloc</span> exception on failure. </p>
+
+</div>
+</div>
+<a id="ga05a7b3982d0b038411a91f7f6281ce18" name="ga05a7b3982d0b038411a91f7f6281ce18"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga05a7b3982d0b038411a91f7f6281ce18">&#9670;&#160;</a></span>mi_theap_alloc_new()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void * mi_theap_alloc_new </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *</td>          <td class="paramname"><span class="paramname"><em>theap</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>size</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>As <a class="el" href="#ga633d96e3bc7011f960df9f3b2731fc6a" title="like mi_malloc(), but when out of memory, use std::get_new_handler and raise std::bad_alloc exception...">mi_new()</a>, using a theap belonging to the calling thread. </p>
+
+</div>
+</div>
+<a id="gac418458e7514e24a54409e394d821fbd" name="gac418458e7514e24a54409e394d821fbd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gac418458e7514e24a54409e394d821fbd">&#9670;&#160;</a></span>mi_theap_alloc_new_n()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void * mi_theap_alloc_new_n </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *</td>          <td class="paramname"><span class="paramname"><em>theap</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>count</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>size</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>As <a class="el" href="#gadd11b85c15d21d308386844b5233856c" title="like mi_mallocn(), but when out of memory, use std::get_new_handler and raise std::bad_alloc exceptio...">mi_new_n()</a>, using a theap belonging to the calling thread. </p>
+
+</div>
+</div>
+<a id="ga4c50cf162abfa03981b2057026c6405c" name="ga4c50cf162abfa03981b2057026c6405c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga4c50cf162abfa03981b2057026c6405c">&#9670;&#160;</a></span>mi_theap_alloc_new_nothrow()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void * mi_theap_alloc_new_nothrow </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *</td>          <td class="paramname"><span class="paramname"><em>theap</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>size</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>As <a class="el" href="#ga5cb4f120d1f7296074256215aa9a9e54" title="like mi_malloc, but when out of memory, use std::get_new_handler but return NULL on failure.">mi_new_nothrow()</a>, using a theap belonging to the calling thread. </p>
+<dl class="section return"><dt>Returns</dt><dd>The allocation, or <em class="arg">NULL</em> on failure. </dd></dl>
 
 </div>
 </div>

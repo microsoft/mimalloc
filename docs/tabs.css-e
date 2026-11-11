@@ -1,0 +1,81 @@
+.tabs, .tabs2, .tabs3 {
+    background-color: white;
+    width: 100%;
+    z-index: 101;
+    font-size: 13px;
+    font-family: 'Lucida Grande',Geneva,Helvetica,Arial,sans-serif;
+    display: table;
+}
+
+#navrow2, #navrow3, #navrow4 {
+    border-top: 1px solid #90989A;
+}
+
+.tabs2 {
+    font-size: 10px;
+}
+.tabs3 {
+    font-size: 9px;
+}
+
+.tablist {
+    margin: 0;
+    padding: 0;
+    display: block;
+}
+
+.tablist li {
+    float: left;
+    display: table-cell;
+    background-color: white;
+    line-height: 36px;
+    list-style: none;
+}
+
+.tablist a {
+    display: block;
+    margin: 5px 0;
+    padding: 0px 20px;
+    background-color: white;
+    color: #040404;
+    text-decoration: none;
+    outline: none;
+}
+
+.tablist a:focus {
+    outline: auto;
+    z-index: 10;
+    position: relative;
+}
+
+.tabs3 .tablist a {
+    padding: 0 10px;
+}
+
+.tablist a:hover {
+    background-color: #B7BDBE;
+    border-radius: 5px;
+    text-decoration: none;
+}
+
+.tablist li.current {
+	position: relative;
+}
+
+.tablist li.current a:after {   
+	content: '';
+	position: absolute;
+	left: 15px;
+	right: 15px;
+	top: 35px;
+	height: 1px;
+	display: block;
+	background-color: #5B6364;
+	border: 1px solid #5B6364;
+	border-radius: 2px 2px 0px 0px;
+}
+
+#navrow4 .tablist li.current a:after {
+	left: 5px;
+	right: 5px;
+}

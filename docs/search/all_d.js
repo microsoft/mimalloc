@@ -1,7 +1,9 @@
 var searchData=
 [
-  ['size_0',['size',['../group__stats.html#ae41e0fff24b988d0a43c34040b04b887',1,'mi_stats_s']]],
-  ['size_20allocation_1',['Constant size allocation',['../group__constantsize.html',1,'']]],
-  ['statistics_2',['Statistics',['../group__stats.html',1,'']]],
-  ['subprocesses_3',['Subprocesses',['../group__subproc.html',1,'']]]
+  ['pac_0',['Pointer Authentication (PAC)',['../security.html#pointer_authentication',1,'']]],
+  ['performance_1',['Performance',['../tuning.html',1,'Getting the Best Performance'],['../bench.html',1,'Performance']]],
+  ['pointer_20authentication_20pac_2',['Pointer Authentication (PAC)',['../security.html#pointer_authentication',1,'']]],
+  ['pointer_20capabilities_20cheri_3',['Pointer Capabilities (CHERI)',['../security.html#pointer_capabilities',1,'']]],
+  ['posix_4',['Posix',['../group__posix.html',1,'']]],
+  ['profiling_5',['Profiling',['../group__profiling.html',1,'Heap Profiling'],['../profiling_guide.html',1,'Profiling']]]
 ];

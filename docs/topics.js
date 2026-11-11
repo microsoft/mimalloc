@@ -1,6 +1,7 @@
 var topics =
 [
     [ "Basic Allocation", "group__malloc.html", "group__malloc" ],
+    [ "Allocation with Block Sizes", "group__sized.html", "group__sized" ],
     [ "Aligned Allocation", "group__aligned.html", "group__aligned" ],
     [ "Typed Macros", "group__typed.html", "group__typed" ],
     [ "Constant size allocation", "group__constantsize.html", "group__constantsize" ],

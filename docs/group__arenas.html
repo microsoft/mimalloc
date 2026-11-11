@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.6/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -96,6 +96,8 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('group__arenas.
 Typedefs</h2></td></tr>
 <tr class="memitem:ga99fe38650d0b02e0e0f89ee024db91d3" id="r_ga99fe38650d0b02e0e0f89ee024db91d3"><td class="memItemLeft">typedef int&#160;</td><td class="memItemRight"><a class="el" href="#ga99fe38650d0b02e0e0f89ee024db91d3">mi_arena_id_t</a></td></tr>
 <tr class="memdesc:ga99fe38650d0b02e0e0f89ee024db91d3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Each arena has an associated identifier.  <br /></td></tr>
+<tr class="memitem:gacc741d08d7075ff38bb222962769bea7" id="r_gacc741d08d7075ff38bb222962769bea7"><td class="memItemLeft">typedef bool&#160;</td><td class="memItemRight"><a class="el" href="#gacc741d08d7075ff38bb222962769bea7">mi_commit_fun_t</a>(bool commit, void *start, size_t size, bool *is_zero, void *user_arg)</td></tr>
+<tr class="memdesc:gacc741d08d7075ff38bb222962769bea7"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>experimental</b>: Callback for committing or decommitting a managed memory range.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
@@ -107,18 +109,31 @@ Functions</h2></td></tr>
 <tr class="memdesc:ga3132f521fb756fc0e8ec0b74fb58df50"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reserve <em class="arg">pages</em> of huge OS pages (1GiB) evenly divided over <em class="arg">numa_nodes</em> nodes, but stops after at most <span class="tt">timeout_msecs</span> seconds.  <br /></td></tr>
 <tr class="memitem:ga7795a13d20087447281858d2c771cca1" id="r_ga7795a13d20087447281858d2c771cca1"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#ga7795a13d20087447281858d2c771cca1">mi_reserve_huge_os_pages_at</a> (size_t pages, int numa_node, size_t timeout_msecs)</td></tr>
 <tr class="memdesc:ga7795a13d20087447281858d2c771cca1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reserve <em class="arg">pages</em> of huge OS pages (1GiB) at a specific <em class="arg">numa_node</em>, but stops after at most <span class="tt">timeout_msecs</span> seconds.  <br /></td></tr>
+<tr class="memitem:ga2664f36a2dd557741c429cb799f04641" id="r_ga2664f36a2dd557741c429cb799f04641"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#ga2664f36a2dd557741c429cb799f04641">mi_reserve_huge_os_pages</a> (size_t pages, double max_secs, size_t *pages_reserved)</td></tr>
 <tr class="memitem:ga591aab1c2bc2ca920e33f0f9f9cb5c52" id="r_ga591aab1c2bc2ca920e33f0f9f9cb5c52"><td class="memItemLeft">int&#160;</td><td class="memItemRight"><a class="el" href="#ga591aab1c2bc2ca920e33f0f9f9cb5c52">mi_reserve_huge_os_pages_at_ex</a> (size_t pages, int numa_node, size_t timeout_msecs, bool exclusive, <a class="el" href="#ga99fe38650d0b02e0e0f89ee024db91d3">mi_arena_id_t</a> *arena_id)</td></tr>
 <tr class="memdesc:ga591aab1c2bc2ca920e33f0f9f9cb5c52"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reserve huge OS pages (1GiB) into a single arena.  <br /></td></tr>
 <tr class="memitem:gaa1a59464dbf3bc972d34fca0f86668fc" id="r_gaa1a59464dbf3bc972d34fca0f86668fc"><td class="memItemLeft">size_t&#160;</td><td class="memItemRight"><a class="el" href="#gaa1a59464dbf3bc972d34fca0f86668fc">mi_arena_min_alignment</a> (void)</td></tr>
 <tr class="memdesc:gaa1a59464dbf3bc972d34fca0f86668fc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Return the minimal alignment required for managed OS memory.  <br /></td></tr>
+<tr class="memitem:ga79da188fa77f8d05627007268b90b24e" id="r_ga79da188fa77f8d05627007268b90b24e"><td class="memItemLeft">size_t&#160;</td><td class="memItemRight"><a class="el" href="#ga79da188fa77f8d05627007268b90b24e">mi_arena_min_size</a> (void)</td></tr>
+<tr class="memdesc:ga79da188fa77f8d05627007268b90b24e"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Return the minimum arena size in bytes.  <br /></td></tr>
+<tr class="memitem:ga4e1559c360fd1016c718d553d87e1545" id="r_ga4e1559c360fd1016c718d553d87e1545"><td class="memItemLeft">size_t&#160;</td><td class="memItemRight"><a class="el" href="#ga4e1559c360fd1016c718d553d87e1545">mi_arena_max_object_size</a> (void)</td></tr>
+<tr class="memdesc:ga4e1559c360fd1016c718d553d87e1545"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Return the current maximum object size allowed in an arena, in bytes.  <br /></td></tr>
 <tr class="memitem:ga4c6486a1fdcd7a423b5f25fe4be8e0cf" id="r_ga4c6486a1fdcd7a423b5f25fe4be8e0cf"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ga4c6486a1fdcd7a423b5f25fe4be8e0cf">mi_manage_os_memory</a> (void *start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node)</td></tr>
 <tr class="memdesc:ga4c6486a1fdcd7a423b5f25fe4be8e0cf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Manage a particular memory area for use by mimalloc.  <br /></td></tr>
 <tr class="memitem:ga41ce8525d77bbb60f618fa1029994f6e" id="r_ga41ce8525d77bbb60f618fa1029994f6e"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ga41ce8525d77bbb60f618fa1029994f6e">mi_manage_os_memory_ex</a> (void *start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node, bool exclusive, <a class="el" href="#ga99fe38650d0b02e0e0f89ee024db91d3">mi_arena_id_t</a> *arena_id)</td></tr>
 <tr class="memdesc:ga41ce8525d77bbb60f618fa1029994f6e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Manage externally allocated memory as a mimalloc arena.  <br /></td></tr>
+<tr class="memitem:ga57cd6a0b6b289b862eb3371e99dc13b5" id="r_ga57cd6a0b6b289b862eb3371e99dc13b5"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ga57cd6a0b6b289b862eb3371e99dc13b5">mi_manage_memory</a> (void *start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive, <a class="el" href="#gacc741d08d7075ff38bb222962769bea7">mi_commit_fun_t</a> *commit_fun, void *commit_fun_arg, <a class="el" href="#ga99fe38650d0b02e0e0f89ee024db91d3">mi_arena_id_t</a> *arena_id)</td></tr>
+<tr class="memdesc:ga57cd6a0b6b289b862eb3371e99dc13b5"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>, <b>experimental</b>: As <a class="el" href="#ga41ce8525d77bbb60f618fa1029994f6e" title="Manage externally allocated memory as a mimalloc arena.">mi_manage_os_memory_ex()</a>, with a custom commit/decommit callback.  <br /></td></tr>
 <tr class="memitem:ga98cda17aa7adeda8b213382af8e7810b" id="r_ga98cda17aa7adeda8b213382af8e7810b"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga98cda17aa7adeda8b213382af8e7810b">mi_debug_show_arenas</a> (void)</td></tr>
 <tr class="memdesc:ga98cda17aa7adeda8b213382af8e7810b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Show all current arena's.  <br /></td></tr>
+<tr class="memitem:ga2150843a8548920d956a6eed1fe73ca4" id="r_ga2150843a8548920d956a6eed1fe73ca4"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga2150843a8548920d956a6eed1fe73ca4">mi_arenas_print</a> (void)</td></tr>
+<tr class="memdesc:ga2150843a8548920d956a6eed1fe73ca4"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Print the current subprocess's arenas; equivalent to <a class="el" href="#ga98cda17aa7adeda8b213382af8e7810b" title="Show all current arena&#39;s.">mi_debug_show_arenas()</a>.  <br /></td></tr>
+<tr class="memitem:ga575c77780b8de4e0b6eda65bbf1593e8" id="r_ga575c77780b8de4e0b6eda65bbf1593e8"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga575c77780b8de4e0b6eda65bbf1593e8">mi_arenas_purge</a> (void)</td></tr>
+<tr class="memdesc:ga575c77780b8de4e0b6eda65bbf1593e8"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Try to purge unused memory in the main subprocess's arenas.  <br /></td></tr>
 <tr class="memitem:ga9a25a00a22151619a0be91a10af7787f" id="r_ga9a25a00a22151619a0be91a10af7787f"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga9a25a00a22151619a0be91a10af7787f">mi_arena_area</a> (<a class="el" href="#ga99fe38650d0b02e0e0f89ee024db91d3">mi_arena_id_t</a> arena_id, size_t *size)</td></tr>
 <tr class="memdesc:ga9a25a00a22151619a0be91a10af7787f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Return the start and size of an arena.  <br /></td></tr>
+<tr class="memitem:ga21037f1b7c250e623b5238a77e2d6905" id="r_ga21037f1b7c250e623b5238a77e2d6905"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#ga21037f1b7c250e623b5238a77e2d6905">mi_arena_contains</a> (<a class="el" href="#ga99fe38650d0b02e0e0f89ee024db91d3">mi_arena_id_t</a> arena_id, const void *p)</td></tr>
+<tr class="memdesc:ga21037f1b7c250e623b5238a77e2d6905"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Test whether <em class="arg">p</em> is inside the arena or one of its subarenas.  <br /></td></tr>
 <tr class="memitem:gaaf2d9976576d5efd5544be12848af949" id="r_gaaf2d9976576d5efd5544be12848af949"><td class="memItemLeft"><a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *&#160;</td><td class="memItemRight"><a class="el" href="#gaaf2d9976576d5efd5544be12848af949">mi_heap_new_in_arena</a> (<a class="el" href="#ga99fe38650d0b02e0e0f89ee024db91d3">mi_arena_id_t</a> arena_id)</td></tr>
 <tr class="memdesc:gaaf2d9976576d5efd5544be12848af949"><td class="mdescLeft">&#160;</td><td class="mdescRight">Create a new heap that only allocates in the specified arena.  <br /></td></tr>
 <tr class="memitem:ga3ae360583f4351aa5267ee7e43008faf" id="r_ga3ae360583f4351aa5267ee7e43008faf"><td class="memItemLeft"><a class="el" href="group__heap.html#ga34a47cde5a5b38c29f1aa3c5e76943c2">mi_heap_t</a> *&#160;</td><td class="memItemRight"><a class="el" href="#ga3ae360583f4351aa5267ee7e43008faf">mi_heap_new_ex</a> (int heap_tag, bool allow_destroy, <a class="el" href="#ga99fe38650d0b02e0e0f89ee024db91d3">mi_arena_id_t</a> arena_id)</td></tr>
@@ -141,6 +156,23 @@ Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Each arena has an associated identifier. </p>
+
+</div>
+</div>
+<a id="gacc741d08d7075ff38bb222962769bea7" name="gacc741d08d7075ff38bb222962769bea7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gacc741d08d7075ff38bb222962769bea7">&#9670;&#160;</a></span>mi_commit_fun_t</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">typedef bool mi_commit_fun_t(bool commit, void *start, size_t size, bool *is_zero, void *user_arg)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>experimental</b>: Callback for committing or decommitting a managed memory range. </p>
+<p>With <em class="arg">commit</em> true, return whether committing succeeded and, if <em class="arg">is_zero</em> is non-NULL, report whether the memory is zero-initialized. With <em class="arg">commit</em> false, return whether the range was decommitted and must be recommitted before reuse. Calls may be concurrent. <em class="arg">user_arg</em> is the argument passed to <a class="el" href="#ga57cd6a0b6b289b862eb3371e99dc13b5" title="v3, experimental: As mi_manage_os_memory_ex(), with a custom commit/decommit callback.">mi_manage_memory()</a>. </p>
 
 </div>
 </div>
@@ -176,6 +208,50 @@ Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="ga21037f1b7c250e623b5238a77e2d6905" name="ga21037f1b7c250e623b5238a77e2d6905"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga21037f1b7c250e623b5238a77e2d6905">&#9670;&#160;</a></span>mi_arena_contains()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool mi_arena_contains </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="#ga99fe38650d0b02e0e0f89ee024db91d3">mi_arena_id_t</a></td>          <td class="paramname"><span class="paramname"><em>arena_id</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const void *</td>          <td class="paramname"><span class="paramname"><em>p</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>: Test whether <em class="arg">p</em> is inside the arena or one of its subarenas. </p>
+<p>This checks address ranges, not whether <em class="arg">p</em> is a live allocation. </p>
+
+</div>
+</div>
+<a id="ga4e1559c360fd1016c718d553d87e1545" name="ga4e1559c360fd1016c718d553d87e1545"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga4e1559c360fd1016c718d553d87e1545">&#9670;&#160;</a></span>mi_arena_max_object_size()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t mi_arena_max_object_size </td>
+          <td>(</td>
+          <td class="paramtype">void</td>          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>: Return the current maximum object size allowed in an arena, in bytes. </p>
+<p>Reflects the <span class="tt">arena_max_object_size</span> option, clamped to supported limits. </p>
+
+</div>
+</div>
 <a id="gaa1a59464dbf3bc972d34fca0f86668fc" name="gaa1a59464dbf3bc972d34fca0f86668fc"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#gaa1a59464dbf3bc972d34fca0f86668fc">&#9670;&#160;</a></span>mi_arena_min_alignment()</h2>
 
@@ -193,6 +269,65 @@ Functions</h2></td></tr>
 
 <p>Return the minimal alignment required for managed OS memory. </p>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga4c6486a1fdcd7a423b5f25fe4be8e0cf" title="Manage a particular memory area for use by mimalloc.">mi_manage_os_memory()</a>, <a class="el" href="#ga41ce8525d77bbb60f618fa1029994f6e" title="Manage externally allocated memory as a mimalloc arena.">mi_manage_os_memory_ex()</a> </dd></dl>
+
+</div>
+</div>
+<a id="ga79da188fa77f8d05627007268b90b24e" name="ga79da188fa77f8d05627007268b90b24e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga79da188fa77f8d05627007268b90b24e">&#9670;&#160;</a></span>mi_arena_min_size()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t mi_arena_min_size </td>
+          <td>(</td>
+          <td class="paramtype">void</td>          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>: Return the minimum arena size in bytes. </p>
+<p>Extra space may be needed if externally supplied memory must be aligned. </p>
+
+</div>
+</div>
+<a id="ga2150843a8548920d956a6eed1fe73ca4" name="ga2150843a8548920d956a6eed1fe73ca4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga2150843a8548920d956a6eed1fe73ca4">&#9670;&#160;</a></span>mi_arenas_print()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_arenas_print </td>
+          <td>(</td>
+          <td class="paramtype">void</td>          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>: Print the current subprocess's arenas; equivalent to <a class="el" href="#ga98cda17aa7adeda8b213382af8e7810b" title="Show all current arena&#39;s.">mi_debug_show_arenas()</a>. </p>
+
+</div>
+</div>
+<a id="ga575c77780b8de4e0b6eda65bbf1593e8" name="ga575c77780b8de4e0b6eda65bbf1593e8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga575c77780b8de4e0b6eda65bbf1593e8">&#9670;&#160;</a></span>mi_arenas_purge()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_arenas_purge </td>
+          <td>(</td>
+          <td class="paramtype">void</td>          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>: Try to purge unused memory in the main subprocess's arenas. </p>
+<p>Does not purge if purging is disabled by the runtime options. </p>
 
 </div>
 </div>
@@ -276,6 +411,70 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The new heap or <span class="tt">NULL</span>. </dd></dl>
+
+</div>
+</div>
+<a id="ga57cd6a0b6b289b862eb3371e99dc13b5" name="ga57cd6a0b6b289b862eb3371e99dc13b5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga57cd6a0b6b289b862eb3371e99dc13b5">&#9670;&#160;</a></span>mi_manage_memory()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool mi_manage_memory </td>
+          <td>(</td>
+          <td class="paramtype">void *</td>          <td class="paramname"><span class="paramname"><em>start</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>size</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>is_committed</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>is_pinned</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>is_zero</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>numa_node</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>exclusive</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#gacc741d08d7075ff38bb222962769bea7">mi_commit_fun_t</a> *</td>          <td class="paramname"><span class="paramname"><em>commit_fun</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">void *</td>          <td class="paramname"><span class="paramname"><em>commit_fun_arg</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#ga99fe38650d0b02e0e0f89ee024db91d3">mi_arena_id_t</a> *</td>          <td class="paramname"><span class="paramname"><em>arena_id</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>, <b>experimental</b>: As <a class="el" href="#ga41ce8525d77bbb60f618fa1029994f6e" title="Manage externally allocated memory as a mimalloc arena.">mi_manage_os_memory_ex()</a>, with a custom commit/decommit callback. </p>
+<p>Pass <em class="arg">NULL</em> for <em class="arg">commit_fun</em> to use the OS primitives. The memory and callback argument must remain valid while the arena is used; mimalloc does not free externally supplied memory. Pinned memory cannot be decommitted or protected and is rejected in secure builds on platforms with guard pages. </p><dl class="section return"><dt>Returns</dt><dd><em class="arg">true</em> on success; optional <em class="arg">arena_id</em> receives the arena identifier. </dd></dl>
 
 </div>
 </div>
@@ -398,6 +597,34 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if successful. </dd></dl>
+
+</div>
+</div>
+<a id="ga2664f36a2dd557741c429cb799f04641" name="ga2664f36a2dd557741c429cb799f04641"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga2664f36a2dd557741c429cb799f04641">&#9670;&#160;</a></span>mi_reserve_huge_os_pages()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int mi_reserve_huge_os_pages </td>
+          <td>(</td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>pages</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">double</td>          <td class="paramname"><span class="paramname"><em>max_secs</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>pages_reserved</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<dl class="deprecated"><dt><b><a class="el" href="deprecated.html#_deprecated000001">Deprecated</a></b></dt><dd>Use <a class="el" href="#ga3132f521fb756fc0e8ec0b74fb58df50" title="Reserve pages of huge OS pages (1GiB) evenly divided over numa_nodes nodes, but stops after at most t...">mi_reserve_huge_os_pages_interleave()</a> or <a class="el" href="#ga7795a13d20087447281858d2c771cca1" title="Reserve pages of huge OS pages (1GiB) at a specific numa_node, but stops after at most timeout_msecs ...">mi_reserve_huge_os_pages_at()</a>. Reserve <em class="arg">pages</em> of 1 GiB memory with a time limit in seconds. Optional <em class="arg">pages_reserved</em> is set to <em class="arg">pages</em> on success, or 0 on failure. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>0 on success, or an error code. </dd></dl>
 
 </div>
 </div>

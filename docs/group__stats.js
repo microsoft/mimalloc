@@ -17,12 +17,18 @@ var group__stats =
     [ "mi_stats_get", "group__stats.html#gaa26d5060ad21b1331a150bb92f6f7086", null ],
     [ "mi_stats_get_bin_size", "group__stats.html#gadecd549d1a7216af596322ac27e78b0d", null ],
     [ "mi_stats_get_json", "group__stats.html#gadaa3be15899cc82e314fa7d3f8e2afbd", null ],
+    [ "mi_stats_header_init", "group__stats.html#gaf653d33dc50c2e4fd5a3293f7862be5e", null ],
+    [ "mi_stats_init", "group__stats.html#ga6b09b30867f2fa4244e7363e92e44cc7", null ],
     [ "mi_stats_merge", "group__stats.html#ga854b1de8cb067c7316286c28b2fcd3d1", null ],
     [ "mi_stats_print", "group__stats.html#ga2d126e5c62d3badc35445e5d84166df2", null ],
     [ "mi_stats_print_out", "group__stats.html#ga537f13b299ddf801e49a5a94fde02c79", null ],
     [ "mi_stats_reset", "group__stats.html#ga3bb8468b8cfcc6e2a61d98aee85c5f99", null ],
     [ "mi_subproc_heap_stats_print_out", "group__stats.html#ga19f1a04bd972e11e4f3b586f25229d5b", null ],
     [ "mi_subproc_stats_get", "group__stats.html#ga5ec3f9058eec804924711ab38ba64b51", null ],
+    [ "mi_subproc_stats_get_exclusive", "group__stats.html#ga8e237e9970723fcb5fdbfe094cee862a", null ],
     [ "mi_subproc_stats_get_json", "group__stats.html#gad1cf918f08b6506e65ae134423477a0b", null ],
-    [ "mi_subproc_stats_print_out", "group__stats.html#ga59ec89969837db414a6bce8b58915624", null ]
+    [ "mi_subproc_stats_print_out", "group__stats.html#ga59ec89969837db414a6bce8b58915624", null ],
+    [ "mi_theap_stats_get", "group__stats.html#ga796d06376a6c8166e791aec4bbd55548", null ],
+    [ "mi_theap_stats_merge_to_heap", "group__stats.html#ga13a431ecfe86d9c7e65aa6605511590b", null ],
+    [ "mi_thread_stats_print_out", "group__stats.html#gab1dac8476c46cb9eecab767eb40c1525", null ]
 ];

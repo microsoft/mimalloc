@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.6/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -123,7 +123,7 @@ Functions</h2></td></tr>
 <tr class="memitem:ga089c859d9eddc5f9b4bd946cd53cebee" id="r_ga089c859d9eddc5f9b4bd946cd53cebee"><td class="memItemLeft">size_t&#160;</td><td class="memItemRight"><a class="el" href="#ga089c859d9eddc5f9b4bd946cd53cebee">mi_usable_size</a> (void *p)</td></tr>
 <tr class="memdesc:ga089c859d9eddc5f9b4bd946cd53cebee"><td class="mdescLeft">&#160;</td><td class="mdescRight">Return the available bytes in a memory block.  <br /></td></tr>
 <tr class="memitem:ga22252f0d9e380047d3684a6c99d330ae" id="r_ga22252f0d9e380047d3684a6c99d330ae"><td class="memItemLeft">size_t&#160;</td><td class="memItemRight"><a class="el" href="#ga22252f0d9e380047d3684a6c99d330ae">mi_thread_id_of</a> (const void *p)</td></tr>
-<tr class="memdesc:ga22252f0d9e380047d3684a6c99d330ae"><td class="mdescLeft">&#160;</td><td class="mdescRight">Return the current owner thread-id of the page containing a live allocation.  <br /></td></tr>
+<tr class="memdesc:ga22252f0d9e380047d3684a6c99d330ae"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>experimental</b>: Return the current owner thread-id of the page containing a live allocation.  <br /></td></tr>
 <tr class="memitem:gac057927cd06c854b45fe7847e921bd47" id="r_gac057927cd06c854b45fe7847e921bd47"><td class="memItemLeft">size_t&#160;</td><td class="memItemRight"><a class="el" href="#gac057927cd06c854b45fe7847e921bd47">mi_good_size</a> (size_t size)</td></tr>
 <tr class="memdesc:gac057927cd06c854b45fe7847e921bd47"><td class="mdescLeft">&#160;</td><td class="mdescRight">Return the probable allocation block size for a given required size.  <br /></td></tr>
 </table>
@@ -542,7 +542,7 @@ mi_zallocn() </dd></dl>
       </table>
 </div><div class="memdoc">
 
-<p>Return the current owner thread-id of the page containing a live allocation. </p>
+<p><b>experimental</b>: Return the current owner thread-id of the page containing a live allocation. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">p</td><td>A mimalloc allocation, or <em class="arg">NULL</em>. </td></tr>

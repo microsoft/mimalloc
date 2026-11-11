@@ -28,6 +28,7 @@ var group__heap =
     [ "mi_heap_reallocf", "group__heap.html#gae7cd171425bee04c683c65a3701f0b4a", null ],
     [ "mi_heap_reallocn", "group__heap.html#gaccf7bfe10ce510a000d3547d9cf7fa29", null ],
     [ "mi_heap_realpath", "group__heap.html#ga55545a3ec6da29c5b4f62e540ecac1e2", null ],
+    [ "mi_heap_set_debug_fill_preserve", "group__heap.html#ga3309f6db82d14343dd84d9d71ec93e64", null ],
     [ "mi_heap_set_default", "group__heap.html#ga349b677dec7da5eacdbc7a385bd62a4a", null ],
     [ "mi_heap_set_numa_affinity", "group__heap.html#gaab93abbc0624f570e2900f95cac18591", null ],
     [ "mi_heap_strdup", "group__heap.html#ga5754e09ccc51dd6bc73885bb6ea21b7a", null ],
