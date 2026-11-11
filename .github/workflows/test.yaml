@@ -1,5 +1,5 @@
 on:
-  workflow_dispatch:   # allow running the workflow manually 
+  workflow_dispatch:   # allow running the workflow manually
   push:
     branches:
       - 'dev*'
@@ -9,7 +9,7 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true # Cancel any in-progress runs of this workflow when a new run is triggered on the same ref (branch or tag)
-  
+
 name: Test
 jobs:
   build:
@@ -18,14 +18,11 @@ jobs:
     strategy:
       matrix:
         tests: [basic,extra]
-        os: [windows-latest, macos-latest, ubuntu-latest, macos-14, macos-15-intel, ubuntu-22.04-arm, windows-11-arm]
-        exclude:
-          - os: macos-14
-            tests: extra          
+        os: [windows-latest, macos-latest, ubuntu-latest, macos-15-intel, ubuntu-22.04-arm, windows-11-arm]
         include:
           - os: windows-latest
             tests: mingw-ucrt64
-        
+
     steps:
       # Checkout: https://github.com/actions/checkout
       - name: Checkout repository
@@ -97,7 +94,7 @@ jobs:
         run: |
           cmake . -B out/release-clang -DCMAKE_BUILD_TYPE=Release -A Win32 -T ClangCl
           cmake --build out/release-clang --parallel 4 --config Release
-          ctest --test-dir out/release-clang --verbose --timeout 240 -C Release          
+          ctest --test-dir out/release-clang --verbose --timeout 240 -C Release
 
       # Extra
       - name: Release, SIMD
@@ -171,7 +168,7 @@ jobs:
       - name: mingw-ucrt64 x64, Setup
         if: matrix.tests == 'mingw-ucrt64'
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
-        with: 
+        with:
           msystem: UCRT64
           install: |
             mingw-w64-ucrt-x86_64-gcc
