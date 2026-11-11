@@ -614,7 +614,7 @@ bool mi_cfree(void* p) mi_attr_noexcept {
 // 3. if it went to < 7/8th used, re-abandon to be mapped (so it can be found by theaps looking for free pages)
 // --------------------------------------------------------------------------------------------
 
-// Consume an empty page, reclaiming delayed pages if this thread has a theap for their heap.
+// Consume an empty page, reclaiming delayed pages only into their originating theap.
 static bool mi_abandoned_page_collect_empty(mi_page_t* page)
 {
   if (!mi_page_all_free(page)) return false;
@@ -626,11 +626,10 @@ static bool mi_abandoned_page_collect_empty(mi_page_t* page)
     _mi_arenas_page_free(page,NULL);
   }
   else {
-    // reclaim into our theap such that it becomes part of the theap's qsbr list (see `doc/qsbr.md`)
-    // note: this may create a theap and initialize the thread; it returns a sentinel theap for a deleted heap,
-    // or if the thread is terminated or released this heap (see `heap/heap.c:_mi_heap_theap_get_or_init`)
-    mi_theap_t* const theap = _mi_heap_theap(mi_page_heap(page));
-    if (mi_theap_is_initialized(theap)) {
+    // A foreign theap may not collect again; only the originating theap may adopt the delayed page.
+    // note: we don't have to do this but reclaiming into the originating theap puts it in the qsbr list which may help with collection across size classes.
+    mi_theap_t* const theap = _mi_page_associated_theap_peek(page);
+    if (theap != NULL && theap == page->theap) {
       _mi_theap_page_reclaim(theap, page);
     }
     else {

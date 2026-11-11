@@ -234,11 +234,10 @@ static bool remote_free_abandoned(void) {
   mi_page_t* page = mi_ptr_page(remote_block);
   require(mi_page_is_abandoned(page));
   mi_free(remote_block);
-  require(_mi_thread_is_initialized());
-  mi_theap_t* theap = _mi_page_associated_theap_peek(page);
-  require(theap != NULL && !mi_page_is_abandoned(page));
-  require(mi_page_theap(page) == theap && mi_page_all_free(page));
-  require(page->qsbr.goal != 0 && mi_page_qsbr_is_in_queue(page) && qsbr_count(theap) == 1);
+  require(!_mi_thread_is_initialized());
+  require(_mi_page_associated_theap_peek(page) == NULL);
+  require(mi_page_is_abandoned(page) && !mi_page_is_owned(page) && mi_page_all_free(page));
+  require(page->qsbr.goal != 0 && !mi_page_qsbr_is_in_queue(page));
   return true;
 }
 
@@ -409,9 +408,9 @@ static bool test_reclaim(void) {
   return true;
 }
 
-static bool test_reclaim_delayed_empty(size_t size, bool os) {
+static bool test_reclaim_delayed_empty(size_t size, bool os, bool origin) {
   const long previous = mi_option_get(mi_option_page_reclaim_on_free);
-  mi_option_set(mi_option_page_reclaim_on_free, -1);
+  mi_option_set(mi_option_page_reclaim_on_free, origin ? -1 : 0);
   worker_heap = mi_heap_new_qsbr();
   mi_option_set(mi_option_page_reclaim_on_free, previous);
   require(worker_heap != NULL);
@@ -420,7 +419,15 @@ static bool test_reclaim_delayed_empty(size_t size, bool os) {
   worker_empty = false;
   worker_delete = false;
   mi_option_set(mi_option_disallow_arena_alloc, os ? 1 : 0);
-  require(mi_run_on_thread(&allocate_and_exit));
+  if (origin) {
+    require(allocate_and_exit());
+    if (!mi_page_is_abandoned(worker_page)) {
+      _mi_page_abandon(worker_page, mi_page_queue_of(worker_page), false);
+    }
+  }
+  else {
+    require(mi_run_on_thread(&allocate_and_exit));
+  }
   mi_option_set(mi_option_disallow_arena_alloc, 0);
   require((worker_page->memid.memkind != MI_MEM_ARENA) == os);
   if (worker_blocks[1] != NULL) {
@@ -431,16 +438,32 @@ static bool test_reclaim_delayed_empty(size_t size, bool os) {
     require(!_mi_abandoned_page_unown(worker_page, NULL));
   }
   mi_free(worker_blocks[0]);
-  require(!mi_page_is_abandoned(worker_page) && mi_page_theap(worker_page) == theap);
   require(worker_page->heap == worker_heap && mi_page_all_free(worker_page));
-  require(worker_page->retire_expire == 0 && !mi_page_is_in_full(worker_page));
-  require(qsbr_count(theap) == 1 && page_count(worker_heap) == 1);
+  require(page_count(worker_heap) == 1);
+  if (origin) {
+    require(!mi_page_is_abandoned(worker_page) && mi_page_theap(worker_page) == theap);
+    require(worker_page->retire_expire == 0 && !mi_page_is_in_full(worker_page));
+    require(qsbr_count(theap) == 1);
+  }
+  else {
+    require(mi_page_is_abandoned(worker_page) && !mi_page_is_owned(worker_page));
+    require(!mi_page_qsbr_is_in_queue(worker_page) && qsbr_count(theap) == 0 && theap->page_count == 0);
+    require(mi_page_is_abandoned_mapped(worker_page) == (!os && !mi_page_is_singleton(worker_page)));
+  }
   const uint64_t goal = worker_page->qsbr.goal;
   require(goal != 0);
   mi_heap_collect(worker_heap, true);
+  _mi_heap_collect_abandoned(worker_heap);
   require(page_count(worker_heap) == 1 && worker_page->qsbr.goal == goal);
   qsbr_complete();
-  mi_heap_collect(worker_heap, true);
+  if (origin) {
+    mi_heap_collect(worker_heap, true);
+  }
+  else {
+    // A foreign free-side collector may still release an empty page once its goal is ready.
+    require(mi_page_claim_ownership(worker_page));
+    require(mi_abandoned_page_collect_empty(worker_page));
+  }
   require(page_count(worker_heap) == 0 && qsbr_count(theap) == 0);
   mi_heap_destroy(worker_heap);
   return true;
@@ -551,18 +574,10 @@ static bool test_free_during_unown(bool from_free) {
     require(!_mi_abandoned_page_unown(worker_page, NULL));
   }
   require(mi_page_all_free(worker_page) && worker_page->qsbr.goal != 0);
-  if (from_free) {
-    require(!mi_page_is_abandoned(worker_page) && mi_page_is_owned(worker_page));
-    require(_mi_page_associated_theap_peek(worker_page) == mi_page_theap(worker_page));
-    require(mi_page_qsbr_is_in_queue(worker_page));
-  }
-  else {
-    require(!mi_page_is_owned(worker_page) && mi_page_is_abandoned_mapped(worker_page));
-    require(!mi_page_qsbr_is_in_queue(worker_page));
-  }
+  require(!mi_page_is_owned(worker_page) && mi_page_is_abandoned_mapped(worker_page));
+  require(!mi_page_qsbr_is_in_queue(worker_page) && _mi_page_associated_theap_peek(worker_page) == NULL);
   qsbr_complete();
-  if (from_free) { mi_heap_collect(worker_heap, true); }
-           else { _mi_heap_collect_abandoned(worker_heap); }
+  _mi_heap_collect_abandoned(worker_heap);
   require(page_count(worker_heap) == 0);
   mi_heap_destroy(worker_heap);
   return true;
@@ -685,17 +700,21 @@ int main(void) {
   CHECK("delayed lists are per theap with independent heap contexts", test_separate_delayed_lists());
   CHECK_THREADS("full queue retains, unfills, and releases a small page", test_page_free(MI_SMALL_MAX_OBJ_SIZE/2, false));
   CHECK_THREADS("full queue retains, unfills, and releases an automatically full page", test_page_free(MI_SMALL_MAX_OBJ_SIZE+1, false));
-  CHECK_THREADS("full small page is abandoned, reclaimed on last free, and released after exit", test_page_free(MI_SMALL_MAX_OBJ_SIZE/2, true));
-  CHECK_THREADS("automatically full page is abandoned, reclaimed on last free, and released after exit", test_page_free(MI_SMALL_MAX_OBJ_SIZE+1, true));
+  CHECK_THREADS("full small page stays abandoned after a delayed foreign last free", test_page_free(MI_SMALL_MAX_OBJ_SIZE/2, true));
+  CHECK_THREADS("automatically full page stays abandoned after a delayed foreign last free", test_page_free(MI_SMALL_MAX_OBJ_SIZE+1, true));
   CHECK("local reuse starts a new grace period", test_reuse(false));
   CHECK_THREADS("remote reuse starts a new grace period", test_reuse(true));
   CHECK_THREADS("reclaim preserves goal, appends at tail, and stops behind an unfinished head", test_reclaim());
-  CHECK_THREADS("delayed empty arena page is reclaimed despite disabled reclaim", test_reclaim_delayed_empty(64, false));
-  CHECK_THREADS("delayed empty OS page is reclaimed despite disabled reclaim", test_reclaim_delayed_empty(64, true));
-  CHECK_THREADS("delayed empty arena singleton is reclaimed", test_reclaim_delayed_empty(2*MI_MiB, false));
-  CHECK_THREADS("delayed empty OS singleton is reclaimed", test_reclaim_delayed_empty(2*MI_MiB, true));
+  CHECK("origin reclaims a delayed empty arena page despite disabled reclaim", test_reclaim_delayed_empty(64, false, true));
+  CHECK("origin reclaims a delayed empty OS page despite disabled reclaim", test_reclaim_delayed_empty(64, true, true));
+  CHECK("origin reclaims a delayed empty arena singleton", test_reclaim_delayed_empty(2*MI_MiB, false, true));
+  CHECK("origin reclaims a delayed empty OS singleton", test_reclaim_delayed_empty(2*MI_MiB, true, true));
+  CHECK_THREADS("foreign last free leaves a delayed empty arena page abandoned", test_reclaim_delayed_empty(64, false, false));
+  CHECK_THREADS("foreign last free leaves a delayed empty OS page abandoned", test_reclaim_delayed_empty(64, true, false));
+  CHECK_THREADS("foreign last free leaves a delayed empty arena singleton abandoned", test_reclaim_delayed_empty(2*MI_MiB, false, false));
+  CHECK_THREADS("foreign last free leaves a delayed empty OS singleton abandoned", test_reclaim_delayed_empty(2*MI_MiB, true, false));
   CHECK_THREADS("allocation retries when reclaim releases ready empty pages", test_reclaim_ready_pages());
-  CHECK_THREADS("live orphan, origin-only reclaim, last free initializes a receiving thread", test_orphan(64, false, false, false));
+  CHECK_THREADS("live orphan, last free does not initialize a receiving thread", test_orphan(64, false, false, false));
   CHECK_THREADS("live orphan, last free by a thread that released the heap keeps it abandoned", test_orphan(64, false, false, true));
   CHECK_THREADS("live abandoned OS singleton, last free by a thread that released the heap", test_orphan(2*MI_MiB, true, false, true));
   CHECK_THREADS("empty abandoned arena singleton", test_orphan(2*MI_MiB, false, true, false));
