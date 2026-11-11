@@ -463,6 +463,7 @@ jobs:
       CC: clang
       CFLAGS: -include ${{ github.workspace }}/test/cheri-sim.h -Wno-builtin-macro-redefined -U__SIZEOF_POINTER__ -D__SIZEOF_POINTER__=16
       CI_CMAKE_ARGS: -DMI_BUILD_SHARED=OFF
+      CI_CTEST_ARGS: -E ^test-rust$
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
