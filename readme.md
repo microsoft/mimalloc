@@ -27,7 +27,7 @@ without code changes, for example, on dynamically linked ELF-based systems (Linu
 It also includes a way to dynamically override the default allocator in [Windows](#override_on_windows).
 Notable aspects of the design include:
 
-- __small and consistent__: the library is about 12k LOC using simple and
+- __small and consistent__: the core library is about 12k LOC using simple and
   consistent data structures. This makes it very suitable
   to integrate and adapt in other projects. For runtime systems it
   provides hooks for a monotonic _heartbeat_ and deferred freeing (for

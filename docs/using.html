@@ -90,16 +90,16 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('using.html',''
 <div class="contents">
 <div class="textblock"><h3>Build</h3>
 <p>The preferred usage is including <span class="tt">&lt;mimalloc.h&gt;</span>, linking with the shared- or static library, and using the <span class="tt"><a class="el" href="group__malloc.html#gae1dd97b542420c87ae085e822b1229e8" title="Allocate size bytes.">mi_malloc</a></span> API exclusively for allocation. For example, </p><div class="fragment"><div class="line">gcc -o myprogram -lmimalloc myfile.c</div>
-</div><!-- fragment --><p>mimalloc uses only safe OS calls (<span class="tt">mmap</span> and <span class="tt">VirtualAlloc</span>) and can co-exist with other allocators linked to the same program. If you use <span class="tt">cmake</span>, you can simply use: </p><div class="fragment"><div class="line">find_package(mimalloc 2.1 REQUIRED)</div>
+</div><!-- fragment --><p>mimalloc uses only safe OS calls (<span class="tt">mmap</span> and <span class="tt">VirtualAlloc</span>) and can co-exist with other allocators linked to the same program. If you use <span class="tt">cmake</span>, you can simply use: </p><div class="fragment"><div class="line">find_package(mimalloc 1.8 REQUIRED)</div>
 </div><!-- fragment --><p> in your <span class="tt">CMakeLists.txt</span> to find a locally installed mimalloc. Then use either: </p><div class="fragment"><div class="line">target_link_libraries(myapp PUBLIC mimalloc)</div>
 </div><!-- fragment --><p> to link with the shared (dynamic) library, or: </p><div class="fragment"><div class="line">target_link_libraries(myapp PUBLIC mimalloc-<span class="keyword">static</span>)</div>
-</div><!-- fragment --><p> to link with the static library. See <span class="tt">test\CMakeLists.txt</span> for an example.</p>
+</div><!-- fragment --><p> to link with the static library. See the test targets in <span class="tt">CMakeLists.txt</span> for examples.</p>
 <h3>C++</h3>
-<p>For best performance in C++ programs, it is also recommended to override the global <span class="tt">new</span> and <span class="tt">delete</span> operators. For convenience, mimalloc provides <a href="https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h"><span class="tt">mimalloc-new-delete.h</span></a> which does this for you &ndash; just include it in a single(!) source file in your project.</p>
+<p>For best performance in C++ programs, it is also recommended to override the global <span class="tt">new</span> and <span class="tt">delete</span> operators. For convenience, mimalloc provides <a href="https://github.com/microsoft/mimalloc/blob/dev3/include/mimalloc-new-delete.h"><span class="tt">mimalloc-new-delete.h</span></a> which does this for you &ndash; just include it in a single(!) source file in your project.</p>
 <p>In C++, mimalloc also provides the <span class="tt"><a class="el" href="group__cpp.html#structmi__stl__allocator" title="std::allocator implementation for mimalloc for use in STL containers.">mi_stl_allocator</a></span> struct which implements the <span class="tt">std::allocator</span> interface. For example: </p><div class="fragment"><div class="line">std::vector&lt;some_struct, mi_stl_allocator&lt;some_struct&gt;&gt; vec;</div>
 <div class="line">vec.push_back(some_struct());</div>
 </div><!-- fragment --><h3>Statistics</h3>
-<p>You can pass environment variables to print verbose messages (<span class="tt">MIMALLOC_VERBOSE=1</span>) and statistics (<span class="tt">MIMALLOC_SHOW_STATS=1</span>) (in the debug version): </p><div class="fragment"><div class="line">&gt; env MIMALLOC_SHOW_STATS=1 ./cfrac 175451865205073170563711388363</div>
+<p>You can pass environment variables to print verbose messages (<span class="tt">MIMALLOC_VERBOSE=1</span>) and statistics (<span class="tt">MIMALLOC_SHOW_STATS=1</span>). Debug builds provide the most detail. Elevated processes ignore these variables; see <a class="el" href="security.html#security_environment" title="security_environment">Environment Options</a>. </p><div class="fragment"><div class="line">&gt; env MIMALLOC_SHOW_STATS=1 ./cfrac 175451865205073170563711388363</div>
 <div class="line"> </div>
 <div class="line">175451865205073170563711388363 = 374456281610909315237213 * 468551</div>
 <div class="line"> </div>
@@ -150,7 +150,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('using.html',''
 <div class="line">  elapsed   :     0.553 s</div>
 <div class="line">  process   : user: 0.557 s, system: 0.013 s, faults: 29, peak rss: 2.1 MiB, peak commit: 4.8 MiB</div>
 </div><!-- fragment --><p>The above model of using the <span class="tt">mi_</span> prefixed API is not always possible though in existing programs that already use the standard malloc interface, and another option is to override the standard malloc interface completely and redirect all calls to the <em>mimalloc</em> library instead.</p>
-<p>See <a class="el" href="overrides.html" title="Overriding Malloc">Overriding Malloc</a> for more info.</p>
+<p>See <a class="el" href="overrides.html" title="Overriding Standard Malloc">Overriding Standard Malloc</a> for more info.</p>
 <h2>Debug Mode</h2>
 <p>When <em>mimalloc</em> is built using debug mode (<span class="tt">-DCMAKE_BUILD_TYPE=Debug</span>), or with <span class="tt">-DMI_DEBUG=ON</span> explicitly, various checks are done at runtime to catch development errors.</p>
 <ul>

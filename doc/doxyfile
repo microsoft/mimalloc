@@ -42,13 +42,13 @@ DOXYFILE_ENCODING      = UTF-8
 # title of most generated pages and in a few other places.
 # The default value is: My Project.
 
-PROJECT_NAME           = mi-malloc
+PROJECT_NAME           = mimalloc
 
 # The PROJECT_NUMBER tag can be used to enter a project or revision number. This
 # could be handy for archiving the generated documentation or if some version
 # control system is used.
 
-PROJECT_NUMBER         = 3.4/2.4/1.9
+PROJECT_NUMBER         = 3.6.1/2.5.2/1.15.2
 
 # Using the PROJECT_BRIEF tag one can provide an optional one line description
 # for a project that appears at the top of each page and should give viewer a
@@ -387,6 +387,7 @@ MARKDOWN_ID_STYLE      = DOXYGEN
 # The default value is: YES.
 
 AUTOLINK_SUPPORT       = YES
+AUTOLINK_IGNORE_WORDS  = malloc free
 
 # If you use STL classes (i.e. std::string, std::vector, etc.) but do not want
 # to include (a tag file for) the STL sources as input, then you should set this

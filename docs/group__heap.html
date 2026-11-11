@@ -237,8 +237,8 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd><em class="arg">true</em> if <em class="arg">p</em> points to a block in default heap of this thread. Note: expensive function, linear in the pages in the heap. </dd></dl>
-<dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga29589f427702a1b873de8efb884a611b" title="v3: is a pointer pointing into mimalloc managed memory?">mi_any_heap_contains()</a> for <b>v3</b> </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd><em class="arg">true</em> if <em class="arg">p</em> points to a block in default heap of this thread. Note: expensive function, linear in the pages in the heap.</dd></dl>
+<dl class="deprecated"><dt><b><a class="el" href="deprecated.html#_deprecated000002">Deprecated</a></b></dt><dd>In <b>v3</b>, use <a class="el" href="#ga29589f427702a1b873de8efb884a611b" title="v3: is a pointer pointing into mimalloc managed memory?">mi_any_heap_contains()</a>; the legacy name checks all heaps, not just the default heap. </dd></dl>
 
 </div>
 </div>
@@ -1195,8 +1195,8 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd><em class="arg">true</em> if this is a pointer into our heap. This function is relatively fast. </dd></dl>
-<dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga29589f427702a1b873de8efb884a611b" title="v3: is a pointer pointing into mimalloc managed memory?">mi_any_heap_contains()</a> for <b>v3</b>. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd><em class="arg">true</em> if this is a pointer into our heap. This function is relatively fast.</dd></dl>
+<dl class="deprecated"><dt><b><a class="el" href="deprecated.html#_deprecated000001">Deprecated</a></b></dt><dd>In <b>v3</b>, use <a class="el" href="#ga29589f427702a1b873de8efb884a611b" title="v3: is a pointer pointing into mimalloc managed memory?">mi_any_heap_contains()</a>. </dd></dl>
 
 </div>
 </div>

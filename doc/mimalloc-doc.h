@@ -13,19 +13,20 @@ terms of the MIT license. A copy of the license can be found in the file
 This is the API documentation of the
 [mimalloc](https://github.com/microsoft/mimalloc) allocator
 (pronounced "me-malloc") -- a
-general purpose allocator with excellent [performance](bench.html)
+general purpose allocator with excellent \ref bench "performance"
 characteristics. Initially
 developed by Daan Leijen for the run-time systems of the
-[Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages.
+[Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-It is a drop-in replacement for `malloc` and can be used in other programs
-without code changes, for example, on Unix you can use it as:
+It is a drop-in replacement for `malloc/free` and can be used in other programs
+without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.):
 ```
-> LD_PRELOAD=/usr/bin/libmimalloc.so  myprogram
+> LD_PRELOAD=/usr/lib/libmimalloc.so  myprogram
 ```
+It also supports dynamic overriding on \ref override_on_windows "Windows".
 
 Notable aspects of the design include:
-- __small and consistent__: the core library is about 10k LOC using simple and
+- __small and consistent__: the core library is about 12k LOC using simple and
   consistent data structures. This makes it very suitable
   to integrate and adapt in other projects. For runtime systems it
   provides hooks for a monotonic _heartbeat_ and deferred freeing (for
@@ -52,22 +53,25 @@ Notable aspects of the design include:
   due to free list sharding) the memory is marked to the OS as unused (reset or decommitted)
   reducing (real) memory pressure and fragmentation, especially in long running
   programs.
-- __secure__: _mimalloc_ can be built in secure mode, adding guard pages,
+- __secure__: _mimalloc_ can be built in \ref secure_mode "secure mode", adding guard pages,
   randomized allocation, encrypted free lists, etc. to protect against various
   heap vulnerabilities. The performance penalty is usually around 10% on average
   over our benchmarks.
 - __first-class heaps__: efficiently create and use multiple heaps to allocate across different regions.
   A heap can be destroyed at once instead of deallocating each object separately.
-  v3.2+ has true first-class heaps where one can allocate in a heap from any thread.
-- __bounded__: it does not suffer from _blowup_ \[1\], has bounded worst-case allocation
+  v3 has true first-class heaps where one can allocate in a heap from any thread.
+- __bounded__: it does not suffer from _blowup_
+  (see the [references](https://github.com/microsoft/mimalloc/blob/dev3/readme.md#references)), has bounded worst-case allocation
   times (_wcat_) (upto OS primitives), bounded space overhead (~0.2% meta-data, with low
   internal fragmentation), and has no internal points of contention using only atomic operations.
-- __fast__: In our benchmarks (see [below](#bench)),
+- __fast__: In our benchmarks (see \ref bench),
   _mimalloc_ outperforms other leading allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc),
   and often uses less memory. A nice property is that it does consistently well over a wide range
   of benchmarks. There is also good huge OS page support for larger server programs.
 
-There are three maintained versions of mimalloc. All versions are mostly equal except for
+## Versions
+
+There are three maintained versions of mimalloc. These are mostly equal except for
 how the OS memory is handled. New development is mostly on v3, while v1 and v2 are maintained
 with security and bug fixes.
 
@@ -75,16 +79,19 @@ with security and bug fixes.
         memory between threads. On certain large workloads this version may use
         (much) less memory. Also supports true first-class heaps (that can allocate from any thread)
         and has more efficient heap-walking (for the CPython GC for example).
-        (release tags: `v3.4.x`, development branch `dev3`).
-- __v2__ __stable__: Uses thread-local segments to reduce fragmentation. (release tags: `v2.4.x`, development branch `dev2`)
-- __v1__ __legacy__: initial design of mimalloc (release tags: `v1.9.x`, development branch `dev`). Send PR's against this version if possible.
+        (release tags: `v3.x`, development branch `dev3`).
+- __v2__ __stable legacy__: Uses thread-local segments to reduce fragmentation.
+  (release tags: `v2.x`, development branches `dev2` and `main`).
+- __v1__ __legacy__: initial design of mimalloc (release tags: `v1.x`, development branch `dev`).
+  Send PRs against this version if possible, and otherwise against `dev3`.
+
+## Further Information
 
 You can read more on the design of mimalloc in the
 [technical report](https://www.microsoft.com/en-us/research/publication/mimalloc-free-list-sharding-in-action)
 which also has detailed benchmark results.
-To learn more about the internal implementation of mimalloc, see [include/mimalloc/types.h](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc/types.h).
-
-Further information:
+To learn more about the internal implementation of mimalloc, see
+[include/mimalloc/types.h](https://github.com/microsoft/mimalloc/blob/dev3/include/mimalloc/types.h).
 
 - \ref build
 - \ref using
@@ -96,6 +103,7 @@ Further information:
 - \ref profiling_guide
 - \ref tools
 - \ref bench
+- \ref deprecated
 
 &nbsp;
 
@@ -719,14 +727,14 @@ bool mi_any_heap_contains(const void* p);
 /// @param p The pointer to check.
 /// @returns \a true if this is a pointer into our heap.
 /// This function is relatively fast.
-/// @see mi_any_heap_contains() for __v3__.
+/// @deprecated In __v3__, use mi_any_heap_contains().
 bool mi_is_in_heap_region(const void* p);
 
 /// __v1__,__v2__: Check if any pointer is part of the default heap of this thread.
 /// @param p   Any pointer -- not required to be previously allocated by us.
 /// @returns \a true if \a p points to a block in default heap of this thread.
 /// Note: expensive function, linear in the pages in the heap.
-/// @see mi_any_heap_contains() for __v3__
+/// @deprecated In __v3__, use mi_any_heap_contains(); the legacy name checks all heaps, not just the default heap.
 bool mi_check_owned(const void* p);
 
 /// __v1__,__v2__: Does a heap contain a pointer to a previously allocated block?
@@ -1395,7 +1403,7 @@ void mi_process_info_print_out(mi_output_fun* out, void* arg);
 void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults);
 
 
-/// Deprecated
+/// @deprecated Use mi_stats_print_out() with \a NULL for the default output.
 /// @param out Ignored, outputs to the registered output function or stderr by default.
 ///
 /// Most detailed when using a debug build.
@@ -1508,9 +1516,11 @@ void mi_subproc_heap_stats_print_out(mi_subproc_id_t subproc_id, mi_output_fun* 
 char*  mi_stats_as_json( mi_stats_t* stats, size_t buf_size, char* buf);
 
 /// __v1__,__v2__: Reset statistics.
+/// @deprecated In __v3__, use the \ref stats "heap and subprocess statistics APIs".
 void mi_stats_reset(void);
 
 /// __v1__,__v2__: Merge thread local statistics with the main statistics and reset.
+/// @deprecated In __v3__, use the \ref stats "heap and subprocess statistics APIs".
 void mi_stats_merge(void);
 
 /// \}
@@ -2084,6 +2094,22 @@ on Windows to build with the `clang-cl` compiler directly:
 > cmake ../.. -G "Visual Studio 17 2022" -T ClangCl
 ```
 
+## Emscripten
+
+Build for WebAssembly with [Emscripten](https://emscripten.org) using `emcmake`.
+Add `-pthread` to the compiler flags for a multi-threaded build. Tests run under `node`:
+
+```
+> emcmake cmake ../.. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-pthread
+> cmake --build .
+> ctest
+```
+
+When linking, use `-sALLOW_MEMORY_GROWTH`, as mimalloc reserves arena memory up front.
+This option is added automatically when linking with the CMake target or `pkg-config`.
+Also use `-pthread` if mimalloc was built with it.
+Under `node`, pass host environment variables with `-sNODE_HOST_ENV`, or set `ENV`
+in the JavaScript module. The \ref security_environment "environment policy" still applies.
 
 ## Single Source
 
@@ -2106,7 +2132,7 @@ mimalloc uses only safe OS calls (`mmap` and `VirtualAlloc`) and can co-exist
 with other allocators linked to the same program.
 If you use `cmake`, you can simply use:
 ```
-find_package(mimalloc 2.1 REQUIRED)
+find_package(mimalloc 1.8 REQUIRED)
 ```
 in your `CMakeLists.txt` to find a locally installed mimalloc. Then use either:
 ```
@@ -2116,12 +2142,12 @@ to link with the shared (dynamic) library, or:
 ```
 target_link_libraries(myapp PUBLIC mimalloc-static)
 ```
-to link with the static library. See `test\CMakeLists.txt` for an example.
+to link with the static library. See the test targets in `CMakeLists.txt` for examples.
 
 ### C++
 For best performance in C++ programs, it is also recommended to override the
 global `new` and `delete` operators. For convenience, mimalloc provides
-[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
+[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/dev3/include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
 
 In C++, mimalloc also provides the `mi_stl_allocator` struct which implements the `std::allocator`
 interface. For example:
@@ -2133,7 +2159,8 @@ vec.push_back(some_struct());
 ### Statistics
 
 You can pass environment variables to print verbose messages (`MIMALLOC_VERBOSE=1`)
-and statistics (`MIMALLOC_SHOW_STATS=1`) (in the debug version):
+and statistics (`MIMALLOC_SHOW_STATS=1`). Debug builds provide the most detail.
+Elevated processes ignore these variables; see \ref security_environment "Environment Options".
 ```
 > env MIMALLOC_SHOW_STATS=1 ./cfrac 175451865205073170563711388363
 
@@ -2209,7 +2236,7 @@ When _mimalloc_ is built using debug mode (`-DCMAKE_BUILD_TYPE=Debug`), or with
 
 You can set further options either programmatically (using mi_option_set(), see \ref options), or via environment variables.
 Elevated processes ignore all environment options. Secure builds also restrict which environment
-options are accepted; see \ref security_environment.
+options are accepted; see \ref security_environment "Environment Options".
 
 Common options:
 
@@ -2238,15 +2265,17 @@ Advanced options:
 
 Further options for large workloads and services:
 
-- `MIMALLOC_ALLOW_THP=1`: By default always allow transparent huge pages (THP) on Linux systems. On Android only this is
-   by default off. When set to `0`, THP is disabled for the process that mimalloc runs in.
-   In mimalloc v3.2+, If enabled, mimalloc also sets
-   the `MIMALLOC_MINIMAL_PURGE_SIZE` to 2MiB to avoid potentially breaking up transparent huge pages.
+- `MIMALLOC_ALLOW_THP=[0,1,2]`: When set to `0`, transparent huge pages (THP) are disabled
+   for the process. Otherwise they are enabled when the [OS THP policy][linux-thp]
+   permits them (`[always]` or `[madvise]`). With `2` (the default on Linux), mimalloc v3
+   also uses a default minimal purge size of 2 MiB to avoid splitting transparent
+   huge pages during purging. This can improve performance but increase resident memory.
+   Android defaults to `0` to reduce resident memory.
 - `MIMALLOC_USE_NUMA_NODES=N`: pretend there are at most `N` NUMA nodes. If not set, the actual NUMA nodes are detected
    at runtime. Setting `N` to 1 may avoid problems in some virtual environments. Also, setting it to a lower number than
    the actual NUMA nodes is fine and will only cause threads to potentially allocate more memory across actual NUMA
    nodes (but this can happen in any case as NUMA local allocation is always a best effort but not guaranteed).
-- `MIMALLOC_ALLOW_LARGE_OS_PAGES=0`: Set to 1 to use large OS pages (usually 2MiB) when available; for some workloads this can
+- `MIMALLOC_ALLOW_LARGE_OS_PAGES=0`: Set to 1 to use large OS pages (2 or 4 MiB) when available; for some workloads this can
    significantly improve performance. However, large OS pages cannot be purged or shared with other processes so may lead
    to increased memory usage in some cases.
    Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
@@ -2268,14 +2297,40 @@ Use caution when using `fork` in combination with either large or huge OS pages:
 for all pages in the original process including the huge OS pages. When any memory is now written in that area, the
 OS will copy the entire 1GiB huge page (or 2MiB large page) which can cause the memory usage to grow in large increments.
 
+[linux-thp]: https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/7/html/performance_tuning_guide/sect-red_hat_enterprise_linux-performance_tuning_guide-configuring_transparent_huge_pages
 [linux-huge]: https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/5/html/tuning_and_optimizing_red_hat_enterprise_linux_for_oracle_9i_and_10g_databases/sect-oracle_9i_and_10g_tuning_guide-large_memory_optimization_big_pages_and_huge_pages-configuring_huge_pages_in_red_hat_enterprise_linux_4_or_5
 [windows-huge]: https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/enable-the-lock-pages-in-memory-option-windows?view=sql-server-2017
 
 */
 
-/*! \page overrides Overriding Malloc
+/*! \page overrides Overriding Standard Malloc
 
 Overriding the standard `malloc` (and `new`) can be done either _dynamically_ or _statically_.
+
+## Static override
+
+On Unix-like systems, link the final program with the single object file
+`mimalloc.o` to override the standard malloc interface. Link it as the first object
+so that its definitions take precedence over library archives:
+
+```
+> gcc -o myprogram mimalloc.o myfile1.c ...
+```
+
+Another approach, available on all platforms, is to link statically and include
+[`mimalloc-override.h`](https://github.com/microsoft/mimalloc/blob/dev3/include/mimalloc-override.h)
+in each source file to redefine `malloc` and related functions. This is reliable
+only when all sources are under your control; otherwise pointers from different
+heaps may be mixed.
+
+On Windows, static overriding requires the static CRT release runtime (`/MT`) and
+the `mimalloc(-debug).obj` object, linked before the CRT library. The debug CRT
+(`/MTd`) is not supported. Static overrides cover the `malloc` family, `_aligned_*`,
+`_expand`, `_msize`, `_strdup`, and `_wcsdup`.
+Other CRT functions returning allocated memory, including `_dupenv_s`,
+`_getcwd(NULL,...)`, `_fullpath(NULL,...)`, and `_tempnam`, still use the CRT heap;
+their results cannot be freed with the overridden `free`.
+Use dynamic overriding or the `mi_` equivalents, such as mi_dupenv_s(), where available.
 
 ## Dynamic override
 
@@ -2313,18 +2368,18 @@ Note that certain security restrictions may apply when doing this from
 the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).
 
 
+\anchor override_on_windows
+
 ### Dynamic Override on Windows
 
-<span id="override_on_windows">Dynamically overriding on mimalloc on Windows</span>
-is robust and has the particular advantage to be able to redirect all malloc/free calls
-that go through the (dynamic) C runtime allocator, including those from other DLL's or
-libraries. As it intercepts all allocation calls on a low level, it can be used reliably
-on large programs that include other 3rd party components.
+We use a separate redirection DLL to redirect malloc/free calls that go through
+the dynamic C runtime allocator, including calls from other DLLs and libraries.
+This low-level interception can be used in large programs containing third-party components.
 There are four requirements to make the overriding work well:
 
 1. Use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
 
-2. Link your program explicitly with the `mimalloc.lib` export library for the `mimalloc.dll`.
+2. Link your program explicitly with the `mimalloc.dll.lib` export library for the `mimalloc.dll`.
    (which must be compiled with `-DMI_OVERRIDE=ON`, which is the default though).
    To ensure the `mimalloc.dll` is actually loaded at run-time it is easiest
    to insert some call to the mimalloc API in the `main` function, like `mi_version()`
@@ -2343,37 +2398,20 @@ There are four requirements to make the overriding work well:
 
 For best performance on Windows with C++, it
 is also recommended to also override the `new`/`delete` operations (by including
-[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/main/include/mimalloc-new-delet.h)
+[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/dev3/include/mimalloc-new-delete.h)
 a single(!) source file in your project).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
 overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully
 redirected.
 
-For different platforms than x64, you may need a specific [redirection dll](bin).
+For different platforms than x64, you may need a specific
+[redirection DLL](https://github.com/microsoft/mimalloc/tree/dev3/bin).
 Furthermore, we cannot always re-link an executable or ensure `mimalloc.dll` comes
-first in the import table. In such cases the [`minject`](bin) tool can be used
+first in the import table. In such cases the
+[`minject`](https://github.com/microsoft/mimalloc/tree/dev3/bin) tool can be used
 to patch the executable's import tables.
 
-
-## Static override
-
-On Unix-like systems, you can also statically link with _mimalloc_ to override the standard
-malloc interface. The recommended way is to link the final program with the
-_mimalloc_ single object file (`mimalloc.o`). We use
-an object file instead of a library file as linkers give preference to
-that over archives to resolve symbols. To ensure that the standard
-malloc interface resolves to the _mimalloc_ library, link it as the first
-object file. For example:
-```
-> gcc -o myprogram mimalloc.o  myfile1.c ...
-```
-
-Another way to override statically that works on all platforms, is to
-link statically to mimalloc (as shown in the introduction) and include a
-header file in each source file that re-defines `malloc` etc. to `mi_malloc`.
-This is provided by [`mimalloc-override.h`](https://github.com/microsoft/mimalloc/blob/main/include/mimalloc-override.h). This only works reliably though if all sources are
-under your control or otherwise mixing of pointers from different heaps may occur!
 
 ## List of Overrides:
 
@@ -2450,7 +2488,9 @@ void   _free_dbg(void* p, int block_type);
 
 There are various build options to make mimalloc more secure.
 
-## Environment Options {#security_environment}
+\anchor security_environment
+
+## Environment Options
 
 With `-DMI_SECURE_ENV=ON`, only `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, and
 `MIMALLOC_ALLOW_THP` are accepted from the environment -- all other options are ignored.
@@ -2458,11 +2498,14 @@ With `-DMI_SECURE_ENV=ON`, only `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, and
 This is by default enabled for \ref secure_mode "secure mode", \ref memory_tagging "MTE", and \ref pointer_authentication "PAC".
 This can be overridden by explicitly building
 with `-DMI_SECURE_ENV=OFF`. Note: even with `OFF`, an elevated process ignores
-all environment options. Moreover, a program build with secure mode always ignores
-settings for large- or huge OS pages (as pinned memory cannot be guarded).
+all environment options. Moreover, on platforms with guard pages, a program built
+with secure mode always ignores settings for large or huge OS pages
+(as pinned memory cannot be guarded).
 You can still set options programmatically for trusted programs.
 
-## Secure Mode {#secure_mode}
+\anchor secure_mode
+
+## Secure Mode
 
 _mimalloc_ can be built in secure mode using `-DMI_SECURE=OFF|MINIMAL|CHECKED|ON|FULL`
 with CMake. These modes enable software mitigations to make mimalloc more robust
@@ -2514,7 +2557,9 @@ large heaps can reach the maximum VMA limit on Linux.
 
 As always, evaluate with care as part of an overall security strategy as all of the above are mitigations but not guarantees.
 
-## Memory Tagging (MTE) {#memory_tagging}
+\anchor memory_tagging
+
+## Memory Tagging (MTE)
 
 (__v3__ only, experimental)
 
@@ -2571,7 +2616,9 @@ so combining the two is generally unnecessary.
 
 [MTE]: https://support.arm.com/documentation/108035/0100/How-does-MTE-work-
 
-## Pointer Authentication (PAC) {#pointer_authentication}
+\anchor pointer_authentication
+
+## Pointer Authentication (PAC)
 
 (__v3__ only, experimental)
 
@@ -2606,7 +2653,9 @@ Older cores such as Cortex-A76/A78/X1, AWS Graviton2, Ampere Altra, and Raspberr
 
 [PAC]: https://developer.arm.com/documentation/102433/0200/Return-oriented-programming
 
-## Pointer Capabilities (CHERI) {#pointer_capabilities}
+\anchor pointer_capabilities
+
+## Pointer Capabilities (CHERI)
 
 (__v3__ only, experimental)
 
@@ -2664,7 +2713,8 @@ In source code:
   The C++ `mimalloc-new-delete.h` sized overrides use these too.
   Use mi_free_csize_nonnull() when the pointer is known to be non-NULL.
 - Use mi_malloc_small() when the requested size is at most `MI_SMALL_SIZE_MAX`
-  (1 KiB). Use mi_free_small() for pointers returned by mi_malloc_small(), and
+  (128 machine words, or 1 KiB on a 64-bit system).
+  Use mi_free_small() for pointers returned by mi_malloc_small(), and
   mi_free_small_nonnull() when the pointer is known to be non-NULL.
 
 For runtimes and compilers, such as Koka, Lean, or Rust, prefer the constant-size
@@ -2688,7 +2738,7 @@ This can be invaluable to catch buffer-overflow bugs in large programs. However,
 allocated with a guard page takes at least 8 KiB memory for the guard page and its alignment. As such, allocating
 a guard page for every allocation may be too expensive both in terms of memory, and in terms of performance with
 many system calls. Therefore, there are various environment variables (and options) to tune this.
-When environment options are restricted (see \ref security_environment), use mi_option_set() instead.
+When environment options are restricted (see \ref security_environment "Environment Options"), use mi_option_set() instead.
 
 - `MIMALLOC_GUARDED_SAMPLE_RATE=N`: Set the sample rate to `N` (by default 0). This mode places a guard page
   behind a suitable object about every `N` requested bytes (per thread). Since the performance in guarded mode without placing
@@ -2775,17 +2825,20 @@ it can also be activated through the environment:
 /*! \page tools Tools
 
 Generally, we recommend using the standard allocator with memory tracking tools, but mimalloc
-can also be build to support the [address sanitizer][asan] or the excellent [Valgrind] tool.
-Moreover, it can be build to support Windows event tracing ([ETW]).
+can also be built to support the [address sanitizer][asan] or the excellent [Valgrind] tool.
+Moreover, it can be built to support Windows event tracing ([ETW]).
 This has a small performance overhead but does allow detecting memory leaks and byte-precise
 buffer overflows directly on final executables. See also the `test/test-wrong.c` file to test with various tools.
+Select a tool with `-DMI_TRACK=ASAN|VALGRIND|ETW`.
+The older `MI_TRACK_ASAN`, `MI_TRACK_VALGRIND`, and `MI_TRACK_ETW` options remain
+accepted as deprecated aliases.
 
 ## Valgrind
 
-To build with [valgrind] support, use the `MI_TRACK_VALGRIND=ON` cmake option:
+To build with [valgrind] support, use the `MI_TRACK=VALGRIND` CMake option:
 
 ```
-> cmake ../.. -DMI_TRACK_VALGRIND=ON
+> cmake ../.. -DMI_TRACK=VALGRIND
 ```
 
 This can also be combined with secure mode or debug mode.
@@ -2820,14 +2873,14 @@ Valgrind support is in its initial development -- please report any issues.
 
 ## ASAN
 
-To build with the address sanitizer, use the `-DMI_TRACK_ASAN=ON` cmake option:
+To build with the address sanitizer, use the `-DMI_TRACK=ASAN` CMake option:
 
 ```
-> cmake ../.. -DMI_TRACK_ASAN=ON
+> cmake ../.. -DMI_TRACK=ASAN
 ```
 
 This can also be combined with secure mode or debug mode.
-You can then run your programs as:'
+You can then run your programs as:
 
 ```
 > ASAN_OPTIONS=verbosity=1 <myprogram>
@@ -2849,8 +2902,8 @@ Address sanitizer support is in its initial development -- please report any iss
 
 ## ETW
 
-Event tracing for Windows ([ETW]) provides a high performance way to capture all allocations though
-mimalloc and analyze them later. To build with ETW support, use the `-DMI_TRACK_ETW=ON` cmake option.
+Event tracing for Windows ([ETW]) provides a high performance way to capture all allocations through
+mimalloc and analyze them later. To build with ETW support, use the `-DMI_TRACK=ETW` CMake option.
 
 You can then capture an allocation trace using the Windows performance recorder (WPR), using the
 `src/prim/windows/etw-mimalloc.wprp` profile. In an admin prompt, you can use:
@@ -2867,21 +2920,4 @@ use a tool like [TraceControl] that is specialized for analyzing mimalloc traces
 
 */
 
-/*! \page bench Performance
 
-We tested _mimalloc_ against many other top allocators over a wide
-range of benchmarks, ranging from various real world programs to
-synthetic benchmarks that see how the allocator behaves under more
-extreme circumstances.
-
-In our benchmarks, _mimalloc_ always outperforms all other leading
-allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc) (Jan 2021),
-and usually uses less memory (up to 25% more in the worst case).
-A nice property is that it does *consistently* well over the wide
-range of benchmarks.
-
-See the [Performance](https://github.com/microsoft/mimalloc#Performance)
-section in the _mimalloc_ repository for benchmark results,
-or the the technical report for detailed benchmark results.
-
-*/

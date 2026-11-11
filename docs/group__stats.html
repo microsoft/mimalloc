@@ -117,7 +117,6 @@ Functions</h2></td></tr>
 <tr class="memitem:ga7d862c2affd5790381da14eb102a364d" id="r_ga7d862c2affd5790381da14eb102a364d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga7d862c2affd5790381da14eb102a364d">mi_process_info</a> (size_t *elapsed_msecs, size_t *user_msecs, size_t *system_msecs, size_t *current_rss, size_t *peak_rss, size_t *current_commit, size_t *peak_commit, size_t *page_faults)</td></tr>
 <tr class="memdesc:ga7d862c2affd5790381da14eb102a364d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Return process information (time and memory usage).  <br /></td></tr>
 <tr class="memitem:ga2d126e5c62d3badc35445e5d84166df2" id="r_ga2d126e5c62d3badc35445e5d84166df2"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga2d126e5c62d3badc35445e5d84166df2">mi_stats_print</a> (void *out)</td></tr>
-<tr class="memdesc:ga2d126e5c62d3badc35445e5d84166df2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Deprecated.  <br /></td></tr>
 <tr class="memitem:ga537f13b299ddf801e49a5a94fde02c79" id="r_ga537f13b299ddf801e49a5a94fde02c79"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga537f13b299ddf801e49a5a94fde02c79">mi_stats_print_out</a> (<a class="el" href="group__extended.html#gadf31cea7d0332a81c8b882cbbdbadb8d">mi_output_fun</a> *out, void *arg)</td></tr>
 <tr class="memdesc:ga537f13b299ddf801e49a5a94fde02c79"><td class="mdescLeft">&#160;</td><td class="mdescRight">Print statistics of the current subprocess aggregated over all its heaps.  <br /></td></tr>
 <tr class="memitem:gab1dac8476c46cb9eecab767eb40c1525" id="r_gab1dac8476c46cb9eecab767eb40c1525"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#gab1dac8476c46cb9eecab767eb40c1525">mi_thread_stats_print_out</a> (<a class="el" href="group__extended.html#gadf31cea7d0332a81c8b882cbbdbadb8d">mi_output_fun</a> *out, void *arg)</td></tr>
@@ -226,7 +225,7 @@ initialize with `MI_STAT_VERSION (so linking dynamically with a separately compi
 <div class="line"><span class="keywordflow">if</span> (<a class="code hl_function" href="#gaa26d5060ad21b1331a150bb92f6f7086">mi_stats_get</a>(&amp;stats)) {</div>
 <div class="line">  ...</div>
 <div class="line">}</div>
-<div class="ttc" id="agroup__stats_html_ga961d0f9f0327ebc9bd8a0b84f6dcb410"><div class="ttname"><a href="#ga961d0f9f0327ebc9bd8a0b84f6dcb410">mi_stats_t_decl</a></div><div class="ttdeci">#define mi_stats_t_decl(name)</div><div class="ttdoc">Helper to declare a properly initialized mi_stats_t() local variable as name where the size and versi...</div><div class="ttdef"><b>Definition</b> mimalloc-doc.h:1351</div></div>
+<div class="ttc" id="agroup__stats_html_ga961d0f9f0327ebc9bd8a0b84f6dcb410"><div class="ttname"><a href="#ga961d0f9f0327ebc9bd8a0b84f6dcb410">mi_stats_t_decl</a></div><div class="ttdeci">#define mi_stats_t_decl(name)</div><div class="ttdoc">Helper to declare a properly initialized mi_stats_t() local variable as name where the size and versi...</div><div class="ttdef"><b>Definition</b> mimalloc-doc.h:1359</div></div>
 <div class="ttc" id="agroup__stats_html_gaa26d5060ad21b1331a150bb92f6f7086"><div class="ttname"><a href="#gaa26d5060ad21b1331a150bb92f6f7086">mi_stats_get</a></div><div class="ttdeci">bool mi_stats_get(mi_stats_t *stats)</div><div class="ttdoc">Get the statistics for the current subprocess aggregated over all its heaps.</div></div>
 </div><!-- fragment --> 
 </div>
@@ -647,6 +646,7 @@ initialize with `MI_STAT_VERSION (so linking dynamically with a separately compi
 </div><div class="memdoc">
 
 <p><b>v1</b>,<b>v2</b>: Merge thread local statistics with the main statistics and reset. </p>
+<dl class="deprecated"><dt><b><a class="el" href="deprecated.html#_deprecated000008">Deprecated</a></b></dt><dd>In <b>v3</b>, use the <a class="el" href="group__stats.html" title="Statistics">heap and subprocess statistics APIs</a>. </dd></dl>
 
 </div>
 </div>
@@ -664,8 +664,7 @@ initialize with `MI_STAT_VERSION (so linking dynamically with a separately compi
         </tr>
       </table>
 </div><div class="memdoc">
-
-<p>Deprecated. </p>
+<dl class="deprecated"><dt><b><a class="el" href="deprecated.html#_deprecated000005">Deprecated</a></b></dt><dd>Use <a class="el" href="#ga537f13b299ddf801e49a5a94fde02c79" title="Print statistics of the current subprocess aggregated over all its heaps.">mi_stats_print_out()</a> with <em class="arg">NULL</em> for the default output. </dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">out</td><td>Ignored, outputs to the registered output function or stderr by default.</td></tr>
@@ -723,6 +722,7 @@ initialize with `MI_STAT_VERSION (so linking dynamically with a separately compi
 </div><div class="memdoc">
 
 <p><b>v1</b>,<b>v2</b>: Reset statistics. </p>
+<dl class="deprecated"><dt><b><a class="el" href="deprecated.html#_deprecated000007">Deprecated</a></b></dt><dd>In <b>v3</b>, use the <a class="el" href="group__stats.html" title="Statistics">heap and subprocess statistics APIs</a>. </dd></dl>
 
 </div>
 </div>
@@ -952,7 +952,7 @@ initialize with `MI_STAT_VERSION (so linking dynamically with a separately compi
         </tr>
       </table>
 </div><div class="memdoc">
-<dl class="deprecated"><dt><b><a class="el" href="deprecated.html#_deprecated000003">Deprecated</a></b></dt><dd>Print the current default theap's statistics, then merge them into its parent heap. <em class="arg">out</em> may be <em class="arg">NULL</em> for the default output. Prefer <a class="el" href="#gafea365d7842f5f5bc1f235bbc303d585" title="v3: Show the heap statistics as JSON.">mi_heap_stats_print_out()</a>. </dd></dl>
+<dl class="deprecated"><dt><b><a class="el" href="deprecated.html#_deprecated000006">Deprecated</a></b></dt><dd>Print the current default theap's statistics, then merge them into its parent heap. <em class="arg">out</em> may be <em class="arg">NULL</em> for the default output. Prefer <a class="el" href="#gafea365d7842f5f5bc1f235bbc303d585" title="v3: Show the heap statistics as JSON.">mi_heap_stats_print_out()</a>. </dd></dl>
 
 </div>
 </div>

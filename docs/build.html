@@ -120,7 +120,13 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('build.html',''
 <div class="fragment"><div class="line">&gt; cmake --build . --config=Release</div>
 </div><!-- fragment --><p>You can also install the <a href="https://learn.microsoft.com/en-us/cpp/build/clang-support-msbuild?view=msvc-170#install-1">LLVM toolset</a> on Windows to build with the <span class="tt">clang-cl</span> compiler directly:</p>
 <div class="fragment"><div class="line">&gt; cmake ../.. -G <span class="stringliteral">&quot;Visual Studio 17 2022&quot;</span> -T ClangCl</div>
-</div><!-- fragment --><h2>Single Source</h2>
+</div><!-- fragment --><h2>Emscripten</h2>
+<p>Build for WebAssembly with <a href="https://emscripten.org">Emscripten</a> using <span class="tt">emcmake</span>. Add <span class="tt">-pthread</span> to the compiler flags for a multi-threaded build. Tests run under <span class="tt">node</span>:</p>
+<div class="fragment"><div class="line">&gt; emcmake cmake ../.. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-pthread</div>
+<div class="line">&gt; cmake --build .</div>
+<div class="line">&gt; ctest</div>
+</div><!-- fragment --><p>When linking, use <span class="tt">-sALLOW_MEMORY_GROWTH</span>, as mimalloc reserves arena memory up front. This option is added automatically when linking with the CMake target or <span class="tt">pkg-config</span>. Also use <span class="tt">-pthread</span> if mimalloc was built with it. Under <span class="tt">node</span>, pass host environment variables with <span class="tt">-sNODE_HOST_ENV</span>, or set <span class="tt">ENV</span> in the JavaScript module. The <a class="el" href="security.html#security_environment" title="security_environment">environment policy</a> still applies.</p>
+<h2>Single Source</h2>
 <p>You can also directly build the single <span class="tt">src/static.c</span> file as part of your project without needing <span class="tt">cmake</span> at all. Make sure to also add the mimalloc <span class="tt">include</span> directory to the include path. </p>
 </div></div><!-- contents -->
 </div><!-- PageDoc -->

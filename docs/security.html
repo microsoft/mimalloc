@@ -89,12 +89,10 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('security.html'
 </div><!--header-->
 <div class="contents">
 <div class="textblock"><p>There are various build options to make mimalloc more secure.</p>
-<h2 class="doxsection"><a class="anchor" id="security_environment"></a>
-Environment Options</h2>
+<p><a class="anchor" id="security_environment"></a> </p><h2>Environment Options</h2>
 <p>With <span class="tt">-DMI_SECURE_ENV=ON</span>, only <span class="tt">MIMALLOC_SHOW_STATS</span>, <span class="tt">MIMALLOC_VERBOSE</span>, and <span class="tt">MIMALLOC_ALLOW_THP</span> are accepted from the environment &ndash; all other options are ignored.</p>
-<p>This is by default enabled for <a class="el" href="#secure_mode" title="Secure Mode">secure mode</a>, <a class="el" href="#memory_tagging" title="Memory Tagging (MTE)">MTE</a>, and <a class="el" href="#pointer_authentication" title="Pointer Authentication (PAC)">PAC</a>. This can be overridden by explicitly building with <span class="tt">-DMI_SECURE_ENV=OFF</span>. Note: even with <span class="tt">OFF</span>, an elevated process ignores all environment options. Moreover, a program build with secure mode always ignores settings for large- or huge OS pages (as pinned memory cannot be guarded). You can still set options programmatically for trusted programs.</p>
-<h2 class="doxsection"><a class="anchor" id="secure_mode"></a>
-Secure Mode</h2>
+<p>This is by default enabled for <a class="el" href="#secure_mode" title="secure_mode">secure mode</a>, <a class="el" href="#memory_tagging" title="memory_tagging">MTE</a>, and <a class="el" href="#pointer_authentication" title="pointer_authentication">PAC</a>. This can be overridden by explicitly building with <span class="tt">-DMI_SECURE_ENV=OFF</span>. Note: even with <span class="tt">OFF</span>, an elevated process ignores all environment options. Moreover, on platforms with guard pages, a program built with secure mode always ignores settings for large or huge OS pages (as pinned memory cannot be guarded). You can still set options programmatically for trusted programs.</p>
+<p><a class="anchor" id="secure_mode"></a> </p><h2>Secure Mode</h2>
 <p><em>mimalloc</em> can be built in secure mode using <span class="tt">-DMI_SECURE=OFF|MINIMAL|CHECKED|ON|FULL</span> with CMake. These modes enable software mitigations to make mimalloc more robust against exploits.</p>
 <p>With <span class="tt">MINIMAL</span>, only mitigations with a small performance impact are added (usually 1-3%):</p>
 <ul>
@@ -106,7 +104,7 @@ Secure Mode</h2>
 </ul>
 <p>With <span class="tt">CHECKED</span> (the default with <span class="tt">-DMI_MTE</span> or <span class="tt">-DMI_PAC</span>), the performance and memory impact is still relatively small (usually less than 10%, but can be 2x slower):</p>
 <ul>
-<li>Free list pointers are encoded with per-page keys to prevent overwrites with a known pointer and detect corruption. With <a class="el" href="#pointer_authentication" title="Pointer Authentication (PAC)">PAC</a>, hardware keys can be used.</li>
+<li>Free list pointers are encoded with per-page keys to prevent overwrites with a known pointer and detect corruption. With <a class="el" href="#pointer_authentication" title="pointer_authentication">PAC</a>, hardware keys can be used.</li>
 <li>Pointers passed to <a class="el" href="group__malloc.html#gaf2c7b89c327d1f60f59e68b9ea644d95" title="Free previously allocated memory.">mi_free()</a> and related functions are validated. Pointers that do not originate from mimalloc are ignored, and interior pointers are adjusted to the start of their block.</li>
 <li>Free lists are initialized in random order, and allocation randomly chooses between extension and reuse within a page to make allocation order less predictable.</li>
 <li>Reuse of freed blocks is delayed until one eighth of a page is free, and a random number of recently freed blocks is held back to make reclaiming a just-freed block harder.</li>
@@ -121,8 +119,7 @@ Secure Mode</h2>
 </ul>
 <p>The <span class="tt">FULL</span> mode additionally places a guard page at the end of each mimalloc page (normally 64 KiB) and checks for byte-precise heap block overflows when freeing. This mode is generally not recommended because it costs more time and memory, and large heaps can reach the maximum VMA limit on Linux.</p>
 <p>As always, evaluate with care as part of an overall security strategy as all of the above are mitigations but not guarantees.</p>
-<h2 class="doxsection"><a class="anchor" id="memory_tagging"></a>
-Memory Tagging (MTE)</h2>
+<p><a class="anchor" id="memory_tagging"></a> </p><h2>Memory Tagging (MTE)</h2>
 <p>(<b>v3</b> only, experimental)</p>
 <p>On recent arm64 hardware with the memory tagging extension (<a href="https://support.arm.com/documentation/108035/0100/How-does-MTE-work-">MTE</a>), build with <span class="tt">-DMI_MTE=ON</span> to give heap blocks randomized memory tags. Memory can only be accessed through a pointer with the matching tag. Adjacent blocks almost always receive different tags, and freed blocks are retagged, causing most double-free and use-after-free accesses to fault. Tags are chosen from 15 values, excluding the tags of neighboring blocks. Blocks up to 512 KiB are tagged; larger blocks use a trailing guard page because tagging takes time proportional to the block size.</p>
 <p>Performance depends on the hardware and workload. On an M5, an MTE build is usually within about 15% of a release build, but can be 2 to 3x slower. <span class="tt">-DMI_MTE=ON</span> requires CPU and OS support at runtime and aborts at initialization otherwise. On Linux, this also requires enabling tag checking for all threads. <span class="tt">-DMI_MTE=PREFER</span> uses tagging when available and otherwise runs untagged, with performance close to a regular release build. MTE builds have an <span class="tt">-mte</span> library suffix, for example <span class="tt">mimalloc-mte.o</span>.</p>
@@ -139,8 +136,7 @@ Memory Tagging (MTE)</h2>
 <div class="line">        -DMI_BUILD_SHARED=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF ../..</div>
 </div><!-- fragment --> Link <span class="tt">libmimalloc-mte.a</span> into the app and use the hardened-process entitlements.</li>
 </ul>
-<h2 class="doxsection"><a class="anchor" id="pointer_authentication"></a>
-Pointer Authentication (PAC)</h2>
+<p><a class="anchor" id="pointer_authentication"></a> </p><h2>Pointer Authentication (PAC)</h2>
 <p>(<b>v3</b> only, experimental)</p>
 <p>On arm64 hardware with pointer authentication (<a href="https://developer.arm.com/documentation/102433/0200/Return-oriented-programming">PAC</a>), build with <span class="tt">-DMI_PAC=ON</span>. Mimalloc uses secret hardware keys to sign pointers and validates them on access to detect tampering. On an M5, the overhead is usually about 10%, but can be 1 to 2x slower.</p>
 <p>Combining <span class="tt">-DMI_MTE=ON -DMI_PAC=ON</span> provides strong mitigation against common heap exploitation techniques. Combined performance is usually within 5% of MTE alone. Mimalloc signs:</p>
@@ -155,8 +151,7 @@ Pointer Authentication (PAC)</h2>
 <li>Linux 5.0+ and Android on Arm Cortex-A710/X2 and later Armv9 cores, Arm Neoverse V1/V2/N2, AmpereOne, and Qualcomm Oryon. Check with <span class="tt">grep pacg /proc/cpuinfo</span>.</li>
 </ul>
 <p>Older cores such as Cortex-A76/A78/X1, AWS Graviton2, Ampere Altra, and Raspberry Pi 4 and 5 do not support it.</p>
-<h2 class="doxsection"><a class="anchor" id="pointer_capabilities"></a>
-Pointer Capabilities (CHERI)</h2>
+<p><a class="anchor" id="pointer_capabilities"></a> </p><h2>Pointer Capabilities (CHERI)</h2>
 <p>(<b>v3</b> only, experimental)</p>
 <p><a href="https://www.cl.cam.ac.uk/research/security/ctsrd/cheri/">CHERI</a> extends an architecture with capabilities: 128-bit pointers carrying bounds, permissions, and an unforgeable validity tag. Integers cannot be turned into valid pointers. Mimalloc supports the pure-capability ABI, bounding allocated blocks and keeping internal metadata unreachable through user capabilities. The default secure level is 3: <span class="tt">CHECKED</span> plus zeroing the first 1 KiB on free and double-free detection. Unlike MTE, CHERI does not prevent use-after-free by itself; that requires capability revocation.</p>
 <p>CHERI is available on the Arm <a href="https://www.arm.com/architecture/cpu/morello">Morello</a> research platform and some CHERI RISC-V cores, such as the Codasip X730, running <a href="https://www.cheribsd.org">CheriBSD</a>. For a native pure-capability CheriBSD build, use <span class="tt">cmake ../.. &amp;&amp; make -j</span>. Cross-compilation with CHERI LLVM requires the pure-capability flags, for example:</p>
@@ -168,13 +163,6 @@ Pointer Capabilities (CHERI)</h2>
 </div></div><!-- contents -->
 </div><!-- PageDoc -->
 </div><!-- doc-content -->
-<div id="page-nav" class="page-nav-panel">
-<div id="page-nav-resize-handle"></div>
-<div id="page-nav-tree">
-<div id="page-nav-contents">
-</div><!-- page-nav-contents -->
-</div><!-- page-nav-tree -->
-</div><!-- page-nav -->
 </div><!-- container -->
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
