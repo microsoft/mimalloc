@@ -10,6 +10,47 @@ const EXCLUSIVE: ReserveOptions = ReserveOptions {
     allow_large_pages: false,
 };
 
+fn build_define(name: &str, default: usize) -> usize {
+    for define in option_env!("MIMALLOC_DEFINES")
+        .unwrap_or_default()
+        .rsplit(|c: char| c.is_whitespace() || c == ',')
+    {
+        let (key, value) = define.split_once('=').unwrap_or((define, "1"));
+        if key == name {
+            return value
+                .parse()
+                .unwrap_or_else(|_| panic!("expected a numeric {name}, got {value}"));
+        }
+    }
+    default
+}
+
+fn expect_pinned_arena(arena: Option<Arena>) -> Option<Arena> {
+    // Match the C defaults and explicit overrides, not just the Cargo `secure` feature.
+    let default_secure = if cfg!(feature = "secure") {
+        4
+    } else if build_define("MI_MTE", 2 * usize::from(cfg!(feature = "mte"))) != 0
+        || build_define("MI_PAC", 2 * usize::from(cfg!(feature = "pac"))) != 0
+    {
+        2
+    } else if build_define("MI_CHERI", 0) != 0 {
+        3
+    } else {
+        0
+    };
+    let secure = build_define("MI_SECURE", default_secure);
+    let guard_pages = build_define(
+        "MI_OS_HAS_GUARD_PAGES",
+        usize::from(!cfg!(target_family = "wasm")),
+    );
+    if secure > 0 && guard_pages != 0 {
+        assert!(arena.is_none(), "secure mode must reject pinned arenas");
+        None
+    } else {
+        Some(arena.expect("pinned arenas must be accepted without secure guard pages"))
+    }
+}
+
 fn area_contains(arena: Arena, p: *const u8, size: usize) -> bool {
     let area = arena.area();
     let start = area.cast::<u8>().as_ptr() as usize;
@@ -105,7 +146,9 @@ fn from_static_memory_unaligned() {
     // what the README recommends for memory at an unaligned address
     let memory = Box::leak(Box::<[u8]>::new_uninit_slice(unaligned_arena_size()));
     let (start, len) = (memory.as_ptr() as usize, memory.len());
-    let arena = Arena::from_static_memory(memory, true).unwrap();
+    let Some(arena) = expect_pinned_arena(Arena::from_static_memory(memory, true)) else {
+        return;
+    };
     let area = arena.area();
     assert!(area.cast::<u8>().as_ptr() as usize >= start);
     assert!(area.cast::<u8>().as_ptr() as usize + area.len() <= start + len);
@@ -119,11 +162,11 @@ fn from_static_memory_inside_mimalloc_block() {
     let p = unsafe { MiMalloc.alloc(Layout::from_size_align(len, 16).unwrap()) };
     assert!(!p.is_null());
     let memory = unsafe { core::slice::from_raw_parts_mut(p.cast::<MaybeUninit<u8>>(), len) };
-    let arena = Arena::from_static_memory(memory, false).unwrap();
-    let heap = Heap::new_in_arena(arena);
-    check_heap_uses_arena(&heap, arena);
-    heap.collect(true);
-    drop(heap);
+    if let Some(arena) = expect_pinned_arena(Arena::from_static_memory(memory, false)) {
+        let heap = Heap::new_in_arena(arena);
+        check_heap_uses_arena(&heap, arena);
+        heap.collect(true);
+    }
 
     // the global allocator keeps working
     for size in [8, 1000, 100_000, 10 * MIB] {
@@ -149,7 +192,10 @@ fn from_external_memory_aligned() {
         pinned: true,
         ..ExternalMemory::default()
     };
-    let arena = unsafe { Arena::from_external_memory(memory, info) }.unwrap();
+    let Some(arena) = expect_pinned_arena(unsafe { Arena::from_external_memory(memory, info) })
+    else {
+        return;
+    };
     assert_eq!(arena.area(), memory);
     check_heap_uses_arena(&Heap::new_in_arena(arena), arena);
 }
