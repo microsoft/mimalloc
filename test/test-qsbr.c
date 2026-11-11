@@ -313,6 +313,55 @@ static bool test_page_free(size_t size, bool abandon) {
   return true;
 }
 
+static bool test_singleton_retention(bool os, bool protected_heap) {
+  mi_heap_t* heap = (protected_heap ? mi_heap_new_qsbr() : mi_heap_new());
+  require(heap != NULL);
+  const long previous = mi_option_get(mi_option_page_full_retain);
+  mi_option_set(mi_option_page_full_retain, 0);
+  mi_theap_t* theap = mi_heap_theap(heap);
+  mi_option_set(mi_option_page_full_retain, previous);
+  require(theap != NULL && theap->allow_page_abandon);
+
+  const size_t size = 2*MI_MiB;
+  const long previous_os = mi_option_get(mi_option_disallow_arena_alloc);
+  mi_option_set(mi_option_disallow_arena_alloc, os ? 1 : 0);
+  void* p = mi_heap_malloc(heap, size);
+  mi_option_set(mi_option_disallow_arena_alloc, previous_os);
+  require(p != NULL);
+  mi_page_t* page = mi_ptr_page(p);
+  require(mi_page_is_singleton(page) && (page->memid.memkind != MI_MEM_ARENA) == os);
+  require(mi_page_is_abandoned(page) == !protected_heap);
+  mi_page_queue_t* huge = &theap->pages[MI_BIN_HUGE];
+  if (protected_heap) {
+    require(mi_page_queue_of(page) == huge && huge->count == 1 && !mi_page_is_in_full(page));
+    require(mi_thread_id_of(p) == theap->tld->thread_id);
+  }
+  remote_block = p;
+  require(mi_run_on_thread(&remote_free));
+  if (protected_heap) {
+    require(!mi_page_is_abandoned(page) && mi_page_theap(page) == theap);
+    // The next huge allocation must discover the remote free even though abandonment is enabled.
+    void* q = mi_heap_malloc(heap, size);
+    require(q != NULL && page_count(heap) == 2 && huge->count == 2);
+    require(mi_page_all_free(page) && qsbr_count(theap) == 1 && theap->qsbr_first == page);
+    const uint64_t goal = page->qsbr.goal;
+    require(goal != 0);
+    _mi_theap_collect_huge_pages(theap);
+    require(page_count(heap) == 2 && page->qsbr.goal == goal && qsbr_count(theap) == 1);
+    qsbr_complete();
+    void* r = mi_heap_malloc(heap, size);
+    require(r != NULL && page_count(heap) == 2 && huge->count == 2 && qsbr_count(theap) == 0);
+    mi_free(q);
+    mi_free(r);
+    require(qsbr_count(theap) == 2);
+    qsbr_complete();
+    mi_heap_collect(heap, true);
+  }
+  require(page_count(heap) == 0 && huge->count == 0 && qsbr_count(theap) == 0);
+  mi_heap_destroy(heap);
+  return true;
+}
+
 static bool test_reuse(bool remote) {
   mi_heap_t* heap = mi_heap_new_qsbr();
   require(heap != NULL);
@@ -702,6 +751,10 @@ int main(void) {
   CHECK_THREADS("full queue retains, unfills, and releases an automatically full page", test_page_free(MI_SMALL_MAX_OBJ_SIZE+1, false));
   CHECK_THREADS("full small page stays abandoned after a delayed foreign last free", test_page_free(MI_SMALL_MAX_OBJ_SIZE/2, true));
   CHECK_THREADS("automatically full page stays abandoned after a delayed foreign last free", test_page_free(MI_SMALL_MAX_OBJ_SIZE+1, true));
+  CHECK_THREADS("QSBR arena singleton stays owned and is collected by huge allocations", test_singleton_retention(false, true));
+  CHECK_THREADS("QSBR OS singleton stays owned and is collected by huge allocations", test_singleton_retention(true, true));
+  CHECK_THREADS("unprotected arena singleton still abandons and frees remotely", test_singleton_retention(false, false));
+  CHECK_THREADS("unprotected OS singleton still abandons and frees remotely", test_singleton_retention(true, false));
   CHECK("local reuse starts a new grace period", test_reuse(false));
   CHECK_THREADS("remote reuse starts a new grace period", test_reuse(true));
   CHECK_THREADS("reclaim preserves goal, appends at tail, and stops behind an unfinished head", test_reclaim());

@@ -637,12 +637,13 @@ void _mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_internal(!mi_page_is_in_full(page));
 
   mi_theap_t* theap = mi_page_theap(page);
-  if (theap->allow_page_abandon) {
+  if (theap->allow_page_abandon && !(mi_heap_qsbr_is_enabled(theap->heap) && mi_page_queue_is_huge(pq))) {
     // abandon full pages (this is the usual case in order to allow for sharing of memory between theaps)
     _mi_page_abandon(page, pq, false);
   }
   else if (mi_page_queue_is_huge(pq)) {
-    // keep huge pages in the huge queue: it is never searched for free blocks (and is collected before each huge allocation)
+    // keep huge pages with their owner for QSBR or when abandonment is disabled;
+    // the huge queue is never searched for free blocks and is collected before each huge allocation
     _mi_page_update_stats(page);
   }
   else if (!mi_page_is_in_full(page)) {
@@ -745,13 +746,13 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
 }
 
 
-#define MI_FULL_COLLECT_MAX_PAGES  (8)   /* visit at most N full (or huge) pages per collect (unless forced); only for theaps that cannot abandon */
+#define MI_FULL_COLLECT_MAX_PAGES  (8)   /* visit at most N full (or huge) pages per collect (unless forced) */
 
 // Collect pages in the full or huge queue that had blocks freed by other threads.
 // Visits at most MI_FULL_COLLECT_MAX_PAGES pages (unless forced) and rotates the queue so the next call continues after them.
 // With N live pages in the queue, a page freed by another thread is thus revisited after about N/MI_FULL_COLLECT_MAX_PAGES calls.
 // note: normally full and huge pages get immediately abandoned and these queues stay (almost) empty;
-// this is only used if abandoning is disabled for the theap (see `theap.c:mi_theap_options_init`).
+// this is used if abandoning is disabled for the theap, or for QSBR-protected huge pages.
 static void mi_theap_collect_special_pages(mi_page_queue_t* pq, bool force) {
   mi_assert_internal(mi_page_queue_is_special(pq));
   mi_page_t* page = pq->first;
@@ -775,7 +776,7 @@ static void mi_theap_collect_special_pages(mi_page_queue_t* pq, bool force) {
 
 // Before allocating a fresh huge page, free huge pages whose block was freed by another thread.
 void _mi_theap_collect_huge_pages(mi_theap_t* theap) {
-  if (theap->allow_page_abandon) return;  // huge pages were abandoned and are freed by the thread that frees their block
+  if (theap->allow_page_abandon && !mi_heap_qsbr_is_enabled(theap->heap)) return;  // unprotected huge pages were abandoned
   mi_theap_collect_special_pages(&theap->pages[MI_BIN_HUGE], false);
 }
 

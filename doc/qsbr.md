@@ -79,7 +79,8 @@ The core gates heap initialization and delay decisions using
 `mi_heap_qsbr_is_enabled(heap)`. This is a mimalloc-owned inline query, not a
 runtime primitive: it reads the immutable
 flag when QSBR is compiled in and returns `false` otherwise. Protected theaps
-disable early full-page abandonment. The host needs no copy of that flag.
+retain singleton pages; ordinary pages follow `page_full_retain`.
+The host needs no copy of that flag.
 
 ## Primitive contract
 
@@ -194,6 +195,14 @@ considered by the adapter; these hooks alone do not make arbitrary reads after
 `mi_free` valid.
 
 ## Abandoned pages and progress
+
+Protected singleton pages stay in their owner's huge queue instead of being
+abandoned when full, even when `page_full_retain` permits abandonment.
+Before each huge allocation, the owner drains its delayed QSBR queue and
+examines a bounded, rotating portion of the huge queue for remote frees.
+Empty pages are queued for delayed release until their grace period completes.
+Ordinary pages still follow `page_full_retain`, and thread exit or explicit
+theap abandonment still abandons singletons.
 
 V3 now permits an empty page to remain abandoned when its grace period is
 unfinished. Mimalloc unlinks it while its old theap is still valid.
