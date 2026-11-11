@@ -13,7 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 This is the API documentation of the
 [mimalloc](https://github.com/microsoft/mimalloc) allocator
 (pronounced "me-malloc") -- a
-general purpose allocator with excellent \ref bench "performance"
+general purpose allocator with excellent [performance](https://github.com/microsoft/mimalloc/blob/dev3/readme.md#performance)
 characteristics. Initially
 developed by Daan Leijen for the run-time systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
@@ -64,7 +64,7 @@ Notable aspects of the design include:
   (see the [references](https://github.com/microsoft/mimalloc/blob/dev3/readme.md#references)), has bounded worst-case allocation
   times (_wcat_) (upto OS primitives), bounded space overhead (~0.2% meta-data, with low
   internal fragmentation), and has no internal points of contention using only atomic operations.
-- __fast__: In our benchmarks (see \ref bench),
+- __fast__: In our benchmarks (see [Performance](https://github.com/microsoft/mimalloc/blob/dev3/readme.md#performance)),
   _mimalloc_ outperforms other leading allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc),
   and often uses less memory. A nice property is that it does consistently well over a wide range
   of benchmarks. There is also good huge OS page support for larger server programs.
@@ -102,7 +102,7 @@ To learn more about the internal implementation of mimalloc, see
 - \ref guarded
 - \ref profiling_guide
 - \ref tools
-- \ref bench
+- [Performance](https://github.com/microsoft/mimalloc/blob/dev3/readme.md#performance)
 - \ref deprecated
 
 &nbsp;
@@ -2919,5 +2919,4 @@ use a tool like [TraceControl] that is specialized for analyzing mimalloc traces
 [TraceControl]: https://github.com/xinglonghe/TraceControl
 
 */
-
 

@@ -88,7 +88,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('index.html',''
   <div class="headertitle"><div class="title">mi-malloc </div></div>
 </div><!--header-->
 <div class="contents">
-<div class="textblock"><p>This is the API documentation of the <a href="https://github.com/microsoft/mimalloc">mimalloc</a> allocator (pronounced "me-malloc") &ndash; a general purpose allocator with excellent performance characteristics. Initially developed by Daan Leijen for the run-time systems of the <a href="https://koka-lang.github.io">Koka</a> and <a href="https://github.com/leanprover/lean">Lean</a> languages.</p>
+<div class="textblock"><p>This is the API documentation of the <a href="https://github.com/microsoft/mimalloc">mimalloc</a> allocator (pronounced "me-malloc") &ndash; a general purpose allocator with excellent <a href="https://github.com/microsoft/mimalloc/blob/dev3/readme.md#performance">performance</a> characteristics. Initially developed by Daan Leijen for the run-time systems of the <a href="https://koka-lang.github.io">Koka</a> and <a href="https://github.com/leanprover/lean">Lean</a> languages.</p>
 <p>It is a drop-in replacement for <span class="tt">malloc/free</span> and can be used in other programs without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.): </p><div class="fragment"><div class="line">&gt; LD_PRELOAD=/usr/lib/libmimalloc.so  myprogram</div>
 </div><!-- fragment --><p> It also supports dynamic overriding on <a class="el" href="overrides.html#override_on_windows" title="override_on_windows">Windows</a>.</p>
 <p>Notable aspects of the design include:</p><ul>
@@ -99,7 +99,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('index.html',''
 <li><b>secure</b>: <em>mimalloc</em> can be built in <a class="el" href="security.html#secure_mode" title="secure_mode">secure mode</a>, adding guard pages, randomized allocation, encrypted free lists, etc. to protect against various heap vulnerabilities. The performance penalty is usually around 10% on average over our benchmarks.</li>
 <li><b>first-class heaps</b>: efficiently create and use multiple heaps to allocate across different regions. A heap can be destroyed at once instead of deallocating each object separately. v3 has true first-class heaps where one can allocate in a heap from any thread.</li>
 <li><b>bounded</b>: it does not suffer from <em>blowup</em> (see the <a href="https://github.com/microsoft/mimalloc/blob/dev3/readme.md#references">references</a>), has bounded worst-case allocation times (<em>wcat</em>) (upto OS primitives), bounded space overhead (~0.2% meta-data, with low internal fragmentation), and has no internal points of contention using only atomic operations.</li>
-<li><b>fast</b>: In our benchmarks (see bench), <em>mimalloc</em> outperforms other leading allocators (<em>jemalloc</em>, <em>tcmalloc</em>, <em>Hoard</em>, etc), and often uses less memory. A nice property is that it does consistently well over a wide range of benchmarks. There is also good huge OS page support for larger server programs.</li>
+<li><b>fast</b>: In our benchmarks (see <a href="https://github.com/microsoft/mimalloc/blob/dev3/readme.md#performance">Performance</a>), <em>mimalloc</em> outperforms other leading allocators (<em>jemalloc</em>, <em>tcmalloc</em>, <em>Hoard</em>, etc), and often uses less memory. A nice property is that it does consistently well over a wide range of benchmarks. There is also good huge OS page support for larger server programs.</li>
 </ul>
 <h2>Versions</h2>
 <p>There are three maintained versions of mimalloc. These are mostly equal except for how the OS memory is handled. New development is mostly on v3, while v1 and v2 are maintained with security and bug fixes.</p>
@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('index.html',''
 <li><a class="el" href="guarded.html" title="Guarded Mode">Guarded Mode</a></li>
 <li><a class="el" href="profiling_guide.html" title="Profiling">Profiling</a></li>
 <li><a class="el" href="tools.html" title="Tools">Tools</a></li>
-<li>bench</li>
+<li><a href="https://github.com/microsoft/mimalloc/blob/dev3/readme.md#performance">Performance</a></li>
 <li><a class="el" href="deprecated.html" title="Deprecated List">Deprecated List</a></li>
 </ul>
 <p>&#160;</p>
