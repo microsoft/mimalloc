@@ -296,7 +296,6 @@ jobs:
   alpine:
     name: qemu, alpine-${{ matrix.target }}
     runs-on: ubuntu-latest
-    continue-on-error: true
     defaults:
       run:
         shell: alpine.sh {0}
@@ -323,7 +322,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # (setup often fails for reasons outside our control: then skip the tests but keep the run green)
       - name: Setup
+        id: setup
+        continue-on-error: true
         uses: jirutka/setup-alpine@ae3b3ddba35054804fc4a3507b519fa7e8152050 # v1.4.1
         with:
           arch: ${{ matrix.arch }}
@@ -332,25 +334,26 @@ jobs:
           packages: build-base cmake ${{ matrix.packages }}
 
       - name: Release, clang
-        if: matrix.target == 'riscv64'
+        if: steps.setup.outcome == 'success' && matrix.target == 'riscv64'
         run: ${{ matrix.test_env }} CC=clang CXX=clang++ sh .github/ci/cmake-test.sh release-clang Release -DMI_OPT_ARCH=rv64gcb_zacas_zalasr -DMI_SEE_ASM=ON
 
       - name: Release, clang, Asm
-        if: matrix.target == 'riscv64'
+        if: steps.setup.outcome == 'success' && matrix.target == 'riscv64'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: alpine-${{ matrix.target }}-clang-asm
           path: out/release-clang/CMakeFiles/mimalloc-static.dir/src/*.s
 
       - name: Release
-        if: matrix.target != 'riscv64' && matrix.target != 'arm32'  # (building under emulation is slow)
+        if: steps.setup.outcome == 'success' && matrix.target != 'riscv64' && matrix.target != 'arm32'  # (building under emulation is slow)
         run: ${{ matrix.test_env }} sh .github/ci/cmake-test.sh release Release -DMI_OPT_ARCH=ON -DMI_SEE_ASM=ON
 
       - name: Debug
+        if: steps.setup.outcome == 'success'
         run: ${{ matrix.test_env }} sh .github/ci/cmake-test.sh debug Debug -DMI_DEBUG=FULL
 
       - name: Secure
-        if: matrix.target != 'riscv64'
+        if: steps.setup.outcome == 'success' && matrix.target != 'riscv64'
         run: ${{ matrix.test_env }} sh .github/ci/cmake-test.sh secure Release -DMI_SECURE=ON
 
   # Linux arm64 with memory tagging (MTE) emulated by QEMU (`-cpu max` as QEMU user mode faults on `dc zva` with tagged pointers, which glibc and bionic use in `memset` on `neoverse-n2`)
@@ -363,7 +366,7 @@ jobs:
       QEMU_CPU: max
       MI_TEST_LIGHT: 1
       MI_TEST_REQUIRE_MTE: 1
-      CI_CMAKE_ARGS: -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64-static
+      CI_CMAKE_ARGS: -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64
       CI_CTEST_ARGS: -E test-fork
       CI_CTEST_TIMEOUT: 600
     steps:
@@ -375,15 +378,15 @@ jobs:
       - name: Setup
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user-static
-          qemu-aarch64-static --version
+          sudo apt-get install -y -q gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user
+          qemu-aarch64 --version
           ls /proc/sys/fs/binfmt_misc/ | grep aarch64 || echo "no binfmt registration for aarch64"
 
       - name: Release, MTE, PAC
         run: sh .github/ci/cmake-test.sh release-arm64-mte Release -DMI_OPT_ARCH=ON -DMI_MTE=ON -DMI_PAC=ON
 
       - name: Release, MTE, PAC, verbose test-mte
-        run: MIMALLOC_VERBOSE=1 qemu-aarch64-static out/release-arm64-mte/mimalloc-test-mte
+        run: MIMALLOC_VERBOSE=1 qemu-aarch64 out/release-arm64-mte/mimalloc-test-mte
 
       - name: Release, Async, MTE, PAC
         run: MIMALLOC_MTE=async sh .github/ci/cmake-test.sh release-arm64-mte Release -DMI_OPT_ARCH=ON -DMI_MTE=ON -DMI_PAC=ON
@@ -411,12 +414,12 @@ jobs:
       - name: Setup
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q qemu-user-static
-          qemu-aarch64-static --version
+          sudo apt-get install -y -q qemu-user
+          qemu-aarch64 --version
           NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
           test -f "$NDK/build/cmake/android.toolchain.cmake" || { echo "::error::Android NDK not found"; exit 1; }
           echo "NDK: $NDK"
-          echo "CI_CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 -DANDROID_STL=c++_static -DMI_BUILD_SHARED=OFF -DMI_OVERRIDE=OFF -DCMAKE_EXE_LINKER_FLAGS=-static -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64-static" >> $GITHUB_ENV
+          echo "CI_CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 -DANDROID_STL=c++_static -DMI_BUILD_SHARED=OFF -DMI_OVERRIDE=OFF -DCMAKE_EXE_LINKER_FLAGS=-static -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64" >> $GITHUB_ENV
 
       - name: Debug
         run: sh .github/ci/cmake-test.sh debug-android Debug -DMI_DEBUG=FULL
@@ -434,7 +437,7 @@ jobs:
         run: MI_TEST_REQUIRE_MTE=1 sh .github/ci/cmake-test.sh release-android-mte Release -DMI_OPT_ARCH=ON -DMI_MTE=ON -DMI_PAC=ON
 
       - name: Release, MTE, PAC, verbose test-mte
-        run: MIMALLOC_VERBOSE=1 qemu-aarch64-static out/release-android-mte/mimalloc-test-mte
+        run: MIMALLOC_VERBOSE=1 qemu-aarch64 out/release-android-mte/mimalloc-test-mte
 
   # TSAN
   tsan:

@@ -1442,7 +1442,7 @@ if (MI_BUILD_TESTS)
   target_include_directories(mimalloc-test-qsbr PRIVATE include)
   target_link_libraries(mimalloc-test-qsbr PRIVATE ${mi_libraries})
   add_test(NAME test-qsbr COMMAND mimalloc-test-qsbr)
-  add_test(NAME test-qsbr-noretain COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_PAGE_FULL_RETAIN=-1 $<TARGET_FILE:mimalloc-test-qsbr>)
+  add_test(NAME test-qsbr-noretain COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_PAGE_FULL_RETAIN=-1 ${mi_test_runner} $<TARGET_FILE:mimalloc-test-qsbr>)
 
   # Check that memory tagging catches invalid accesses
   if(MI_MTE AND MI_ARCH STREQUAL "arm64" AND NOT WIN32)
