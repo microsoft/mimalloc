@@ -138,13 +138,8 @@ static inline mi_page_t* mi_aligned_ptr_page0(const void* p) {
   mi_page_t* const page_metas = (mi_page_t*)mi_align_down_ptr(p,MI_PAGE_META_ALIGNMENT);
   const size_t page_idx       = mi_page_meta_aligned_index((size_t)(mi_addr(p) / MI_ARENA_SLICE_SIZE));
   mi_assert_internal(page_idx <= MI_PAGE_META_ALIGNED_COUNT);
-  #if MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_RISCV // better code on x64/x86/riscv64
-  mi_page_t* const page = (mi_page_t*)(((uintptr_t)page_metas | (page_idx * sizeof(mi_page_t))) + MI_PAGE_META_ALIGNED_OFFSET);
-  #else
-  mi_page_t* const page = (mi_page_t*)((uint8_t*)&page_metas[page_idx] + MI_PAGE_META_ALIGNED_OFFSET);
-  #endif
+  mi_page_t* const page = (mi_page_t*)(((uintptr_t)page_metas | (page_idx * sizeof(mi_page_t))) + MI_PAGE_META_ALIGNED_OFFSET); // note: doesn't work for CHERI
   return page;
-
 }
 
 static inline mi_page_t* mi_aligned_ptr_page(const void* p) {
