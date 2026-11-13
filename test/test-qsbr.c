@@ -827,11 +827,11 @@ static bool test_heap_delayed_thread_exit(void) {
   return true;
 }
 
-static _Atomic(bool) heap_delayed_producer_done;
+static _Atomic(uintptr_t) heap_delayed_producer_done;  // word-sized: the MSVC C atomics operate on `uintptr_t`
 
 static bool free_heap_delayed_blocks(void) {
   for (size_t i = 0; i < full_page_count; i++) { mi_free(full_page_blocks[i]); }
-  mi_atomic_store_release(&heap_delayed_producer_done, true);
+  mi_atomic_store_release(&heap_delayed_producer_done, 1);
   return true;
 }
 
@@ -847,7 +847,7 @@ static bool test_heap_delayed_concurrent(void) {
     mi_page_t* page = mi_ptr_page(full_page_blocks[i]);
     _mi_page_abandon(page, mi_page_queue_of(page), true);
   }
-  mi_atomic_store_release(&heap_delayed_producer_done, false);
+  mi_atomic_store_release(&heap_delayed_producer_done, 0);
   mi_thread_fun_args_t arg = { &free_heap_delayed_blocks, false };
   #ifdef _WIN32
   HANDLE thread = CreateThread(NULL, 0, &mi_win_thread_entry, &arg, 0, NULL);
@@ -856,7 +856,7 @@ static bool test_heap_delayed_concurrent(void) {
   pthread_t thread;
   require(pthread_create(&thread, NULL, &mi_pthread_entry, &arg) == 0);
   #endif
-  while (!mi_atomic_load_acquire(&heap_delayed_producer_done)) {
+  while (mi_atomic_load_acquire(&heap_delayed_producer_done) == 0) {
     qsbr_complete();
     _mi_heap_qsbr_collect_delayed(worker_heap);
     _mi_prim_thread_yield();
