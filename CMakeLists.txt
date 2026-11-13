@@ -237,13 +237,21 @@ else()
 endif()
 
 set(MI_ARCH "unknown")
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86|i[3456]86)$" OR CMAKE_GENERATOR_PLATFORM MATCHES "^(x86|Win32)$")
+string(TOLOWER "${CMAKE_GENERATOR_PLATFORM}" mi_generator_platform)  # e.g. `-A Win32`, `-A ARM64`, or `-A Arm64EC`
+# the generator platform comes first as `CMAKE_SYSTEM_PROCESSOR` is the host processor when cross-compiling with `-A`
+if(mi_generator_platform MATCHES "^arm64(ec)?$")
+  set(MI_ARCH "arm64")  # (including arm64ec, which runs as native arm64 code)
+elseif(mi_generator_platform STREQUAL "x64")
+  set(MI_ARCH "x64")
+elseif(mi_generator_platform MATCHES "^(x86|win32)$")
   set(MI_ARCH "x86")
-elseif((CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|x64|amd64|AMD64)$" OR CMAKE_GENERATOR_PLATFORM STREQUAL "x64" OR "x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES) AND NOT CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64") # must be before arm64
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86|i[3456]86)$")
+  set(MI_ARCH "x86")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|x64|amd64|AMD64)$" OR "x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES) # must be before arm64
   set(MI_ARCH "x64")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm|armv[3-9].?|ARM)$" AND MI_ARCH_BITS STREQUAL "32")  # must be before arm64: a 32-bit userland on an ARMv8/v9 cpu reports armv8l/armv9l
   set(MI_ARCH "arm32")
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|armv[89].?|ARM64)$" OR CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64" OR "arm64" IN_LIST CMAKE_OSX_ARCHITECTURES)
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|armv[89].?|ARM64)$" OR "arm64" IN_LIST CMAKE_OSX_ARCHITECTURES)
   set(MI_ARCH "arm64")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm|armv[34567].?|ARM)$")
   set(MI_ARCH "arm32")
@@ -1217,7 +1225,7 @@ if(MI_BUILD_SHARED)
       set_property(TARGET mimalloc PROPERTY PREFIX "")
     endif()
     # On windows, link and copy the mimalloc redirection dll too.
-    if(CMAKE_GENERATOR_PLATFORM STREQUAL "arm64ec")
+    if(mi_generator_platform STREQUAL "arm64ec")
       set(MIMALLOC_REDIRECT_SUFFIX "-arm64ec")
       set(MINJECT_SUFFIX "")
     elseif(MI_ARCH STREQUAL "x64")
