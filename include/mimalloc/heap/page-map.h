@@ -141,7 +141,8 @@ static inline mi_page_t* mi_aligned_ptr_page0(const void* p) {
   #if MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_RISCV // better code on x64/x86/riscv64
   mi_page_t* const page = (mi_page_t*)(((uintptr_t)page_metas | (page_idx * sizeof(mi_page_t))) + MI_PAGE_META_ALIGNED_OFFSET);
   #else
-  mi_page_t* const page = (mi_page_t*)((uint8_t*)&page_metas[page_idx] + MI_PAGE_META_ALIGNED_OFFSET);
+  // integer arithmetic: `page_metas` is NULL when `p` is NULL, and pointer arithmetic on NULL is undefined
+  mi_page_t* const page = (mi_page_t*)(mi_addr(page_metas) + (page_idx * sizeof(mi_page_t)) + MI_PAGE_META_ALIGNED_OFFSET);
   #endif
   return page;
 
