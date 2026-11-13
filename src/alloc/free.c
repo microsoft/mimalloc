@@ -614,7 +614,7 @@ bool mi_cfree(void* p) mi_attr_noexcept {
 // 3. if it went to < 7/8th used, re-abandon to be mapped (so it can be found by theaps looking for free pages)
 // --------------------------------------------------------------------------------------------
 
-// Consume an empty page, reclaiming delayed pages only into their originating theap.
+// Free or reclaim an empty page
 static bool mi_abandoned_page_collect_empty(mi_page_t* page)
 {
   if (!mi_page_all_free(page)) return false;
@@ -623,18 +623,18 @@ static bool mi_abandoned_page_collect_empty(mi_page_t* page)
   _mi_arenas_page_unabandon(page,NULL);
   if mi_likely(!should_delay) {
     _mi_page_qsbr_clear(page);
-    _mi_arenas_page_free(page,NULL);
+    _mi_arenas_page_free_direct(page,NULL);
   }
   else {
-    // A foreign theap may not collect again; only the originating theap may adopt the delayed page.
+    // A foreign theap may not collect again; only the originating theap may adopt a QSBR delayed page.
     // note: we don't have to do this but reclaiming into the originating theap puts it in the qsbr list which may help with collection across size classes.
     mi_theap_t* const theap = _mi_page_associated_theap_peek(page);
     if (theap != NULL && theap == page->theap) {
       _mi_theap_page_reclaim(theap, page);
     }
     else {
-      // abandon as empty; it is collected later by an allocation reclaim or `_mi_heap_collect_abandoned`
-      _mi_arenas_page_abandon(page,NULL);
+      // keep the page in abandoned or in the heap qsbr delayed list
+      _mi_arenas_page_free(page,NULL);
     }
   }
   return true;

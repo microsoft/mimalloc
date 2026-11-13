@@ -656,7 +656,7 @@ void _mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
 
 
 // Physically release an empty page after its grace period has finished.
-static void mi_page_free_prim(mi_page_t* page, mi_page_queue_t* pq) {
+static void mi_page_free_direct(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_internal(page != NULL);
   mi_assert_internal(_mi_page_qsbr_is_clear(page));
   mi_assert_expensive(_mi_page_is_valid(page));
@@ -671,7 +671,7 @@ static void mi_page_free_prim(mi_page_t* page, mi_page_queue_t* pq) {
   // and free it
   mi_theap_t* theap = mi_page_theap(page); mi_assert_internal(theap!=NULL);
   mi_page_set_theap(page,NULL);
-  _mi_arenas_page_free(page, theap);
+  _mi_arenas_page_free_direct(page, theap);
   // _mi_arenas_collect(false, false, theap->tld);  // allow purging
 }
 
@@ -684,7 +684,7 @@ bool _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   mi_page_set_has_interior_pointers(page, false);
 
   // try to free
-  if (_mi_page_qsbr_should_delay(page)) {
+  if mi_unlikely(_mi_page_qsbr_should_delay(page)) {
     // for pages that are delayed due to qsbr (e.g. in CPython)
     page->retire_expire = 0;
     if (mi_page_is_in_full(page)) { _mi_page_unfull(page); }
@@ -694,7 +694,7 @@ bool _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   else {
     // free the page
     _mi_page_qsbr_clear(page);
-    mi_page_free_prim(page, pq);
+    mi_page_free_direct(page, pq);
     return true;
   }
 }
@@ -776,6 +776,7 @@ static void mi_theap_collect_special_pages(mi_page_queue_t* pq, bool force) {
 
 // Before allocating a fresh huge page, free huge pages whose block was freed by another thread.
 void _mi_theap_collect_huge_pages(mi_theap_t* theap) {
+  _mi_heap_qsbr_collect_delayed(theap->heap);
   if (theap->allow_page_abandon && !mi_heap_qsbr_is_enabled(theap->heap)) return;  // unprotected huge pages were abandoned
   mi_theap_collect_special_pages(&theap->pages[MI_BIN_HUGE], false);
 }

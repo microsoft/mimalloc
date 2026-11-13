@@ -120,7 +120,7 @@ Normal release attempts still call `_mi_page_free(page, pq)`. It returns `true`
 if the page was freed, or `false` if its release was delayed. On a delay,
 mimalloc clears `retire_expire`, moves a full page back to its size-class queue,
 and appends it to its theap's QSBR queue unless already queued. Otherwise it
-unlinks the page, clears its goal, and calls the static `mi_page_free_prim` for
+unlinks the page, clears its goal, and calls the static `mi_page_free_direct` for
 physical release. The runtime never calls that primitive or implements the
 release operation itself.
 
@@ -149,7 +149,7 @@ A delayed owned page belongs to two independent lists:
 - Its theap's QSBR queue, so ready pages can be drained efficiently.
 
 Mimalloc owns `qsbr_next`, `qsbr_prev`, and `qsbr_xthread_id` in each page and
-`qsbr_first`/`qsbr_last` in each theap. The membership bit (the lowest bit of
+`qsbr_delayed`/`qsbr_delayed_last` in each theap. The membership bit (the lowest bit of
 `qsbr_xthread_id`) distinguishes an
 unlinked page from a singleton queue without dereferencing an abandoned page's
 old theap. Only owned pages can be queued. A recorded goal alone does not imply
@@ -202,7 +202,35 @@ Before each huge allocation, the owner drains its delayed QSBR queue and
 examines a bounded, rotating portion of the huge queue for remote frees.
 Empty pages are queued for delayed release until their grace period completes.
 Ordinary pages still follow `page_full_retain`, and thread exit or explicit
-theap abandonment still abandons singletons.
+theap abandonment still abandons live singletons.
+
+Empty singletons whose grace period is unfinished go to the heap's
+`qsbr_delayed` list instead of the abandoned registries, unless a free can
+return them to their existing originating theap. This covers both
+arena and OS pages, whether they become empty before or after their owner
+exits. They keep their ownership bit set, cannot be allocation-reclaimed,
+and retain their existing goal. Other abandoned pages are unchanged.
+
+`_mi_arenas_page_free` is the single place that decides how to release an
+empty abandoned page. It establishes or polls its QSBR goal and then frees
+the page, queues a delayed singleton, or re-abandons a delayed ordinary page
+for reuse or visitation. It returns true only for physical release. Unowning
+routes empty singletons, and pages that became empty through concurrent
+frees, to it; other callers route pages they know to be empty to it. Callers that have already
+established safety and cleared the goal, including terminal destruction, use
+`_mi_arenas_page_free_direct` without starting another grace period.
+
+The list is FIFO: insertion appends at the tail under a per-heap lock, so the
+oldest pages are at the front. Huge allocations and periodic theap collection
+try to collect at most eight heap-delayed pages; they skip the pass if the
+lock is busy. A pass detaches pages from the front under the lock, then
+polls QSBR and frees ready pages without holding it, and finally appends the
+unfinished pages at the tail again (so they rotate). The lock thus only
+protects list updates and is never held while calling into the embedder or
+releasing memory. While detached, pages are invisible to other collectors.
+The stopped-heap abandoned collector visits all heap-delayed pages, and
+terminal destruction releases them without waiting for QSBR. All fields and
+paths are compiled only with `MI_QSBR`.
 
 V3 now permits an empty page to remain abandoned when its grace period is
 unfinished. Mimalloc unlinks it while its old theap is still valid.
@@ -214,23 +242,26 @@ Ordinary empty arena pages remain in the existing per-heap abandoned size-class
 maps and can be reclaimed by allocation. If a full regular arena page becomes
 empty while abandonment collects concurrent frees, delayed release re-abandons
 it as mapped before releasing ownership. Reclaim does not require waiting if
-the runtime permits compatible reuse. Empty arena singletons are **not** put in
-those maps; they remain in the all-pages map. OS pages stay in the existing
-abandoned OS-page list. No new shared delayed-page list is introduced.
+the runtime permits compatible reuse. Heap-delayed arena singletons are **not** put in
+those maps; they remain registered in the all-pages map. Heap-delayed OS singletons
+are removed from the abandoned OS-page list and remain visible to heap visitation
+through `qsbr_delayed`.
 
 A page may also become empty only after its owner has terminated. A zero goal
 in this case is **not** evidence of safety: `mi_page_qsbr_should_delay` must
 establish a new grace period using the heap's stable domain. On a free-side
-release attempt, an unfinished empty page is reclaimed only if the calling
+release attempt, an unfinished empty page is first reclaimed if the calling
 thread already has its originating theap. Ordinary release then resets its
-retirement countdown and queues it for QSBR collection. This includes singleton
-and OS pages and bypasses nonempty-page reclaim limits.
-Otherwise the page remains abandoned with its goal intact; the free does not
+retirement countdown and queues it for local QSBR collection. This includes
+singletons and OS pages and bypasses nonempty-page reclaim limits.
+Otherwise a singleton goes to `qsbr_delayed`, while other pages remain
+abandoned with their goals intact; the free does not
 initialize a thread or create a theap. Ordinary arena pages are made available
-for allocation reclaim, while singletons and OS pages remain visible to the
+for allocation reclaim, while non-singleton OS pages remain visible to the
 abandoned-page collector. The empty-page path finishes handling the page and
-releases ownership, without falling through to nonempty-page reclaim.
-Thread-exit abandonment is unchanged.
+does not fall through to nonempty-page reclaim. Non-singleton pages release
+ownership when left abandoned; heap-delayed singletons stay owned by the shared list.
+Thread-exit abandonment of other pages is unchanged.
 
 A goal is a target QSBR sequence identifying the grace period that must finish
 before releasing the page. Zero means that no goal has been recorded, not that
@@ -269,7 +300,8 @@ For heaps created by `mi_heap_new_qsbr()`, positive values are capped at `0`;
 negative values remain disabled. Thus a free can reclaim a nonempty protected
 page only into its originating theap. Empty pages delayed by QSBR may also
 return to their existing originating theap regardless of this policy, but are
-never adopted into a foreign theap by a free. This cap
+never adopted into a foreign theap by a free. Empty delayed singletons go to
+`qsbr_delayed` if their originating theap is unavailable. This cap
 does not change allocation-side reclaim: other theaps may still obtain
 compatible abandoned pages from the same heap when looking for a fresh page.
 

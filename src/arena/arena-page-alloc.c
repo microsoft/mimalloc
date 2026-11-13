@@ -645,7 +645,7 @@ static mi_page_t* mi_arenas_page_regular_alloc(mi_theap_t* theap, size_t slice_c
 
   mi_assert_internal(page->memid.memkind != MI_MEM_ARENA || page->memid.mem.arena.slice_count == slice_count);
   if (!_mi_page_init(theap, page)) {
-    _mi_arenas_page_free(page,theap);
+    _mi_arenas_page_free_direct(page,theap);
     return NULL;
   }
 
@@ -680,7 +680,7 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_theap_t* theap, size_t block
 
   mi_assert(page->reserved == 1);
   if (!_mi_page_init(theap, page)) {
-    _mi_arenas_page_free(page,theap);
+    _mi_arenas_page_free_direct(page,theap);
     return NULL;
   }
 
@@ -827,7 +827,8 @@ void _mi_arenas_page_free_prim(mi_page_t* page) {
   _mi_arenas_free(subproc, slice_start, full_size, memid);
 }
 
-void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
+// Physically release an empty page whose QSBR state has already been cleared.
+void _mi_arenas_page_free_direct(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(_mi_page_qsbr_is_clear(page));
   mi_assert_internal(mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
@@ -843,4 +844,26 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
   _mi_page_free_collect(page,false);  // update used count for cross-thread free's
   _mi_page_update_stats(page);        // and update the stats
   _mi_arenas_page_free_prim(page);
+}
+
+// Free an empty page that was removed from the abandoned registries, or retain it if it is delayed by QSBR:
+// a delayed singleton goes to the heap QSBR delayed list, and other pages are abandoned (to be reclaimed or collected later).
+// Returns true if the page was freed.
+bool _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
+  mi_assert_internal(mi_page_is_owned(page) && mi_page_all_free(page));
+  mi_assert_internal(mi_page_is_abandoned(page) && !mi_page_is_abandoned_mapped(page));
+  mi_assert_internal(page->next == NULL && page->prev == NULL);
+  if (_mi_page_qsbr_should_delay(page)) {
+    #if MI_QSBR
+    if (mi_page_is_singleton(page)) {
+      _mi_heap_qsbr_delayed_enqueue(page);
+      return false;
+    }
+    #endif
+    _mi_arenas_page_abandon(page, current_theapx);
+    return false;
+  }
+  _mi_page_qsbr_clear(page);
+  _mi_arenas_page_free_direct(page, current_theapx);
+  return true;
 }

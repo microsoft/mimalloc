@@ -255,6 +255,12 @@ bool _mi_abandoned_page_unown(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(mi_theap_matches_thread(current_theapx));
+  if (mi_page_is_singleton(page) && mi_page_all_free(page)) {
+    // an empty singleton is never found again by allocation or frees, so release or delay it now
+    // (this does not recurse as `_mi_arenas_page_free` never abandons a singleton)
+    _mi_arenas_page_unabandon(page, current_theapx);
+    return _mi_arenas_page_free(page, current_theapx);
+  }
   mi_thread_free_t tf_new;
   mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
   do {
@@ -262,22 +268,8 @@ bool _mi_abandoned_page_unown(mi_page_t* page, mi_theap_t* current_theapx) {
     while mi_unlikely(mi_tf_block(tf_old) != NULL) {
       _mi_page_free_collect(page, false);  // update used
       if (mi_page_all_free(page)) {
-        if (!_mi_page_qsbr_should_delay(page)) {
-          _mi_page_qsbr_clear(page);
-          _mi_arenas_page_unabandon(page, current_theapx);
-          _mi_arenas_page_free(page, current_theapx);
-          return true;
-        }
-        #if MI_QSBR
-        else if (page->memid.memkind == MI_MEM_ARENA &&
-                 !mi_page_is_singleton(page) && !mi_page_is_abandoned_mapped(page))
-        {
-          // if empty and qsbr delayed, we re-abandon to mapped so it can be reused
-          _mi_arenas_page_unabandon(page, current_theapx);
-          _mi_arenas_page_abandon(page, current_theapx);   // cannot recurse due to `!mi_page_is_abandoned_mapped(page)`
-          return false;
-        }
-        #endif
+        _mi_arenas_page_unabandon(page, current_theapx);
+        return _mi_arenas_page_free(page, current_theapx);
       }
       tf_old = mi_atomic_load_relaxed(&page->xthread_free);
     }

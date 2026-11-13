@@ -19,6 +19,8 @@ Visit, collect, and move or destroy all the pages of a heap.
 #include "mimalloc/arena/arena-page.h"
 #include "arena-page.h"
 
+static void mi_heap_qsbr_collect_delayed(mi_heap_t* heap, size_t max_pages, bool destroy);
+
 /* -----------------------------------------------------------
   Visit all pages and blocks in a heap
 ----------------------------------------------------------- */
@@ -36,8 +38,8 @@ static bool mi_heap_visit_page(mi_page_t* page, const mi_heap_visit_info_t* vinf
   // abandoned pages can only be collected if we can claim them
   const bool abandoned = mi_page_is_abandoned(page);
   const bool claimed = (abandoned && mi_page_claim_ownership(page));
-  if (!abandoned || claimed) { _mi_page_free_collect(page, true); }  // collect cross-thread free'd blocks so `area.used` is precise.
-  if (claimed && _mi_abandoned_page_unown(page, NULL)) return true;    // the page was freed
+  if (!abandoned) { _mi_page_free_collect(page, true); }               // collect cross-thread free'd blocks so `area.used` is precise.
+  if (claimed && _mi_abandoned_page_unown(page, NULL)) return true;    // collects cross-thread frees as well; returns true if the page was freed
   _mi_heap_area_init(&area, page);
   mi_assert_internal(vinfo->heap == mi_page_heap(page));
   if (!vinfo->visitor(vinfo->heap, &area, NULL, area.block_size, vinfo->arg)) {
@@ -103,8 +105,21 @@ static bool mi_heap_visit_blocks_locked(mi_heap_t* heap, bool abandoned_only, bo
   bool ok = mi_forall_arenas(heap, NULL, 0, &mi_heap_visit_arena, &visit_info, NULL);
   if (!ok) return false;
 
-  // visit abandoned pages in OS allocated memory
   mi_page_t* page = NULL;
+  #if MI_QSBR
+  if (!abandoned_only) {
+    // Visit before abandoned OS pages, as collecting their frees may move them to the heap delayed list.
+    // Arena-backed delayed pages were already visited through the all-pages map.
+    page = mi_atomic_load_ptr_relaxed(mi_page_t, &heap->qsbr_delayed);
+    while (ok && page != NULL) {
+      mi_page_t* next = page->next;
+      if (page->memid.memkind != MI_MEM_ARENA) { ok = mi_heap_visit_page(page, &visit_info); }
+      page = next;
+    }
+  }
+  #endif
+
+  // visit abandoned pages in OS allocated memory
   mi_lock(&heap->os_abandoned_pages_lock) {
     page = heap->os_abandoned_pages;
   }
@@ -141,72 +156,6 @@ bool mi_heap_visit_abandoned_blocks(mi_heap_t* heap, bool visit_blocks, mi_block
   return _mi_heap_visit_blocks(heap, true, visit_blocks, visitor, arg);
 }
 
-#if MI_QSBR
-// Collect an abandoned page that we claimed: free it if it is empty and safe, and otherwise unown it again.
-static void mi_heap_collect_abandoned_page(mi_page_t* page) {
-  mi_assert_internal(mi_page_is_owned(page));
-  _mi_page_free_collect(page, true);
-  if (mi_page_all_free(page) && !_mi_page_qsbr_should_delay(page)) {
-    _mi_page_qsbr_clear(page);
-    _mi_arenas_page_unabandon(page, NULL);
-    _mi_arenas_page_free(page, NULL);
-  }
-  else {
-    _mi_abandoned_page_unown(page, NULL);
-  }
-}
-
-// Pages owned by a concurrent free are skipped (as that free collects the page itself).
-static bool mi_heap_collect_abandoned_page_at(size_t slice_index, size_t slice_count, mi_arena_t* arena, void* arg) {
-  MI_UNUSED(slice_count);
-  mi_heap_t* const heap = (mi_heap_t*)arg;
-  mi_bitmap_t* const pages = mi_heap_arena_pages(heap, arena)->pages;
-  // temporarily clear the bit so a concurrent free cannot free the page while we claim it (see `_mi_arenas_page_free_prim`)
-  if (!mi_bitmap_clear(pages, slice_index)) return true;  // freed concurrently
-  mi_page_t* const page = mi_arena_page_at_slice(arena, slice_index);
-  const bool claimed = (mi_page_is_abandoned(page) && mi_page_claim_ownership(page));
-  mi_bitmap_set(pages, slice_index);
-  if (claimed) { mi_heap_collect_abandoned_page(page); }
-  return true;
-}
-
-static bool mi_heap_collect_abandoned_arena(mi_arena_t* arena, const void* arg, void** result) {
-  MI_UNUSED(result);
-  mi_heap_t* heap = (mi_heap_t*)arg;
-  mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena);
-  if (arena_pages == NULL) return true;
-  return _mi_bitmap_forall_set(arena_pages->pages, &mi_heap_collect_abandoned_page_at, arena, heap);
-}
-
-// Claim the first abandoned OS page after `page` (or from the start if `page==NULL`).
-// The `page` must be owned by us so it stays in the list (and cannot be freed concurrently).
-static mi_page_t* mi_heap_os_abandoned_page_claim_next(mi_heap_t* heap, mi_page_t* page) {
-  mi_page_t* claimed = NULL;
-  mi_lock(&heap->os_abandoned_pages_lock) {
-    for (mi_page_t* p = (page==NULL ? heap->os_abandoned_pages : page->next); p != NULL && claimed == NULL; p = p->next) {
-      if (mi_page_claim_ownership(p)) { claimed = p; }
-    }
-  }
-  return claimed;
-}
-
-// Collect the abandoned pages of a heap; this can run concurrently with frees (but not with allocations, see `doc/qsbr.md`).
-void _mi_heap_collect_abandoned(mi_heap_t* heap) {
-  mi_assert_internal(heap != NULL);
-  mi_lock(&heap->theaps_lock) {
-    // Use the all-pages map: abandoned size-class maps exclude singletons and full pages.
-    mi_forall_arenas(heap, NULL, 0, &mi_heap_collect_abandoned_arena, heap, NULL);
-    mi_page_t* page = mi_heap_os_abandoned_page_claim_next(heap, NULL);
-    while (page != NULL) {
-      mi_page_t* const next = mi_heap_os_abandoned_page_claim_next(heap, page);  // claim while we still own `page`
-      mi_heap_collect_abandoned_page(page);
-      page = next;
-    }
-  }
-}
-#endif
-
-
 /* -----------------------------------------------------------
   Move all pages of a deleted heap to a target heap: empty pages are freed,
   and if there is no target heap (`heap_target==NULL`) all pages are destroyed.
@@ -232,6 +181,7 @@ static void mi_heap_move_page(const mi_heap_move_info_t* info, mi_page_t* page) 
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(mi_page_heap(page) == heap);
+  mi_assert_internal(heap_target == NULL || !mi_heap_qsbr_is_enabled(heap));  // a QSBR heap cannot be deleted (only destroyed)
 
   _mi_page_free_collect(page, true);  // collect cross-thread frees so `used` is precise
   _mi_page_qsbr_clear(page);          // deletion requires an unprotected heap; destruction requires no readers
@@ -239,16 +189,16 @@ static void mi_heap_move_page(const mi_heap_move_info_t* info, mi_page_t* page) 
 
   if (mi_page_used(page)==0) {
     // free the page
-    _mi_arenas_page_free(page, NULL);
+    _mi_arenas_page_free_direct(page, NULL);
   }
   else if (heap_target==NULL) {
     #if MI_GUARDED
     _mi_page_unguard_all(page);          // remove potential interior guard pages
     #endif
     // destroy the page
-    _mi_page_free_collect(page, false); // collect the thread-free list first while `used` still counts those blocks (as `_mi_arenas_page_free` collects it again) (see #1420)
+    _mi_page_free_collect(page, false); // collect the thread-free list first while `used` still counts those blocks (as `_mi_arenas_page_free_direct` collects it again) (see #1420)
     mi_page_used_reset(page);           // note: invariant `|local_free| + |free| == reserved - used`  does not hold in this case
-    _mi_arenas_page_free(page, NULL);
+    _mi_arenas_page_free_direct(page, NULL);
   }
   else {
     // move the page to `heap_target` as an abandoned page
@@ -352,6 +302,9 @@ static bool mi_heap_has_pages(mi_heap_t* heap) {
 
 static void mi_heap_move_pages(mi_heap_t* heap, mi_heap_t* heap_target) {
   mi_assert_internal(heap->is_deleted && heap->theaps == NULL);
+  #if MI_QSBR
+  mi_assert_internal(mi_atomic_load_ptr_relaxed(mi_page_t, &heap->qsbr_delayed) == NULL);  // delayed pages are owned and cannot be claimed
+  #endif
   mi_heap_move_info_t info = { heap, heap_target, (heap_target != NULL ? _mi_heap_theap(heap_target) : NULL), false };
   do {
     info.retry = false;
@@ -379,5 +332,162 @@ void _mi_heap_move_pages(mi_heap_t* heap_from, mi_heap_t* heap_to) {
 
 void _mi_heap_destroy_pages(mi_heap_t* heap_from) {
   if (mi_is_heap_main(heap_from)) return;
+  mi_heap_qsbr_collect_delayed(heap_from, SIZE_MAX, true); // Destruction requires external exclusion, so no delayed-page collector can hold the lock or detached pages.
   mi_heap_move_pages(heap_from, NULL);
 }
+
+
+/* -----------------------------------------------------------
+  QSBR: heap delayed singleton pages and abandoned page collection
+----------------------------------------------------------- */
+
+#if MI_QSBR
+// Append a list of pages at the end of the delayed list (with the delayed lock held).
+static void mi_heap_qsbr_delayed_append(mi_heap_t* heap, mi_page_t* first, mi_page_t* last) {
+  mi_assert_internal(first != NULL && last != NULL && last->next == NULL);
+  if (heap->qsbr_delayed_last == NULL) {
+    mi_atomic_store_ptr_relaxed(mi_page_t, &heap->qsbr_delayed, first);
+  }
+  else {
+    heap->qsbr_delayed_last->next = first;
+  }
+  heap->qsbr_delayed_last = last;
+}
+
+// The caller removed the page from its old queues/registries and keeps ownership.
+void _mi_heap_qsbr_delayed_enqueue(mi_page_t* page) {
+  mi_assert_internal(mi_page_is_owned(page) && mi_page_is_abandoned(page));
+  mi_assert_internal(mi_page_all_free(page) && mi_page_is_singleton(page));
+  mi_assert_internal(!mi_page_is_abandoned_mapped(page));
+  mi_assert_internal(page->next == NULL && page->prev == NULL);
+  mi_assert_internal(!mi_page_qsbr_is_in_queue(page) && page->qsbr_next == NULL && page->qsbr_prev == NULL);
+  mi_assert_internal(!mi_page_qsbr_is_clear(&page->qsbr));
+  mi_heap_t* heap = mi_page_heap(page);
+  mi_assert_internal(mi_heap_qsbr_is_enabled(heap));
+  _mi_page_update_stats(page);
+  mi_lock(&heap->qsbr_delayed_lock) {
+    mi_heap_qsbr_delayed_append(heap, page, page);
+  }
+}
+
+// Detach up to `max_pages` (at least 1) from the front of the delayed list (the oldest pages), free those whose
+// grace period completed, and append the others at the end again (so they rotate). The lock is only held to
+// update the list; polling QSBR (which calls into the embedder) and freeing pages happens outside the lock.
+static void mi_heap_qsbr_collect_delayed(mi_heap_t* heap, size_t max_pages, bool destroy) {
+  if (mi_atomic_load_ptr_relaxed(mi_page_t, &heap->qsbr_delayed) == NULL) return;
+  if (!mi_lock_try_acquire(&heap->qsbr_delayed_lock)) return;
+  mi_page_t* const first = mi_atomic_load_ptr_relaxed(mi_page_t, &heap->qsbr_delayed);
+  if (first == NULL) {
+    mi_lock_release(&heap->qsbr_delayed_lock);
+    return;
+  }
+  mi_page_t* last = first;
+  while (--max_pages > 0 && last->next != NULL) { last = last->next; }
+  mi_atomic_store_ptr_relaxed(mi_page_t, &heap->qsbr_delayed, last->next);
+  if (last->next == NULL) { heap->qsbr_delayed_last = NULL; }
+  last->next = NULL;
+  mi_lock_release(&heap->qsbr_delayed_lock);
+
+  mi_page_t* delayed_first = NULL;
+  mi_page_t* delayed_last = NULL;
+  mi_page_t* next;
+  for (mi_page_t* page = first; page != NULL; page = next) {
+    next = page->next;
+    page->next = NULL;
+    if (destroy || !_mi_page_qsbr_should_delay(page)) {
+      _mi_page_qsbr_clear(page);
+      _mi_arenas_page_free_direct(page, NULL);
+    }
+    else {
+      if (delayed_last == NULL) { delayed_first = page; }
+      else { delayed_last->next = page; }
+      delayed_last = page;
+    }
+  }
+  if (delayed_first != NULL) {
+    mi_lock(&heap->qsbr_delayed_lock) {
+      mi_heap_qsbr_delayed_append(heap, delayed_first, delayed_last);
+    }
+  }
+}
+
+void _mi_heap_qsbr_collect_delayed(mi_heap_t* heap) {
+  mi_heap_qsbr_collect_delayed(heap, 8, false);
+}
+
+// Collect an abandoned page that we claimed: free it if it is empty and safe, and otherwise unown it again.
+static void mi_heap_collect_abandoned_page(mi_page_t* page) {
+  mi_assert_internal(mi_page_is_owned(page));
+  _mi_page_free_collect(page, true);
+  if (mi_page_all_free(page) && !_mi_page_qsbr_should_delay(page)) {
+    _mi_arenas_page_unabandon(page, NULL);
+    _mi_arenas_page_free(page, NULL);  // frees the page
+  }
+  else {
+    _mi_abandoned_page_unown(page, NULL);  // leaves a delayed page in place (but an empty singleton goes to `_mi_arenas_page_free`)
+  }
+}
+
+// Pages owned by a concurrent free are skipped (as that free collects the page itself).
+static bool mi_heap_collect_abandoned_page_at(size_t slice_index, size_t slice_count, mi_arena_t* arena, void* arg) {
+  MI_UNUSED(slice_count);
+  mi_heap_t* const heap = (mi_heap_t*)arg;
+  mi_bitmap_t* const pages = mi_heap_arena_pages(heap, arena)->pages;
+  // temporarily clear the bit so a concurrent free cannot free the page while we claim it (see `_mi_arenas_page_free_prim`)
+  if (!mi_bitmap_clear(pages, slice_index)) return true;  // freed concurrently
+  mi_page_t* const page = mi_arena_page_at_slice(arena, slice_index);
+  const bool claimed = (mi_page_is_abandoned(page) && mi_page_claim_ownership(page));
+  mi_bitmap_set(pages, slice_index);
+  if (claimed) { mi_heap_collect_abandoned_page(page); }
+  return true;
+}
+
+static bool mi_heap_collect_abandoned_arena(mi_arena_t* arena, const void* arg, void** result) {
+  MI_UNUSED(result);
+  mi_heap_t* heap = (mi_heap_t*)arg;
+  mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena);
+  if (arena_pages == NULL) return true;
+  return _mi_bitmap_forall_set(arena_pages->pages, &mi_heap_collect_abandoned_page_at, arena, heap);
+}
+
+// Claim the first abandoned OS page after `page` (or from the start if `page==NULL`).
+// The `page` must be owned by us so it stays in the list (and cannot be freed concurrently).
+static mi_page_t* mi_heap_os_abandoned_page_claim_next(mi_heap_t* heap, mi_page_t* page) {
+  mi_page_t* claimed = NULL;
+  mi_lock(&heap->os_abandoned_pages_lock) {
+    for (mi_page_t* p = (page==NULL ? heap->os_abandoned_pages : page->next); p != NULL && claimed == NULL; p = p->next) {
+      if (mi_page_claim_ownership(p)) { claimed = p; }
+    }
+  }
+  return claimed;
+}
+
+// Collect the abandoned pages of a heap; this can run concurrently with frees (but not with allocations, see `doc/qsbr.md`).
+void _mi_heap_collect_abandoned(mi_heap_t* heap) {
+  mi_assert_internal(heap != NULL);
+  mi_lock(&heap->theaps_lock) {
+    // Use the all-pages map: abandoned size-class maps exclude singletons and full pages.
+    mi_forall_arenas(heap, NULL, 0, &mi_heap_collect_abandoned_arena, heap, NULL);
+    mi_page_t* page = mi_heap_os_abandoned_page_claim_next(heap, NULL);
+    while (page != NULL) {
+      mi_page_t* const next = mi_heap_os_abandoned_page_claim_next(heap, page);  // claim while we still own `page`
+      mi_heap_collect_abandoned_page(page);
+      page = next;
+    }
+    mi_heap_qsbr_collect_delayed(heap, SIZE_MAX, false);
+  }
+}
+#else
+static void mi_heap_qsbr_collect_delayed(mi_heap_t* heap, size_t max_pages, bool destroy) {
+  MI_UNUSED(heap); MI_UNUSED(max_pages); MI_UNUSED(destroy);
+  return;
+}
+void _mi_heap_qsbr_collect_delayed(mi_heap_t* heap) {
+  MI_UNUSED(heap);
+  return;
+}
+void _mi_heap_collect_abandoned(mi_heap_t* heap) {
+  MI_UNUSED(heap);
+  return;
+}
+#endif

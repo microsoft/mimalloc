@@ -553,13 +553,13 @@ static inline void mi_page_qsbr_unlink(mi_page_t* page) {
   mi_theap_t* theap = mi_page_theap(page);
   if (page->qsbr_prev != NULL) { page->qsbr_prev->qsbr_next = page->qsbr_next; }
   else {
-    mi_assert_internal(theap->qsbr_first == page);
-    theap->qsbr_first = page->qsbr_next;
+    mi_assert_internal(theap->qsbr_delayed == page);
+    theap->qsbr_delayed = page->qsbr_next;
   }
   if (page->qsbr_next != NULL) { page->qsbr_next->qsbr_prev = page->qsbr_prev; }
   else {
-    mi_assert_internal(theap->qsbr_last == page);
-    theap->qsbr_last = page->qsbr_prev;
+    mi_assert_internal(theap->qsbr_delayed_last == page);
+    theap->qsbr_delayed_last = page->qsbr_prev;
   }
   page->qsbr_next = page->qsbr_prev = NULL;
   mi_page_qsbr_set_in_queue(page, false);
@@ -576,10 +576,10 @@ static inline void mi_page_qsbr_enqueue(mi_page_t* page, mi_theap_t* theap) {
   mi_assert_internal(!mi_page_qsbr_is_clear(&page->qsbr));
   if (mi_page_qsbr_is_in_queue(page)) return;
   mi_assert_internal(page->qsbr_next == NULL && page->qsbr_prev == NULL);
-  page->qsbr_prev = theap->qsbr_last;
-  if (theap->qsbr_last != NULL) { theap->qsbr_last->qsbr_next = page; }
-  else { theap->qsbr_first = page; }
-  theap->qsbr_last = page;
+  page->qsbr_prev = theap->qsbr_delayed_last;
+  if (theap->qsbr_delayed_last != NULL) { theap->qsbr_delayed_last->qsbr_next = page; }
+  else { theap->qsbr_delayed = page; }
+  theap->qsbr_delayed_last = page;
   mi_page_qsbr_set_in_queue(page, true);
 #else
   MI_UNUSED(page);

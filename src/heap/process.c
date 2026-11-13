@@ -172,7 +172,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   MI_MEMID_STATIC,
   MI_STATS_NULL,          // stats
   #if MI_QSBR
-  NULL, NULL,            // qsbr_first, qsbr_last
+  NULL, NULL,            // qsbr_delayed, qsbr_delayed_last
   #endif
 };
 

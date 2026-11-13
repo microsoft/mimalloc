@@ -13,6 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/util/memid.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/arena/arena-alloc.h"
+#include "mimalloc/arena/arena-page.h"   // _mi_heap_qsbr_collect_delayed
 #include "mimalloc/profile/sample-guarded.h"
 #include "mimalloc/profile/sample-profile.h"
 #include "mimalloc/heap/heap.h"
@@ -151,6 +152,7 @@ static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
   // collect arenas (this is program wide so don't force purges on abandonment of threads)
   //mi_atomic_storei64_release(&theap->tld->subproc->purge_expire, 1);
   if (collect != MI_ABANDON) {
+    _mi_heap_qsbr_collect_delayed(theap->heap);  // skip on thread shutdown as QSBR polling may call into the embedder
     _mi_arenas_collect(collect == MI_FORCE /* force purge? */, collect >= MI_FORCE /* visit all? */, theap->tld);
   }
 
@@ -390,7 +392,7 @@ size_t _mi_theap_random_next(mi_theap_t* theap) {
 static void mi_theap_free_mem(mi_theap_t* theap) {
   if (theap!=NULL) {
     #if MI_QSBR
-    mi_assert_internal(theap->qsbr_first == NULL && theap->qsbr_last == NULL);
+    mi_assert_internal(theap->qsbr_delayed == NULL && theap->qsbr_delayed_last == NULL);
     #endif
     mi_subproc_t* const subproc = mi_atomic_load_ptr_relaxed(mi_subproc_t,&theap->subproc);
     if (!theap->is_detached) {

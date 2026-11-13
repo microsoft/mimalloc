@@ -143,6 +143,9 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
   heap->is_deleted = false;
   #if MI_QSBR
   heap->qsbr_enabled = use_qsbr;
+  mi_atomic_store_ptr_relaxed(mi_page_t, &heap->qsbr_delayed, NULL);
+  heap->qsbr_delayed_last = NULL;
+  mi_lock_init(&heap->qsbr_delayed_lock);
   if (use_qsbr) {
     if (heap->reclaim_on_free > 0) { heap->reclaim_on_free = 0; }
     mi_heap_qsbr_init(&heap->qsbr);
@@ -305,6 +308,10 @@ static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
   mi_lock_done(&heap->theaps_lock);
   mi_lock_done(&heap->os_abandoned_pages_lock);
   mi_lock_done(&heap->arena_pages_lock);
+  #if MI_QSBR
+  mi_assert_internal(mi_atomic_load_ptr_relaxed(mi_page_t, &heap->qsbr_delayed) == NULL);
+  mi_lock_done(&heap->qsbr_delayed_lock);
+  #endif
   if (!is_main) {  // main heaps of all subprocesses share the fast key which must never be released
     _mi_thread_local_free(heap->theap);
     heap->theap = 0;

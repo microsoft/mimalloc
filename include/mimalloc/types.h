@@ -767,8 +767,8 @@ struct mi_theap_s {
   mi_memid_t            memid;                               // provenance of the theap struct itself (meta or os)
   mi_stats_t            stats;                               // thread-local statistics
   #if MI_QSBR
-  mi_page_t*           qsbr_first;
-  mi_page_t*           qsbr_last;
+  mi_page_t*            qsbr_delayed;
+  mi_page_t*            qsbr_delayed_last;
   #endif
 };
 
@@ -827,6 +827,9 @@ typedef struct mi_heap_s {
   mi_memid_t            memid;                           // provenance of the heap memory
   mi_stats_t            stats;                           // statistics for this heap; periodically updated by merging from each theap
   #if MI_QSBR
+  _Atomic(mi_page_t*)   qsbr_delayed;                    // empty singletons, owned by this list instead of abandoned registries
+  mi_page_t*            qsbr_delayed_last;
+  mi_lock_t             qsbr_delayed_lock;
   mi_heap_qsbr_t        qsbr;
   #endif
 } mi_heap_t;
