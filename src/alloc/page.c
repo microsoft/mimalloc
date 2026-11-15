@@ -22,11 +22,10 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 
 // Index a block in a page (with its memory tag if `memtag` is set)
-static inline mi_block_t* mi_page_block_at(const mi_page_t* page, void* page_start, size_t block_size, size_t i, bool memtag) {
-  MI_UNUSED(page);
+static inline mi_block_t* mi_page_block_at(const mi_page_t* page, size_t block_size, size_t i, bool memtag) {
   mi_assert_internal(page != NULL);
   mi_assert_internal(i <= page->reserved);
-  mi_block_t* const block = (mi_block_t*)((uint8_t*)page_start + (i * block_size));
+  mi_block_t* const block = (mi_block_t*)(mi_page_start(page) + (i * block_size));
   return (memtag ? (mi_block_t*)mi_memtag_load(block) : block);
 }
 
@@ -852,7 +851,6 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
   #endif
   mi_assert_internal(page->capacity + extend <= page->reserved);
   mi_assert_internal(bsize == mi_page_block_size(page));
-  void* const page_area = mi_page_start(page);
 
   // initialize a randomized free list
   // set up `slice_count` slices to alternate between
@@ -866,7 +864,7 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
   mi_block_t* blocks[MI_MAX_SLICES];   // current start of the slice
   size_t      counts[MI_MAX_SLICES];   // available objects in the slice
   for (size_t i = 0; i < slice_count; i++) {
-    blocks[i] = mi_page_block_at(page, page_area, bsize, page->capacity + i*slice_extend, memtag);
+    blocks[i] = mi_page_block_at(page, bsize, page->capacity + i*slice_extend, memtag);
     counts[i] = slice_extend;
   }
   counts[slice_count-1] += (extend % slice_count);  // final slice holds the modulus too (todo: distribute evenly?)
@@ -911,12 +909,11 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
   #endif
   mi_assert_internal(page->capacity + extend <= page->reserved);
   mi_assert_internal(bsize == mi_page_block_size(page));
-  void* const page_area = mi_page_start(page);
 
-  mi_block_t* const start = mi_page_block_at(page, page_area, bsize, page->capacity, memtag);
+  mi_block_t* const start = mi_page_block_at(page, bsize, page->capacity, memtag);
 
   // initialize a sequential free list
-  mi_block_t* const last = mi_page_block_at(page, page_area, bsize, page->capacity + extend - 1, false);
+  mi_block_t* const last = mi_page_block_at(page, bsize, page->capacity + extend - 1, false);
   mi_block_t* block = start;
   while (mi_addr(block) < mi_addr(last)) {
     mi_block_t* const next = mi_block_after(block, bsize, memtag);
@@ -966,8 +963,14 @@ bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_internal(extend > 0);
 
   const size_t min_extend = MI_MIN_EXTEND(bsize);
-  size_t max_extend = (bsize >= MI_MAX_EXTEND_SIZE ? min_extend : MI_MAX_EXTEND_SIZE/bsize);
-  if (max_extend < min_extend) { max_extend = min_extend; }
+  size_t max_extend = min_extend;
+  if (bsize < MI_MAX_EXTEND_SIZE) {
+    // extend up to an `MI_MAX_EXTEND_SIZE` aligned address (as the page start can be offset) to avoid touching an extra OS page
+    const mi_addr_t start = mi_addr(mi_page_block_at(page, bsize, page->capacity, false));
+    const mi_addr_t end = mi_align_down(start + MI_MAX_EXTEND_SIZE, MI_MAX_EXTEND_SIZE);
+    max_extend = (size_t)(end - start) / bsize;
+    if (max_extend < min_extend) { max_extend = min_extend; }
+  }
   mi_assert_internal(max_extend > 0);
 
   if (extend > max_extend) {
