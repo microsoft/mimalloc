@@ -45,9 +45,6 @@ and the page offset is stored unmasked (as the page keys need not be secret).
 Authentication failures report `EFAULT` and return `NULL` (see `_mi_error_ptr_auth_failed`).
 ----------------------------------------------------------------------------- */
 
-void* _mi_error_ptr_auth_failed(mi_ptr_signed_t x, mi_addr_t salt);               // slow path: returns NULL for x==0, and reports EFAULT otherwise
-void  _mi_error_ptr_pac_unaligned(const void* p);                                 // fatal error for an unaligned pointer with memory tagging
-
 // Sign a pointer `p` to be stored at address `salt`
 static inline mi_ptr_signed_t mi_ptr_sign(const void* p, mi_addr_t salt);
 

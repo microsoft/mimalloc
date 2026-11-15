@@ -837,4 +837,29 @@ static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, c
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
 }
 
+
+/* -----------------------------------------------------------
+  Safe unlinking of doubly linked lists
+
+  In secure mode, check that a `node` is properly linked through its `prev` and `next`
+  fields before unlinking it, such that corrupted links cannot be used for arbitrary writes.
+  `first` is the head of the list, and `last` the tail (or `NULL` if the list has no tail).
+  A corrupted list is a fatal error.
+----------------------------------------------------------- */
+
+static inline bool mi_list_link_is(const void* link, const void* node) {
+  return (mi_addr(link) == mi_addr(node));  // ignore memory tags
+}
+
+#if MI_SECURE>=1
+#define mi_list_unlink_check(node,prev,next,first,last) \
+  do { \
+    if mi_unlikely(!((node)->prev==NULL ? mi_list_link_is(first,node) : mi_list_link_is((node)->prev->next,node)) || \
+                   !((node)->next==NULL ? ((last)==NULL || mi_list_link_is(last,node)) : mi_list_link_is((node)->next->prev,node))) \
+    { _mi_error_list_corrupted(node); } \
+  } while(0)
+#else
+#define mi_list_unlink_check(node,prev,next,first,last)  do { } while(0)
+#endif
+
 #endif
