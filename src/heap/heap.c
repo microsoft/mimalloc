@@ -132,6 +132,7 @@ mi_decl_cold mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
 
 void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool use_qsbr)
 {
+  mi_assert_internal(_mi_bin_size(_mi_bin(MI_LARGE_MAX_OBJ_SIZE)) == MI_LARGE_MAX_OBJ_SIZE);  // must be a bin size
   // init fields
   heap->cookie = mi_heap_cookie(heap);
   heap->theap = theap_slot;
