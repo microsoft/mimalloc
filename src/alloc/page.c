@@ -698,8 +698,12 @@ bool _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   }
 }
 
-#define MI_RETIRE_CYCLES      (16)      /* keep a retired page around for about 16 "admin cycles" before free'ing it */
+#ifndef MI_RETIRE_CYCLES
+#define MI_RETIRE_CYCLES      (32)      /* keep a retired page around for about N "admin cycles" before free'ing it */
+#endif
+#ifndef MI_RETIRE_MAX_PAGES
 #define MI_RETIRE_MAX_PAGES   (3)       /* keep at most N pages per size bin as retired */
+#endif
 
 // Retire a page with no more used blocks
 // Important to not retire too quickly though as new
