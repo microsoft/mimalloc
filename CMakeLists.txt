@@ -352,7 +352,7 @@ elseif(MI_SECURE STREQUAL "MINIMAL")
   list(APPEND mi_defines MI_SECURE=1)
   set(MI_SECURE "OFF")  # so if(MI_SECURE) is false in subsequent checks
 elseif(MI_SECURE STREQUAL "CHECKED")
-  message(STATUS "Use minimal security mitigations, validate pointers passed to free, encode free lists, and randomize free lists (MI_SECURE=CHECKED)")
+  message(STATUS "Use checked security mitigations (minimal + validate pointers passed to free, encode free lists, and randomize free lists (MI_SECURE=CHECKED)")
   list(APPEND mi_defines MI_SECURE=2)
   if(MI_FREE_IS_CHECKED STREQUAL "DEFAULT")
     set(MI_FREE_IS_CHECKED ON)  # implied by MI_SECURE=2
@@ -462,6 +462,8 @@ if(MI_PAC)
     message(STATUS "Sign internal pointers using pointer authentication and require it to be supported at runtime (MI_PAC=${MI_PAC})")
     list(APPEND mi_defines MI_PAC=2)
   endif()
+elseif(MI_MTE)
+  message(WARNING "Pointer authentication is currently not ON, but is recommended when memory tagging is enabled (MI_MTE=${MI_MTE})")
 endif()
 
 if(MI_CHECK_FULL OR MI_DEBUG_FULL)
@@ -1274,7 +1276,11 @@ if (MI_BUILD_TESTS)
   endif()
   function(mi_test_sign target)
     if(mi_test_mte_sign)
-      add_custom_command(TARGET ${target} POST_BUILD COMMAND ${MI_CODESIGN} -s - -f --entitlements ${CMAKE_CURRENT_SOURCE_DIR}/cmake/mte-entitlements.plist $<TARGET_FILE:${target}>)
+      # remove the linker's ad-hoc signature first to avoid a "replacing existing signature" message
+      add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${MI_CODESIGN} --remove-signature $<TARGET_FILE:${target}>
+        COMMAND ${MI_CODESIGN} -s - --entitlements ${CMAKE_CURRENT_SOURCE_DIR}/cmake/mte-entitlements.plist $<TARGET_FILE:${target}>
+        COMMENT "Code sign (MTE): ${target}")
     endif()
   endfunction()
 
