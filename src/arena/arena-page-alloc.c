@@ -46,9 +46,9 @@ static size_t mi_page_guard_front_block_start(size_t guard_front, size_t block_s
   return mi_align_up(guard_front, mi_bounds_align(block_size));  // on CHERI, keep exact bounds
 }
 
-// Can we offset the first block to spread cache sets? (see `MI_PAGE_CACHE_OFFSET`)
-static bool mi_page_block_can_cache_offset(size_t block_size, bool os_align) {
-  if (os_align || !mi_block_size_has_cache_offset(block_size)) return false;
+// Can we offset the first block with a large cache offset to spread cache sets? (see `MI_PAGE_LARGE_CACHE_OFFSET`)
+static bool mi_page_block_can_use_large_cache_offset(size_t block_size) {
+  if (!mi_block_size_has_large_cache_offset(block_size)) return false;
   #if MI_GUARDED
   if (block_size % _mi_os_page_size() == 0) return false;  // guarded blocks must stay OS page aligned
   #endif
@@ -86,8 +86,9 @@ static size_t mi_page_meta_in_front_block_start(size_t block_size, bool os_align
     offset = mi_align_up(mi_page_info_size(), block_size);
   }
   else if (block_size != 0 && (block_size % MI_PAGE_OSPAGE_BLOCK_ALIGN2) == 0) {
-    // also align large pages that are a multiple of MI_PAGE_OSPAGE_BLOCK_ALIGN2 (4KiB)
-    offset = mi_align_up(mi_page_info_size(), MI_PAGE_OSPAGE_BLOCK_ALIGN2);
+    // align blocks that are a multiple of MI_PAGE_OSPAGE_BLOCK_ALIGN2 (4KiB) (or to the cache offset unit)
+    const size_t alignment = (mi_page_block_can_use_large_cache_offset(block_size) ? MI_PAGE_LARGE_CACHE_OFFSET_UNIT : MI_PAGE_OSPAGE_BLOCK_ALIGN2);
+    offset = mi_align_up(mi_page_info_size(), alignment);
   }
   else {
     // otherwise start after the info
@@ -118,15 +119,15 @@ static size_t mi_page_small_block_cache_offset(uint8_t* slice_start, size_t slic
 // The offset fits in the unused space at the end of the page; if there is none, we skip the last block
 // if that wastes at most 12.5% of the page.
 static size_t mi_page_block_cache_offset(uint8_t* slice_start, size_t slice_count, size_t block_size, size_t block_start, bool os_align, size_t page_noguard_size) {
-  if (MI_PAGE_CACHE_OFFSET == 0 || os_align) return 0;
-  if (!mi_block_size_has_cache_offset(block_size)) return mi_page_small_block_cache_offset(slice_start, slice_count, block_size);
-  if (!mi_page_block_can_cache_offset(block_size, os_align)) return 0;
-  const size_t unit = mi_max(MI_PAGE_CACHE_OFFSET_UNIT, mi_bounds_align(block_size));  // on CHERI, keep exact bounds
-  if (unit > MI_PAGE_CACHE_OFFSET_MAX) return 0;
+  if (MI_PAGE_LARGE_CACHE_OFFSET == 0 || os_align) return 0;
+  if (!mi_block_size_has_large_cache_offset(block_size)) return mi_page_small_block_cache_offset(slice_start, slice_count, block_size);
+  if (!mi_page_block_can_use_large_cache_offset(block_size)) return 0;
+  const size_t unit = mi_max(MI_PAGE_LARGE_CACHE_OFFSET_UNIT, mi_bounds_align(block_size));  // on CHERI, keep exact bounds
+  if (unit > MI_PAGE_LARGE_CACHE_OFFSET_MAX) return 0;
   mi_assert_internal(block_start + block_size <= page_noguard_size);
   size_t slack = (page_noguard_size - block_start) % block_size;
   if (slack < unit && block_size <= page_noguard_size/8) { slack += block_size; }      // offset 0 still fits exact
-  const size_t noffsets = 1 + (slack < MI_PAGE_CACHE_OFFSET_MAX ? slack : MI_PAGE_CACHE_OFFSET_MAX) / unit;
+  const size_t noffsets = 1 + (slack < MI_PAGE_LARGE_CACHE_OFFSET_MAX ? slack : MI_PAGE_LARGE_CACHE_OFFSET_MAX) / unit;
   return mi_page_cache_offset_index(slice_start, slice_count, noffsets) * unit;
 }
 
@@ -662,7 +663,7 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_theap_t* theap, size_t block
   const size_t info_size = (os_align ? MI_PAGE_ALIGN : mi_align_up(mi_page_info_size(), mi_bounds_align(block_size)));  // see `mi_page_meta_in_front_block_start`
   #endif
   // room for the cache offset of the block (committed but not touched)
-  const size_t cache_offset_size = (mi_page_block_can_cache_offset(block_size, os_align) ? MI_PAGE_CACHE_OFFSET_MAX : 0);
+  const size_t cache_offset_size = (!os_align && mi_page_block_can_use_large_cache_offset(block_size) ? MI_PAGE_LARGE_CACHE_OFFSET_MAX : 0);
   // determine the guard pages based on the page size without guard pages
   const size_t size = info_size + cache_offset_size + block_size;
   const mi_page_guards_t guards = mi_theap_page_guards(theap, _mi_size_of_slices(_mi_slice_count_of_size(size)), true, os_align);

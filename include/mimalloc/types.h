@@ -597,16 +597,16 @@ typedef struct mi_decl_memtag_unit_align mi_page_s {
 
 #define MI_PAGE_ALIGN                     MI_ARENA_SLICE_ALIGN      // page area's must be aligned on this for the page map.
 #define MI_PAGE_MIN_START_BLOCK_ALIGN     MI_MAX_ALIGN_SIZE         // minimal block alignment for the first block in a page (16b)
-#define MI_PAGE_MAX_START_BLOCK_ALIGN2    (4*MI_KiB)                // maximal block alignment for "power of 2"-sized blocks (such that we guarantee natural alignment)
-#define MI_PAGE_OSPAGE_BLOCK_ALIGN2       (4*MI_KiB)                // also aligns any multiple of this size to avoid TLB misses.
+#define MI_PAGE_MAX_START_BLOCK_ALIGN2    (4*MI_KiB)                // maximal block alignment for "power of 2"-sized blocks (such that we guarantee natural alignment, i.e. aligned to their own size)
+#define MI_PAGE_OSPAGE_BLOCK_ALIGN2       (4*MI_KiB)                // alignment of blocks that are a multiple of this size.
 #define MI_PAGE_MAX_OVERALLOC_ALIGN       MI_ARENA_SLICE_SIZE       // (64 KiB) limit for which we overallocate in arena pages, beyond this use OS allocation
 
 // Offset the first block in pages with larger blocks (using the unused space at the end of the page) spread across cache sets (issue #1121).
-#if !defined(MI_PAGE_CACHE_OFFSET)
-#define MI_PAGE_CACHE_OFFSET              1
+#if !defined(MI_PAGE_LARGE_CACHE_OFFSET)
+#define MI_PAGE_LARGE_CACHE_OFFSET        1
 #endif
-#define MI_PAGE_CACHE_OFFSET_UNIT         (128)                                                     // offset granularity (power of 2 between 16 and 4KiB)
-#define MI_PAGE_CACHE_OFFSET_MAX          (MI_PAGE_OSPAGE_BLOCK_ALIGN2 - MI_PAGE_CACHE_OFFSET_UNIT) // maximal offset (32 possible offsets)
+#define MI_PAGE_LARGE_CACHE_OFFSET_UNIT   (128)                         // offset granularity (power of 2 between 16 and 4KiB)
+#define MI_PAGE_LARGE_CACHE_OFFSET_MAX    (MI_PAGE_OSPAGE_BLOCK_ALIGN2 - MI_PAGE_LARGE_CACHE_OFFSET_UNIT) // maximal offset (32 possible offsets)
 // Offset the first block in pages with small blocks
 #define MI_PAGE_SMALL_CACHE_OFFSET_UNIT   (64)
 #define MI_PAGE_SMALL_CACHE_OFFSET_MAX    (7*MI_PAGE_SMALL_CACHE_OFFSET_UNIT)  // up to 512B (7+1 offsets) (using 15+1 offsets upto 1KiB works well too)
