@@ -295,7 +295,7 @@ jobs:
   # VM: Alpine Linux with MUSL libc
   alpine:
     name: qemu, alpine-${{ matrix.target }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # setup-alpine uses `sudo -E` which is not supported by sudo-rs on Ubuntu 26.04+
     continue-on-error: true
     defaults:
       run:
