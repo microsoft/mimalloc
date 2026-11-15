@@ -194,7 +194,7 @@ static bool mi_page_map_init_once(void) {
   // set the page map (once) before the committed count as `mi_checked_ptr_page` only reads the page map if the count is non-zero
   mi_process_sealed_once_t* const once = _mi_process_unseal_once();
   mi_page_map_t* const pmap_bounded = (mi_page_map_t*)mi_ptr_bounded_data(pmap, reserve_size);  // see `mi_page_map_vmem`
-  mi_atomic_store_ptr_release(mi_page_map_t, &once->page_map, (mi_page_map_t*)mi_ptr_memtag_meta(pmap_bounded));  // store without memory tag (see `mi_page_map`)
+  mi_atomic_store_ptr_release(mi_page_map_t, &once->page_map, (mi_page_map_t*)mi_ptr_memtag_meta(pmap_bounded));  // store without memory tag (see `mi_page_map_untagged`)
   _mi_process_seal_once();
   mi_page_map_store_committed(commit_count);
   mi_assert_internal(mi_ptr_page(NULL)==NULL);
@@ -294,7 +294,7 @@ static bool mi_page_map_set_range_prim(mi_page_map_t* pmap, mi_page_t* page, siz
     // set the offsets for the page; use atomic stores as the entries of a freed OS page can be set by another
     // thread that reallocates the same address range (and the OS unmap and map do not synchronize for TSAN)
     while (slice_count > 0 && sub_idx < MI_PAGE_MAP_SUB_COUNT) {
-      mi_atomic_ptr_sign_relaxed((_Atomic(mi_ptr_signed_t)*)&sub[sub_idx], page);
+      mi_atomic_ptr_sign_relaxed(&sub[sub_idx], page);
       slice_count--;
       sub_idx++;
     }

@@ -73,7 +73,7 @@ typedef struct mi_process_metadata_s {
 // Sealed process data that is only written during process initialization (see `heap/process.c:_mi_process_unseal_once`).
 // In secure mode it is read-only after initialization (and immutable if the OS supports it, see `MI_PROTECT_READ_SEALED`).
 typedef struct mi_process_sealed_once_s {
-  _Atomic(struct mi_page_map_s*)  page_map;     // the page map without memory tag (`NULL` before initialization) (see `heap/page-map.h:mi_page_map`); must be the first entry for better code-gen in secure mode
+  _Atomic(struct mi_page_map_s*)  page_map;     // the page map without memory tag (`NULL` before initialization) (see `heap/page-map.h:mi_page_map_untagged`); must be the first entry for better code-gen in secure mode
   mi_addr_t           process_key;              // random process key for encoded pointers (see `prim/prim-pac.h`) and heap cookies (see `heap/heap.h:mi_heap_cookie`); next to `page_map` as it is used for page map lookups
   mi_process_metadata_t* metadata;              // process meta data without memory tag (`NULL` before initialization) (see `mi_process_metadata`)
   mi_os_mem_config_t  os_mem_config;            // OS memory configuration (see `prim/os.c`)
