@@ -82,8 +82,9 @@ static inline mi_submap_t mi_page_map_at(const mi_page_map_t* pmap, size_t idx) 
   return mi_atomic_ptr_auth_acquire(mi_ptr_signed(mi_page_t), (_Atomic(mi_ptr_signed_t)*)&pmap->submaps[idx]);
 }
 
+// relaxed atomic load as entries can be set concurrently on OS address reuse (see `page-map.c:mi_page_map_set_range_prim`)
 static inline mi_page_t* mi_submap_at(const mi_submap_t sub, size_t sub_idx) {
-  return mi_ptr_auth_at(mi_page_t, &sub[sub_idx]);
+  return mi_atomic_ptr_auth_relaxed(mi_page_t, (_Atomic(mi_ptr_signed_t)*)&sub[sub_idx]);
 }
 
 static inline mi_page_t* mi_unchecked_ptr_page(const void* p) {

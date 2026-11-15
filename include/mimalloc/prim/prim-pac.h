@@ -224,6 +224,7 @@ Note: the `slot` argument is evaluated twice.
 
 #define mi_atomic_ptr_sign_relaxed(slot,p)    mi_atomic_store_relaxed(slot, mi_ptr_sign(p, mi_addr(slot)))
 #define mi_atomic_ptr_sign_release(slot,p)    mi_atomic_store_release(slot, mi_ptr_sign(p, mi_addr(slot)))
+#define mi_atomic_ptr_auth_relaxed(tp,slot)   ((tp*)mi_ptr_auth(mi_atomic_load_relaxed(slot), mi_addr(slot)))
 #define mi_atomic_ptr_auth_acquire(tp,slot)   ((tp*)mi_ptr_auth(mi_atomic_load_acquire(slot), mi_addr(slot)))
 
 #endif // MI_PRIM_PAC_H
