@@ -78,3 +78,13 @@ function(find_link_library libname outlibname)
     endif()
   endif()
 endfunction()
+
+# describe the compiler for `lang` (C or CXX) as its path (with symlinks resolved), id, and version
+function(compiler_info lang outvar)
+  set(compiler "${CMAKE_${lang}_COMPILER}")
+  get_filename_component(compiler_path "${compiler}" REALPATH)
+  if(NOT compiler_path STREQUAL compiler)
+    string(APPEND compiler " -> ${compiler_path}")
+  endif()
+  set(${outvar} "${compiler} (${CMAKE_${lang}_COMPILER_ID} ${CMAKE_${lang}_COMPILER_VERSION}, ${lang})" PARENT_SCOPE)
+endfunction()
