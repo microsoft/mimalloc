@@ -36,7 +36,8 @@ win_direct_tls = []
 no_thp = []
 # use architecture specific optimizations (as cmake `-DMI_OPT_ARCH=ON`)
 opt_arch = []
-# use memory tagging (MTE) and require it at runtime (aarch64 Linux, Android, and macOS only; as cmake `-DMI_MTE=ON`)
+# use memory tagging (MTE) and require it at runtime (aarch64 Linux, Android, and macOS only; as cmake `-DMI_MTE=ON`);
+# this also enables pointer authentication (PAC) (opt out with `MIMALLOC_DEFINES="MI_PAC=0"`)
 mte = []
 # sign internal pointers with pointer authentication (PAC) and require it at runtime (aarch64 Linux, Android, and macOS only; as cmake `-DMI_PAC=ON`)
 pac = []

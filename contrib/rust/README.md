@@ -57,7 +57,7 @@ let heap = Heap::new_in_arena(arena);
 | `win_direct_tls`    | Use direct TLS slots on Windows |
 | `no_thp`            | Disable transparent huge pages by default on Linux |
 | `opt_arch`          | Architecture specific optimizations (as `-DMI_OPT_ARCH=ON`) |
-| `mte`               | Memory tagging; requires MTE support at runtime (aarch64 Linux, Android, and Apple only (where macOS also needs the MTE entitlement); as `-DMI_MTE=ON`) |
+| `mte`               | Memory tagging; requires MTE support at runtime (aarch64 Linux, Android, and Apple only (where macOS also needs the MTE entitlement); as `-DMI_MTE=ON`, which also enables PAC unless `MIMALLOC_DEFINES="MI_PAC=0"`) |
 | `pac`               | Sign internal pointers with pointer authentication; requires PAC support at runtime (aarch64 Linux, Android, and Apple only; as `-DMI_PAC=ON`) |
 | `nightly`           | `Allocator` support on nightly compilers before Rust 1.100 (`mimalloc` only) |
 

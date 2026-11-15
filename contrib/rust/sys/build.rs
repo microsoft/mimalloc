@@ -117,7 +117,7 @@ fn main() {
         if !hw_os {
             panic!("the `mte` feature is only supported on aarch64 Linux, Android, and macOS targets");
         }
-        define("MI_MTE", "2"); // ON
+        define("MI_MTE", "2"); // ON (which also enables `MI_PAC=2` by default in `arch.h`)
     }
     if feature("pac") {
         if !hw_os || is_msvc {

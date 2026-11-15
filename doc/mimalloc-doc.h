@@ -2572,16 +2572,19 @@ of neighboring blocks. Blocks up to 512 KiB are tagged; larger blocks use a trai
 guard page because tagging takes time proportional to the block size.
 
 Performance depends on the hardware and workload. On an M5, an MTE build is usually
-within about 15% of a release build, but can be 2 to 3x slower.
+within about 20% of a release build, but can be 2 to 3x slower.
+`-DMI_MTE=ON` also enables \ref pointer_authentication "PAC" (`-DMI_PAC=ON`),
+`-DMI_SECURE=CHECKED`, and `-DMI_SECURE_ENV=ON` by default.
+
+_These combined options provide strong mitigation against common heap exploitation techniques._
+As it is hardware assisted, this is stronger than `-DMI_SECURE=ON`.
+
 `-DMI_MTE=ON` requires CPU and OS support at runtime and aborts at initialization
 otherwise. On Linux, this also requires enabling tag checking for all threads.
 `-DMI_MTE=PREFER` uses tagging when available and otherwise runs untagged, with
 performance close to a regular release build.
-MTE builds have an `-mte` library suffix, for example `mimalloc-mte.o`.
-
-MTE enables `-DMI_SECURE=CHECKED` and `-DMI_SECURE_ENV=ON` by default.
-It provides similar and often stronger mitigations than `-DMI_SECURE=ON`,
-so combining the two is generally unnecessary.
+`-DMI_MTE=ON` builds have an `-mte-pac` library suffix, for example `mimalloc-mte-pac.o`,
+or `-mte` with `-DMI_PAC=OFF`.
 
 - **macOS:** requires an Apple M5 or later with macOS 26+. Executables need the
   hardened-process entitlements; mimalloc tests are signed automatically:
@@ -2612,7 +2615,7 @@ so combining the two is generally unnecessary.
   > cmake -DMI_MTE=ON -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=26.0 \
           -DMI_BUILD_SHARED=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF ../..
   ```
-  Link `libmimalloc-mte.a` into the app and use the hardened-process entitlements.
+  Link `libmimalloc-mte-pac.a` into the app and use the hardened-process entitlements.
 
 [MTE]: https://support.arm.com/documentation/108035/0100/How-does-MTE-work-
 
@@ -2626,8 +2629,8 @@ On arm64 hardware with pointer authentication ([PAC]), build with `-DMI_PAC=ON`.
 Mimalloc uses secret hardware keys to sign pointers and validates them on access to
 detect tampering. On an M5, the overhead is usually about 10%, but can be 1 to 2x slower.
 
-Combining `-DMI_MTE=ON -DMI_PAC=ON` provides strong mitigation against common heap
-exploitation techniques. Combined performance is usually within 5% of MTE alone.
+This is most effective together with MTE, and it is enabled by default with `-DMI_MTE=ON`.
+Without MTE, it is best combined with `-DMI_SECURE=ON` to get the most benefit.
 Mimalloc signs:
 
 - Free list links, so heap block overflows or use-after-free writes cannot forge
@@ -2635,7 +2638,7 @@ Mimalloc signs:
 - Page map entries, thread-local theap pointers, and other root pointers that may
   reside adjacent to user memory.
 
-Authentication failures abort the process. PAC enables `-DMI_SECURE=CHECKED` and
+Authentication failures abort the process. Like MTE, PAC enables `-DMI_SECURE=CHECKED` and
 `-DMI_SECURE_ENV=ON` by default. `-DMI_PAC=ON` requires CPU and OS support at runtime
 and aborts at initialization otherwise.
 On other platforms, or with MSVC, `-DMI_PAC=WEAK` signs pointers using a random

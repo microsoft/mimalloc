@@ -393,9 +393,13 @@ typedef uintptr_t           mi_ptr_signed_t;
 // Pointer signing (see `prim/prim-pac.h`): 0=off, 1=weak (using a software process key), 2=required (using the
 // arm64 generic pointer authentication key (`pacga`), which must be supported at runtime).
 // Only on 64-bit systems (and not on CHERI); `required` only on arm64 with GCC or clang.
+// Defaults to `required` with `MI_MTE=2` as all MTE hardware supports PAC.
+#if (MI_MTE >= 2) && !defined(MI_PAC)
+#define MI_PAC  2
+#endif
 #if (MI_PAC >= 2) && !(MI_ARCH_ARM64 && defined(__GNUC__))
 #error "pointer authentication (MI_PAC=ON) is only supported on arm64 with GCC or clang"
-#elif defined(MI_PAC) && (MI_CHERI || (MI_INTPTR_SIZE != 8))
+#elif (MI_PAC > 0) && (MI_CHERI || (MI_INTPTR_SIZE != 8))
 #warning "pointer authentication (MI_PAC=ON) is not supported on CHERI or non-64-bit systems"
 #undef MI_PAC
 #define MI_PAC  0
