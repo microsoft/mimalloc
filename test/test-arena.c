@@ -979,16 +979,16 @@ static bool test_page_map_tamper(void) {
   size_t sub_idx;
   const size_t idx = mi_page_map_index(p, &sub_idx);
   mi_submap_t const sub = mi_page_map_at(mi_page_map(), idx);
-  mi_ptr_signed_t* const entry = &sub[sub_idx];
-  const mi_ptr_signed_t saved = *entry;
+  _Atomic(mi_ptr_signed_t)* const entry = &sub[sub_idx];
+  const mi_ptr_signed_t saved = mi_atomic_load_relaxed(entry);
   size_t errors = 0;
   mi_register_error(&record_free_list_error, &errors);
   bool result = (page != NULL && mi_submap_at(sub, sub_idx) == page);
-  *entry = (mi_ptr_signed_t)page;                                // a raw pointer
+  mi_atomic_store_relaxed(entry, (mi_ptr_signed_t)page);        // a raw pointer
   result = (_mi_safe_ptr_page(p) == NULL && result);
-  *entry = mi_ptr_sign(page, mi_addr(entry + 1));               // validly signed for the next slot
+  mi_atomic_store_relaxed(entry, mi_ptr_sign(page, mi_addr(entry + 1)));  // validly signed for the next slot
   result = (_mi_safe_ptr_page(p) == NULL && result);
-  *entry = saved;
+  mi_atomic_store_relaxed(entry, saved);
   result = (_mi_safe_ptr_page(p) == page && result);
   mi_register_error(NULL, NULL);
   mi_free(p);
