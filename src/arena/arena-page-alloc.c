@@ -116,7 +116,7 @@ static size_t mi_page_small_block_cache_offset(uint8_t* slice_start, size_t slic
 
 // Cache offset for the first block to spread the blocks of different pages over the cache sets (issue #1121).
 // The offset fits in the unused space at the end of the page; if there is none, we skip the last block
-// if that wastes less than 12.5% of the page (e.g. 64 KiB blocks in a 4 MiB page, but not 512 KiB blocks).
+// if that wastes at most 12.5% of the page.
 static size_t mi_page_block_cache_offset(uint8_t* slice_start, size_t slice_count, size_t block_size, size_t block_start, bool os_align, size_t page_noguard_size) {
   if (MI_PAGE_CACHE_OFFSET == 0 || os_align) return 0;
   if (!mi_block_size_has_cache_offset(block_size)) return mi_page_small_block_cache_offset(slice_start, slice_count, block_size);
@@ -125,7 +125,7 @@ static size_t mi_page_block_cache_offset(uint8_t* slice_start, size_t slice_coun
   if (unit > MI_PAGE_CACHE_OFFSET_MAX) return 0;
   mi_assert_internal(block_start + block_size <= page_noguard_size);
   size_t slack = (page_noguard_size - block_start) % block_size;
-  if (slack < unit && block_size < page_noguard_size/8) { slack += block_size; }
+  if (slack < unit && block_size <= page_noguard_size/8) { slack += block_size; }      // offset 0 still fits exact
   const size_t noffsets = 1 + (slack < MI_PAGE_CACHE_OFFSET_MAX ? slack : MI_PAGE_CACHE_OFFSET_MAX) / unit;
   return mi_page_cache_offset_index(slice_start, slice_count, noffsets) * unit;
 }
