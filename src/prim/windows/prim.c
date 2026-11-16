@@ -67,7 +67,8 @@ typedef BOOL (__stdcall* PGetNumaNodeProcessorMaskEx)(USHORT Node, PGROUP_AFFINI
 typedef BOOL (__stdcall *PGetNumaProcessorNode)(UCHAR Processor, PUCHAR NodeNumber);
 typedef BOOL (__stdcall* PGetNumaNodeProcessorMask)(UCHAR Node, PULONGLONG ProcessorMask);
 typedef BOOL (__stdcall* PGetNumaHighestNodeNumber)(PULONG Node);
-typedef BOOL (__stdcall* PRtlDllShutdownInProgress)(VOID);
+typedef BOOLEAN (__stdcall* PRtlDllShutdownInProgress)(VOID);
+
 static void* pGetCurrentProcessorNumberEx = NULL;  // (all encoded)
 static void* pGetNumaProcessorNodeEx = NULL;
 static void* pGetNumaNodeProcessorMaskEx = NULL;

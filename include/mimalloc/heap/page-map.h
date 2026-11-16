@@ -105,10 +105,10 @@ static inline mi_page_t* mi_checked_ptr_page(const void* p) {
   if mi_unlikely(idx >= committed_count) return NULL;
   const mi_page_map_t* pmap = mi_page_map_initialized();
   const _Atomic(mi_ptr_signed(mi_submap_t))* const entry = &pmap->submaps[idx];
-  const mi_ptr_signed_t x = mi_atomic_load_acquire(entry);
+  const mi_ptr_signed_t sub_signed = mi_atomic_load_acquire(entry);
   bool valid;
-  mi_submap_t const sub = (mi_submap_t)mi_ptr_auth_valid(x, mi_addr(entry), &valid);
-  if mi_unlikely(!valid) return (mi_page_t*)_mi_error_ptr_auth_failed(x, mi_addr(entry));  // as a tail call for better codegen
+  mi_submap_t const sub = (mi_submap_t)mi_ptr_auth_valid(sub_signed, mi_addr(entry), &valid);
+  if mi_unlikely(!valid) return (mi_page_t*)_mi_error_ptr_auth_failed(sub_signed, mi_addr(entry));  // as a tail call for better codegen
   if mi_unlikely(sub == NULL) return NULL;
   return mi_submap_at(sub, sub_idx);
 }
