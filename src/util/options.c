@@ -471,8 +471,8 @@ static mi_output_fun* mi_out_get_default(void** parg) {
 
 void mi_register_output(mi_output_fun* out, void* arg) mi_attr_noexcept {
   mi_process_sealed_t* const sealed = _mi_process_unseal();
+  mi_atomic_store_ptr_release(void,&sealed->out_arg, arg);  // store the argument before the function (as readers load the function first)
   mi_atomic_store_ptr_release(void,&sealed->out_default, (void*)(out == NULL ? &mi_out_stderr : out)); // stop using the delayed output buffer
-  mi_atomic_store_ptr_release(void,&sealed->out_arg, arg);
   _mi_process_seal();
   if (out!=NULL) { mi_out_buf_flush(out,true,arg); }        // output all the delayed output now
 }
