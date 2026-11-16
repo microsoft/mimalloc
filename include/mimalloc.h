@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 30602   // major + 2 digits minor + 2 digits patch
+#define MI_MALLOC_VERSION 30700   // major + 2 digits minor + 2 digits patch
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -464,7 +464,45 @@ mi_decl_export void mi_stats_reset(void)      mi_attr_noexcept;
 mi_decl_export void mi_stats_merge(void)      mi_attr_noexcept;
 mi_decl_export void mi_stats_print(void* out) mi_attr_noexcept;  // backward compatibility: `out` is ignored and should be NULL
 
+<<<<<<< HEAD
 mi_decl_export void mi_stats_print_out(mi_output_fun* out, void* arg) mi_attr_noexcept;  // not deprecated but declared in `mimalloc-stats.h` now.
+=======
+
+// ------------------------------------------------------
+// Convenience
+// ------------------------------------------------------
+
+#define mi_malloc_tp(tp)                ((tp*)mi_malloc(sizeof(tp)))
+#define mi_zalloc_tp(tp)                ((tp*)mi_zalloc(sizeof(tp)))
+#define mi_calloc_tp(tp,n)              ((tp*)mi_calloc(n,sizeof(tp)))
+#define mi_mallocn_tp(tp,n)             ((tp*)mi_mallocn(n,sizeof(tp)))
+#define mi_reallocn_tp(p,tp,n)          ((tp*)mi_reallocn(p,n,sizeof(tp)))
+#define mi_recalloc_tp(p,tp,n)          ((tp*)mi_recalloc(p,n,sizeof(tp)))
+
+#define mi_heap_malloc_tp(hp,tp)        ((tp*)mi_heap_malloc(hp,sizeof(tp)))
+#define mi_heap_zalloc_tp(hp,tp)        ((tp*)mi_heap_zalloc(hp,sizeof(tp)))
+#define mi_heap_calloc_tp(hp,tp,n)      ((tp*)mi_heap_calloc(hp,n,sizeof(tp)))
+#define mi_heap_mallocn_tp(hp,tp,n)     ((tp*)mi_heap_mallocn(hp,n,sizeof(tp)))
+#define mi_heap_reallocn_tp(hp,p,tp,n)  ((tp*)mi_heap_reallocn(hp,p,n,sizeof(tp)))
+#define mi_heap_recalloc_tp(hp,p,tp,n)  ((tp*)mi_heap_recalloc(hp,p,n,sizeof(tp)))
+
+
+// ------------------------------------------------------
+// Compatibility with v3
+// ------------------------------------------------------
+
+typedef mi_heap_t  mi_theap_t;
+
+#define mi_theap_get_default()            mi_heap_get_default()
+#define mi_theap_set_default(hp)          mi_heap_set_default(hp)
+#define mi_theap_collect(hp,force)        mi_heap_collect(hp,force)
+#define mi_theap_malloc(hp,sz)            mi_heap_malloc(hp,sz)
+#define mi_theap_zalloc(hp,sz)            mi_heap_zalloc(hp,sz)
+#define mi_theap_calloc(hp,cnt,sz)        mi_heap_calloc(hp,cnt,sz)
+#define mi_theap_malloc_small(hp,sz)      mi_heap_malloc_small(hp,sz)
+#define mi_theap_malloc_aligned(hp,sz,a)  mi_heap_malloc_aligned(hp,sz,a)
+#define mi_theap_realloc(hp,p,newsz)      mi_heap_realloc(hp,p,newsz)
+>>>>>>> dev
 
 
 // ------------------------------------------------------

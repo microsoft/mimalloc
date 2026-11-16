@@ -14,3 +14,4 @@
 
 * [`util`](util): utility functions, libc, options, random numbers, statistics, and dynamic thread locals.
 
+* [`static`](static.c): single-file build for mimalloc, includes all sources.
