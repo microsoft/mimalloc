@@ -459,21 +459,18 @@ static void mi_cdecl mi_out_buf_stderr(const char* msg, void* arg) {
 // Default output handler
 // --------------------------------------------------------
 
-// The program should only install a single output handler from a single thread
-// since otherwise the argument and output function may not match.
 // The output function and argument are stored in the sealed process data (see `heap/process.h`).
 static mi_output_fun* mi_out_get_default(void** parg) {
-  mi_process_sealed_t* const sealed = mi_process_get_sealed();
-  mi_output_fun* const out = (mi_output_fun*)mi_atomic_load_ptr_acquire(void,&sealed->out_default);
-  if (parg != NULL) { *parg = mi_atomic_load_ptr_acquire(void,&sealed->out_arg); }
+  const mi_process_sealed_t* const sealed = mi_process_get_sealed();
+  void* arg;
+  mi_output_fun* const out = (mi_output_fun*)_mi_process_get_callback(&sealed->out_default, &sealed->out_arg, &arg);
+  if (parg != NULL) { *parg = arg; }
   return (out == NULL ? &mi_out_buf : out);
 }
 
 void mi_register_output(mi_output_fun* out, void* arg) mi_attr_noexcept {
-  mi_process_sealed_t* const sealed = _mi_process_unseal();
-  mi_atomic_store_ptr_release(void,&sealed->out_arg, arg);  // store the argument before the function (as readers load the function first)
-  mi_atomic_store_ptr_release(void,&sealed->out_default, (void*)(out == NULL ? &mi_out_stderr : out)); // stop using the delayed output buffer
-  _mi_process_seal();
+  const mi_process_sealed_t* const sealed = mi_process_get_sealed();
+  _mi_process_set_callback(&sealed->out_default, &sealed->out_arg, (void*)(out == NULL ? &mi_out_stderr : out), arg); // stop using the delayed output buffer
   if (out!=NULL) { mi_out_buf_flush(out,true,arg); }        // output all the delayed output now
 }
 
@@ -481,10 +478,8 @@ void mi_register_output(mi_output_fun* out, void* arg) mi_attr_noexcept {
 static void mi_add_stderr_output(void) {
   mi_assert_internal(mi_process_get_sealed()->out_default == NULL);
   mi_out_buf_flush(&mi_out_stderr, false, NULL); // flush current contents to stderr
-  mi_process_sealed_t* const sealed = _mi_process_unseal();
-  mi_atomic_store_ptr_release(void,&sealed->out_default,(void*)&mi_out_buf_stderr);  // and add stderr to the delayed output
-  mi_atomic_store_ptr_release(void,&sealed->out_arg,NULL);
-  _mi_process_seal();
+  const mi_process_sealed_t* const sealed = mi_process_get_sealed();
+  _mi_process_set_callback(&sealed->out_default, &sealed->out_arg, (void*)&mi_out_buf_stderr, NULL);  // and add stderr to the delayed output
 }
 
 // --------------------------------------------------------
@@ -637,10 +632,8 @@ static void mi_error_default(int err) {
 }
 
 void mi_register_error(mi_error_fun* fun, void* arg) {
-  mi_process_sealed_t* const sealed = _mi_process_unseal();
-  mi_atomic_store_ptr_release(void,&sealed->error_arg, arg);
-  mi_atomic_store_ptr_release(void,&sealed->error_handler, (void*)fun);  // can be NULL
-  _mi_process_seal();
+  const mi_process_sealed_t* const sealed = mi_process_get_sealed();
+  _mi_process_set_callback(&sealed->error_handler, &sealed->error_arg, (void*)fun, arg);  // can be NULL
 }
 
 static void mi_error_message_va(int err, const char* prefix, const char* fmt, va_list args) {
@@ -653,10 +646,11 @@ static void mi_error_message_va(int err, const char* prefix, const char* fmt, va
     mi_show_error_message(fmt, args);
   }
   // and call the error handler which may abort (or return normally, potentially setting errno)
-  mi_process_sealed_t* const sealed = mi_process_get_sealed();
-  mi_error_fun* const handler = (mi_error_fun*)mi_atomic_load_ptr_acquire(void,&sealed->error_handler);
+  const mi_process_sealed_t* const sealed = mi_process_get_sealed();
+  void* arg;
+  mi_error_fun* const handler = (mi_error_fun*)_mi_process_get_callback(&sealed->error_handler, &sealed->error_arg, &arg);
   if (handler != NULL) {
-    handler(err, mi_atomic_load_ptr_acquire(void,&sealed->error_arg));
+    handler(err, arg);
   }
   else {
     mi_error_default(err);

@@ -192,7 +192,7 @@ mi_decl_nodiscard mi_decl_export void* mi_realloc_aligned_at(void* p, size_t new
 // See also `mimalloc-stats.h` for statistics
 // ------------------------------------------------------
 
-// Register callbacks before allocating (or starting threads); concurrent re-registration can mix functions and arguments.
+// Callbacks are always called with their registered argument, but other threads may briefly call a previously registered one.
 typedef void (mi_cdecl mi_deferred_free_fun)(bool force, unsigned long long heartbeat, void* arg);
 mi_decl_export void mi_register_deferred_free(mi_deferred_free_fun* deferred_free, void* arg) mi_attr_noexcept;
 

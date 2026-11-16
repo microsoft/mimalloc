@@ -74,8 +74,8 @@ static bool static_pages_fit(void) {
 // The sealed process data is read-only
 static bool test_sealed_readonly(void) {
   if (!mi_process_get_sealed_once()->is_protected) return false;
-  return (test_access_faults(mi_process_get_sealed_once(), true) &&
-          test_access_faults(mi_process_get_sealed(), true));
+  return (test_access_faults((void*)mi_process_get_sealed_once(), true) &&
+          test_access_faults((void*)mi_process_get_sealed(), true));
 }
 
 // The static process data is surrounded by guard pages

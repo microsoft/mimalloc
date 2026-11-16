@@ -189,7 +189,7 @@ static mi_lock_t mi_sealed_lock = MI_LOCK_INITIALIZER;
 // Make the sealed process data writable; this takes the sealed lock until `_mi_process_seal`.
 mi_process_sealed_t* _mi_process_unseal(void) {
   mi_lock_acquire(&mi_sealed_lock);
-  mi_process_sealed_t* const sealed = mi_process_get_sealed();
+  mi_process_sealed_t* const sealed = (mi_process_sealed_t*)mi_process_get_sealed();
   if (mi_process_get_sealed_once()->is_protected) {
     _mi_prim_protect(sealed, MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READWRITE);  // on failure we fault on the first write
   }
@@ -198,7 +198,7 @@ mi_process_sealed_t* _mi_process_unseal(void) {
 
 // Make the sealed process data read-only again and release the sealed lock.
 void _mi_process_seal(void) {
-  mi_process_sealed_t* const sealed = mi_process_get_sealed();
+  mi_process_sealed_t* const sealed = (mi_process_sealed_t*)mi_process_get_sealed();
   const int err = (mi_process_get_sealed_once()->is_protected ? _mi_prim_protect(sealed, MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READ) : 0);
   mi_lock_release(&mi_sealed_lock);
   if (err != 0) {
@@ -206,11 +206,36 @@ void _mi_process_seal(void) {
   }
 }
 
+// Set a callback `fun` with `arg` in the sealed fields `pfun` and `parg` (using a seqlock so readers always see a consistent pair).
+// The fields must be in the sealed process data (and are writable once unsealed).
+void _mi_process_set_callback(const _Atomic(void*)* pfun, const _Atomic(void*)* parg, void* fun, void* arg) {
+  mi_process_sealed_t* const sealed = _mi_process_unseal();
+  const size_t seq = mi_atomic_load_relaxed(&sealed->callbacks_seq);
+  mi_atomic_store_relaxed(&sealed->callbacks_seq, seq + 1);           // odd while updating
+  mi_atomic_store_ptr_release(void, (_Atomic(void*)*)parg, arg);      // release stores keep the odd sequence visible first
+  mi_atomic_store_ptr_release(void, (_Atomic(void*)*)pfun, fun);
+  mi_atomic_store_release(&sealed->callbacks_seq, seq + 2);
+  _mi_process_seal();
+}
+
+// Get a consistent callback pair from the sealed fields `pfun` and `parg`.
+void* _mi_process_get_callback(const _Atomic(void*)* pfun, const _Atomic(void*)* parg, void** arg) {
+  const mi_process_sealed_t* const sealed = mi_process_get_sealed();
+  size_t seq;
+  void* fun;
+  do {
+    seq = mi_atomic_load_acquire(&sealed->callbacks_seq);
+    fun = mi_atomic_load_ptr_acquire(void, pfun);
+    *arg = mi_atomic_load_ptr_acquire(void, parg);
+  } while ((seq & 1) != 0 || mi_atomic_load_relaxed(&sealed->callbacks_seq) != seq);
+  return fun;
+}
+
 // Write the sealed-once process data; this takes the sealed lock until `_mi_process_seal_once`.
 // This is only allowed before `mi_process_sealed_init` (as the data is never made writable again).
 mi_process_sealed_once_t* _mi_process_unseal_once(void) {
   mi_lock_acquire(&mi_sealed_lock);
-  mi_process_sealed_once_t* const once = mi_process_get_sealed_once();
+  mi_process_sealed_once_t* const once = (mi_process_sealed_once_t*)mi_process_get_sealed_once();
   if mi_unlikely(once->is_sealed) {
     mi_lock_release(&mi_sealed_lock);
     _mi_fatal_error("attempt to write sealed process data after process initialization\n");
@@ -249,7 +274,7 @@ static void mi_process_sealed_init(void) {
   once->is_protected = protect;
   int err = 0;
   if (protect) {
-    err = _mi_prim_protect(mi_process_get_sealed(), MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READ);
+    err = _mi_prim_protect((void*)mi_process_get_sealed(), MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READ);
     if (err == 0) { err = _mi_prim_protect(once, MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READ_SEALED); }
   }
   _mi_process_seal_once();

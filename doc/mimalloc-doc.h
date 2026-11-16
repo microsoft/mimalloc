@@ -1205,8 +1205,8 @@ typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat, vo
 /// to be called deterministically after some number of allocations
 /// (regardless of freeing or available free memory).
 /// At most one \a deferred_free function can be active.
-/// Register the function before allocating (or starting other threads), as concurrent
-/// re-registration may call a function with the argument of another registration.
+/// The function is always called with the argument it was registered with, but after
+/// re-registration other threads may still call the previous function for a short while.
 void   mi_register_deferred_free(mi_deferred_free_fun* deferred_free, void* arg);
 
 /// Type of output functions.
@@ -1222,8 +1222,8 @@ typedef void (mi_output_fun)(const char* msg, void* arg);
 ///
 /// The `out` function is called to output any information from mimalloc,
 /// like verbose or warning messages.
-/// Register the function before allocating (or starting other threads), as concurrent
-/// re-registration may call a function with the argument of another registration.
+/// The function is always called with the argument it was registered with, but after
+/// re-registration other threads may still call the previous function for a short while.
 void mi_register_output(mi_output_fun* out, void* arg);
 
 /// Type of error callback functions.
@@ -1254,8 +1254,8 @@ typedef void (mi_error_fun)(int err, void* arg);
 /// set \a errno as required by POSIX: \a ENOMEM, or \a EINVAL for an invalid alignment.
 /// Other errors (like freeing an invalid pointer) do not modify \a errno.
 ///
-/// Register the function before allocating (or starting other threads), as concurrent
-/// re-registration may call a function with the argument of another registration.
+/// The function is always called with the argument it was registered with, but after
+/// re-registration other threads may still call the previous function for a short while.
 void mi_register_error(mi_error_fun* errfun, void* arg);
 
 /// Allocate a small object.

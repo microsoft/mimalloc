@@ -605,7 +605,7 @@ static mi_msecs_t mi_to_msecs(LARGE_INTEGER t) {
       ticks_per_msec = f.QuadPart/1000LL;
     }
     if (ticks_per_msec == 0) { ticks_per_msec = 1; }
-    mi_process_get_sealed_once()->clock_ticks_per_msec = ticks_per_msec;
+    ((mi_process_sealed_once_t*)mi_process_get_sealed_once())->clock_ticks_per_msec = ticks_per_msec;  // first set during process initialization (before sealing)
   }
   return (mi_msecs_t)(t.QuadPart / ticks_per_msec);
 }
