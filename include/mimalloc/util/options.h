@@ -45,10 +45,10 @@ typedef struct mi_option_desc_s {
   const char*       legacy_name; // potential legacy option name
 } mi_option_desc_t;
 
-// Current option value (stored in `_mi_process.options`)
+// Current option value (stored in `_mi_process.options`); atomic as options can be set concurrently with readers.
 typedef struct mi_option_state_s {
-  long              value;  // the value
-  mi_option_init_t  init;   // is it initialized yet? (from the environment)
+  _Atomic(mi_ssize_t) value;  // the value (a `long`)
+  _Atomic(size_t)     init;   // the `mi_option_init_t` state: is it initialized yet? (from the environment)
 } mi_option_state_t;
 
 

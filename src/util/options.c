@@ -24,8 +24,9 @@ int mi_version(void) {
 // --------------------------------------------------------
 // Options
 // These can be accessed by multiple threads and may be
-// concurrently initialized, but an initializing data race
-// is ok since they resolve to the same value.
+// concurrently initialized or set. The value is relaxed atomic,
+// and the init state is release/acquire so a reader that sees
+// an initialized state also sees the initialized value.
 // --------------------------------------------------------
 
 
@@ -197,12 +198,25 @@ static const mi_option_desc_t* mi_option_desc(mi_option_t option) {
   return desc;
 }
 
+static inline long mi_option_state_value(mi_option_state_t* state) {
+  return (long)mi_atomic_loads_relaxed(&state->value);
+}
+
+static inline mi_option_init_t mi_option_state_init(mi_option_state_t* state) {
+  return (mi_option_init_t)mi_atomic_load_acquire(&state->init);
+}
+
+// Set the value and then the init state (so readers that see the init state also see the value).
+static inline void mi_option_state_set(mi_option_state_t* state, long value, mi_option_init_t init) {
+  mi_atomic_storess_relaxed(&state->value, (mi_ssize_t)value);
+  mi_atomic_store_release(&state->init, (size_t)init);
+}
+
 // Get the option state with the value set (to the default if not yet set) (but not reading from the environment)
 static mi_option_state_t* mi_option_state(mi_option_t option) {
   mi_option_state_t* state = &_mi_process.options[option];
-  if mi_unlikely(state->init == MI_OPTION_UNINIT) {
-    state->value = mi_option_desc(option)->default_value;
-    state->init = MI_OPTION_PENDING;
+  if mi_unlikely(mi_option_state_init(state) == MI_OPTION_UNINIT) {
+    mi_option_state_set(state, mi_option_desc(option)->default_value, MI_OPTION_PENDING);
   }
   return state;
 }
@@ -321,7 +335,7 @@ mi_decl_export void mi_options_print(void) mi_attr_noexcept {
 
 long _mi_option_get_fast(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
-  return mi_option_state(option)->value;
+  return mi_option_state_value(mi_option_state(option));
 }
 
 
@@ -329,11 +343,11 @@ mi_decl_nodiscard long mi_option_get(mi_option_t option) {
   mi_assert(option >= 0 && option < _mi_option_last);
   if (option < 0 || option >= _mi_option_last) return 0;
   mi_option_state_t* state = &_mi_process.options[option];
-  if mi_unlikely(state->init < MI_OPTION_DEFAULTED) {  // uninit or pending
+  if mi_unlikely(mi_option_state_init(state) < MI_OPTION_DEFAULTED) {  // uninit or pending
     state = mi_option_state(option);
     mi_option_init(option, state);
   }
-  return state->value;
+  return mi_option_state_value(state);
 }
 
 mi_decl_nodiscard long mi_option_get_clamp(mi_option_t option, long min, long max) {
@@ -356,13 +370,12 @@ void mi_option_set(mi_option_t option, long value) {
   mi_assert(option >= 0 && option < _mi_option_last);
   if (option < 0 || option >= _mi_option_last) return;
   mi_option_state_t* const state = &_mi_process.options[option];
-  state->value = value;
-  state->init = MI_OPTION_INITIALIZED;
+  mi_option_state_set(state, value, MI_OPTION_INITIALIZED);
   // ensure min/max range; be careful to not recurse.
-  if (option == mi_option_guarded_min && mi_option_state(mi_option_guarded_max)->value < value) {
+  if (option == mi_option_guarded_min && mi_option_state_value(mi_option_state(mi_option_guarded_max)) < value) {
     mi_option_set(mi_option_guarded_max, value);
   }
-  else if (option == mi_option_guarded_max && mi_option_state(mi_option_guarded_min)->value > value) {
+  else if (option == mi_option_guarded_max && mi_option_state_value(mi_option_state(mi_option_guarded_min)) > value) {
     mi_option_set(mi_option_guarded_min, value);
   }
 }
@@ -371,8 +384,8 @@ void mi_option_set_default(mi_option_t option, long value) {
   mi_assert(option >= 0 && option < _mi_option_last);
   if (option < 0 || option >= _mi_option_last) return;
   mi_option_state_t* const state = mi_option_state(option);
-  if (state->init != MI_OPTION_INITIALIZED) {
-    state->value = value;
+  if (mi_option_state_init(state) != MI_OPTION_INITIALIZED) {
+    mi_atomic_storess_relaxed(&state->value, (mi_ssize_t)value);
   }
 }
 
@@ -809,7 +822,7 @@ static void mi_option_env_apply(mi_option_t option, mi_option_state_t* state, mi
     mi_option_set(option, env->value);
   }
   else if (env->err != EAGAIN) {
-    state->init = MI_OPTION_DEFAULTED;  // not found or invalid: use the default value
+    mi_atomic_store_release(&state->init, (size_t)MI_OPTION_DEFAULTED);  // not found or invalid: use the default value
   }
   // on EAGAIN, keep pending to try again (can happen during preloading if getenv is not available)
 }
@@ -827,10 +840,10 @@ static void mi_option_env_warn(mi_option_t option, const mi_option_env_t* env) {
     // if the 'mimalloc_verbose' env var has a bogus value we'd never know
     // (since the value defaults to 'off') so in that case briefly enable verbose
     mi_option_state_t* const state = &_mi_process.options[option];
-    const bool force_verbose = (option == mi_option_verbose && state->value == 0);
-    if (force_verbose) { state->value = 1; }
+    const bool force_verbose = (option == mi_option_verbose && mi_option_state_value(state) == 0);
+    if (force_verbose) { mi_atomic_storess_relaxed(&state->value, 1); }
     _mi_warning_message("environment option mimalloc_%s %s.\n", desc->name, (env->err == E2BIG ? "has a value that is too long" : "has an invalid value"));
-    if (force_verbose) { state->value = 0; }
+    if (force_verbose) { mi_atomic_storess_relaxed(&state->value, 0); }
   }
 }
 
@@ -954,7 +967,7 @@ static bool mi_options_init_from_environ(void) {
   for (size_t i = 0; i < _mi_option_last; i++) {
     const mi_option_t option = (mi_option_t)i;
     mi_option_state_t* const state = mi_option_state(option);
-    if (state->init == MI_OPTION_PENDING) {
+    if (mi_option_state_init(state) == MI_OPTION_PENDING) {
       mi_option_env_apply(option, state, &scan.options[i]);
     }
     else {
