@@ -18,10 +18,10 @@ static void mi_page_map_cannot_commit(void) {
 }
 
 // A 2-level page map
-#define MI_PAGE_MAP_SUB_SIZE          (MI_PAGE_MAP_SUB_COUNT * sizeof(mi_ptr_signed_t))
+#define MI_PAGE_MAP_SUB_SIZE          (sizeof(mi_page_submap_t))
 
 // Set a (signed) sub map pointer in the page map
-static void mi_page_map_set_at(mi_page_map_t* pmap, size_t idx, mi_submap_t sub) {
+static void mi_page_map_set_at(mi_page_map_t* pmap, size_t idx, mi_page_submap_t* sub) {
   mi_atomic_ptr_sign_release(&pmap->submaps[idx], sub);
 }
 
@@ -86,7 +86,7 @@ mi_decl_nodiscard static mi_decl_noinline bool mi_page_map_commit_entries(mi_pag
   return true;
 }
 
-mi_decl_nodiscard static bool mi_page_map_ensure_committed(mi_page_map_t* pmap, size_t idx, mi_submap_t* submap) {
+mi_decl_nodiscard static bool mi_page_map_ensure_committed(mi_page_map_t* pmap, size_t idx, mi_page_submap_t** submap) {
   mi_assert_internal(submap!=NULL && *submap==NULL);
   if mi_unlikely(idx >= mi_page_map_committed()) {
     // commit under the lock so the committed count only increases
@@ -168,7 +168,7 @@ static bool mi_page_map_init_once(void) {
   mi_assert_internal(commit_count >= min_commit_count);
 
   // ensure there is a submap for the NULL address
-  mi_submap_t sub0 = (mi_submap_t)((uint8_t*)pmap + reserve_size);  // we reserved a submap part at the end already
+  mi_page_submap_t* sub0 = (mi_page_submap_t*)((uint8_t*)pmap + reserve_size);  // we reserved a submap part at the end already
   if (!memid.initially_committed) {
     if (!_mi_os_commit(subproc, sub0, submap_size, NULL)) {  // commit full submap (issue #1087)
       mi_page_map_cannot_commit();
@@ -183,14 +183,14 @@ static bool mi_page_map_init_once(void) {
   // tag the committed page map entries and the first sub map (with a different tag as it is adjacent once the page map is fully committed)
   if (use_memtag) {
     pmap = (mi_page_map_t*)mi_memtag_meta_init_separate(pmap, mi_align_up(mi_page_map_size_of_count(commit_count), MI_MEMTAG_UNIT_SIZE), 0, NULL);
-    sub0 = (mi_submap_t)mi_memtag_meta_init_separate(sub0, submap_size, 1, pmap);
+    sub0 = (mi_page_submap_t*)mi_memtag_meta_init_separate(sub0, submap_size, 1, pmap);
   }
 
   // initialize the fields
   pmap->memid = memid;
   pmap->reserved_size  = reserve_size;
   mi_lock_init(&pmap->lock);
-  mi_page_map_set_at(pmap, 0, (mi_submap_t)mi_ptr_bounded_data(sub0, submap_size));
+  mi_page_map_set_at(pmap, 0, (mi_page_submap_t*)mi_ptr_bounded_data(sub0, submap_size));
   // set the page map (once) before the committed count as `mi_checked_ptr_page` only reads the page map if the count is non-zero
   mi_process_sealed_once_t* const once = _mi_process_unseal_once();
   mi_page_map_t* const pmap_bounded = (mi_page_map_t*)mi_ptr_bounded_data(pmap, reserve_size);  // see `mi_page_map_vmem`
@@ -209,19 +209,19 @@ bool _mi_page_map_init(void) {
 }
 
 // Sub maps are allocated with guard pages around them in secure mode
-static mi_submap_t mi_page_map_alloc_submap(mi_subproc_t* subproc, mi_memid_t* memid) {
-  mi_submap_t sub = (mi_submap_t)_mi_os_alloc_with_guards(subproc, MI_PAGE_MAP_SUB_SIZE, true /* commit */, false /* allow large */, memid);
+static mi_page_submap_t* mi_page_map_alloc_submap(mi_subproc_t* subproc, mi_memid_t* memid) {
+  mi_page_submap_t* sub = (mi_page_submap_t*)_mi_os_alloc_with_guards(subproc, MI_PAGE_MAP_SUB_SIZE, true /* commit */, false /* allow large */, memid);
   if (sub != NULL && !memid->initially_zero) {
     mi_memzero_aligned(sub, MI_PAGE_MAP_SUB_SIZE);
   }
   if (sub != NULL && mi_page_map_use_memtag(memid)) {
-    sub = (mi_submap_t)mi_memtag_meta_init_separate(sub, MI_PAGE_MAP_SUB_SIZE, 0, NULL);
+    sub = (mi_page_submap_t*)mi_memtag_meta_init_separate(sub, MI_PAGE_MAP_SUB_SIZE, 0, NULL);
   }
   return sub;
 }
 
 // We do not store the memid of a sub map but can recreate it (see `_mi_os_alloc_with_guards`)
-static mi_memid_t mi_page_map_submap_memid(mi_submap_t sub) {
+static mi_memid_t mi_page_map_submap_memid(mi_page_submap_t* sub) {
   const size_t guard_size = _mi_os_secure_guard_page_size();
   const size_t size = _mi_os_good_alloc_size(MI_PAGE_MAP_SUB_SIZE + 2*guard_size);
   return _mi_memid_create_os((uint8_t*)mi_ptr_memtag_meta(sub) - guard_size, size, size, false, false);
@@ -237,7 +237,7 @@ void _mi_page_map_unsafe_destroy(void) {
   mi_page_map_store_committed(0);  // before freeing so `mi_checked_ptr_page` returns NULL (the page map itself is sealed and not reset)
   for (size_t idx = 1; idx < committed_count; idx++) {  // skip entry 0 (as we allocate that submap at the end of the page_map)
     // free all sub-maps
-    mi_submap_t sub = mi_page_map_at(pmap,idx);
+    mi_page_submap_t* sub = mi_page_map_at(pmap,idx);
     if (sub != NULL) {
       _mi_os_free_with_guards(subproc, mi_page_map_submap_memid(sub));
       mi_page_map_set_at(pmap, idx, NULL);
@@ -246,9 +246,9 @@ void _mi_page_map_unsafe_destroy(void) {
   _mi_os_free_with_guards(subproc, pmap->memid);
 }
 
-mi_decl_nodiscard static mi_decl_noinline mi_submap_t mi_page_map_alloc_submap_at(mi_page_map_t* pmap, size_t idx) {
+mi_decl_nodiscard static mi_decl_noinline mi_page_submap_t* mi_page_map_alloc_submap_at(mi_page_map_t* pmap, size_t idx) {
   // sub map not yet allocated, alloc now
-  mi_submap_t sub = NULL;
+  mi_page_submap_t* sub = NULL;
   mi_lock(&pmap->lock)
   {
     sub = mi_page_map_at(pmap, idx); // reload
@@ -268,9 +268,9 @@ mi_decl_nodiscard static mi_decl_noinline mi_submap_t mi_page_map_alloc_submap_a
   return sub;
 }
 
-mi_decl_nodiscard static bool mi_page_map_ensure_submap_at(mi_page_map_t* pmap, size_t idx, mi_submap_t* submap) {
+mi_decl_nodiscard static bool mi_page_map_ensure_submap_at(mi_page_map_t* pmap, size_t idx, mi_page_submap_t** submap) {
   mi_assert_internal(submap!=NULL && *submap==NULL);
-  mi_submap_t sub = NULL;
+  mi_page_submap_t* sub = NULL;
   if (!mi_page_map_ensure_committed(pmap, idx, &sub)) {
     return false;
   }
@@ -286,7 +286,7 @@ mi_decl_nodiscard static bool mi_page_map_ensure_submap_at(mi_page_map_t* pmap, 
 static bool mi_page_map_set_range_prim(mi_page_map_t* pmap, mi_page_t* page, size_t idx, size_t sub_idx, size_t slice_count) {
   // is the page map area that contains the page address committed?
   while (slice_count > 0) {
-    mi_submap_t sub = NULL;
+    mi_page_submap_t* sub = NULL;
     if (!mi_page_map_ensure_submap_at(pmap, idx, &sub)) {
       return false;
     };
@@ -294,7 +294,7 @@ static bool mi_page_map_set_range_prim(mi_page_map_t* pmap, mi_page_t* page, siz
     // set the offsets for the page; use atomic stores as the entries of a freed OS page can be set by another
     // thread that reallocates the same address range (and the OS unmap and map do not synchronize for TSAN)
     while (slice_count > 0 && sub_idx < MI_PAGE_MAP_SUB_COUNT) {
-      mi_atomic_ptr_sign_relaxed(&sub[sub_idx], page);
+      mi_atomic_ptr_sign_relaxed(&sub->page_metas[sub_idx], page);
       slice_count--;
       sub_idx++;
     }
