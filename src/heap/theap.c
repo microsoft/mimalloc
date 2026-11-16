@@ -521,14 +521,14 @@ void _mi_tld_detach_theaps( mi_tld_t* tld ) {
 void _mi_theap_release(mi_theap_t* theap, mi_theap_t* slot_theap) {
   if (theap==NULL) return;
   // The main theap stays alive even if a concurrent heap delete invalidates our default.
-  mi_theap_t* const main = _mi_theap_main();
-  if (main==NULL) {
+  mi_theap_t* const main_theap = _mi_theap_main();
+  if (main_theap==NULL) {
     _mi_warning_message("cannot delete a theap on an uninitialized thread\n");
     return;
   }
-  mi_tld_t* const tld = main->tld;
+  mi_tld_t* const tld = main_theap->tld;
   if (_mi_theap_default() == theap) {
-    _mi_theap_default_set(main);
+    _mi_theap_default_set(main_theap);
   }
 
   bool found = false;
@@ -542,7 +542,7 @@ void _mi_theap_release(mi_theap_t* theap, mi_theap_t* slot_theap) {
       mi_heap_t* const heap = mi_theap_heap(owned);
       mi_assert_internal(heap!=NULL);
       mi_lock(&heap->theaps_lock) {
-        if (owned == main) {
+        if (owned == main_theap) {
           _mi_theap_collect_abandon(owned);  // retain the backing theap and tld for the living thread
           _mi_theap_merge_stats(owned);
         }

@@ -78,7 +78,7 @@ static inline bool mi_theap_matches_thread(mi_theap_t* theap) {
       && !defined(MI_LIBC_MUSL) \
       && (!defined(__clang_major__) || __clang_major__ >= 14)  /* older clang versions emit bad code; fall back to using the TLS slot (<https://lore.kernel.org/linux-arm-kernel/202110280952.352F66D8@keescook/T/>) */
     #if    (defined(__GNUC__) && (__GNUC__ >= 7)  && defined(__aarch64__)) /* aarch64 for older gcc versions (issue #851) */ \
-        || (defined(__GNUC__) && (__GNUC__ >= 7)  && defined(__riscv)) \
+        || (defined(__GNUC__) && (__GNUC__ >= 11) && defined(__riscv))     /* gcc 10.3+, issue #1497 */ \
         || (defined(__GNUC__) && (__GNUC__ >= 11) && defined(__x86_64__)) \
         || (defined(__clang_major__) && (__clang_major__ >= 14) && (defined(__aarch64__) || defined(__x86_64__) || defined(__riscv)))
       #define MI_USE_BUILTIN_THREAD_POINTER  1
