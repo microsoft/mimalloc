@@ -7,8 +7,8 @@
 [package]
 name = "mimalloc-sys"
 version = "3.7.0"
-edition = "2024"
-rust-version = "1.85"
+edition = "2021"
+rust-version = "1.65"
 license = "MIT"
 description = "Raw bindings to the mimalloc memory allocator (builds and links the C library)"
 repository = "https://github.com/microsoft/mimalloc"
@@ -43,5 +43,5 @@ mte = []
 pac = []
 
 [build-dependencies]
-cc = "1.2"
+cc = "1.11"
 rustversion = "1"
