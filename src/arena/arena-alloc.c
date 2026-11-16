@@ -61,16 +61,18 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(
   memid->is_memtag = arena->memid.is_memtag;
 
   // set the dirty bits and track which slices become accessible
-  size_t touched_slices = slice_count;
+  size_t touched_slices = 0;  // todo: properly count touched pages for non-zero arenas with a separate bitmap?
   if (arena->memid.initially_zero) {
-    size_t already_dirty = 0;
-    memid->initially_zero = mi_bitmap_setN(arena->slices_dirty, slice_index, slice_count, &already_dirty);
-    mi_assert_internal(already_dirty <= touched_slices);
-    touched_slices -= already_dirty;
-  }
-  else {
-    // todo: properly count touched pages with a separate bitmap?
-    touched_slices = 0;
+    // dirty bits are never cleared, so check first to avoid writing to the shared bitmap
+    size_t already_dirty = slice_count;
+    if (mi_bitmap_is_setN(arena->slices_dirty, slice_index, slice_count)) {
+      memid->initially_zero = false;
+    }
+    else {
+      memid->initially_zero = mi_bitmap_setN(arena->slices_dirty, slice_index, slice_count, &already_dirty);
+    }
+    mi_assert_internal(already_dirty <= slice_count);
+    touched_slices = slice_count - already_dirty;
   }
 
   // set commit state
