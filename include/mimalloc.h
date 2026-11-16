@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 20502  // major + 2 digits minor + 2 digits patch
+#define MI_MALLOC_VERSION 20503  // major + 2 digits minor + 2 digits patch
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -375,8 +375,8 @@ mi_decl_export void mi_collect_reduce(size_t target_thread_owned) mi_attr_noexce
 
 typedef mi_heap_t  mi_theap_t;
 
-#define mi_theap_get_default()            mi_heap_get_default()      
-#define mi_theap_set_default(hp)          mi_heap_set_default(hp)      
+#define mi_theap_get_default()            mi_heap_get_default()
+#define mi_theap_set_default(hp)          mi_heap_set_default(hp)
 #define mi_theap_collect(hp,force)        mi_heap_collect(hp,force)
 #define mi_theap_malloc(hp,sz)            mi_heap_malloc(hp,sz)
 #define mi_theap_zalloc(hp,sz)            mi_heap_zalloc(hp,sz)
