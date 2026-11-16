@@ -15,9 +15,9 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.6.1`  (2026-10-30) recommended.\
-Latest v2 release: `v2.5.2`  (2026-09-12) stable, legacy.\
-Latest v1 release: `v1.15.2` (2026-09-12) legacy.
+Latest release   : `v3.7.0`  (2026-11-16) recommended.\
+Latest v2 release: `v2.5.3`  (2026-11-16) stable, legacy.\
+Latest v1 release: `v1.15.3` (2026-11-16) legacy.
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -90,6 +90,14 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 
 ### Releases
 
+* 2026-11-16, `v3.7.0`, `v2.5.3`, `v1.15.3`:
+  (v3) Initial memory tagging support on an M5 (or better), see [MTE](#memory-tagging-mte) and [PAC](#pointer-authentication-pac).
+  Generally improved [security](#security) with sealed data after initialization and secure environments.
+  More CPython integration fixes (python/cpython#158718), fixed profile sample data,
+  Some performance improvements, fix arm64ec cross-compilation (#1492), better backtrace support (#1489),
+  waste less memory with realloc (on Rust, #1488), fix arm32 detection (#1487), make error
+  codes aligned with POSIX, fix lost arena purges, improve fork support on macOS,
+  improved documentation.
 * 2026-10-30, `v3.6.1`: (v3) Many small fixes for CPython integration (thank you @DinoV),
   Emscripten fixes (#1455, thank you @kleisauke) and reduced memory usage on WASI and Emscripten,
   C23 free_sized(_aligned) overrides (#1470), improved fork support (#1456),
