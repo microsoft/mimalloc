@@ -648,8 +648,8 @@ build (but can be 2 to 3x slower).
 Building with `-DMI_MTE=ON` also sets pointer authentication ([PAC](#pointer-authentication-pac)) (`-DMI_PAC=ON`),
 `-DMI_SECURE=CHECKED`, and `MI_SECURE_ENV=ON` by default.
 
-__These combined options provide strong mitigation against common heap exploitation techniques__.\
-As it is hardware assisted, this is stronger than `-DMI_SECURE=ON`.
+_These combined options provide strong mitigation against common heap exploitation techniques_.\
+As it is hardware assisted, this is stronger than `-DMI_SECURE=ON` (but still probabilistic).
 
 When building with `-DMI_MTE=ON`, _mimalloc_ requires that the CPU and OS support MTE at runtime and
 otherwise aborts at initialization.
