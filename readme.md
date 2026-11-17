@@ -91,7 +91,7 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 ### Releases
 
 * 2026-11-16, `v3.7.0`, `v2.5.3`, `v1.15.3`:
-  (v3) Initial memory tagging support on an M5 (or better), see [MTE](#memory-tagging-mte) and [PAC](#pointer-authentication-pac).
+  (v3) Initial memory tagging support (on an M5 for example), see [MTE](#memory-tagging-mte) and [PAC](#pointer-authentication-pac).
   Generally improved [security](#security) with sealed data after initialization and secure environments.
   More CPython integration fixes (python/cpython#158718), fixed profile sample data,
   Some performance improvements, fix arm64ec cross-compilation (#1492), better backtrace support (#1489),
@@ -234,7 +234,7 @@ Finally, you can build a _secure_ version that uses guard pages, encrypted free 
 ```
 
 This will name the shared library as `libmimalloc-secure.so`.
-Use `cmake ../.. -LH` to see all the available build options.
+Use `ccmake ../..` or `cmake ../.. -LH` to see all the available build options.
 
 The examples use the default compiler. If you like to use another, use:
 
