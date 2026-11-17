@@ -1,5 +1,5 @@
 use core::alloc::Layout;
-use mimalloc::{Heap, sys};
+use mimalloc::{sys, Heap};
 use std::sync::Arc;
 use std::thread;
 
@@ -35,7 +35,7 @@ fn heap_contains() {
     let layout = Layout::new::<u64>();
     let p = a.alloc(layout);
     assert!(a.contains(p) && !b.contains(p));
-    assert_eq!(sys::mi_heap_of(p.cast()), a.as_ptr());
+    assert_eq!(unsafe { sys::mi_heap_of(p.cast()) }, a.as_ptr());
     unsafe { a.dealloc(p, layout) };
 }
 
@@ -54,7 +54,7 @@ fn heap_drop_keeps_live_blocks() {
     };
     for (i, &p) in blocks.iter().enumerate() {
         let p = p as *mut u8;
-        assert!(sys::mi_any_heap_contains(p.cast()));
+        assert!(unsafe { sys::mi_any_heap_contains(p.cast()) });
         assert!((0..256).all(|j| unsafe { p.add(j).read() } == i as u8));
         unsafe { sys::mi_free(p.cast()) };
     }

@@ -1,6 +1,6 @@
 use core::alloc::{GlobalAlloc, Layout};
 use core::mem::MaybeUninit;
-use core::ptr::NonNull;
+use core::ptr::{self, NonNull};
 use mimalloc::{Arena, ExternalMemory, Heap, MiMalloc, ReserveOptions};
 
 const MIB: usize = 1 << 20;
@@ -85,8 +85,12 @@ fn unaligned_arena_size() -> usize {
 // leak `size` bytes of memory that start at an `align`-aligned address
 // (we align by hand: with the `override` feature the system allocator is mimalloc, which does not
 // support alignments as large as `Arena::min_alignment()`)
+fn leak_memory(size: usize) -> &'static mut [MaybeUninit<u8>] {
+    Box::leak(vec![MaybeUninit::uninit(); size].into_boxed_slice())
+}
+
 fn leak_aligned_memory(size: usize, align: usize) -> *mut u8 {
-    let memory = Box::leak(Box::<[u8]>::new_uninit_slice(size + align));
+    let memory = leak_memory(size + align);
     let start = memory.as_mut_ptr().cast::<u8>();
     unsafe { start.add((start as usize).wrapping_neg() & (align - 1)) }
 }
@@ -104,10 +108,9 @@ fn reserve_from_os_arena() {
     let p = heap.alloc(layout);
     assert!(!p.is_null() && p as usize % (64 << 10) == 0 && arena.contains(p));
     unsafe { heap.dealloc(p, layout) };
-    assert!(
-        heap.alloc(Layout::from_size_align(64, 1 << 20).unwrap())
-            .is_null()
-    );
+    assert!(heap
+        .alloc(Layout::from_size_align(64, 1 << 20).unwrap())
+        .is_null());
 
     // other heaps never allocate in an exclusive arena
     let layout = Layout::new::<u64>();
@@ -144,7 +147,7 @@ fn full_arena_returns_null() {
 #[test]
 fn from_static_memory_unaligned() {
     // what the README recommends for memory at an unaligned address
-    let memory = Box::leak(Box::<[u8]>::new_uninit_slice(unaligned_arena_size()));
+    let memory = leak_memory(unaligned_arena_size());
     let (start, len) = (memory.as_ptr() as usize, memory.len());
     let Some(arena) = expect_pinned_arena(Arena::from_static_memory(memory, true)) else {
         return;
@@ -185,7 +188,7 @@ fn from_static_memory_inside_mimalloc_block() {
 fn from_external_memory_aligned() {
     let len = Arena::min_size();
     let start = leak_aligned_memory(len, Arena::min_alignment());
-    let memory = NonNull::slice_from_raw_parts(NonNull::new(start).unwrap(), len);
+    let memory = NonNull::new(ptr::slice_from_raw_parts_mut(start, len)).unwrap();
     let info = ExternalMemory {
         exclusive: true,
         committed: true,
@@ -204,7 +207,7 @@ fn from_external_memory_aligned() {
 fn too_small_memory_is_rejected() {
     let (min_size, align) = (Arena::min_size(), Arena::min_alignment());
 
-    let memory = Box::leak(Box::<[u8]>::new_uninit_slice(MIB));
+    let memory = leak_memory(MIB);
     assert!(Arena::from_static_memory(memory, false).is_none());
 
     // `min_size` bytes are not enough if the memory is not aligned
