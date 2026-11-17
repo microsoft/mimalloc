@@ -13,6 +13,7 @@ var group__malloc =
     [ "mi_realpath", "group__malloc.html#ga94c3afcc086e85d75a57e9f76b9b71dd", null ],
     [ "mi_strdup", "group__malloc.html#ga245ac90ebc2cfdd17de599e5fea59889", null ],
     [ "mi_strndup", "group__malloc.html#ga486d0d26b3b3794f6d1cdb41a9aed92d", null ],
+    [ "mi_thread_id_of", "group__malloc.html#ga22252f0d9e380047d3684a6c99d330ae", null ],
     [ "mi_usable_size", "group__malloc.html#ga089c859d9eddc5f9b4bd946cd53cebee", null ],
     [ "mi_zalloc", "group__malloc.html#gae6e38c4403247a7b40d80419e093bfb8", null ]
 ];

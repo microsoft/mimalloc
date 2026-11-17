@@ -4,7 +4,7 @@ This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
-use crate::sys;
+use crate::{nonnull_slice, sys};
 use core::ffi::{c_int, c_void};
 use core::mem::MaybeUninit;
 use core::ptr::{self, NonNull};
@@ -82,7 +82,7 @@ impl Arena {
         exclusive: bool,
     ) -> Option<Arena> {
         let len = memory.len();
-        let memory = NonNull::slice_from_raw_parts(NonNull::from(memory).cast::<u8>(), len);
+        let memory = nonnull_slice(NonNull::from(memory).cast::<u8>(), len);
         let info = ExternalMemory {
             exclusive,
             committed: true,
@@ -143,21 +143,21 @@ impl Arena {
         let start = unsafe { sys::mi_arena_area(self.as_raw(), &mut size) };
         // Safety: the area of a live arena is never null.
         let start = unsafe { NonNull::new_unchecked(start.cast::<u8>()) };
-        NonNull::slice_from_raw_parts(start, size)
+        nonnull_slice(start, size)
     }
 
     /// The minimum size of an arena
     pub fn min_size() -> usize {
-        sys::mi_arena_min_size()
+        unsafe { sys::mi_arena_min_size() }
     }
 
     /// The alignment of the start of an arena
     pub fn min_alignment() -> usize {
-        sys::mi_arena_min_alignment()
+        unsafe { sys::mi_arena_min_alignment() }
     }
 
     /// The largest block that can be allocated in an arena
     pub fn max_object_size() -> usize {
-        sys::mi_arena_max_object_size()
+        unsafe { sys::mi_arena_max_object_size() }
     }
 }

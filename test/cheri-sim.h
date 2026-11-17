@@ -31,6 +31,8 @@ static inline void* mi_sim_trap_untagged(const void* p) {
 #define __builtin_cheri_base_get(p)      ((void)(p), 0UL)
 #define __builtin_cheri_length_get(p)    ((void)(p), ~0UL)   // bounds are not modelled
 #define __builtin_cheri_offset_get(p)    ((void)(p), 0UL)
+#define __builtin_cheri_sealed_get(p)    ((void)(p), 0)      // never sealed
+#define __builtin_cheri_perms_get(p)     ((void)(p), 0xFFFFUL)  // all permissions
 
 // exact CHERI-RISC-V 128 (MW=14) representability (Morello is about 4x more lax)
 static inline unsigned long mi_sim_repr_mask(unsigned long n) {
@@ -46,6 +48,10 @@ static inline unsigned long mi_sim_repr_mask(unsigned long n) {
 #define __builtin_cheri_round_representable_length(n)    (((n) + ~mi_sim_repr_mask(n)) & mi_sim_repr_mask(n))
 
 #define __CHERI_CAP_PERMISSION_PERMIT_EXECUTE__           2
+#define __CHERI_CAP_PERMISSION_PERMIT_LOAD__              4
+#define __CHERI_CAP_PERMISSION_PERMIT_STORE__             8
+#define __CHERI_CAP_PERMISSION_PERMIT_LOAD_CAPABILITY__   16
+#define __CHERI_CAP_PERMISSION_PERMIT_STORE_CAPABILITY__  32
 #define __CHERI_CAP_PERMISSION_PERMIT_SEAL__              128
 #define __CHERI_CAP_PERMISSION_PERMIT_UNSEAL__            512
 #define __CHERI_CAP_PERMISSION_ACCESS_SYSTEM_REGISTERS__  1024

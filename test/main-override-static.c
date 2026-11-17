@@ -346,7 +346,7 @@ static void test_large_pages(void) {
 #if 0
 #include <stdint.h>
 #include <stdbool.h>
-#include <mimalloc/bits.h>
+#include <mimalloc/arch.h>
 
 #define MI_LARGE_WSIZE_MAX (4*1024*1024 / MI_SIZE_SIZE)
 

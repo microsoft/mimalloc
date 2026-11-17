@@ -5,10 +5,10 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 #pragma once
-#ifndef MIMALLOC_PRIM_H
-#define MIMALLOC_PRIM_H
+#ifndef MI_PRIM_H
+#define MI_PRIM_H
 
-#include "types.h"
+#include "../types.h"
 
 // --------------------------------------------------------------------------
 // This file specifies the primitive portability API.
@@ -28,10 +28,17 @@ typedef struct mi_os_mem_config_s {
   size_t  alloc_granularity;      // smallest allocation size (usually 4KiB, on Windows 64KiB)
   size_t  physical_memory_in_kib; // physical memory size in KiB
   size_t  virtual_address_bits;   // usually 48 or 56 bits on 64-bit systems. (used to determine secure randomization)
+  size_t  memtag_mode;            // OS specific memory tag check mode (only used in the `prim` layer, see `unix/prim.c`)
+  size_t  memtag_line_size;       // cache line size tagged at once by the CPU (`dc gva`); set in `_mi_os_init`
   bool    has_overcommit;         // can we reserve more memory than can be actually committed?
   bool    has_partial_free;       // can allocated blocks be freed partially? (true for mmap, false for VirtualAlloc)
   bool    has_virtual_reserve;    // supports virtual address space reservation? (if true we can reserve virtual address space without using commit or physical memory)
+  bool    has_reset;              // can memory be reset? (if false, `_mi_prim_reset` is a no-op, e.g. on WebAssembly)
+  bool    has_aligned_alloc;      // can the OS directly allocate at a requested alignment? (e.g. `VirtualAlloc2`, or `mmap` with `MAP_ALIGNED`)
   bool    has_transparent_huge_pages;  // true if transparent huge pages are enabled (on Linux)
+  bool    is_elevated;            // running with elevated privileges (e.g. setuid)? (set in `_mi_os_init`)
+  bool    has_pac;                // true if generic pointer authentication (`pacga`) is supported (only detected with `MI_PAC=ON`)
+  bool    has_memtag;             // true if memory tagging (MTE) is enabled; all non-large OS memory then supports tagging
 } mi_os_mem_config_t;
 
 // Initialize
@@ -70,14 +77,25 @@ int _mi_prim_reset(void* addr, size_t size);
 // Returns error code or 0 on success. On most platforms this is a no-op.
 int _mi_prim_reuse(void* addr, size_t size);
 
-// Set (or reset) a guard range. Returns error code or 0 on success.
-// `is_committed` is the accounted commit state of the range which is never changed by the guard:
-// - if `is_committed`, the range stays committed but becomes inaccessible (and its physical memory may be released);
-//   a reset makes the range accessible again.
-// - otherwise, the range may be reserved, decommitted, or still partly committed. After a set the range is
-//   inaccessible until it is explicitly committed (`_mi_prim_commit`), and a reset is a no-op.
-// The caller must ensure the accounted commit state does not change between a set and reset.
-int _mi_prim_guard(void* addr, size_t size, bool set, bool is_committed);
+// Set a guard on a range making it inaccessible (`set_guard`), or remove it. Returns error code or 0 on success.
+// The guard should not change the accounted commit state `is_committed` of the range:
+// - if committed, a set keeps it committed (but the contents may be discarded), and a remove makes it accessible again.
+// - otherwise (the range may be partly committed), a set makes it inaccessible (e.g. by decommitting on Windows)
+//   and a remove is a no-op (it stays inaccessible until `_mi_prim_commit`).
+int _mi_prim_guard(void* addr, size_t size, bool set_guard, bool is_committed);
+
+// Memory access protection
+typedef enum mi_protect_e {
+  MI_PROTECT_NONE,       // inaccessible
+  MI_PROTECT_READ,       // read-only
+  MI_PROTECT_READWRITE,  // readable and writable
+  MI_PROTECT_READ_SEALED // read-only, and if the OS supports it, immutable (the protection can no longer be changed)
+} mi_protect_t;
+
+// Set the access protection of a committed range. Returns error code or 0 on success
+// (and on platforms that have no memory protection, return 0 as well).
+// With `MI_PROTECT_READ_SEALED`, sealing is best effort (and only failing to make the range read-only is an error).
+int _mi_prim_protect(void* addr, size_t size, mi_protect_t protect);
 
 // Allocate huge (1GiB) pages possibly associated with a NUMA node.
 // `is_zero` is set to true if the memory was zero initialized (as on most OS's)
@@ -114,9 +132,22 @@ void _mi_prim_out_stderr( const char* msg );
 
 // Get an environment variable. (only for options)
 // name != NULL, result != NULL, result_size >= 64
-// Return 1 for success, 0 if not found,
+// Return 1 for success, 0 if not found, -2 if the value does not fit in `result`,
 // and -1 on error (for example, if `getenv` cannot be called yet during preloading).
 int _mi_prim_getenv(const char* name, char* result, size_t result_size);
+
+// Visit all entries of the environment (only for options). Calls `visit(entry,arg)` for each
+// zero terminated `name=value` entry (which is only valid during the call). The environment may be locked
+// during the visit so `visit` should not call into the OS. Very long entries may be skipped.
+// Returns `false` if the platform cannot iterate the full environment (or not yet, e.g. during preloading);
+// in that case options are looked up one at a time using `_mi_prim_getenv`.
+// visit != NULL
+typedef void (mi_env_visit_fun)(const char* entry, void* arg);
+bool _mi_prim_env_visit(mi_env_visit_fun* visit, void* arg);
+
+// Generic implementation of `_mi_prim_getenv` using `_mi_prim_env_visit` (case insensitive).
+// Can be used on platforms where visiting the environment does not allocate (e.g. using `environ`).
+int _mi_prim_getenv_by_visit(const char* name, char* result, size_t result_size);
 
 
 // Fill a buffer with strong randomness; return `false` on error or if
@@ -129,8 +160,12 @@ void _mi_prim_thread_init_auto_done(void);
 // Called on process exit and may take action to clean up resources associated with the thread auto done.
 void _mi_prim_thread_done_auto_done(void);
 
-// Called when the default theap for a thread changes
+// Called when the default theap for a thread changes; the (opaque) `theap` value is passed
+// to `_mi_thread_done` at thread termination (and is signed with `MI_PAC`).
 void _mi_prim_thread_associate_default_theap(mi_theap_t* theap);
+
+// Called once on each thread initialization (before the first allocation in that thread)
+void _mi_prim_thread_init(void);
 
 // Is this thread part of a thread pool?
 bool _mi_prim_thread_is_in_threadpool(void);

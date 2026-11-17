@@ -1,5 +1,5 @@
 use core::alloc::{GlobalAlloc, Layout};
-use mimalloc::{MiMalloc, sys};
+use mimalloc::{sys, MiMalloc};
 use std::sync::mpsc;
 use std::thread;
 
@@ -45,9 +45,9 @@ fn check(p: *const u8, size: usize, seed: usize) {
 #[test]
 fn uses_mimalloc() {
     let b = Box::new(42u64);
-    assert!(sys::mi_any_heap_contains((&*b as *const u64).cast()));
+    assert!(unsafe { sys::mi_any_heap_contains((&*b as *const u64).cast()) });
     let v: Vec<u8> = Vec::with_capacity(1 << 20);
-    assert!(sys::mi_any_heap_contains(v.as_ptr().cast()));
+    assert!(unsafe { sys::mi_any_heap_contains(v.as_ptr().cast()) });
 }
 
 #[test]
@@ -181,10 +181,12 @@ fn options() {
     mimalloc::option_set(sys::mi_option_max_warnings, max + 1);
     assert_eq!(mimalloc::option_get(sys::mi_option_max_warnings), max + 1);
     mimalloc::option_set(sys::mi_option_max_warnings, max);
-    assert_eq!(
-        sys::mi_option_get_size(sys::mi_option_arena_reserve),
-        (sys::mi_option_get(sys::mi_option_arena_reserve) as usize) * 1024
-    );
+    unsafe {
+        assert_eq!(
+            sys::mi_option_get_size(sys::mi_option_arena_reserve),
+            (sys::mi_option_get(sys::mi_option_arena_reserve) as usize) * 1024
+        );
+    }
 }
 
 #[test]

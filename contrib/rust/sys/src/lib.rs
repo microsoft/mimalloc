@@ -14,7 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 use core::ffi::{c_char, c_int, c_long, c_ulonglong, c_void};
 
-pub const MI_MALLOC_VERSION: c_int = 30601;
+pub const MI_MALLOC_VERSION: c_int = 30700;
 pub const MI_SMALL_WSIZE_MAX: usize = 128;
 pub const MI_SMALL_SIZE_MAX: usize = MI_SMALL_WSIZE_MAX * core::mem::size_of::<usize>();
 
@@ -93,7 +93,7 @@ pub const mi_option_disallow_arena_alloc: mi_option_t = 26;
 pub const mi_option_retry_on_oom: mi_option_t = 27;
 pub const mi_option_guarded_min: mi_option_t = 29;
 pub const mi_option_guarded_max: mi_option_t = 30;
-pub const mi_option_unsafe_guarded_precise: mi_option_t = 31;
+pub const mi_option_deprecated_unsafe_guarded_precise: mi_option_t = 31;
 pub const mi_option_guarded_sample_rate: mi_option_t = 32;
 pub const mi_option_guarded_sample_seed: mi_option_t = 33;
 pub const mi_option_generic_collect: mi_option_t = 34;
@@ -116,12 +116,14 @@ pub const mi_option_profile_time_interval: mi_option_t = 50;
 pub const mi_option_profile_sample_rate: mi_option_t = 51;
 pub const mi_option_stats_merge_threshold: mi_option_t = 52;
 pub const mi_option_arena_purge_immediate_size: mi_option_t = 53;
-pub const _mi_option_last: mi_option_t = 54;
+/// Use memory tagging (MTE) if available (with the `mte` feature): 0=off, 1=on (default), and on Linux 2=sync, 3=async, 4=preferred tag check mode.
+pub const mi_option_mte: mi_option_t = 54;
+pub const _mi_option_last: mi_option_t = 55;
 
-unsafe extern "C" {
+extern "C" {
     // standard malloc interface
-    pub safe fn mi_malloc(size: usize) -> *mut c_void;
-    pub safe fn mi_calloc(count: usize, size: usize) -> *mut c_void;
+    pub fn mi_malloc(size: usize) -> *mut c_void;
+    pub fn mi_calloc(count: usize, size: usize) -> *mut c_void;
     pub fn mi_realloc(p: *mut c_void, newsize: usize) -> *mut c_void;
     pub fn mi_expand(p: *mut c_void, newsize: usize) -> *mut c_void;
     pub fn mi_free(p: *mut c_void);
@@ -132,12 +134,12 @@ unsafe extern "C" {
     // extended allocation
     pub fn mi_malloc_small(size: usize) -> *mut c_void;
     pub fn mi_zalloc_small(size: usize) -> *mut c_void;
-    pub safe fn mi_zalloc(size: usize) -> *mut c_void;
-    pub safe fn mi_mallocn(count: usize, size: usize) -> *mut c_void;
+    pub fn mi_zalloc(size: usize) -> *mut c_void;
+    pub fn mi_mallocn(count: usize, size: usize) -> *mut c_void;
     pub fn mi_reallocn(p: *mut c_void, count: usize, size: usize) -> *mut c_void;
     pub fn mi_reallocf(p: *mut c_void, newsize: usize) -> *mut c_void;
     pub fn mi_usable_size(p: *const c_void) -> usize;
-    pub safe fn mi_good_size(size: usize) -> usize;
+    pub fn mi_good_size(size: usize) -> usize;
     pub fn mi_free_size(p: *mut c_void, size: usize);
     pub fn mi_free_small(p: *mut c_void);
     pub fn mi_free_small_nonnull(p: *mut c_void);
@@ -150,12 +152,12 @@ unsafe extern "C" {
     pub fn mi_wzalloc_small(wsize: usize) -> *mut c_void;
 
     // aligned allocation
-    pub safe fn mi_malloc_aligned(size: usize, alignment: usize) -> *mut c_void;
-    pub safe fn mi_malloc_aligned_at(size: usize, alignment: usize, offset: usize) -> *mut c_void;
-    pub safe fn mi_zalloc_aligned(size: usize, alignment: usize) -> *mut c_void;
-    pub safe fn mi_zalloc_aligned_at(size: usize, alignment: usize, offset: usize) -> *mut c_void;
-    pub safe fn mi_calloc_aligned(count: usize, size: usize, alignment: usize) -> *mut c_void;
-    pub safe fn mi_calloc_aligned_at(
+    pub fn mi_malloc_aligned(size: usize, alignment: usize) -> *mut c_void;
+    pub fn mi_malloc_aligned_at(size: usize, alignment: usize, offset: usize) -> *mut c_void;
+    pub fn mi_zalloc_aligned(size: usize, alignment: usize) -> *mut c_void;
+    pub fn mi_zalloc_aligned_at(size: usize, alignment: usize, offset: usize) -> *mut c_void;
+    pub fn mi_calloc_aligned(count: usize, size: usize, alignment: usize) -> *mut c_void;
+    pub fn mi_calloc_aligned_at(
         count: usize,
         size: usize,
         alignment: usize,
@@ -173,10 +175,10 @@ unsafe extern "C" {
     pub fn mi_register_deferred_free(deferred_free: Option<mi_deferred_free_fun>, arg: *mut c_void);
     pub fn mi_register_output(out: Option<mi_output_fun>, arg: *mut c_void);
     pub fn mi_register_error(fun: Option<mi_error_fun>, arg: *mut c_void);
-    pub safe fn mi_collect(force: bool);
-    pub safe fn mi_version() -> c_int;
-    pub safe fn mi_options_print();
-    pub safe fn mi_process_info_print();
+    pub fn mi_collect(force: bool);
+    pub fn mi_version() -> c_int;
+    pub fn mi_options_print();
+    pub fn mi_process_info_print();
     pub fn mi_options_print_out(out: Option<mi_output_fun>, arg: *mut c_void);
     pub fn mi_process_info_print_out(out: Option<mi_output_fun>, arg: *mut c_void);
     pub fn mi_process_info(
@@ -206,23 +208,24 @@ unsafe extern "C" {
     ) -> *mut c_void;
     pub fn mi_ufree(p: *mut c_void, block_size: *mut usize);
     pub fn mi_umalloc_aligned(size: usize, alignment: usize, block_size: *mut usize)
-    -> *mut c_void;
+        -> *mut c_void;
     pub fn mi_uzalloc_aligned(size: usize, alignment: usize, block_size: *mut usize)
-    -> *mut c_void;
+        -> *mut c_void;
     pub fn mi_umalloc_small(size: usize, block_size: *mut usize) -> *mut c_void;
     pub fn mi_uzalloc_small(size: usize, block_size: *mut usize) -> *mut c_void;
 
     // first-class heaps
-    pub safe fn mi_heap_new() -> *mut mi_heap_t;
+    pub fn mi_heap_new() -> *mut mi_heap_t;
     pub fn mi_heap_delete(heap: *mut mi_heap_t);
     pub fn mi_heap_destroy(heap: *mut mi_heap_t);
+    pub fn mi_thread_heap_release(heap: *mut mi_heap_t);
     pub fn mi_heap_set_numa_affinity(heap: *mut mi_heap_t, numa_node: c_int);
     pub fn mi_heap_set_debug_fill_preserve(heap: *mut mi_heap_t, preserve: usize);
     pub fn mi_heap_collect(heap: *mut mi_heap_t, force: bool);
-    pub safe fn mi_heap_main() -> *mut mi_heap_t;
-    pub safe fn mi_heap_of(p: *const c_void) -> *mut mi_heap_t;
+    pub fn mi_heap_main() -> *mut mi_heap_t;
+    pub fn mi_heap_of(p: *const c_void) -> *mut mi_heap_t;
     pub fn mi_heap_contains(heap: *const mi_heap_t, p: *const c_void) -> bool;
-    pub safe fn mi_any_heap_contains(p: *const c_void) -> bool;
+    pub fn mi_any_heap_contains(p: *const c_void) -> bool;
 
     pub fn mi_heap_malloc(heap: *mut mi_heap_t, size: usize) -> *mut c_void;
     pub fn mi_heap_zalloc(heap: *mut mi_heap_t, size: usize) -> *mut c_void;
@@ -369,7 +372,7 @@ unsafe extern "C" {
     ) -> bool;
 
     // arenas
-    pub safe fn mi_is_redirected() -> bool;
+    pub fn mi_is_redirected() -> bool;
     pub fn mi_reserve_huge_os_pages_interleave(
         pages: usize,
         numa_nodes: usize,
@@ -389,12 +392,12 @@ unsafe extern "C" {
         is_zero: bool,
         numa_node: c_int,
     ) -> bool;
-    pub safe fn mi_debug_show_arenas();
-    pub safe fn mi_arenas_print();
-    pub safe fn mi_arenas_purge();
-    pub safe fn mi_arena_min_alignment() -> usize;
-    pub safe fn mi_arena_min_size() -> usize;
-    pub safe fn mi_arena_max_object_size() -> usize;
+    pub fn mi_debug_show_arenas();
+    pub fn mi_arenas_print();
+    pub fn mi_arenas_purge();
+    pub fn mi_arena_min_alignment() -> usize;
+    pub fn mi_arena_min_size() -> usize;
+    pub fn mi_arena_max_object_size() -> usize;
     pub fn mi_arena_area(arena_id: mi_arena_id_t, size: *mut usize) -> *mut c_void;
     pub fn mi_reserve_huge_os_pages_at_ex(
         pages: usize,
@@ -424,8 +427,8 @@ unsafe extern "C" {
     pub fn mi_heap_new_in_arena(arena_id: mi_arena_id_t) -> *mut mi_heap_t;
 
     // sub-processes
-    pub safe fn mi_subproc_current() -> mi_subproc_id_t;
-    pub safe fn mi_subproc_new() -> mi_subproc_id_t;
+    pub fn mi_subproc_current() -> mi_subproc_id_t;
+    pub fn mi_subproc_new() -> mi_subproc_id_t;
     pub fn mi_subproc_destroy(subproc: mi_subproc_id_t);
     pub fn mi_subproc_add_current_thread(subproc: mi_subproc_id_t);
     pub fn mi_subproc_visit_heaps(
@@ -437,7 +440,7 @@ unsafe extern "C" {
     // thread-local heaps
     pub fn mi_heap_theap(heap: *mut mi_heap_t) -> *mut mi_theap_t;
     pub fn mi_theap_set_default(theap: *mut mi_theap_t) -> *mut mi_theap_t;
-    pub safe fn mi_theap_get_default() -> *mut mi_theap_t;
+    pub fn mi_theap_get_default() -> *mut mi_theap_t;
     pub fn mi_theap_collect(theap: *mut mi_theap_t, force: bool);
     pub fn mi_theap_malloc(theap: *mut mi_theap_t, size: usize) -> *mut c_void;
     pub fn mi_theap_zalloc(theap: *mut mi_theap_t, size: usize) -> *mut c_void;
@@ -456,7 +459,7 @@ unsafe extern "C" {
     ) -> *mut c_void;
     pub fn mi_theap_realloc(theap: *mut mi_theap_t, p: *mut c_void, newsize: usize) -> *mut c_void;
     pub fn mi_theap_rezalloc(theap: *mut mi_theap_t, p: *mut c_void, newsize: usize)
-    -> *mut c_void;
+        -> *mut c_void;
     pub fn mi_theap_wmalloc_small(theap: *mut mi_theap_t, wsize: usize) -> *mut c_void;
     pub fn mi_theap_wzalloc_small(theap: *mut mi_theap_t, wsize: usize) -> *mut c_void;
     pub fn mi_theap_delete(theap: *mut mi_theap_t);
@@ -518,32 +521,32 @@ unsafe extern "C" {
         out: Option<mi_output_fun>,
         arg: *mut c_void,
     );
-    pub safe fn mi_stats_get_bin_size(bin: usize) -> usize;
+    pub fn mi_stats_get_bin_size(bin: usize) -> usize;
     pub fn mi_theap_stats_merge_to_heap(theap: *mut mi_theap_t);
 
     // options
-    pub safe fn mi_option_is_enabled(option: mi_option_t) -> bool;
-    pub safe fn mi_option_enable(option: mi_option_t);
-    pub safe fn mi_option_disable(option: mi_option_t);
-    pub safe fn mi_option_set_enabled(option: mi_option_t, enable: bool);
-    pub safe fn mi_option_set_enabled_default(option: mi_option_t, enable: bool);
-    pub safe fn mi_option_get(option: mi_option_t) -> c_long;
-    pub safe fn mi_option_get_clamp(option: mi_option_t, min: c_long, max: c_long) -> c_long;
-    pub safe fn mi_option_get_size(option: mi_option_t) -> usize;
-    pub safe fn mi_option_set(option: mi_option_t, value: c_long);
-    pub safe fn mi_option_set_default(option: mi_option_t, value: c_long);
+    pub fn mi_option_is_enabled(option: mi_option_t) -> bool;
+    pub fn mi_option_enable(option: mi_option_t);
+    pub fn mi_option_disable(option: mi_option_t);
+    pub fn mi_option_set_enabled(option: mi_option_t, enable: bool);
+    pub fn mi_option_set_enabled_default(option: mi_option_t, enable: bool);
+    pub fn mi_option_get(option: mi_option_t) -> c_long;
+    pub fn mi_option_get_clamp(option: mi_option_t, min: c_long, max: c_long) -> c_long;
+    pub fn mi_option_get_size(option: mi_option_t) -> usize;
+    pub fn mi_option_set(option: mi_option_t, value: c_long);
+    pub fn mi_option_set_default(option: mi_option_t, value: c_long);
 
     // posix and other standard interfaces
     pub fn mi_cfree(p: *mut c_void) -> bool;
     pub fn mi__expand(p: *mut c_void, newsize: usize) -> *mut c_void;
     pub fn mi_malloc_size(p: *const c_void) -> usize;
-    pub safe fn mi_malloc_good_size(size: usize) -> usize;
+    pub fn mi_malloc_good_size(size: usize) -> usize;
     pub fn mi_malloc_usable_size(p: *const c_void) -> usize;
     pub fn mi_posix_memalign(p: *mut *mut c_void, alignment: usize, size: usize) -> c_int;
-    pub safe fn mi_memalign(alignment: usize, size: usize) -> *mut c_void;
-    pub safe fn mi_valloc(size: usize) -> *mut c_void;
-    pub safe fn mi_pvalloc(size: usize) -> *mut c_void;
-    pub safe fn mi_aligned_alloc(alignment: usize, size: usize) -> *mut c_void;
+    pub fn mi_memalign(alignment: usize, size: usize) -> *mut c_void;
+    pub fn mi_valloc(size: usize) -> *mut c_void;
+    pub fn mi_pvalloc(size: usize) -> *mut c_void;
+    pub fn mi_aligned_alloc(alignment: usize, size: usize) -> *mut c_void;
     pub fn mi_reallocarray(p: *mut c_void, count: usize, size: usize) -> *mut c_void;
     pub fn mi_reallocarr(p: *mut c_void, count: usize, size: usize) -> c_int;
     pub fn mi_aligned_recalloc(
@@ -566,4 +569,4 @@ unsafe extern "C" {
 // keep the malloc overrides when linking statically
 #[cfg(feature = "override")]
 #[used]
-static OVERRIDE: extern "C" fn(usize) -> *mut c_void = mi_malloc;
+static OVERRIDE: unsafe extern "C" fn(usize) -> *mut c_void = mi_malloc;

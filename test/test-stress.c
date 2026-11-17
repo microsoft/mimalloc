@@ -53,22 +53,26 @@ static mi_profiler_t* stress_pprof_profiler = NULL;
 //
 // argument defaults
 #if defined(MI_TSAN) && MI_TEST_LIGHT         // with thread-sanitizer reduce the threads to test within the azure pipeline limits
-static int THREADS = NTHREADS/4;
+static int THREADS = NTHREADS/8;
 static int SCALE   = 10;
 static int ITER    = 100;
 #elif defined(MI_TSAN)          // with thread-sanitizer reduce the threads to test within the azure pipeline limits
 static int THREADS = NTHREADS/4;
 static int SCALE   = 25;
-static int ITER    = 500;
+static int ITER    = 400;
+#elif MI_TEST_LIGHT >= 2       // reduce the load further (e.g. under slow emulation)
+static int THREADS = NTHREADS/4;
+static int SCALE   = 5;
+static int ITER    = 5;
+#elif MI_TEST_LIGHT            // reduce the load in test integration (e.g. under emulation)
+static int THREADS = NTHREADS/4;
+static int SCALE   = 10;
+static int ITER    = 5;
 #elif defined(MI_UBSAN)       // with undefined behavious sanitizer reduce parameters to stay within the azure pipeline limits
 static int THREADS = NTHREADS/4;
 static int SCALE   = 25;
 static int ITER    = 20;
 #elif defined(MI_GUARDED)     // with debug guard pages reduce parameters to stay within the azure pipeline limits
-static int THREADS = NTHREADS/4;
-static int SCALE   = 25;
-static int ITER    = 10;
-#elif MI_DEBUG && MI_TEST_LIGHT
 static int THREADS = NTHREADS/4;
 static int SCALE   = 25;
 static int ITER    = 10;
@@ -126,19 +130,19 @@ static mi_heap_t* current_heap;
 // static volatile void* transfer[TRANSFERS];
 
 
-#if (UINTPTR_MAX != UINT32_MAX)
-const uintptr_t cookie = 0xbf58476d1ce4e5b9UL;
+#if (SIZE_MAX > UINT32_MAX)
+const size_t cookie = 0xbf58476d1ce4e5b9UL;
 #else
-const uintptr_t cookie = 0x1ce4e5b9UL;
+const size_t cookie = 0x1ce4e5b9UL;
 #endif
 
 static void* atomic_exchange_ptr(volatile void** p, void* newval);
 
-typedef uintptr_t* random_t;
+typedef size_t* random_t;
 
-static uintptr_t pick(random_t r) {
-  uintptr_t x = *r;
-#if (UINTPTR_MAX > UINT32_MAX)
+static size_t pick(random_t r) {
+  size_t x = *r;
+#if (SIZE_MAX > UINT32_MAX)
   // by Sebastiano Vigna, see: <http://xoshiro.di.unimi.it/splitmix64.c>
   x ^= x >> 30;
   x *= 0xbf58476d1ce4e5b9UL;
@@ -168,11 +172,11 @@ static void* alloc_items(size_t items, random_t r) {
     else items *= 100;                                             // 1% large objects;
   }
   if (items>=32 && items<=40) items*=2;              // pthreads uses 320b allocations (this shows that more clearly in the stats)
-  if (use_one_size > 0) items = (use_one_size / sizeof(uintptr_t));
+  if (use_one_size > 0) items = (use_one_size / sizeof(size_t));
   if (items==0) items = 1;
-  uintptr_t* p = (uintptr_t*)custom_calloc(items,sizeof(uintptr_t));
+  size_t* p = (size_t*)custom_calloc(items,sizeof(size_t));
   if (p != NULL) {
-    for (uintptr_t i = 0; i < items; i++) {
+    for (size_t i = 0; i < items; i++) {
       assert(p[i] == 0);
       p[i] = (items - i) ^ cookie;
     }
@@ -182,9 +186,9 @@ static void* alloc_items(size_t items, random_t r) {
 
 static void free_items(void* p) {
   if (p != NULL) {
-    uintptr_t* q = (uintptr_t*)p;
-    uintptr_t items = (q[0] ^ cookie);
-    for (uintptr_t i = 0; i < items; i++) {
+    size_t* q = (size_t*)p;
+    size_t items = (q[0] ^ cookie);
+    for (size_t i = 0; i < items; i++) {
       if ((q[i] ^ cookie) != items - i) {
         fprintf(stderr, "memory corruption at block %p at %zu\n", p, i);
         abort();
@@ -207,11 +211,11 @@ static bool visit_blocks(const mi_theap_t* theap, const mi_theap_area_t* area, v
 
 static void stress(intptr_t tid, void* vtransfers) {
   #ifndef USE_STD_MALLOC
-  // printf("test stress thread: subproc: %p, tid: %zi\n", mi_subproc_current()._mi_subproc_id, tid);
+  //  printf("test stress thread: subproc: %p, tid: %zi\n", mi_subproc_current()._mi_subproc_id, tid);
   #endif
   volatile void** transfers = (volatile void**)vtransfers;
   //bench_start_thread();
-  uintptr_t r = ((tid + 1) * 43); // rand();
+  size_t r = (((size_t)tid + 1) * 43); // rand();
   const size_t max_item_shift = 5; // 128
   const size_t max_item_retained_shift = max_item_shift + 2;
   size_t allocs = 100 * ((size_t)SCALE) * (tid % 8 + 1); // some threads do more
@@ -285,7 +289,7 @@ static void test_stress(mi_subproc_id_t subproc) {
   #ifdef MI_USE_HEAPS
   mi_heap_t* prev_heaps[MI_USE_HEAPS] = { NULL };
   #endif
-  uintptr_t r = rand();
+  size_t r = rand();
   for (int n = 0; n < ITER; n++) {
 
     #ifdef MI_USE_HEAPS
@@ -329,9 +333,9 @@ static void test_stress(mi_subproc_id_t subproc) {
     #if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) {
       printf("- iterations left: %3d\n", ITER - (n + 1));
-      #ifndef USE_STD_MALLOC
-      mi_debug_show_arenas();
-      #endif
+      // #if !defined(USE_STD_MALLOC) && !MI_TEST_LIGHT
+      // mi_debug_show_arenas();
+      // #endif
       //mi_collect(true);
       //mi_debug_show_arenas();
     }
@@ -387,7 +391,7 @@ static void test_stress_subprocs(void) {
 
 #if TEST_LEAK
 static void leak(intptr_t tid) {
-  uintptr_t r = rand();
+  size_t r = rand();
   void* p = alloc_items(1 /*pick(&r)%128*/, &r);
   if (chance(50, &r)) {
     intptr_t i = (pick(&r) % TRANSFERS);

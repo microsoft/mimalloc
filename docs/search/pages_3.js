@@ -1,7 +1,5 @@
 var searchData=
 [
-  ['malloc_0',['Overriding Malloc',['../overrides.html',1,'']]],
-  ['malloc_1',['mi-malloc',['../index.html',1,'']]],
-  ['mi_20malloc_2',['mi-malloc',['../index.html',1,'']]],
-  ['modes_3',['Build Modes',['../modes.html',1,'']]]
+  ['getting_20the_20best_20performance_0',['Getting the Best Performance',['../tuning.html',1,'']]],
+  ['guarded_20mode_1',['Guarded Mode',['../guarded.html',1,'']]]
 ];

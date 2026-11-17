@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.6/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -89,26 +89,24 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('group__constan
 </div><!--header-->
 <div class="contents">
 
-<p>Inlined definitions for onstant size allocation and freeing.
+<p>Inlined definitions for onstant size allocation and freeing.  
 <a href="#details">More...</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
-<tr class="memitem:ga9cd44d925d34f7180922e12bbf594571" id="r_ga9cd44d925d34f7180922e12bbf594571"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga9cd44d925d34f7180922e12bbf594571">mi_malloc_csize</a> (size_t size)</td></tr>
+<tr class="memitem:ga9cd44d925d34f7180922e12bbf594571" id="r_ga9cd44d925d34f7180922e12bbf594571"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga9cd44d925d34f7180922e12bbf594571">mi_malloc_csize</a> (size_t size)</td></tr>
 <tr class="memdesc:ga9cd44d925d34f7180922e12bbf594571"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Allocate a constant size object.  <br /></td></tr>
-<tr class="separator:ga9cd44d925d34f7180922e12bbf594571"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:gadca6d340ee15b5c70695ed82d95c6cec" id="r_gadca6d340ee15b5c70695ed82d95c6cec"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#gadca6d340ee15b5c70695ed82d95c6cec">mi_zalloc_csize</a> (size_t size)</td></tr>
-<tr class="separator:gadca6d340ee15b5c70695ed82d95c6cec"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga105bd667da91a15d113fe79be04d625c" id="r_ga105bd667da91a15d113fe79be04d625c"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga105bd667da91a15d113fe79be04d625c">mi_theap_malloc_csize</a> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
-<tr class="separator:ga105bd667da91a15d113fe79be04d625c"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga1addf755829380581dd9c3c9175e376f" id="r_ga1addf755829380581dd9c3c9175e376f"><td class="memItemLeft" align="right" valign="top">void *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga1addf755829380581dd9c3c9175e376f">mi_theap_zalloc_csize</a> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
-<tr class="separator:ga1addf755829380581dd9c3c9175e376f"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga7a421e302074e598527c3eb052a6a3c5" id="r_ga7a421e302074e598527c3eb052a6a3c5"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga7a421e302074e598527c3eb052a6a3c5">mi_free_csize</a> (void *p, size_t size)</td></tr>
+<tr class="memitem:gadca6d340ee15b5c70695ed82d95c6cec" id="r_gadca6d340ee15b5c70695ed82d95c6cec"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#gadca6d340ee15b5c70695ed82d95c6cec">mi_zalloc_csize</a> (size_t size)</td></tr>
+<tr class="memitem:ga105bd667da91a15d113fe79be04d625c" id="r_ga105bd667da91a15d113fe79be04d625c"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga105bd667da91a15d113fe79be04d625c">mi_theap_malloc_csize</a> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
+<tr class="memitem:ga1addf755829380581dd9c3c9175e376f" id="r_ga1addf755829380581dd9c3c9175e376f"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga1addf755829380581dd9c3c9175e376f">mi_theap_zalloc_csize</a> (<a class="el" href="group__theap.html#ga8722f6ac4f638b4692e06ddfddc844f8">mi_theap_t</a> *theap, size_t size)</td></tr>
+<tr class="memitem:ga7a421e302074e598527c3eb052a6a3c5" id="r_ga7a421e302074e598527c3eb052a6a3c5"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga7a421e302074e598527c3eb052a6a3c5">mi_free_csize</a> (void *p, size_t size)</td></tr>
 <tr class="memdesc:ga7a421e302074e598527c3eb052a6a3c5"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Free a pointer with a known constant size.  <br /></td></tr>
-<tr class="separator:ga7a421e302074e598527c3eb052a6a3c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ga38a93d373a9dc8edc8bca83edb6af5c5" id="r_ga38a93d373a9dc8edc8bca83edb6af5c5"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ga38a93d373a9dc8edc8bca83edb6af5c5">mi_free_csize_nonnull</a> (void *p, size_t size)</td></tr>
+<tr class="memitem:ga38a93d373a9dc8edc8bca83edb6af5c5" id="r_ga38a93d373a9dc8edc8bca83edb6af5c5"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga38a93d373a9dc8edc8bca83edb6af5c5">mi_free_csize_nonnull</a> (void *p, size_t size)</td></tr>
 <tr class="memdesc:ga38a93d373a9dc8edc8bca83edb6af5c5"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Free a non-null pointer with a known constant size.  <br /></td></tr>
-<tr class="separator:ga38a93d373a9dc8edc8bca83edb6af5c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ga6fb968bb46f18f107d8d933e44964b10" id="r_ga6fb968bb46f18f107d8d933e44964b10"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga6fb968bb46f18f107d8d933e44964b10">mi_free_csize_aligned</a> (void *p, size_t size, size_t aligned)</td></tr>
+<tr class="memdesc:ga6fb968bb46f18f107d8d933e44964b10"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Free a pointer using its known allocation size and alignment.  <br /></td></tr>
+<tr class="memitem:gaf6715d45503bba655a4e7407bf8e0f92" id="r_gaf6715d45503bba655a4e7407bf8e0f92"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#gaf6715d45503bba655a4e7407bf8e0f92">mi_free_csize_aligned_nonnull</a> (void *p, size_t size, size_t aligned)</td></tr>
+<tr class="memdesc:gaf6715d45503bba655a4e7407bf8e0f92"><td class="mdescLeft">&#160;</td><td class="mdescRight">As <a class="el" href="#ga6fb968bb46f18f107d8d933e44964b10" title="v3: Free a pointer using its known allocation size and alignment.">mi_free_csize_aligned()</a>, but <em class="arg">p</em> must not be <em class="arg">NULL</em>.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Inlined definitions for onstant size allocation and freeing. </p>
@@ -148,6 +146,63 @@ Functions</h2></td></tr>
 <a class="el" href="group__posix.html#gae01389eedab8d67341ff52e2aad80ebb" title="Free a block that was allocated with a known size.">mi_free_size()</a> </dd>
 <dd>
 <a class="el" href="group__posix.html#ga796602dae2a89797026f72e0c0240f32" title="Free a non-NULL pointer that was allocated with a known size.">mi_free_size_nonnull()</a> </dd></dl>
+
+</div>
+</div>
+<a id="ga6fb968bb46f18f107d8d933e44964b10" name="ga6fb968bb46f18f107d8d933e44964b10"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga6fb968bb46f18f107d8d933e44964b10">&#9670;&#160;</a></span>mi_free_csize_aligned()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_free_csize_aligned </td>
+          <td>(</td>
+          <td class="paramtype">void *</td>          <td class="paramname"><span class="paramname"><em>p</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>size</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>aligned</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>: Free a pointer using its known allocation size and alignment. </p>
+<p><em class="arg">p</em> may be <em class="arg">NULL</em>. Constant arguments allow selecting the small-free path. </p><dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga7a421e302074e598527c3eb052a6a3c5" title="v3: Free a pointer with a known constant size.">mi_free_csize()</a> </dd></dl>
+
+</div>
+</div>
+<a id="gaf6715d45503bba655a4e7407bf8e0f92" name="gaf6715d45503bba655a4e7407bf8e0f92"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaf6715d45503bba655a4e7407bf8e0f92">&#9670;&#160;</a></span>mi_free_csize_aligned_nonnull()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void mi_free_csize_aligned_nonnull </td>
+          <td>(</td>
+          <td class="paramtype">void *</td>          <td class="paramname"><span class="paramname"><em>p</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>size</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>aligned</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>As <a class="el" href="#ga6fb968bb46f18f107d8d933e44964b10" title="v3: Free a pointer using its known allocation size and alignment.">mi_free_csize_aligned()</a>, but <em class="arg">p</em> must not be <em class="arg">NULL</em>. </p>
 
 </div>
 </div>
@@ -208,7 +263,7 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>A pointer to an allocated block of size <em>size</em> bytes. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>A pointer to an allocated block of size <em class="arg">size</em> bytes. </dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga7a421e302074e598527c3eb052a6a3c5" title="v3: Free a pointer with a known constant size.">mi_free_csize()</a> </dd>
 <dd>
 <a class="el" href="group__malloc.html#gae1dd97b542420c87ae085e822b1229e8" title="Allocate size bytes.">mi_malloc()</a> </dd></dl>

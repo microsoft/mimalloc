@@ -102,17 +102,34 @@ fn main() {
     };
 
     // build options
-    let debug = feature("debug")
-        || (feature("debug_in_debug") && is_rust_debug());
+    let debug = feature("debug") || (feature("debug_in_debug") && is_rust_debug());
     if debug {
         define("MI_DEBUG", "2");
     } else if !is_user("MI_DEBUG") {
         define("MI_DEBUG", "0");
         define("NDEBUG", "1");
     }
-    if feature("secure") {
-        define("MI_SECURE", "4");
+    // `mte` and `pac` require hardware and OS support at runtime (and fail at startup otherwise)
+    let hw_os =
+        target_arch == "aarch64" && (is_apple || target_os == "linux" || target_os == "android");
+    if feature("mte") {
+        if !hw_os {
+            panic!(
+                "the `mte` feature is only supported on aarch64 Linux, Android, and macOS targets"
+            );
+        }
+        define("MI_MTE", "2"); // ON (which also enables `MI_PAC=2` by default in `arch.h`)
     }
+    if feature("pac") {
+        if !hw_os || is_msvc {
+            panic!("the `pac` feature is only supported on aarch64 Linux, Android, and macOS targets with GCC or clang");
+        }
+        define("MI_PAC", "2"); // ON
+    }
+    if feature("secure") {
+        define("MI_SECURE", "4"); // ON
+    } // (otherwise the default level in `types.h` is used: 2 with `mte` or `pac`, 3 on CHERI, and 0 otherwise;
+      //  opt out explicitly with `MIMALLOC_DEFINES="MI_SECURE=0"`)
     let is_override = feature("override") && !is_windows;
     if is_override {
         define("MI_MALLOC_OVERRIDE", "1");
@@ -206,5 +223,5 @@ fn main() {
 
 fn is_apple_clang(compiler: &cc::Tool) -> bool {
     let out = compiler.to_command().arg("--version").output();
-    out.is_ok_and(|out| String::from_utf8_lossy(&out.stdout).contains("Apple clang"))
+    matches!(out, Ok(out) if String::from_utf8_lossy(&out.stdout).contains("Apple clang"))
 }

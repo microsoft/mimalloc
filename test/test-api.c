@@ -27,6 +27,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 #include <stdbool.h>
 #include <stdint.h>
 #include <errno.h>
+#include <string.h>
 
 #ifdef __cplusplus
 #include <new>
@@ -34,6 +35,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 #endif
 
 #include "mimalloc.h"
+#include "mimalloc-stats.h"
 // #include "mimalloc/internal.h"
 #include "mimalloc/types.h" // for MI_DEBUG and MI_PAGE_MAX_OVERALLOC_ALIGN
 
@@ -59,6 +61,9 @@ static bool test_zero_aligned_first(void);
 static bool test_aligned_all(void);
 static bool test_heap_destroy_xthread_free(void);
 static bool test_heap_destroy_stale_theap(void);
+static bool test_thread_done_no_reinit(void);
+static bool test_thread_heap_release(void);
+static bool test_heap_delete_concurrent_free(void);
 #ifdef __cplusplus
 static bool test_new_first(void);
 #endif
@@ -71,20 +76,81 @@ static void mi_cdecl qsbr_record_error(int err, void* arg) {
 
 static bool mem_has_vals(const uint8_t* p, size_t size, uint8_t val) {
   if (p==NULL) return false;
-  for (size_t i = 0; i < size; ++i) {
-    if (p[i] != val) return false;
-  }
-  return true;
+  if (size==0) return true;
+  return (p[0] == val && memcmp(p, p + 1, size - 1) == 0);  // all bytes equal the first one (fast even in debug builds)
 }
 static bool mem_is_zero(const void* p, size_t size) {
   return mem_has_vals((const uint8_t*)p,size,0);
 }
 
+// size sweeps use a larger odd multiple of the step beyond the smallest sizes (so all residues
+// modulo the power-of-two alignments are still covered); with `MI_TEST_LIGHT` the steps are larger
+// and repeated tests run fewer iterations (and even fewer with `MI_TEST_LIGHT=2`)
+#if MI_TEST_LIGHT >= 2
+#define MI_TEST_SIZE_STEP(size,step)  ((size) < 64 ? (step) : 15*(step))
+#define MI_TEST_LARGE_STEP            (6*1024)
+#define MI_TEST_ITERS(n)              ((n)/8)
+#elif MI_TEST_LIGHT
+#define MI_TEST_SIZE_STEP(size,step)  ((size) < 128 ? (step) : 7*(step))
+#define MI_TEST_LARGE_STEP            (3*1024)
+#define MI_TEST_ITERS(n)              ((n)/4)
+#else
+#define MI_TEST_SIZE_STEP(size,step)  ((size) < 256 ? (step) : 3*(step))
+#define MI_TEST_LARGE_STEP            (1024)
+#define MI_TEST_ITERS(n)              (n)
+#endif
+// small size sweeps stay dense around the `MI_SMALL_SIZE_MAX` boundary
+#define MI_TEST_SMALL_SIZE_STEP(size) ((size) + 8 >= MI_SMALL_SIZE_MAX && (size) <= MI_SMALL_SIZE_MAX + 8 ? 1 : MI_TEST_SIZE_STEP(size,1))
+
 // ---------------------------------------------------------------------------
 // Main testing
 // ---------------------------------------------------------------------------
 int main(void) {
+  mi_options_print();
   mi_option_disable(mi_option_verbose);
+
+  CHECK_BODY("pointer-address-and-memtag") {
+    uint8_t area[128];
+    for (size_t tag = 0; tag < 16; tag++) {
+      void* p = mi_ptr_with_memtag(area, tag);
+      void* q = mi_ptr_with_addr(p, mi_addr(area) + 32);
+      result = result && mi_addr(p) == mi_addr(area) && mi_addr(q) == mi_addr(area + 32);
+      #if MI_MTE
+      result = result && mi_ptr_memtag(p) == tag;
+      #else
+      result = result && mi_ptr_memtag(p) == 0;
+      #endif
+      result = result && mi_ptr_memtag(q) == mi_ptr_memtag(p);
+      result = result && mi_ptr_memtag_meta(q) == area + 32;
+    }
+    #if MI_MTE
+    // Ignored pointer bits are not logical memory-tag bits.
+    void* p = (void*)((uintptr_t)mi_ptr_with_memtag(area, 5) | (~MI_PTR_ADDR_MASK & ~MI_PTR_MEMTAG_MASK));
+    result = result && mi_addr(p) == mi_addr(area) && mi_ptr_memtag(p) == 5;
+    result = result && mi_ptr_with_memtag(p, 0xF5) == mi_ptr_with_memtag(area, 5);
+    #endif
+  };
+  CHECK_BODY("pointer-pack-rederive") {
+    uint8_t area[128];
+    for (size_t tag = 0; tag < 16; tag++) {
+      void* p = mi_ptr_with_memtag(mi_ptr_bounded(area + 32, 16), tag);
+      void* auth = mi_ptr_with_memtag(area, tag ^ 1);
+      void* unpacked = mi_ptr_unpack(auth, mi_ptr_pack(p));
+      void* derived = mi_ptr_rederive(auth, p);
+      result = result && mi_addr(unpacked) == mi_addr(p) && mi_addr(derived) == mi_addr(p);
+      result = result && mi_ptr_memtag(unpacked) == mi_ptr_memtag(p) && mi_ptr_memtag(derived) == mi_ptr_memtag(p);
+      // Recover authority before moving outside the user's bounds.
+      void* base = mi_ptr_with_addr(derived, mi_addr(area));
+      result = result && mi_addr(base) == mi_addr(area) && mi_ptr_memtag(base) == mi_ptr_memtag(p);
+      #if MI_CHERI
+      result = result && __builtin_cheri_tag_get(unpacked) && __builtin_cheri_tag_get(base);
+      result = result && __builtin_cheri_base_get(unpacked) == __builtin_cheri_base_get(auth);
+      result = result && __builtin_cheri_length_get(unpacked) == __builtin_cheri_length_get(auth);
+      result = result && __builtin_cheri_base_get(base) == __builtin_cheri_base_get(auth);
+      result = result && __builtin_cheri_length_get(base) == __builtin_cheri_length_get(auth);
+      #endif
+    }
+  };
 
   // ---------------------------------------------------
   // Malloc
@@ -130,7 +196,7 @@ int main(void) {
   CHECK_BODY("mi_urealloc_invalid") {
     void* p = mi_malloc(64);
     size_t pre, post;
-    void* q = mi_urealloc((char*)p + 3, 40, &pre, &post);
+    void* q = mi_urealloc((char*)p + 3, 58, &pre, &post);  // stays in place in release (no interior pointer check)
     mi_free(p);
     result = (q==NULL || q==(uint8_t*)p+3);
   }
@@ -307,7 +373,7 @@ int main(void) {
 
   CHECK_BODY("mimalloc-aligned13") {
     bool ok = true;
-    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size++ ) {
+    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size += MI_TEST_SMALL_SIZE_STEP(size) ) {
       for(size_t align = 1; align <= size && ok; align *= 2 ) {
         void* p[10];
         for(int i = 0; i < 10 && ok; i++) {
@@ -323,7 +389,7 @@ int main(void) {
   }
   CHECK_BODY("mimalloc-size-aligned14") {
     bool ok = true;
-    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size++ ) {
+    for( size_t size = 1; size <= (MI_SMALL_SIZE_MAX * 2) && ok; size += MI_TEST_SMALL_SIZE_STEP(size) ) {
       for(size_t align = 1; align <= 16*size && ok; align *= 2) {
         void* p[10];
         for(int i = 0; i < 10 && ok; i++) {
@@ -345,6 +411,11 @@ int main(void) {
   };
   CHECK_BODY("malloc-aligned-at2") {
     void* p = mi_malloc_aligned_at(50,32,8); result = (p != NULL && ((uintptr_t)(p) + 8) % 32 == 0); mi_free(p);
+  };
+  CHECK_BODY("realloc-aligned-from-offset") {  // realloc to a small alignment must realign a pointer allocated at an offset
+    void* p = mi_malloc_aligned_at(16,16,4);
+    void* q = mi_realloc_aligned(p,16,sizeof(void*));
+    result = (p != NULL && q != NULL && (uintptr_t)q % sizeof(void*) == 0); mi_free(q);
   };
   CHECK_BODY("memalign1") {
     void* p;
@@ -450,6 +521,39 @@ int main(void) {
     mi_free(q);
   };
 
+  CHECK_BODY("realloc-shrink") {  // issue #1488
+    void* p = mi_malloc(4096);
+    const size_t size = mi_usable_size(p);
+    void* q = mi_realloc(p, size - size/16);          // little waste: stays in place
+    result = (q == p);
+    void* r = mi_realloc(q, size/2 + 16);              // too much waste: shrinks
+    result = result && (r != NULL && mi_usable_size(r) < size - size/8);
+    void* s = mi_realloc_aligned(r, 4096, 64);
+    const size_t asize = mi_usable_size(s);
+    void* t = mi_realloc_aligned(s, asize/2 + 16, 64);
+    result = result && (t != NULL && mi_usable_size(t) < asize - asize/8 && ((uintptr_t)t % 64) == 0);
+    mi_free(t);
+  };
+
+  CHECK_BODY("realloc-shrink-huge") {
+    const size_t size = 8*MI_MiB;
+    uint8_t* p = (uint8_t*)mi_malloc(size);
+    memset(p, 1, size);
+    const size_t half = mi_usable_size(p)/2 + 1;      // (the usable size can be larger with guarded sampling)
+    uint8_t* q = (uint8_t*)mi_realloc(p, half);       // huge and at least half: stays in place and resets the tail
+    #if defined(__wasi__) || defined(__EMSCRIPTEN__)
+    const bool in_place = false;                        // unless the OS cannot reset memory
+    #else
+    const bool in_place = true;
+    #endif
+    result = ((q == p) == in_place && q[0] == 1 && q[half - 1] == 1);
+    uint8_t* volatile qv = q;                           // hide the alloc_size of `q` from fortified `memset`
+    memset(qv, 2, mi_usable_size(q));                   // the tail stays accessible
+    uint8_t* r = (uint8_t*)mi_realloc(q, size/8);      // less than half: copies
+    result = result && (r != NULL && r != q && r[0] == 2 && r[size/8 - 1] == 2);
+    mi_free(r);
+  };
+
   CHECK_BODY("reallocarray-null-sizezero") {
     void* p = mi_reallocarray(NULL,0,16);  // issue #574
     result = (p != NULL && errno == 0);
@@ -463,7 +567,7 @@ int main(void) {
       memset(p, 0x5A, 32);
       errno = 0;
       void* q = mi_reallocarray(p, SIZE_MAX / 2 + 1, 2);
-      result = (q == NULL && errno == EOVERFLOW && mem_has_vals(p, 32, 0x5A));
+      result = (q == NULL && errno == ENOMEM && mem_has_vals(p, 32, 0x5A));
       mi_free(q == NULL ? p : q);
     }
   };
@@ -489,6 +593,25 @@ int main(void) {
     }
   };
 
+  CHECK_BODY("reallocarr-zero-size") {
+    void* p = mi_malloc(32);
+    if (p == NULL) { result = false; }
+    else {
+      int err = mi_reallocarr(&p, 2, 0);
+      result = (err == 0 && p == NULL);
+      mi_free(p);
+    }
+  };
+
+  CHECK_BODY("realloc-aligned-other-heap") {
+    mi_heap_t* heap = mi_heap_new();
+    void* p = mi_heap_malloc_aligned(heap, 100, 64);
+    void* q = mi_realloc_aligned(p, 100, 64);  // fits in place but must move to the default heap
+    result = (q != NULL && mi_heap_of(q) != heap);
+    mi_free(q);
+    mi_heap_delete(heap);
+  };
+
   CHECK_BODY("reallocarr-overflow") {
     void* p = mi_malloc(32);
     if (p == NULL) { result = false; }
@@ -503,7 +626,7 @@ int main(void) {
 
   CHECK_BODY("realloc-guarded") {      // issue #1304
  	  void* shared_ptr = NULL;
-    for (int iterations = 0; iterations < 64; ++iterations) {
+    for (int iterations = 0; iterations < MI_TEST_ITERS(64); ++iterations) {
       for (int i = 0; i < 1024; ++i) {
         shared_ptr = mi_realloc(shared_ptr, i * 64);
       }
@@ -514,6 +637,28 @@ int main(void) {
   // ---------------------------------------------------
   // Small allocations
   // ---------------------------------------------------
+  CHECK_BODY("guarded-api-small-free") {
+    mi_heap_t* heap = mi_heap_new();
+    mi_theap_t* theap = (heap == NULL ? NULL : mi_heap_theap(heap));
+    if (theap == NULL) { result = false; }
+    else {
+      void* blocks[128];
+      mi_theap_guarded_set_size_bound(theap, 0, MI_SMALL_SIZE_MAX);
+      mi_theap_guarded_set_sample_rate(theap, 1, 1);
+      for (size_t i = 0; i < 128; i++) {
+        blocks[i] = mi_theap_malloc(theap, MI_SMALL_SIZE_MAX);
+        if (blocks[i] == NULL) { result = false; }
+        else { memset(blocks[i], 0x5A, MI_SMALL_SIZE_MAX); }
+      }
+      mi_theap_guarded_set_sample_rate(theap, 0, 0);
+      for (size_t i = 0; i < 128; i++) {
+        if (i % 2 == 0) { mi_free_small(blocks[i]); }
+        else { mi_free_size(blocks[i], MI_SMALL_SIZE_MAX); }
+      }
+    }
+    if (heap != NULL) { mi_heap_delete(heap); }
+  }
+
   CHECK_BODY("free_small1") {
     for(size_t n = 1; n < MI_SMALL_SIZE_MAX; n *=2) {
       const size_t size = n*sizeof(int);
@@ -542,6 +687,12 @@ int main(void) {
     }
   }
 
+  CHECK_BODY("free_small_null") {  // the nullable variants accept NULL
+    mi_free_small(NULL);
+    mi_free_small_local(NULL);
+    result = (errno == 0);
+  }
+
   CHECK_BODY("free_small4") {
     for(size_t n = 1; n < MI_SMALL_SIZE_MAX/sizeof(int); n *=2) {
       const size_t size = n*sizeof(int);
@@ -567,6 +718,11 @@ int main(void) {
       mi_ufree(p,&fsize);
       assert(fsize == post_size);
     }
+  }
+  CHECK_BODY("ucalloc-nomem") {
+    size_t bsize = 42;
+    void* p = mi_ucalloc(SIZE_MAX/4, 4, &bsize);
+    result = (p == NULL && bsize == 42);
   }
 
   #if (MI_SIZE_SIZE > 4)
@@ -638,6 +794,21 @@ int main(void) {
   }
   #endif
 
+  CHECK_BODY("stats-json-exact-buffer") {  // the output fits exactly in a buffer of its length + 1
+    // (the process info in the output can change between calls so we retry until the length is the same)
+    bool exact = false;
+    for (int i = 0; i < 100 && !exact; i++) {
+      char* json = mi_stats_get_json(0, NULL);
+      if (json == NULL) break;
+      const size_t len = strlen(json);
+      char* buf = (char*)mi_malloc(len + 1);
+      exact = (buf != NULL && mi_stats_get_json(len + 1, buf) == buf && strlen(buf) == len);
+      mi_free(buf);
+      mi_free(json);
+    }
+    result = exact;
+  }
+
   // ---------------------------------------------------
   // Heaps
   // ---------------------------------------------------
@@ -684,13 +855,16 @@ int main(void) {
     mi_stats_get(&stats0);
     mi_option_set(mi_option_disallow_arena_alloc, 1);   // force all pages to be OS allocated
     mi_heap_t* h = mi_heap_new();
-    for (int i = 0; i < 1000; i++) { (void)mi_heap_malloc(h, 48); }  // owned OS-backed pages with live blocks
+    bool allocated = true;
+    for (int i = 0; i < 1000; i++) {  // owned OS-backed pages with live blocks
+      if (mi_heap_malloc(h, 48) == NULL) { allocated = false; }
+    }
     mi_heap_destroy(h);
     mi_option_set(mi_option_disallow_arena_alloc, 0);
     mi_collect(true);
     mi_stats_t_decl(stats1);
     mi_stats_get(&stats1);
-    result = (stats0.pages.current == stats1.pages.current);  // orphaned if destroy missed the owned OS pages
+    result = allocated && (stats0.pages.current == stats1.pages.current);  // orphaned if destroy missed the owned OS pages
   }
 
   #define NHEAPS (1000)
@@ -706,11 +880,38 @@ int main(void) {
     }
   }
 
+  CHECK_BODY("subproc-destroy-keeps-thread-locals") {  // destroying another subproc must not release the caller's thread locals or the fast key
+    mi_heap_t* const h2 = mi_heap_new();
+    mi_theap_t* const t2 = mi_heap_theap(h2);
+    mi_theap_t* const tmain = mi_heap_theap(mi_heap_main());
+    mi_subproc_destroy(mi_subproc_new());
+    mi_heap_t* const h3 = mi_heap_new();
+    mi_theap_t* const t3 = mi_heap_theap(h3);
+    mi_subproc_destroy(mi_subproc_new());
+    mi_heap_t* const h4 = mi_heap_new();
+    mi_theap_t* const t4 = mi_heap_theap(h4);
+    result = (t2!=NULL && t3!=NULL && t4!=NULL && t2!=t3 && t3!=t4);
+    for (int i = 0; i < 100 && result; i++) {
+      result = (mi_heap_theap(h2)==t2 && mi_heap_theap(h3)==t3 && mi_heap_theap(h4)==t4 && mi_heap_theap(mi_heap_main())==tmain);
+    }
+    mi_heap_delete(h4);
+    mi_heap_delete(h3);
+    mi_heap_delete(h2);
+  }
   CHECK_THREADS_BODY("heap-destroy-xthread-free") {   // destroy a heap with live blocks and pending cross-thread frees
     result = test_heap_destroy_xthread_free();
   }
   CHECK_THREADS_BODY("heap-destroy-stale-theap") {    // a thread's cached theap must not survive the destroy of its heap
     result = test_heap_destroy_stale_theap();
+  }
+  CHECK_THREADS_BODY("thread-done-no-reinit") {      // allocation after `mi_thread_done` (e.g. in thread-local destructors) must not re-initialize the thread
+    result = test_thread_done_no_reinit();
+  }
+  CHECK_THREADS_BODY("thread-heap-release") {        // after `mi_thread_heap_release` a thread can still free but no longer allocate in the heap
+    result = test_thread_heap_release();
+  }
+  CHECK_THREADS_BODY("heap-delete-concurrent-free") { // delete a heap while other threads free its blocks
+    result = test_heap_delete_concurrent_free();
   }
 
   //CHECK("theap_destroy", test_theap1());
@@ -932,12 +1133,12 @@ static bool test_aligned_check(size_t size, size_t align, bool zero) {
 
 static bool test_aligned_all(void) {
   bool ok = true;
-  for (size_t size = 0; size <= 300*1024 && ok; size += (size < 16*1024 ? 8 : 512)) {
+  for (size_t size = 0; size <= 300*1024 && ok; size += MI_TEST_SIZE_STEP(size, (size < 16*1024 ? 8 : 512))) {
     for (size_t align = 8; align <= 4096 && ok; align *= 2) {
       ok = test_aligned_check(size, align, ((size/8) & 1) != 0);
     }
   }
-  for (size_t size = 4*1024*1024 - 4096; size <= 4*1024*1024 + 3*4096 && ok; size += 1024) {
+  for (size_t size = 4*1024*1024 - 4096; size <= 4*1024*1024 + 3*4096 && ok; size += MI_TEST_LARGE_STEP) {
     for (size_t align = 8; align <= 4096 && ok; align *= 2) {
       ok = test_aligned_check(size, align, false);
     }
@@ -999,6 +1200,12 @@ static bool test_heap_destroy_xthread_free(void) {
 // pages were destroyed).
 // ---------------------------------------------------------------------------
 
+// run `fun(id)` on a fresh thread (see `test_thread_start`)
+typedef struct test_worker_s {
+  void (*fun)(size_t id);
+  size_t id;
+} test_worker_t;
+
 typedef struct test_gate_s {
   int step;
   #ifdef _WIN32
@@ -1023,10 +1230,9 @@ static void test_gate_wait(test_gate_t* g, int step) {
   LeaveCriticalSection(&g->lock);
 }
 typedef HANDLE test_thread_t;
-static void stale_theap_worker(void);
-static DWORD WINAPI test_thread_entry(LPVOID arg) { (void)arg; stale_theap_worker(); return 0; }
-static bool test_thread_start(test_thread_t* t) {
-  *t = CreateThread(NULL, 0, &test_thread_entry, NULL, 0, NULL);
+static DWORD WINAPI test_thread_entry(LPVOID arg) { const test_worker_t* w = (const test_worker_t*)arg; w->fun(w->id); return 0; }
+static bool test_thread_start(test_thread_t* t, const test_worker_t* w) {
+  *t = CreateThread(NULL, 0, &test_thread_entry, (LPVOID)w, 0, NULL);
   return (*t != NULL);
 }
 static void test_thread_join(test_thread_t t) { WaitForSingleObject(t, INFINITE); CloseHandle(t); }
@@ -1043,10 +1249,9 @@ static void test_gate_wait(test_gate_t* g, int step) {
   pthread_mutex_unlock(&g->lock);
 }
 typedef pthread_t test_thread_t;
-static void stale_theap_worker(void);
-static void* test_thread_entry(void* arg) { (void)arg; stale_theap_worker(); return NULL; }
-static bool test_thread_start(test_thread_t* t) {
-  return (pthread_create(t, NULL, &test_thread_entry, NULL) == 0);
+static void* test_thread_entry(void* arg) { const test_worker_t* w = (const test_worker_t*)arg; w->fun(w->id); return NULL; }
+static bool test_thread_start(test_thread_t* t, const test_worker_t* w) {
+  return (pthread_create(t, NULL, &test_thread_entry, (void*)w) == 0);
 }
 static void test_thread_join(test_thread_t t) { pthread_join(t, NULL); }
 #endif
@@ -1055,7 +1260,8 @@ static test_gate_t stale_gate;
 static mi_heap_t*  stale_heap;       // published through the gate
 static bool        stale_result;
 
-static void stale_theap_worker(void) {
+static void stale_theap_worker(size_t id) {
+  (void)id;
   void* p = mi_heap_malloc(stale_heap, 16);  // creates this thread's theap of `stale_heap` (may leave the main theap cached)
   mi_free(p);
   p = mi_heap_malloc(stale_heap, 16);        // now `_mi_theap_cached` is this thread's theap of `stale_heap`
@@ -1076,7 +1282,8 @@ static bool test_heap_destroy_stale_theap(void) {
   stale_result = false;
 
   test_thread_t thread;
-  if (!test_thread_start(&thread)) return false;
+  const test_worker_t worker = { &stale_theap_worker, 0 };
+  if (!test_thread_start(&thread, &worker)) return false;
   test_gate_wait(&stale_gate, 1);
   mi_heap_destroy(destroyed);
 
@@ -1100,4 +1307,134 @@ static bool test_heap_destroy_stale_theap(void) {
 
   if (!reused) { fprintf(stderr, "(heap address not reused, inconclusive) "); }
   return stale_result;
+}
+
+
+// ---------------------------------------------------------------------------
+// Allocation after `mi_thread_done` must work without re-initializing the thread
+// (which would leak as the thread-done hooks may have already run).
+// ---------------------------------------------------------------------------
+
+static int64_t current_threads(void) {
+  mi_stats_t_decl(stats);
+  mi_stats_get(&stats);
+  return stats.threads.current;
+}
+
+static bool thread_done_no_reinit_fun(void) {
+  mi_free(mi_malloc(32));  // ensure the thread is initialized
+  mi_heap_t* const other = mi_heap_new();
+  if (other == NULL) return false;
+  const int64_t threads = current_threads();
+  mi_thread_done();
+  bool ok = (current_threads() == threads - 1);
+  void* p = mi_malloc(64);
+  void* q = mi_zalloc_aligned(100, 256);
+  void* r = mi_malloc(1000000);
+  ok = ok && p != NULL && q != NULL && r != NULL && mem_is_zero(q, 100) && ((uintptr_t)q % 256) == 0;
+  mi_heap_t* heap = mi_heap_main();
+  void* s = mi_heap_malloc(heap, 32);
+  ok = ok && s != NULL;
+  ok = ok && mi_heap_malloc(other, 32) == NULL;  // other heaps cannot allocate on a done thread
+  mi_free(p); mi_free(q); mi_free(r); mi_free(s);
+  ok = ok && (current_threads() == threads - 1);
+  mi_thread_init();  // explicit re-initialization is allowed
+  ok = ok && (current_threads() == threads);
+  void* t = mi_malloc(32);
+  ok = ok && t != NULL;
+  mi_free(t);
+  mi_heap_delete(other);
+  return ok;
+}
+
+static bool test_thread_done_no_reinit(void) {
+  return mi_run_on_thread(&thread_done_no_reinit_fun);
+}
+
+
+// ---------------------------------------------------------------------------
+// After `mi_thread_heap_release` a thread can still free blocks but no longer allocate in the heap
+// (and no theap is created again). The blocks can still be freed after the heap is deleted.
+// ---------------------------------------------------------------------------
+
+static mi_heap_t* release_heap;
+static void*      release_blocks[64];
+
+static bool thread_heap_release_fun(void) {
+  for (int i = 0; i < 64; i++) {
+    release_blocks[i] = mi_heap_malloc(release_heap, 16 + i);
+    if (release_blocks[i] == NULL) return false;
+  }
+  mi_free(release_blocks[0]); release_blocks[0] = NULL;
+  mi_thread_heap_release(release_heap);
+  bool ok = (mi_heap_malloc(release_heap, 16) == NULL && mi_heap_malloc(release_heap, 100000) == NULL);
+  mi_free(release_blocks[1]); release_blocks[1] = NULL;
+  mi_thread_heap_release(release_heap);  // releasing again is allowed
+  ok = ok && (mi_heap_malloc(release_heap, 16) == NULL);
+  return ok;
+}
+
+static bool test_thread_heap_release(void) {
+  release_heap = mi_heap_new();
+  if (release_heap == NULL) return false;
+  mi_thread_heap_release(release_heap);  // never used in this thread
+  bool ok = (mi_heap_malloc(release_heap, 16) == NULL);
+  ok = ok && mi_run_on_thread(&thread_heap_release_fun);
+  mi_heap_delete(release_heap);
+  for (int i = 0; i < 64; i++) { mi_free(release_blocks[i]); }
+  return ok;
+}
+
+
+// ---------------------------------------------------------------------------
+// Delete a heap while other threads concurrently free its blocks. The delete must
+// claim each page before moving it, and retry pages briefly owned by a concurrent free.
+// ---------------------------------------------------------------------------
+
+#define DELETE_FREE_THREADS (4)
+#define DELETE_FREE_BLOCKS  (4096)
+
+static mi_heap_t* delete_free_heap;
+static void*      delete_free_blocks[DELETE_FREE_THREADS][DELETE_FREE_BLOCKS];
+
+static void delete_free_alloc_worker(size_t id) {
+  for (size_t i = 0; i < DELETE_FREE_BLOCKS; i++) {
+    const size_t size = (i % 100 == 0 ? 100000 + i : (i % 10 == 0 ? 2000 + i : 8 + i % 256));
+    delete_free_blocks[id][i] = mi_heap_malloc(delete_free_heap, size);
+  }
+  for (size_t i = 0; i < DELETE_FREE_BLOCKS; i += 3) {
+    mi_free(delete_free_blocks[id][i]);
+    delete_free_blocks[id][i] = NULL;
+  }
+  mi_thread_heap_release(delete_free_heap);
+}
+
+static void delete_free_worker(size_t id) {
+  for (size_t i = 0; i < DELETE_FREE_BLOCKS; i++) {
+    mi_free(delete_free_blocks[id][i]);
+  }
+}
+
+static bool test_heap_delete_concurrent_free(void) {
+  const long disallow_arena_alloc = mi_option_get(mi_option_disallow_arena_alloc);
+  for (int iter = 0; iter < MI_TEST_ITERS(20); iter++) {
+    mi_option_set(mi_option_disallow_arena_alloc, iter % 2);  // odd iterations use OS allocated pages
+    delete_free_heap = mi_heap_new();
+    if (delete_free_heap == NULL) return false;
+    test_thread_t threads[DELETE_FREE_THREADS];
+    test_worker_t workers[DELETE_FREE_THREADS];
+    for (size_t i = 0; i < DELETE_FREE_THREADS; i++) {
+      workers[i].fun = &delete_free_alloc_worker; workers[i].id = i;
+      if (!test_thread_start(&threads[i], &workers[i])) return false;
+    }
+    for (size_t i = 0; i < DELETE_FREE_THREADS; i++) { test_thread_join(threads[i]); }
+    for (size_t i = 0; i < DELETE_FREE_THREADS; i++) {
+      workers[i].fun = &delete_free_worker;
+      if (!test_thread_start(&threads[i], &workers[i])) return false;
+    }
+    mi_heap_delete(delete_free_heap);
+    for (size_t i = 0; i < DELETE_FREE_THREADS; i++) { test_thread_join(threads[i]); }
+  }
+  mi_option_set(mi_option_disallow_arena_alloc, disallow_arena_alloc);
+  return true;
 }

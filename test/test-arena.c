@@ -1,7 +1,9 @@
 #include "../src/arena/arena.h"
+#include "../src/arena/arena-page.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/heap/theap.h"
-#include "mimalloc/prim.h"
+#include "mimalloc/prim/prim.h"
+#include "mimalloc/prim/os.h"
 #include "testhelper.h"
 
 static mi_subproc_t test_subproc;
@@ -185,6 +187,147 @@ static bool test_arena_result(void) {
   found = &test_arenas[0];
   return (mi_forall_suitable_arenas(&test_heap, NULL, 0, true, -1, false, &arena_find, &index, &found) && found == NULL);
 }
+
+#if MI_PAGE_META_IS_ALIGNED
+static bool test_arena_oversized_alloc(void) {
+  void* warm = mi_malloc(64);
+  if (warm == NULL) return false;
+  mi_free(warm);
+  mi_subproc_t* subproc = mi_theap_subproc(mi_theap_get_default());
+  const size_t arena_count = mi_arenas_get_count(subproc);
+  const size_t size = (MI_PAGE_META_ALIGNED_CHUNKS - 1) * MI_ARENA_CHUNK_SIZE + MI_ARENA_SLICE_SIZE;
+  bool result = true;
+  for (size_t i = 0; i < 2; i++) {
+    void* p = mi_malloc(size);
+    if (p == NULL || mi_arenas_get_count(subproc) != arena_count) { result = false; }
+    mi_free(p);
+  }
+  return result;
+}
+#endif
+
+#if MI_PAGE_META_IS_SEPARATED && !MI_PAGE_META_IS_ALIGNED
+static bool test_arena_page_meta_permutation(void) {
+  mi_arena_id_t arena_id;
+  if (mi_reserve_os_memory_ex(5 * MI_ARENA_CHUNK_SIZE, false, false, true, &arena_id) != 0) return false;
+  mi_arena_t* arena = _mi_arena_from_id(arena_id);
+  if (arena == NULL || arena->pages_meta == NULL || arena->slice_count != 5 * MI_BCHUNK_BITS) return false;
+  bool seen[5 * MI_BCHUNK_BITS] = { false };
+  for (size_t i = 0; i < arena->slice_count; i++) {
+    const mi_page_t* entry = mi_arena_page_meta_at_slice(arena, i);
+    const size_t idx = (size_t)(entry - arena->pages_meta);
+    if (idx >= arena->slice_count || seen[idx] || idx / MI_BCHUNK_BITS != i / MI_BCHUNK_BITS) return false;
+    seen[idx] = true;
+  }
+
+  mi_heap_t* heap = mi_heap_new_in_arena(arena_id);
+  if (heap == NULL) return false;
+  void* blocks[MI_BCHUNK_BITS / 4 + 1] = { NULL };
+  bool result = true;
+  bool crossed_chunk = false;
+  for (size_t i = 0; result && i < sizeof(blocks)/sizeof(blocks[0]); i++) {
+    blocks[i] = mi_heap_malloc(heap, MI_MEDIUM_PAGE_SIZE / 2);
+    if (blocks[i] == NULL) { result = false; break; }
+    mi_page_t* page = mi_ptr_page(blocks[i]);
+    result = (page != NULL && page->memid.memkind == MI_MEM_ARENA && mi_memid_arena(page->memid) == arena);
+    if (!result) break;
+    const size_t slice_index = page->memid.mem.arena.slice_index;
+    result = (mi_addr(page) == mi_addr(mi_arena_page_meta_at_slice(arena, slice_index)) &&
+              mi_arena_page_at_slice(arena, slice_index) == page);
+    if (slice_index >= MI_BCHUNK_BITS) crossed_chunk = true;
+  }
+  for (size_t i = 0; i < sizeof(blocks)/sizeof(blocks[0]); i++) { mi_free(blocks[i]); }
+  mi_heap_destroy(heap);
+  return (result && crossed_chunk);
+}
+#endif
+
+#if MI_STATS
+static bool test_os_aligned_offset_stats(void) {
+  mi_subproc_t* subproc = mi_theap_subproc(mi_theap_get_default());
+  const size_t page_size = _mi_os_page_size();
+  const size_t alignment = 16 * page_size;
+  const size_t size = 2 * alignment;
+  const size_t offsets[] = { page_size, page_size + 1, alignment - 1 };
+  bool result = true;
+  for (size_t commit = 0; commit < 2; commit++) {
+    for (size_t i = 0; i < sizeof(offsets)/sizeof(offsets[0]); i++) {
+      const int64_t committed = subproc->stats.committed.current;
+      const int64_t reserved = subproc->stats.reserved.current;
+      mi_memid_t memid;
+      void* p = _mi_os_alloc_aligned_at_offset(subproc, size, alignment, offsets[i], commit != 0, false, &memid);
+      if (p == NULL) return false;
+      result = result && ((mi_addr(p) + offsets[i]) % alignment == 0);
+      _mi_os_free(subproc, p, size, memid);
+      result = result && subproc->stats.committed.current == committed && subproc->stats.reserved.current == reserved;
+    }
+  }
+  return result;
+}
+#endif
+
+static bool test_os_allow_large(void) {
+  const long allow_large = mi_option_get(mi_option_allow_large_os_pages);
+  mi_option_enable(mi_option_allow_large_os_pages);
+  mi_subproc_t* subproc = mi_theap_subproc(mi_theap_get_default());
+  const size_t size = mi_align_up(2 * MI_MiB, _mi_os_large_page_size());
+  mi_memid_t memid;
+  void* p = _mi_os_alloc_aligned(subproc, size, _mi_os_large_page_size(), true, true, &memid);
+  mi_option_set(mi_option_allow_large_os_pages, allow_large);
+  if (p == NULL) return false;
+  bool result = true;
+  #if MI_SECURE > 0 && MI_OS_HAS_GUARD_PAGES
+  result = !memid.is_pinned;
+  #endif
+  memset(p, 0x5A, size);
+  _mi_os_free(subproc, p, size, memid);
+  return result;
+}
+
+#if MI_SECURE > 0 && MI_OS_HAS_GUARD_PAGES
+static bool record_pinned_commit(bool commit, void* start, size_t size, bool* is_zero, void* arg) {
+  MI_UNUSED(commit); MI_UNUSED(start); MI_UNUSED(size); MI_UNUSED(is_zero);
+  (*(size_t*)arg)++;
+  return false;
+}
+
+static bool test_arena_reject_pinned(void) {
+  mi_subproc_t* subproc = mi_theap_subproc(mi_theap_get_default());
+  const size_t arena_count = mi_arenas_get_count(subproc);
+  const size_t size = MI_ARENA_MIN_SIZE;
+  mi_memid_t memid;
+  void* p = _mi_os_alloc_aligned(subproc, size, MI_ARENA_ALIGNMENT, false, false, &memid);
+  if (p == NULL) return false;
+  // Leave the memory uncommitted: rejection must not access the supplied area.
+  if (mi_manage_os_memory(p, size, true, true, true, -1)) return false;
+  mi_arena_id_t arena_id = &test_arenas[0];
+  if (mi_manage_os_memory_ex(p, size, true, true, true, -1, true, &arena_id)) return false;
+  bool result = (arena_id == NULL);
+  size_t commits = 0;
+  arena_id = &test_arenas[0];
+  if (mi_manage_memory(p, size, false, true, true, -1, true, &record_pinned_commit, &commits, &arena_id)) return false;
+  result = (result && arena_id == NULL && commits == 0 && mi_arenas_get_count(subproc) == arena_count);
+  _mi_os_free(subproc, p, size, memid);
+  return result;
+}
+
+static bool test_os_reject_huge_pages(void) {
+  mi_subproc_t* subproc = mi_theap_subproc(mi_theap_get_default());
+  size_t pages = 1;
+  size_t size = 1;
+  mi_memid_t memid;
+  void* p = _mi_os_alloc_huge_os_pages(subproc, 1, -1, 0, &pages, &size, &memid);
+  if (p != NULL) {
+    _mi_os_free(subproc, p, size, memid);
+    return false;
+  }
+  if (pages != 0 || size != 0 || memid.memkind != MI_MEM_NONE) return false;
+  mi_arena_id_t arena_id = &test_arenas[0];
+  if (mi_reserve_huge_os_pages_at_ex(1, -1, 0, true, &arena_id) == 0 || arena_id != NULL) return false;
+  return (mi_reserve_huge_os_pages_interleave(1, 1, 0) != 0 &&
+          mi_reserve_huge_os_pages_at_ex(0, -1, 0, true, &arena_id) == 0 && arena_id == NULL);
+}
+#endif
 
 static mi_heap_t* visit_heap;
 
@@ -732,7 +875,178 @@ static bool test_theap_cleanup(bool os_pages) {
   return result;
 }
 
+#if MI_FREE_IS_CHECKED
+static bool test_page_capacity_size(bool os_pages) {
+  const long disallow = mi_option_get(mi_option_disallow_arena_alloc);
+  const long guarded = mi_option_get(mi_option_guarded_sample_rate);
+  mi_option_set(mi_option_disallow_arena_alloc, (os_pages ? 1 : 0));
+  mi_option_set(mi_option_guarded_sample_rate, 0);
+  mi_heap_t* heap = mi_heap_new();
+  void* blocks[256] = { NULL };
+  mi_page_t* first_page = NULL;
+  size_t initial_size = 0;
+  bool result = (heap != NULL);
+  for (size_t i = 0; result && i < 256; i++) {
+    blocks[i] = mi_heap_malloc(heap, 64);
+    if (blocks[i] == NULL) { result = false; break; }
+    mi_page_t* page = mi_ptr_page(blocks[i]);
+    const size_t capacity_size = mi_atomic_load_relaxed(&page->capacity_size);
+    if (i == 0) {
+      first_page = page;
+      initial_size = capacity_size;
+    }
+    result = (capacity_size > 0 &&
+              (size_t)(mi_addr(blocks[i]) - mi_addr(mi_page_start(page))) < capacity_size);
+  }
+  if (result) {
+    result = (mi_atomic_load_relaxed(&first_page->capacity_size) > initial_size);
+  }
+  for (size_t i = 0; i < 256; i++) {
+    if (blocks[i] == NULL) continue;
+    size_t bsize = 0;
+    mi_ufree(blocks[i], &bsize);
+    result = (bsize > 0 && result);
+  }
+  mi_heap_destroy(heap);
+  mi_option_set(mi_option_disallow_arena_alloc, disallow);
+  mi_option_set(mi_option_guarded_sample_rate, guarded);
+  return result;
+}
+#endif
+
+static void mi_cdecl record_free_list_error(int err, void* arg) {
+  if (err == EFAULT) { (*(size_t*)arg)++; }
+}
+
+static bool record_free_list_block(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t size, void* arg) {
+  MI_UNUSED(heap); MI_UNUSED(area); MI_UNUSED(block); MI_UNUSED(size);
+  (*(size_t*)arg)++;
+  return true;
+}
+
+static bool test_free_list_cycle(bool collect, bool self_cycle) {
+  const long guarded = mi_option_get(mi_option_guarded_sample_rate);
+  mi_option_set(mi_option_guarded_sample_rate, 0);
+  mi_heap_t* heap = mi_heap_new();
+  void* p = (heap == NULL ? NULL : mi_heap_malloc(heap, 64));
+  void* q = (heap == NULL ? NULL : mi_heap_malloc(heap, 64));
+  void* live = (heap == NULL ? NULL : mi_heap_malloc(heap, 64));
+  bool result = (p != NULL && q != NULL && live != NULL);
+  if (result) {
+    mi_page_t* page = mi_ptr_page(p);
+    result = (page == mi_ptr_page(q) && page == mi_ptr_page(live) && page->free != NULL);
+    if (result) {
+      mi_free(p);
+      mi_free(q);
+      if (!collect) { _mi_page_free_collect(page, true); }
+      mi_block_t* head = (collect ? page->local_free : page->free);
+      mi_block_t* link = (self_cycle ? head : mi_block_next(page, head));
+      mi_block_t* saved_next = mi_block_next(page, link);
+      mi_block_t* saved_free = page->free;
+      mi_block_set_next(page, link, head);
+      size_t errors = 0;
+      size_t visited = 0;
+      mi_heap_area_t area;
+      _mi_heap_area_init(&area, page);
+      mi_register_error(&record_free_list_error, &errors);
+      if (collect) {
+        _mi_page_free_collect(page, true);
+        result = (page->local_free == head && page->free == saved_free);
+      }
+      else {
+        result = (_mi_theap_area_visit_blocks(&area, page, &record_free_list_block, &visited) &&
+                  visited == (size_t)page->capacity - (self_cycle ? 1 : 2));
+      }
+      mi_block_set_next(page, link, saved_next);
+      mi_register_error(NULL, NULL);
+      result = (errors == (collect ? 1 : 0) && result);
+      _mi_page_free_collect(page, true);
+      visited = 0;
+      result = (_mi_theap_area_visit_blocks(&area, page, &record_free_list_block, &visited) && visited == 1 && result);
+    }
+  }
+  mi_heap_destroy(heap);
+  mi_option_set(mi_option_guarded_sample_rate, guarded);
+  return result;
+}
+
+#if MI_PAC
+// Corrupt the (signed) page map entry of a pointer and check that the lookup fails with EFAULT
+static bool test_page_map_tamper(void) {
+  void* p = mi_malloc(64);
+  if (p == NULL) return false;
+  mi_page_t* const page = _mi_safe_ptr_page(p);
+  size_t sub_idx;
+  const size_t idx = mi_page_map_index(p, &sub_idx);
+  mi_page_submap_t* const sub = mi_page_map_at(mi_page_map(), idx);
+  _Atomic(mi_ptr_signed_t)* const entry = &sub->page_metas[sub_idx];
+  const mi_ptr_signed_t saved = mi_atomic_load_relaxed(entry);
+  size_t errors = 0;
+  mi_register_error(&record_free_list_error, &errors);
+  bool result = (page != NULL && mi_submap_at(sub, sub_idx) == page);
+  mi_atomic_store_relaxed(entry, (mi_ptr_signed_t)page);        // a raw pointer
+  result = (_mi_safe_ptr_page(p) == NULL && result);
+  mi_atomic_store_relaxed(entry, mi_ptr_sign(page, mi_addr(entry + 1)));  // validly signed for the next slot
+  result = (_mi_safe_ptr_page(p) == NULL && result);
+  mi_atomic_store_relaxed(entry, saved);
+  result = (_mi_safe_ptr_page(p) == page && result);
+  mi_register_error(NULL, NULL);
+  mi_free(p);
+  return (result && errors == 2);
+}
+#endif
+
+static bool test_collect_self_cycle(void)      { return test_free_list_cycle(true, true); }
+static bool test_collect_two_block_cycle(void) { return test_free_list_cycle(true, false); }
+
+// In secure mode an `EFAULT` error always aborts (even if the error handler returns),
+// so then check that the test aborts in a child process instead.
+#if MI_SECURE && !defined(_WIN32)
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+static bool test_efault(bool (*test)(void)) {
+  #if !MI_SECURE
+  return test();
+  #elif defined(_WIN32)
+  MI_UNUSED(test);
+  return true;  // skip
+  #else
+  fflush(NULL);
+  const pid_t pid = fork();
+  if (pid == 0) { test(); _exit(0); }
+  int status = 0;
+  return (pid > 0 && waitpid(pid, &status, 0) == pid && WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+  #endif
+}
+
 int main(void) {
+  CHECK("os-allow-large", test_os_allow_large());
+  #if MI_SECURE > 0 && MI_OS_HAS_GUARD_PAGES
+  CHECK("arena-reject-pinned", test_arena_reject_pinned());
+  CHECK("os-reject-huge-pages", test_os_reject_huge_pages());
+  #endif
+  #if MI_STATS
+  CHECK("os-aligned-offset-stats", test_os_aligned_offset_stats());
+  #endif
+  #if MI_PAGE_META_IS_ALIGNED
+  CHECK("arena-oversized-alloc", test_arena_oversized_alloc());
+  #endif
+  #if MI_PAGE_META_IS_SEPARATED && !MI_PAGE_META_IS_ALIGNED
+  CHECK("arena-page-meta-permutation", test_arena_page_meta_permutation());
+  #endif
+  #if MI_PAC
+  CHECK("page-map-tamper", test_efault(&test_page_map_tamper));
+  #endif
+  CHECK("collect-self-cycle", test_efault(&test_collect_self_cycle));
+  CHECK("collect-two-block-cycle", test_efault(&test_collect_two_block_cycle));
+  CHECK("visit-self-cycle", test_free_list_cycle(false, true));
+  CHECK("visit-two-block-cycle", test_free_list_cycle(false, false));
+  #if MI_FREE_IS_CHECKED
+  CHECK("page-capacity-size-arena", test_page_capacity_size(false));
+  CHECK("page-capacity-size-os", test_page_capacity_size(true));
+  #endif
   CHECK_THREADS("theap-cleanup-arena", test_theap_cleanup(false));
   CHECK_THREADS("theap-cleanup-os", test_theap_cleanup(true));
   CHECK("theap-collect-detached", test_theap_collect_detached());

@@ -6,9 +6,9 @@
 # -----------------------------------------------------------------------------
 [package]
 name = "mimalloc"
-version = "3.6.1"
-edition = "2024"
-rust-version = "1.85"
+version = "3.7.0"
+edition = "2021"
+rust-version = "1.65"
 license = "MIT"
 description = "Rust bindings and global allocator for the mimalloc memory allocator"
 repository = "https://github.com/microsoft/mimalloc"
@@ -30,6 +30,8 @@ local_dynamic_tls = ["mimalloc-sys/local_dynamic_tls"]
 win_direct_tls = ["mimalloc-sys/win_direct_tls"]
 no_thp = ["mimalloc-sys/no_thp"]
 opt_arch = ["mimalloc-sys/opt_arch"]
+mte = ["mimalloc-sys/mte"]
+pac = ["mimalloc-sys/pac"]
 # implement `core::alloc::Allocator` on nightly compilers before Rust 1.100 (where it is stable)
 nightly = []
 # for compatibility with the `mimalloc` crate of mimalloc_rust (the full API is always available)
@@ -39,4 +41,7 @@ nightly_allocator_api = ["nightly"]
 
 [dependencies]
 # the exact version as the fast paths depend on `MI_SMALL_SIZE_MAX` and internal entry points
-mimalloc-sys = { version = "=3.6.1", path = "sys" }
+mimalloc-sys = { version = "=3.7.0", path = "sys" }
+
+[build-dependencies]
+rustversion = "1"
