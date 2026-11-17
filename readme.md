@@ -15,7 +15,7 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.7.0`  (2026-11-16) recommended.\
+Latest release   : `v3.7.0`  (2026-11-16) recommended -- now with [MTE](#memory-tagging-mte) support.\
 Latest v2 release: `v2.5.3`  (2026-11-16) stable, legacy.\
 Latest v1 release: `v1.15.3` (2026-11-16) legacy.
 
