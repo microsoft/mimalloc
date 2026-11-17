@@ -767,7 +767,7 @@ void _mi_arenas_page_free_prim(mi_page_t* page) {
       size_t bin = _mi_bin(mi_page_block_size(page));
       mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
       mi_assert_internal(mi_page_slice_committed(page) > 0 || mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
-      mi_assert_internal(bin >= MI_ARENA_BIN_COUNT || mi_bitmap_is_clearN(arena_pages->pages_abandoned[bin], slice_index, 1));
+      mi_assert_internal(bin >= MI_ARENA_BIN_COUNT || mi_bitmap_chunk_count(arena_pages->pages_abandoned[bin]) == 0 || mi_bitmap_is_clearN(arena_pages->pages_abandoned[bin], slice_index, 1));
       // note: we cannot check for `!mi_page_is_abandoned_and_mapped` since that may
       // be (temporarily) not true if the free happens while trying to reclaim
       // see `mi_arena_try_claim_abandoned`
