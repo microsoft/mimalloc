@@ -22,7 +22,7 @@ terms of the MIT license.
 #include <string.h>
 #include <assert.h>
 
-// #define MI_GUARDED
+// #define MI_GUARDED 1
 // #define USE_STD_MALLOC
 
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
@@ -36,7 +36,7 @@ static int ITER    = 400;
 static int THREADS = 8;
 static int SCALE   = 25;
 static int ITER    = 20;
-#elif defined(MI_GUARDED)     // with debug guard pages reduce parameters to stay within the azure pipeline limits
+#elif MI_GUARDED             // with debug guard pages reduce parameters to stay within the azure pipeline limits
 static int THREADS = 8;
 static int SCALE   = 10;
 static int ITER    = 10;

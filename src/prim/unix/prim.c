@@ -803,8 +803,13 @@ void _mi_prim_out_stderr( const char* msg ) {
 #if !defined(MI_USE_ENVIRON) || (MI_USE_ENVIRON!=0)
 // On Posix systemsr use `environ` to access environment variables
 // even before the C runtime is initialized.
-#if defined(__APPLE__) && defined(__has_include) && __has_include(<crt_externs.h>)
+#if defined(__APPLE__) && defined(__has_include)
+#if __has_include(<crt_externs.h>)
 #include <crt_externs.h>
+#define MI_UNIX_HAS_CRT_EXTERNS_H  1
+#endif
+#endif
+#if MI_UNIX_HAS_CRT_EXTERNS_H
 static char** mi_get_environ(void) {
   return (*_NSGetEnviron());
 }
@@ -937,7 +942,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 // Thread init/done
 //----------------------------------------------------------------
 
-#if defined(MI_USE_PTHREADS)
+#if MI_USE_PTHREADS
 
 // use pthread local storage keys to detect thread ending
 // (and used with MI_TLS_PTHREADS for the default heap)
