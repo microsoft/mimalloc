@@ -55,7 +55,7 @@ static mi_decl_noinline void* mi_malloc_generic_new(mi_theap_t* theap, size_t si
   if (p == NULL) { return mi_theap_new_handler(theap, size - MI_PADDING_SIZE); }
   return p;
 }
-#if defined(_MSC_VER) && !MI_CLANG_CL
+#if defined(_MSC_VER) && !defined(__clang__)
 // for the msvc compiler to get tail-calls
 static mi_decl_noinline void* mi_malloc_generic_msvc(mi_theap_t* theap, size_t size, size_t zero_new_huge_alignment, mi_page_t** ppage) mi_attr_noexcept {
   const bool is_new = ((zero_new_huge_alignment & 2) != 0);
@@ -93,7 +93,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
   #endif
   xused.used_alloc += 0x10001;
   if mi_unlikely(block == NULL) {
-    #if defined(_MSC_VER) && !MI_CLANG_CL
+    #if defined(_MSC_VER) && !defined(__clang__)
     return mi_malloc_generic_msvc(theap, size, (zero ? 1 : 0) | (is_new ? 2 : 0), ppage);
     #else
     if (is_new) { return mi_malloc_generic_new(theap, size, (zero ? 1 : 0), ppage); }
