@@ -155,6 +155,10 @@ static inline void** mi_prim_thread_pointer(void) {
 #define MI_NO_THREAD_POINTER (1)
 #endif
 
+#ifndef MI_NO_THREAD_POINTER
+#define MI_NO_THREAD_POINTER 0
+#endif
+
 #if !MI_NO_THREAD_POINTER
 #define MI_HAS_TLS_SLOT  (1)
 static inline void* mi_prim_tls_slot(size_t slot) {
@@ -433,6 +437,10 @@ static inline void* mi_prim_theap_cached_raw(void) {
 
 #else
 #error "no TLS model is defined for this platform?"
+#endif
+
+#ifndef MI_THEAP_INITASNULL
+#define MI_THEAP_INITASNULL 0
 #endif
 
 
