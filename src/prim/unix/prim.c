@@ -91,11 +91,13 @@ terms of the MIT license. A copy of the license can be found in the file
   #define MAC_OS_X_VERSION_10_7   1070
   #endif
   #include <sys/sysctl.h>
-  #if MI_MTE && defined(VM_FLAGS_MTE) && __has_include(<os/security_config.h>)
+  #if MI_MTE && defined(VM_FLAGS_MTE) && defined(__has_include)
+  #if __has_include(<os/security_config.h>)
   #include <os/security_config.h>   // os_security_config_get
   #include <mach/mach.h>
   #include <mach/vm_map.h>          // vm_map (as `mach/mach_vm.h` is not supported on iOS)
   #define MI_UNIX_MACH_MTE  1
+  #endif
   #endif
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
   #include <sys/param.h>
@@ -1159,8 +1161,13 @@ void _mi_prim_out_stderr( const char* msg ) {
 #if !defined(MI_USE_ENVIRON) || (MI_USE_ENVIRON!=0)
 // On Posix systemsr use `environ` to access environment variables
 // even before the C runtime is initialized.
-#if defined(__APPLE__) && defined(__has_include) && __has_include(<crt_externs.h>)
+#if defined(__APPLE__) && defined(__has_include)
+#if __has_include(<crt_externs.h>)
 #include <crt_externs.h>
+#define MI_UNIX_HAS_CRT_EXTERNS_H  1
+#endif
+#endif
+#if MI_UNIX_HAS_CRT_EXTERNS_H
 static char** mi_get_environ(void) {
   return (*_NSGetEnviron());
 }

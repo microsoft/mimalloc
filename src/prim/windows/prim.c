@@ -17,8 +17,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdlib.h>  // atexit
 
 // xbox has no console IO (and might not be able to use GetModuleHandle)
-#if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)
+#if !defined(WINAPI_FAMILY_PARTITION)
 #define MI_WIN_DESKTOP  1
+#elif WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)
+#define MI_WIN_DESKTOP  1
+#elif WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP)
+#define MI_WIN_APP_ONLY  1
 #endif
 
 //---------------------------------------------
@@ -461,7 +465,7 @@ int _mi_prim_reuse(void* addr, size_t size) {
 
 int _mi_prim_protect(void* addr, size_t size, mi_protect_t protect) {
   const ULONG prot = (protect == MI_PROTECT_NONE ? PAGE_NOACCESS : (protect == MI_PROTECT_READWRITE ? PAGE_READWRITE : PAGE_READONLY));
-  #if !MI_WIN_DESKTOP && WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP)
+  #if MI_WIN_APP_ONLY
   ULONG oldprotect = 0;
   BOOL ok = VirtualProtectFromApp(addr, size, prot, &oldprotect);
   #else
