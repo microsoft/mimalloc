@@ -97,18 +97,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_FREE_IS_CHECKED 1
 #endif
 
-// Define MI_DEBUG for assertion and invariant checking
-// #define MI_DEBUG 1  // basic assertion checks and statistics, check double free, corrupted free list, and invalid pointer free. (cmake -DMI_DEBUG=ON)
-// #define MI_DEBUG 2  // + internal assertion checks (cmake -DMI_DEBUG_INTERNAL=ON)
-// #define MI_DEBUG 3  // + extensive internal invariant checking (cmake -DMI_DEBUG_FULL=ON)
-#if !defined(MI_DEBUG)
-#if defined(MI_BUILD_RELEASE) || defined(NDEBUG)
-#define MI_DEBUG 0
-#else
-#define MI_DEBUG 2
-#endif
-#endif
-
 // Statistics (0=only essential, 1=detailed (fast, can be enabled always), 2=slightly more expensive tracking of precise requested bytes)
 #ifndef MI_STATS
 #if (MI_DEBUG>0)
