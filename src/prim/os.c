@@ -174,6 +174,14 @@ bool _mi_os_canuse_large_page(size_t size, size_t alignment) {
   return ((size % lpsize) == 0 && (alignment % lpsize) == 0);
 }
 
+// Does the mapping contain at least one complete, aligned large page?
+bool _mi_os_canuse_thp(const void* p, size_t size) {
+  const size_t lpsize = mi_os_mem_config()->large_page_size;
+  if (lpsize == 0 || size < lpsize) return false;
+  const size_t offset = mi_addr(p) % lpsize;
+  return (offset == 0 || lpsize - offset <= size - lpsize);
+}
+
 // round to a good OS allocation size (bounded by max 12.5% waste)
 size_t _mi_os_good_alloc_size(size_t size) {
   size_t align_size;

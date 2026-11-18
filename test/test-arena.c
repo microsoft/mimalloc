@@ -266,6 +266,24 @@ static bool test_os_aligned_offset_stats(void) {
 }
 #endif
 
+static bool test_os_canuse_thp(void) {
+  const size_t lpsize = _mi_os_large_page_size();
+  if (!_mi_os_canuse_large_page(lpsize, lpsize)) return check_skip("no large OS page size");
+  mi_subproc_t* subproc = mi_theap_subproc(mi_theap_get_default());
+  mi_memid_t memid;
+  uint8_t* p = (uint8_t*)_mi_os_alloc_aligned(subproc, 3*lpsize, lpsize, false, false, &memid);
+  if (p == NULL) return false;
+  const bool result = (!_mi_os_canuse_thp(p, 0) &&
+                       !_mi_os_canuse_thp(p, lpsize - 1) &&
+                        _mi_os_canuse_thp(p, lpsize) &&
+                        _mi_os_canuse_thp(p, lpsize + 1) &&
+                       !_mi_os_canuse_thp(p + 1, lpsize - 2) &&
+                       !_mi_os_canuse_thp(p + 1, 2*lpsize - 2) &&
+                        _mi_os_canuse_thp(p + 1, 2*lpsize - 1));
+  _mi_os_free(subproc, p, 3*lpsize, memid);
+  return result;
+}
+
 static bool test_os_allow_large(void) {
   const long allow_large = mi_option_get(mi_option_allow_large_os_pages);
   mi_option_enable(mi_option_allow_large_os_pages);
@@ -1022,6 +1040,7 @@ static bool test_efault(bool (*test)(void)) {
 }
 
 int main(void) {
+  CHECK("os-canuse-thp", test_os_canuse_thp());
   CHECK("os-allow-large", test_os_allow_large());
   #if MI_SECURE > 0 && MI_OS_HAS_GUARD_PAGES
   CHECK("arena-reject-pinned", test_arena_reject_pinned());
