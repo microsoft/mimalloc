@@ -2,6 +2,7 @@
 # Utility functions for CMakeLists.txt
 # ----------------------------------------------------------------------------
 include(CheckCCompilerFlag)
+include(CheckCSourceRuns)
 include(CheckCSourceCompiles)
 include(CheckIncludeFiles)
 include(CheckSymbolExists)
@@ -55,6 +56,10 @@ function(check_symbol_exists_with_libs symbol headers libs outvar)
   list(APPEND CMAKE_REQUIRED_LIBRARIES ${libs})
   check_symbol_exists(${symbol} "${headers}" ${outvar})
   cmake_pop_check_state()
+endfunction()
+
+function(check_big_endian outvar)
+  check_c_source_runs("int main(void) { const unsigned int n = 1; return *(const unsigned char*)&n; }" ${outvar})
 endfunction()
 
 # we prefer -l<lib> test over `find_library` as sometimes core libraries

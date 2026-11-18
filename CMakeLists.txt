@@ -959,6 +959,11 @@ if(MI_USE_CXX)
   set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-arena.c test/test-bitmap.c test/test-qsbr.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-stress-pprof.c test/test-profile.c test/test-pprof.c test/test-fork.c test/test-secure.c PROPERTIES LANGUAGE CXX )
 endif()
 
+check_big_endian(MI_BIG_ENDIAN)
+if(MI_BIG_ENDIAN)
+  list(APPEND mi_defines MI_BIG_ENDIAN=1)
+endif()
+
 # platform specific headers
 if(NOT WIN32)
   CHECK_INCLUDE_FILES("unistd.h" MI_HAS_UNISTDH)
