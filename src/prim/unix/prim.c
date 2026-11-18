@@ -706,7 +706,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       #endif
       {  // keep the `else` above well-formed when MI_NO_THP is defined
       #if !defined(MI_NO_THP)
-      if (allow_large && mi_option_is_enabled(mi_option_allow_thp) && _mi_os_canuse_large_page(size,try_alignment)) {
+      if (mi_option_is_enabled(mi_option_allow_thp) && _mi_os_canuse_large_page(size,try_alignment)) {
         #if defined(MADV_HUGEPAGE)
         if (_mi_os_has_thp()) {
           // Many Linux systems don't allow MAP_HUGETLB but they support instead

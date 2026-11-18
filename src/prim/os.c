@@ -146,10 +146,7 @@ size_t _mi_os_minimal_purge_size(void) {
     return mi_align_up(minsize, _mi_os_page_size());
   }
   else if (mi_os_mem_config()->has_transparent_huge_pages && mi_option_get(mi_option_allow_thp) == 2) {
-    // don't break up THP pages;
-    // we don't do this by default as that can lead to increased memory usage (see issue #1282).
-    // on the other hand, breaking up THP pages can lead to performance degradation and perhaps
-    // allow_thp should be 2 by default (and the user can set the OS THP setting to [never]).
+    // avoid splitting THP pages during purging; this can improve performance but increase memory usage.
     return _mi_os_large_page_size();
   }
   else {

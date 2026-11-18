@@ -1701,7 +1701,7 @@ typedef enum mi_option_e {
   mi_option_os_tag,                   ///< tag used for OS logging (macOS only for now) (=100)
   mi_option_retry_on_oom,             ///< retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries. (only on windows)
   mi_option_generic_collect,          ///< collect heaps every N (=10000) generic allocation calls
-  mi_option_allow_thp,                ///< allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
+  mi_option_allow_thp,                ///< Transparent huge pages: 0 disable for the process, 1 allow, 2 allow and avoid splitting on purge. Default: 2 on Linux, 0 on Android; an explicit mi_option_minimal_purge_size overrides the purge behavior.
 
   // guard pages
   mi_option_guarded_min,              ///< only used when building with MI_GUARDED: minimal rounded object size for guarded objects (=0)
@@ -2274,9 +2274,11 @@ Further options for large workloads and services:
 
 - `MIMALLOC_ALLOW_THP=[0,1,2]`: When set to `0`, transparent huge pages (THP) are disabled
    for the process. Otherwise they are enabled when the [OS THP policy][linux-thp]
-   permits them (`[always]` or `[madvise]`). With `2` (the default on Linux), mimalloc v3
-   also uses a default minimal purge size of 2 MiB to avoid splitting transparent
-   huge pages during purging. This can improve performance but increase resident memory.
+   permits them (`[always]` or `[madvise]`). With `1`, purging may split transparent huge pages.
+   With `2` (the default on Linux), when THP is available, mimalloc v3 uses the large OS page
+   size (usually 2 MiB) as the default minimal purge size to avoid splitting transparent
+   huge pages during purging. An explicit `MIMALLOC_MINIMAL_PURGE_SIZE` overrides this default.
+   This can improve performance but increase resident memory.
    Android defaults to `0` to reduce resident memory.
 - `MIMALLOC_USE_NUMA_NODES=N`: pretend there are at most `N` NUMA nodes. If not set, the actual NUMA nodes are detected
    at runtime. Setting `N` to 1 may avoid problems in some virtual environments. Also, setting it to a lower number than

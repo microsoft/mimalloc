@@ -518,7 +518,8 @@ typedef enum mi_option_e {
   mi_option_page_commit_on_demand,      // commit page memory on-demand
   mi_option_page_max_reclaim,           // don't reclaim pages of the same originating theap if we already own N pages (in that size class) (=-1 (unlimited))
   mi_option_page_cross_thread_max_reclaim, // don't reclaim pages across threads if we already own N pages (in that size class) (=32)
-  mi_option_allow_thp,                  // allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
+  mi_option_allow_thp,                  // transparent huge pages: 0 disable for the process, 1 allow, 2 allow and avoid splitting on purge.
+                                       // default: 2 on Linux, 0 on Android; an explicit minimal_purge_size overrides the purge behavior.
   mi_option_arena_purge_min_size,       // set minimal purge size (in KiB) (=0). By default set to either 64 or 2048 if THP is enabled.
   mi_option_arena_max_object_size,      // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit).
   mi_option_arena_is_numa_local,        // experimental: associate local numa node with an initial arena allocation

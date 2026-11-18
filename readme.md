@@ -410,9 +410,10 @@ Advanced options:
 Further options for large workloads and services:
 
 - `MIMALLOC_ALLOW_THP=[0,1,2]`: When set to `0`, the use of transparent huge pages (THP) is disabled for the process that mimalloc
-   runs in, and otherwise it is enabled whenever THP is [enabled in the OS][linux-thp] (`[always]` or `[madvise]`). If set to 2 (default on Linux),
-   mimalloc also sets the `MIMALLOC_MINIMAL_PURGE_SIZE` in v3 to 2MiB to avoid potentially breaking up transparent huge pages when
-   purging memory which is better for performance (but may increase the rss!). On Android the default setting is 0 to reduce rss.
+   runs in, and otherwise it is enabled whenever THP is [enabled in the OS][linux-thp] (`[always]` or `[madvise]`). With `1`, purging may
+   split transparent huge pages. With `2` (the default on Linux), when THP is available, mimalloc v3 uses the large OS page size
+   (usually 2 MiB) as the default minimal purge size to avoid splitting transparent huge pages during purging. An explicit
+   `MIMALLOC_MINIMAL_PURGE_SIZE` overrides this default. This can improve performance but increase rss. On Android the default is `0`.
 - `MIMALLOC_USE_NUMA_NODES=N`: pretend there are at most `N` NUMA nodes. If not set, the actual NUMA nodes are detected
    at runtime. Setting `N` to 1 may avoid problems in some virtual environments. Also, setting it to a lower number than
    the actual NUMA nodes is fine and will only cause threads to potentially allocate more memory across actual NUMA

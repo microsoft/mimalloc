@@ -174,7 +174,7 @@ static const mi_option_desc_t mi_option_descs[_mi_option_last] =
   { 0, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this only on overcommit systems (like Linux))
   { MI_DEFAULT_PAGE_MAX_RECLAIM, MI_OPTION(page_max_reclaim) },         // don't reclaim (small) pages of the same originating theap if we already own N pages in that size class
   { MI_DEFAULT_PAGE_CROSS_THREAD_MAX_RECLAIM, MI_OPTION(page_cross_thread_max_reclaim) }, // don't reclaim (small) pages across threads if we already own N pages in that size class
-  { MI_DEFAULT_ALLOW_THP, MI_OPTION(allow_thp) },                // allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
+  { MI_DEFAULT_ALLOW_THP, MI_OPTION(allow_thp) },                // transparent huge pages: 0 disable for the process, 1 allow, 2 allow and avoid splitting on purge.
   { 0, MI_OPTION_LEGACY(arena_purge_min_size, minimal_purge_size) },       // set minimal purge size (in KiB) (=0). Using 0 resolves to either 64 (or 2048 if THP is enabled).
   { MI_DEFAULT_ARENA_MAX_OBJECT_SIZE, MI_OPTION(arena_max_object_size) },    // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit).
   { 0, MI_OPTION(arena_is_numa_local) },      // associate local numa node with an initial arena allocation
