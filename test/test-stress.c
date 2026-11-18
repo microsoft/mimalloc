@@ -52,7 +52,7 @@ static mi_profiler_t* stress_pprof_profiler = NULL;
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
 // argument defaults
-#if defined(MI_TSAN) && MI_TEST_LIGHT         // with thread-sanitizer reduce the threads to test within the azure pipeline limits
+#if defined(MI_TSAN) && defined(MI_TEST_LIGHT)  // with thread-sanitizer reduce the threads to test within the azure pipeline limits
 static int THREADS = NTHREADS/8;
 static int SCALE   = 10;
 static int ITER    = 100;
@@ -60,11 +60,11 @@ static int ITER    = 100;
 static int THREADS = NTHREADS/4;
 static int SCALE   = 25;
 static int ITER    = 400;
-#elif MI_TEST_LIGHT >= 2       // reduce the load further (e.g. under slow emulation)
+#elif defined(MI_TEST_LIGHT) && MI_TEST_LIGHT >= 2       // reduce the load further (e.g. under slow emulation)
 static int THREADS = NTHREADS/4;
 static int SCALE   = 5;
 static int ITER    = 5;
-#elif MI_TEST_LIGHT            // reduce the load in test integration (e.g. under emulation)
+#elif defined(MI_TEST_LIGHT)  // reduce the load in test integration (e.g. under emulation)
 static int THREADS = NTHREADS/4;
 static int SCALE   = 10;
 static int ITER    = 5;
@@ -333,7 +333,7 @@ static void test_stress(mi_subproc_id_t subproc) {
     #if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) {
       printf("- iterations left: %3d\n", ITER - (n + 1));
-      // #if !defined(USE_STD_MALLOC) && !MI_TEST_LIGHT
+      // #if !defined(USE_STD_MALLOC) && !defined(MI_TEST_LIGHT)
       // mi_debug_show_arenas();
       // #endif
       //mi_collect(true);
