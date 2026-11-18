@@ -30,6 +30,13 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_CHERI          1
 #endif
 
+#ifndef MI_CHERI
+#define MI_CHERI 0
+#endif
+#ifndef MI_MTE
+#define MI_MTE 0
+#endif
+
 // ------------------------------------------------------
 // Size of a pointer.
 // We assume that `sizeof(void*)==sizeof(intptr_t)`
@@ -294,6 +301,13 @@ static inline size_t mi_ptr_bounds_limit(const void* p, size_t size) {
 #endif
 #endif
 
+#ifndef MI_ARCH_ARM64
+#define MI_ARCH_ARM64 0
+#endif
+#ifndef MI_ARCH_RISCV
+#define MI_ARCH_RISCV 0
+#endif
+
 #if MI_MTE && !MI_ARCH_ARM64
 #error "memory tagging (MI_MTE) is only supported on arm64"
 #endif
@@ -321,7 +335,7 @@ static inline size_t mi_ptr_bounds_limit(const void* p, size_t size) {
 // #define MI_BIG_ENDIAN  1
 
 // maximum virtual address bits in a user-space pointer
-#if MI_DEFAULT_VIRTUAL_ADDRESS_BITS > 0
+#if defined(MI_DEFAULT_VIRTUAL_ADDRESS_BITS) && MI_DEFAULT_VIRTUAL_ADDRESS_BITS > 0
 #define MI_MAX_VABITS     MI_DEFAULT_VIRTUAL_ADDRESS_BITS
 #elif MI_ARCH_X64 && (MI_INTPTR_SIZE > 4)   // not on x32
 #define MI_MAX_VABITS     (47)
@@ -344,6 +358,9 @@ static inline size_t mi_ptr_bounds_limit(const void* p, size_t size) {
 // and on WebAssembly as it cannot do large aligned allocations well (needed for aligned page meta-data).
 #if (MI_CHERI || defined(__wasi__) || defined(__EMSCRIPTEN__)) && !defined(MI_FREE_USE_PAGEMAP)
 #define MI_FREE_USE_PAGEMAP  1
+#endif
+#ifndef MI_FREE_USE_PAGEMAP
+#define MI_FREE_USE_PAGEMAP 0
 #endif
 
 // Probable OS page size (as statically known; the actual page size is determined at runtime with `_mi_os_page_size()`).
@@ -397,9 +414,9 @@ typedef uintptr_t           mi_ptr_signed_t;
 #if (MI_MTE >= 2) && !defined(MI_PAC)
 #define MI_PAC  2
 #endif
-#if (MI_PAC >= 2) && !(MI_ARCH_ARM64 && defined(__GNUC__))
+#if defined(MI_PAC) && (MI_PAC >= 2) && !(MI_ARCH_ARM64 && defined(__GNUC__))
 #error "pointer authentication (MI_PAC=ON) is only supported on arm64 with GCC or clang"
-#elif (MI_PAC > 0) && (MI_CHERI || (MI_INTPTR_SIZE != 8))
+#elif defined(MI_PAC) && (MI_PAC > 0) && (MI_CHERI || (MI_INTPTR_SIZE != 8))
 #warning "pointer authentication (MI_PAC=ON) is not supported on CHERI or non-64-bit systems"
 #undef MI_PAC
 #define MI_PAC  0

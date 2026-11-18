@@ -31,7 +31,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "prim/os.c"
 #include "prim/prim.c"            // includes platform specific prim/<platform>/prim.c
 #include "prim/prim-tls.c"
-#if MI_OSX_ZONE
+#ifdef MI_OSX_ZONE
 #include "prim/osx/alloc-override-zone.c"
 #endif
 

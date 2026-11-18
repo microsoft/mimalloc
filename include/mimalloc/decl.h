@@ -5,6 +5,43 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 
+// ------------------------------------------------------
+// Variants
+// ------------------------------------------------------
+
+// Define MI_TRACK_<tool> to enable tracking support
+// #define MI_TRACK_VALGRIND 1
+// #define MI_TRACK_ASAN     1
+// #define MI_TRACK_ETW      1
+// #define MI_TRACK_CUSTOM   1
+
+// Define MI_DEBUG for assertion and invariant checking
+// #define MI_DEBUG 1  // basic assertion checks and statistics, check double free, corrupted free list, and invalid pointer free. (cmake -DMI_DEBUG=ON)
+// #define MI_DEBUG 2  // + internal assertion checks (cmake -DMI_DEBUG_INTERNAL=ON)
+// #define MI_DEBUG 3  // + extensive internal invariant checking (cmake -DMI_DEBUG_FULL=ON)
+#if !defined(MI_DEBUG)
+#if defined(MI_BUILD_RELEASE) || defined(NDEBUG)
+#define MI_DEBUG 0
+#else
+#define MI_DEBUG 2
+#endif
+#endif
+
+// Define undefined macros to 0: macros only tested with "#if MACRO"
+#ifndef MI_DEBUG
+#define MI_DEBUG 0
+#endif
+#ifndef MI_TRACK_ASAN
+#define MI_TRACK_ASAN 0
+#endif
+#ifndef MI_TRACK_ETW
+#define MI_TRACK_ETW 0
+#endif
+#ifndef MI_TRACK_VALGRIND
+#define MI_TRACK_VALGRIND 0
+#endif
+
+
 /* ----------------------------------------------------------------------------
   Compiler dependent definitions
 ---------------------------------------------------------------------------- */

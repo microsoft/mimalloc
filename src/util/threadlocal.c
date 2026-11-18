@@ -47,7 +47,7 @@ static const mi_thread_locals_t mi_thread_locals_empty = mi_init_struct_zero;
   initially `NULL` (where `name_get` returns the `initval` instead).
 ----------------------------------------------------------- */
 
-#if MI_TLS_MODEL_PTHREADS || defined(__APPLE__)   // macOS has fast pthreads
+#if defined(MI_TLS_MODEL_PTHREADS) || defined(__APPLE__)   // macOS has fast pthreads
 // Use pthreads
 #define mi_define_thread_local(tp,name,initval,tag) \
   static pthread_key_t __##name##_key = MI_PTHREAD_KEY_INVALID; \
@@ -77,7 +77,7 @@ mi_define_thread_local(void*, mi_slot_fast, NULL, MI_TLS_TAG_SLOT_FAST)
   a value, we also set the version of the key.
 ----------------------------------------------------------- */
 
-#if MI_TLS_KEY32
+#ifdef MI_TLS_KEY32
 #define MI_TLS_KEY_BITS     MI_SIZE_BITS
 #else
 #define MI_TLS_KEY_BITS     64

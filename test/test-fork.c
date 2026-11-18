@@ -27,9 +27,9 @@ int main(void) {
 #include <sys/wait.h>
 
 #define THREADS  4
-#if MI_TEST_LIGHT >= 2
+#if defined(MI_TEST_LIGHT) && MI_TEST_LIGHT >= 2
 #define FORKS    12
-#elif MI_TEST_LIGHT
+#elif defined(MI_TEST_LIGHT)
 #define FORKS    25
 #else
 #define FORKS    100
@@ -159,9 +159,9 @@ static int run_child(int depth) {
 
 #define U_SLOTS    1024
 #define U_THREADS  4
-#if MI_TEST_LIGHT >= 2
+#if defined(MI_TEST_LIGHT) && MI_TEST_LIGHT >= 2
 #define U_FORKS    25
-#elif MI_TEST_LIGHT
+#elif defined(MI_TEST_LIGHT)
 #define U_FORKS    50
 #else
 #define U_FORKS    250

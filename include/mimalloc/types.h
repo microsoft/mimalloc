@@ -54,12 +54,6 @@ terms of the MIT license. A copy of the license can be found in the file
 // Define NDEBUG in the release version to disable assertions.
 // #define NDEBUG
 
-// Define MI_TRACK_<tool> to enable tracking support
-// #define MI_TRACK_VALGRIND 1
-// #define MI_TRACK_ASAN     1
-// #define MI_TRACK_ETW      1
-// #define MI_TRACK_CUSTOM   1
-
 // Define MI_STATS as 1 to maintain statistics; set it to 2 to have detailed statistics (but costs some performance).
 // #define MI_STATS 1
 
@@ -70,6 +64,10 @@ terms of the MIT license. A copy of the license can be found in the file
 // #define MI_SECURE 3  // + zero blocks on free (up to the first 1KiB), check double free (slow, and only for thread-local frees; only at level 3 as padding is used at level 4)
 // #define MI_SECURE 4  // + check buffer overflow (with padding), fast double free check (with padding), more randomized free lists, decommit with mprotect (`-DMI_SECURE=ON`)
 // #define MI_SECURE 5  // + guard page at the end of each mimalloc page (expensive!), and byte-precise buffer overflow checks (`-DMI_SECURE=FULL`)
+
+#ifndef MI_OPT_FREE_SMALL
+#define MI_OPT_FREE_SMALL 0
+#endif
 
 // The default is 2 with MTE or PAC, and 3 on CHERI (where capabilities already provide spatial safety)
 #if !defined(MI_SECURE)
@@ -96,17 +94,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #undef  MI_FREE_IS_CHECKED
 #define MI_FREE_IS_CHECKED 1
 #endif
-
-// Define MI_DEBUG for assertion and invariant checking
-// #define MI_DEBUG 1  // basic assertion checks and statistics, check double free, corrupted free list, and invalid pointer free. (cmake -DMI_DEBUG=ON)
-// #define MI_DEBUG 2  // + internal assertion checks (cmake -DMI_DEBUG_INTERNAL=ON)
-// #define MI_DEBUG 3  // + extensive internal invariant checking (cmake -DMI_DEBUG_FULL=ON)
-#if !defined(MI_DEBUG)
-#if defined(MI_BUILD_RELEASE) || defined(NDEBUG)
-#define MI_DEBUG 0
-#else
-#define MI_DEBUG 2
-#endif
+#ifndef MI_FREE_IS_CHECKED
+#define MI_FREE_IS_CHECKED 0
 #endif
 
 // Statistics (0=only essential, 1=detailed (fast, can be enabled always), 2=slightly more expensive tracking of precise requested bytes)
@@ -153,12 +142,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #if !defined(MI_PADDING_CHECK_BYTES) && MI_PADDING && (MI_SECURE>=5 || MI_DEBUG>=1)
 #define MI_PADDING_CHECK_BYTES      1
 #endif
+#ifndef MI_PADDING_CHECK_BYTES
+#define MI_PADDING_CHECK_BYTES 0
+#endif
 
 
 // Encoded free lists allow detection of corrupted free lists
 // and can detect buffer overflows, modify after free, and double `free`s.
 #if (MI_SECURE>=2 || MI_DEBUG>=1)
 #define MI_ENCODE_FREELIST          1
+#endif
+#ifndef MI_ENCODE_FREELIST
+#define MI_ENCODE_FREELIST 0
 #endif
 
 
@@ -195,7 +190,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #if !defined(MI_PAGE_META_SMALL_IS_ALIGNED)
 // guarded can put small allocations into big blocks in a medium page (which would make `mi_free_small` fail)
 // on CHERI we cannot derive the page from a (bounded) user pointer
-#if (defined(MI_OPT_FREE_SMALL) && MI_OPT_FREE_SMALL==0) || MI_SECURE || MI_GUARDED || MI_CHERI
+#if MI_OPT_FREE_SMALL==0 || MI_SECURE || MI_GUARDED || MI_CHERI
 #define MI_PAGE_META_SMALL_IS_ALIGNED   0
 #elif (MI_OPT_FREE_SMALL || MI_PAGE_META_IS_ALIGNED)
 #define MI_PAGE_META_SMALL_IS_ALIGNED   1
@@ -758,7 +753,7 @@ typedef struct mi_arena_pages_s mi_arena_pages_t;
 
 // A dynamic thread-local variable: a slot index and a version (see `util/threadlocal.c`); 0 for an invalid thread-local.
 // By default always 64-bit
-#if MI_TLS_KEY32
+#ifdef MI_TLS_KEY32
 typedef size_t   mi_thread_local_t;
 #else
 typedef uint64_t mi_thread_local_t;
@@ -1004,6 +999,9 @@ typedef struct mi_arena_s {
 // `MI_SECURE_HOLD_BACK`) of the most recently freed ones until the next time (if `MI_SECURE_HOLD_BACK > 0`).
 #if !defined(MI_SECURE_HOLD_BACK) && MI_SECURE>=2
 #define MI_SECURE_HOLD_BACK         16
+#endif
+#ifndef MI_SECURE_HOLD_BACK
+#define MI_SECURE_HOLD_BACK 0
 #endif
 
 

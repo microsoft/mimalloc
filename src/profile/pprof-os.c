@@ -178,7 +178,7 @@ static size_t mi_backtrace_hash(void** frames, size_t depth) {
 }
 #endif
 
-#if _WIN32
+#ifdef _WIN32
 #include <windows.h>    // CaptureStackBackTrace
 mi_decl_noinline size_t _mi_pprof_backtrace(void** buffer, size_t max_depth, size_t* hash) {
   if (max_depth > ULONG_MAX) { max_depth = ULONG_MAX; }

@@ -254,7 +254,7 @@ void mi_page_queue_remove(mi_page_queue_t* queue, mi_page_t* page) {
 void mi_page_queue_push(mi_theap_t* theap, mi_page_queue_t* queue, mi_page_t* page) {
   mi_assert_internal(mi_page_theap(page) == theap);
   mi_assert_internal(!mi_page_queue_contains(queue, page));
-  #if MI_HUGE_PAGE_ABANDON
+  #ifdef MI_HUGE_PAGE_ABANDON
   mi_assert_internal(_mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
   #endif
   mi_assert_internal(mi_page_block_size(page) == queue->block_size ||

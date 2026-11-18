@@ -48,7 +48,7 @@ mi_thread_id_t _mi_thread_id(void) mi_attr_noexcept {
 // Setting the default and cached theap
 // ----------------------------------------------------------------------------
 
-#if MI_TLS_MODEL_WIN32
+#ifdef MI_TLS_MODEL_WIN32
 
 // If we can, we use one of the 64 direct TLS slots (but fall back to expansion slots if needed)
 // See <https://en.wikipedia.org/wiki/Win32_Thread_Information_Block> for the offsets.
@@ -155,7 +155,7 @@ static void mi_win_tls_slot_set(size_t slot, size_t extended_slot, void* value) 
   }
 }
 
-#elif MI_TLS_MODEL_PTHREADS
+#elif defined(MI_TLS_MODEL_PTHREADS)
 
 // only for pthreads for now
 mi_decl_hidden _Atomic(pthread_key_t) _mi_theap_default_key = MI_ATOMIC_VAR_INIT(MI_PTHREAD_KEY_INVALID);
@@ -184,7 +184,7 @@ void _mi_tls_slots_done(void) {
   if (key!=MI_PTHREAD_KEY_INVALID) { pthread_key_delete(key); }
 }
 
-#elif MI_TLS_MODEL_FIXED
+#elif defined(MI_TLS_MODEL_FIXED)
 
 void _mi_tls_slots_init(void) {
   mi_atomic_do_once {
@@ -224,11 +224,11 @@ void _mi_theap_cached_set(mi_theap_t* theap) {
   void* const x = mi_tls_sign(theap, MI_TLS_TAG_THEAP_CACHED);
   #if MI_TLS_MODEL_LOCAL
     __mi_theap_cached = (mi_theap_t*)x;
-  #elif MI_TLS_MODEL_FIXED
+  #elif defined(MI_TLS_MODEL_FIXED)
     mi_prim_tls_slot_set(MI_TLS_MODEL_FIXED_CACHED, x);
-  #elif MI_TLS_MODEL_WIN32
+  #elif defined(MI_TLS_MODEL_WIN32)
     mi_win_tls_slot_set(mi_atomic_load_relaxed(&_mi_theap_cached_slot), mi_atomic_load_relaxed(&_mi_theap_cached_expansion_slot), x);
-  #elif MI_TLS_MODEL_PTHREADS
+  #elif defined(MI_TLS_MODEL_PTHREADS)
     pthread_key_t key = mi_atomic_load_relaxed(&_mi_theap_cached_key);
     if (key!=MI_PTHREAD_KEY_INVALID) { pthread_setspecific(key, x); }
   #endif
@@ -245,11 +245,11 @@ void _mi_theap_default_set(mi_theap_t* theap)  {
   void* const x = mi_tls_sign(theap, MI_TLS_TAG_THEAP_DEFAULT);
   #if MI_TLS_MODEL_LOCAL
     __mi_theap_default = (mi_theap_t*)x;
-  #elif MI_TLS_MODEL_FIXED
+  #elif defined(MI_TLS_MODEL_FIXED)
     mi_prim_tls_slot_set(MI_TLS_MODEL_FIXED_DEFAULT, x);
-  #elif MI_TLS_MODEL_WIN32
+  #elif defined(MI_TLS_MODEL_WIN32)
     mi_win_tls_slot_set(mi_atomic_load_relaxed(&_mi_theap_default_slot), mi_atomic_load_relaxed(&_mi_theap_default_expansion_slot), x);
-  #elif MI_TLS_MODEL_PTHREADS
+  #elif defined(MI_TLS_MODEL_PTHREADS)
     pthread_key_t key = mi_atomic_load_relaxed(&_mi_theap_default_key);
     if (key!=MI_PTHREAD_KEY_INVALID) { pthread_setspecific(key, x); }
   #endif

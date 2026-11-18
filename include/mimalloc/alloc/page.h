@@ -395,7 +395,7 @@ static inline size_t mi_page_block_memtag_adjacent(const mi_page_t* page, const 
 // Are freed blocks in this page zeroed (except for the free list link)? This holds for small blocks that are
 // memory tagged or with `MI_SECURE>=3` (always false otherwise, or in debug mode as freed blocks are filled then)
 static inline bool mi_page_is_zero_on_free(const mi_page_t* page) {
-  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
+  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !defined(MI_TSAN)
   MI_UNUSED(page);
   return false;
   #else

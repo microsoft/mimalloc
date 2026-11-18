@@ -86,11 +86,11 @@ static bool mem_is_zero(const void* p, size_t size) {
 // size sweeps use a larger odd multiple of the step beyond the smallest sizes (so all residues
 // modulo the power-of-two alignments are still covered); with `MI_TEST_LIGHT` the steps are larger
 // and repeated tests run fewer iterations (and even fewer with `MI_TEST_LIGHT=2`)
-#if MI_TEST_LIGHT >= 2
+#if defined(MI_TEST_LIGHT) && MI_TEST_LIGHT >= 2
 #define MI_TEST_SIZE_STEP(size,step)  ((size) < 64 ? (step) : 15*(step))
 #define MI_TEST_LARGE_STEP            (6*1024)
 #define MI_TEST_ITERS(n)              ((n)/8)
-#elif MI_TEST_LIGHT
+#elif defined(MI_TEST_LIGHT)
 #define MI_TEST_SIZE_STEP(size,step)  ((size) < 128 ? (step) : 7*(step))
 #define MI_TEST_LARGE_STEP            (3*1024)
 #define MI_TEST_ITERS(n)              ((n)/4)
@@ -730,7 +730,7 @@ int main(void) {
     result = (0==mi_reserve_os_memory(16*MI_GiB,false,true));
   }
 
-  #if TEST_ARENAS // normally disabled as it takes long and consumes a lot of memory
+  #ifdef TEST_ARENAS // normally disabled as it takes long and consumes a lot of memory
   CHECK_BODY("arena_reserve_child") {
     // With the following setup, the arena size is 24 GiB and the total
     // allocation requires over 16 GiB. mimalloc arena internally creates
@@ -938,7 +938,7 @@ int main(void) {
   // ---------------------------------------------------
   // various
   // ---------------------------------------------------
-  #if !defined(MI_TRACK_ASAN)   // realpath may leak with ASAN enabled (as the ASAN allocator intercepts it)
+  #if !MI_TRACK_ASAN   // realpath may leak with ASAN enabled (as the ASAN allocator intercepts it)
   CHECK_BODY("realpath") {
     char* s = mi_realpath( ".", NULL );
     // printf("realpath: %s\n",s);

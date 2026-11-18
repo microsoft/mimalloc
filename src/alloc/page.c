@@ -108,7 +108,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   }
   #endif
 
-  #if !MI_TRACK_ENABLED && !MI_TSAN
+  #if !MI_TRACK_ENABLED && !defined(MI_TSAN)
   mi_block_t* tfree = mi_page_thread_free(page);
   mi_assert_internal(mi_page_list_is_valid(page, tfree));
   //size_t tfree_count = mi_page_list_count(page, tfree);
@@ -558,7 +558,7 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq, bool owner_done) {
 
 // allocate a fresh page from an arena
 mi_page_t* _mi_page_fresh_alloc(mi_theap_t* theap, mi_page_queue_t* pq, size_t block_size, size_t page_alignment) {
-  #if !MI_HUGE_PAGE_ABANDON
+  #ifndef MI_HUGE_PAGE_ABANDON
   mi_assert_internal(pq != NULL);
   mi_assert_internal(mi_theap_contains_queue(theap, pq));
   mi_assert_internal(page_alignment > 0 || block_size > MI_LARGE_MAX_OBJ_SIZE || block_size == pq->block_size);

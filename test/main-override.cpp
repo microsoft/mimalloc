@@ -45,7 +45,7 @@ static void test_perf3(void);         // issue #1104
 static void test_perf4(void);         // issue #1104
 static void test_perf5(void);         // issue #1104
 
-#if _WIN32
+#ifdef _WIN32
 #include "main-override-dep.h"
 static void test_dep();               // issue #981: test overriding in another DLL
 #else
@@ -128,7 +128,7 @@ static void various_tests() {
   t->~Test();
   delete[] tbuf;
 
-  #if _WIN32
+  #ifdef _WIN32
   const char* ptr = ::_Getdays();  // test _base overrid
   free((void*)ptr);
   #endif
@@ -161,7 +161,7 @@ static bool test_stl_allocator1() {
 struct some_struct { int i; int j; double z; };
 
 
-#if _WIN32
+#ifdef _WIN32
 static void test_dep()
 {
   TestAllocInDll t;

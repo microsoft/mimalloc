@@ -1,4 +1,4 @@
-#if _WIN32
+#ifdef _WIN32
 #include <windows.h>
 #endif
 #include <stdlib.h>
@@ -28,7 +28,7 @@ static void test_canary_leak(void);
 static void test_manage_os_memory(void);
 // static void test_large_pages(void);
 
-#if _WIN32
+#ifdef _WIN32
 #include "main-static-dep.h"
 static void test_dep();               // test static mimalloc in a separate DLL
 #else
@@ -257,7 +257,7 @@ static void test_canary_leak(void) {
   free(p);
 }
 
-#if _WIN32
+#ifdef _WIN32
 static void test_manage_os_memory(void) {
   size_t size = 256 * 1024 * 1024;
   void* ptr = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
@@ -285,7 +285,7 @@ static void test_manage_os_memory(void) {
 }
 #endif
 
-#if _WIN32
+#ifdef _WIN32
 
 static void call_library(void) {
   HMODULE dll = LoadLibraryA("mimalloc-test-static-dep.dll");

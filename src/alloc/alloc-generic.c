@@ -255,7 +255,7 @@ static mi_page_t* mi_huge_page_alloc(mi_theap_t* theap, size_t size, size_t page
     page_alignment = mi_max(page_alignment, mi_max(bounds_align, 2*MI_PAGE_MAX_OVERALLOC_ALIGN));
   }
   // mi_assert_internal(mi_bin(block_size) == MI_BIN_HUGE || page_alignment > 0);
-  #if MI_HUGE_PAGE_ABANDON
+  #ifdef MI_HUGE_PAGE_ABANDON
   #error todo.
   #else
   // mi_page_queue_t* pq = mi_page_queue(theap, MI_LARGE_MAX_OBJ_SIZE+1);  // always in the huge queue regardless of the block size
@@ -267,7 +267,7 @@ static mi_page_t* mi_huge_page_alloc(mi_theap_t* theap, size_t size, size_t page
     mi_assert_internal(mi_page_immediate_available(page));
     mi_assert_internal(mi_page_is_huge(page));
     mi_assert_internal(mi_page_is_singleton(page));
-    #if MI_HUGE_PAGE_ABANDON
+    #ifdef MI_HUGE_PAGE_ABANDON
     mi_assert_internal(mi_page_is_abandoned(page));
     mi_page_set_theap(page, NULL);
     #endif
