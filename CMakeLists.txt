@@ -61,6 +61,7 @@ option(MI_USE_LIBATOMIC     "Explicitly link with -latomic (on older systems) (d
 
 include(CheckLinkerFlag)    # requires cmake 3.18
 include(CheckIncludeFiles)
+include(CheckCSourceRuns)
 include(GNUInstallDirs)
 include("cmake/mimalloc-config-version.cmake")
 
@@ -517,6 +518,15 @@ endif()
 if(MI_OPT_ARCH_FLAGS)
   list(APPEND mi_cflags ${MI_OPT_ARCH_FLAGS})
   message(STATUS "Architecture specific optimization is enabled (with ${MI_OPT_ARCH_FLAGS}) (MI_OPT_ARCH=ON)")
+endif()
+
+function(check_big_endian outvar)
+  check_c_source_runs("int main(void) { const unsigned int n = 1; return *(const unsigned char*)&n; }" ${outvar})
+endfunction()
+
+check_big_endian(MI_BIG_ENDIAN)
+if(MI_BIG_ENDIAN)
+  list(APPEND mi_defines MI_BIG_ENDIAN=1)
 endif()
 
 # extra needed libraries

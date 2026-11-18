@@ -178,6 +178,9 @@ static inline void* mi_prim_tls_slot(size_t slot) mi_attr_noexcept {
     __asm__ volatile ("mv %0, tp" : "=r" (tcb));
     res = tcb[slot];
   #elif defined(__APPLE__) && defined(__POWERPC__) // ppc, issue #781
+    #if !MI_USE_PTHREADS
+    #error PowerPC TLS slots require MI_USE_PTHREADS
+    #endif
     MI_UNUSED(ofs);
     res = pthread_getspecific(slot);
   #endif
@@ -397,6 +400,10 @@ static inline mi_heap_t* mi_prim_get_default_heap(void) {
 
 #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
 
+#if !MI_USE_PTHREADS
+#error MI_TLS_PTHREAD_SLOT_OFS requires MI_USE_PTHREADS
+#endif
+
 static inline mi_heap_t** mi_prim_tls_pthread_heap_slot(void) {
   pthread_t self = pthread_self();
   #if defined(__DragonFly__)
@@ -414,6 +421,10 @@ static inline mi_heap_t* mi_prim_get_default_heap(void) {
 }
 
 #elif defined(MI_TLS_PTHREAD)
+
+#if !MI_USE_PTHREADS
+#error MI_TLS_PTHREAD requires MI_USE_PTHREADS
+#endif
 
 extern mi_decl_hidden pthread_key_t _mi_heap_default_key;
 static inline mi_heap_t* mi_prim_get_default_heap(void) {
