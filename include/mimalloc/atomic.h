@@ -15,8 +15,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #include <windows.h>
 #endif
+#if !defined(MI_USE_PTHREADS)
 #if !defined(_WIN32) && !defined(__wasi__) && (!defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__))
-#define  MI_USE_PTHREADS        1
+#define MI_USE_PTHREADS        1
+#endif
+#endif
+#if MI_USE_PTHREADS
 #include <pthread.h>
 #endif
 
@@ -489,7 +493,7 @@ static inline void mi_lock_done(mi_lock_t* lock) {
   (void)(lock);
 }
 
-#elif defined(MI_USE_PTHREADS)
+#elif MI_USE_PTHREADS
 
 #include <string.h> // memcpy
 void _mi_error_message(int err, const char* fmt, ...);

@@ -63,7 +63,7 @@ int _mi_prim_free(void* addr, size_t size ) {
   }
 #endif
 
-#if defined(MI_USE_PTHREADS)
+#if MI_USE_PTHREADS
 static pthread_mutex_t mi_theap_grow_mutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
@@ -71,11 +71,11 @@ static void* mi_prim_mem_grow(size_t size, size_t try_alignment) {
   void* p = NULL;
   if (try_alignment <= 1) {
     // `sbrk` is not thread safe in general so try to protect it (we could skip this on WASM but leave it in for now)
-    #if defined(MI_USE_PTHREADS)
+    #if MI_USE_PTHREADS
     pthread_mutex_lock(&mi_theap_grow_mutex);
     #endif
     p = mi_memory_grow(size);
-    #if defined(MI_USE_PTHREADS)
+    #if MI_USE_PTHREADS
     pthread_mutex_unlock(&mi_theap_grow_mutex);
     #endif
   }
@@ -85,7 +85,7 @@ static void* mi_prim_mem_grow(size_t size, size_t try_alignment) {
     // to allocate aligned use a lock to try to avoid thread interaction
     // between getting the current size and actual allocation
     // (also, `sbrk` is not thread safe in general)
-    #if defined(MI_USE_PTHREADS)
+    #if MI_USE_PTHREADS
     pthread_mutex_lock(&mi_theap_grow_mutex);
     #endif
     {
@@ -96,7 +96,7 @@ static void* mi_prim_mem_grow(size_t size, size_t try_alignment) {
         base = mi_memory_grow(alloc_size);
       }
     }
-    #if defined(MI_USE_PTHREADS)
+    #if MI_USE_PTHREADS
     pthread_mutex_unlock(&mi_theap_grow_mutex);
     #endif
     if (base != NULL) {
