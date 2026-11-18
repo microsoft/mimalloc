@@ -956,12 +956,16 @@ if(MI_USE_CXX)
   set_source_files_properties(src/static.c test/test-api.c test/test-api-fill.c test/test-arena.c test/test-bitmap.c test/test-qsbr.c test/test-stress.c test/test-stress-heaps.c  test/test-stress-subprocs.c test/test-stress-pprof.c test/test-profile.c test/test-pprof.c test/test-fork.c test/test-secure.c PROPERTIES LANGUAGE CXX )
 endif()
 
-# platform specific headers that are only needed for profiling support
-if(NOT WIN32 AND MI_PROFILE)
+# platform specific headers
+if(NOT WIN32)
   CHECK_INCLUDE_FILES("unistd.h" MI_HAS_UNISTDH)
   if(MI_HAS_UNISTDH)
     list(APPEND mi_defines MI_HAS_UNISTDH=1)
   endif()
+endif()
+
+# platform specific headers that are only needed for profiling support
+if(NOT WIN32 AND MI_PROFILE)
   # Check that `backtrace` is declared and linkable, not just that `execinfo.h` exists (e.g. on Android `backtrace` is only available from API level 33).
   check_symbol_exists(backtrace "execinfo.h" MI_HAS_BACKTRACE)
   if(NOT MI_HAS_BACKTRACE AND CMAKE_SYSTEM_NAME MATCHES "BSD|DragonFly")

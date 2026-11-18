@@ -18,6 +18,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdbool.h>  // bool
 #include <limits.h>   // LONG_MAX
 
+// Header availability for builds that do not use CMake.
+#if !defined(MI_HAS_UNISTDH) && !defined(_WIN32)
+#if defined(__has_include)
+#if __has_include(<unistd.h>)
+#define MI_HAS_UNISTDH  1
+#endif
+#elif defined(__unix__) || defined(__APPLE__) || defined(__HAIKU__)
+#define MI_HAS_UNISTDH  1
+#endif
+#endif
+
+// C++ versus C
 #if defined(__cplusplus)
 #define mi_decl_externc         extern "C"
 #define mi_init_struct_zero     { }
