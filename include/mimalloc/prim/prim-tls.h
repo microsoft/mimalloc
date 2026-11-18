@@ -321,6 +321,10 @@ static inline void* mi_prim_theap_cached_raw(void) {
 }
 
 #elif MI_TLS_MODEL_PTHREADS
+#if !MI_USE_PTHREADS
+#error MI_TLS_MODEL_PTHREADS requires MI_USE_PTHREADS
+#endif
+
 // Dynamic pthread slots. This can be fast depending on the platform (default for macOS and OpenBSD)
 // On some platforms (like macOS), the loader might allocate on thread local declarations which
 // can be avoided with pthreads.
