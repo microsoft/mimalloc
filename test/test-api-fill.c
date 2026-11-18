@@ -18,7 +18,7 @@ bool check_zero_init(uint8_t* p, size_t size);
 bool check_debug_fill_uninit(uint8_t* p, size_t size);
 bool check_debug_fill_freed(uint8_t* p, size_t size);
 #endif
-#if (MI_DEBUG >= 2) && !MI_TSAN && !(MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_GUARDED)
+#if (MI_DEBUG >= 2) && !defined(MI_TSAN) && !(MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_GUARDED)
 static void* fill_xthread_block;
 static bool fill_free_xthread_block(void) {
   mi_free(fill_xthread_block);
@@ -172,7 +172,7 @@ int main(void) {
     mi_free(p);
   };
 
-#if (MI_DEBUG >= 2) && !MI_TSAN
+#if (MI_DEBUG >= 2) && !defined(MI_TSAN)
   // ---------------------------------------------------
   // Debug filling
   // ---------------------------------------------------

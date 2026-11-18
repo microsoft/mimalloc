@@ -323,7 +323,7 @@ static size_t unix_detect_virtual_address_bits(void) {
   return MI_MAX_VABITS;
 }
 
-#if MI_UNIX_LINUX_MTE
+#ifdef MI_UNIX_LINUX_MTE
 // With `-DMI_MTE=ON` it is a fatal error if tag checking cannot be enabled for all threads
 #if MI_MTE >= 2
 #define unix_memtag_thread_error(...)   _mi_fatal_error(__VA_ARGS__)
@@ -367,7 +367,7 @@ static size_t unix_thread_count(void) {
 // Does the CPU support the memory tagging (MTE) instructions? (only checked with `-DMI_MTE=ON`;
 // on other systems we assume it does and fault on the first use of a tag instruction otherwise)
 static bool unix_detect_memtag_cpu(void) {
-  #if MI_UNIX_LINUX_MTE
+  #ifdef MI_UNIX_LINUX_MTE
   return ((getauxval(AT_HWCAP2) & HWCAP2_MTE) != 0);
   #elif defined(__APPLE__) && defined(__aarch64__)
   int val = 0;
@@ -397,11 +397,11 @@ static bool unix_detect_pac_cpu(void) {
 // Detect if memory tagging (MTE) is enabled for this process (only called if the `mte` option is enabled)
 static bool unix_detect_memtag(mi_os_mem_config_t* config) {
   MI_UNUSED(config);
-  #if MI_UNIX_MACH_MTE
+  #ifdef MI_UNIX_MACH_MTE
   if (__builtin_available(macOS 26.0, iOS 26.0, *)) {
     return ((os_security_config_get() & OS_SECURITY_CONFIG_MTE) != 0);   // set through process entitlements
   }
-  #elif MI_UNIX_LINUX_MTE
+  #elif defined(MI_UNIX_LINUX_MTE)
   // These settings are per thread and inherited by threads created afterwards (see also `_mi_prim_thread_init`)
   if ((getauxval(AT_HWCAP2) & HWCAP2_MTE) == 0) return false;
   const int ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);
@@ -583,11 +583,11 @@ static int unix_mmap_fd(void) {
 #define MI_OS_HAS_SUPERPAGES  1
 #endif
 
-#if defined(MAP_ALIGNED_SUPER) || defined(MAP_HUGETLB) || defined(MAP_HUGE_1GB) || defined(MAP_HUGE_2MB) || MI_OS_HAS_SUPERPAGES
+#if defined(MAP_ALIGNED_SUPER) || defined(MAP_HUGETLB) || defined(MAP_HUGE_1GB) || defined(MAP_HUGE_2MB) || defined(MI_OS_HAS_SUPERPAGES)
 #define MI_OS_HAS_HUGE_PAGES  1
 #endif
 
-#if MI_UNIX_MACH_MTE
+#ifdef MI_UNIX_MACH_MTE
 // Allocate memory that supports memory tagging (as `mmap` has no MTE flag on macOS/iOS)
 static void* unix_mmap_memtag(size_t size, size_t try_alignment, int protect_flags, int fd) {
   const vm_offset_t mask = (mi_is_power_of_two(try_alignment) && try_alignment <= MI_GiB ? try_alignment - 1 : 0);
@@ -614,11 +614,11 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   void* p = NULL;
   const int fd = unix_mmap_fd();
   bool allow_huge = allow_large;
-  #if MI_UNIX_MACH_MTE || MI_UNIX_LINUX_MTE
+  #if defined(MI_UNIX_MACH_MTE) || defined(MI_UNIX_LINUX_MTE)
   if (_mi_os_has_memtag()) {   // no large OS pages with memory tagging
     *is_large = false;
     if (large_only) return NULL;
-    #if MI_UNIX_MACH_MTE
+    #ifdef MI_UNIX_MACH_MTE
     return unix_mmap_memtag(size, try_alignment, protect_flags, fd);
     #else
     allow_huge = false;
@@ -664,7 +664,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
         lflags |= MAP_HUGE_2MB;
         #endif
       }
-      #if MI_OS_HAS_SUPERPAGES
+      #ifdef MI_OS_HAS_SUPERPAGES
       lfd |= VM_FLAGS_SUPERPAGE_SIZE_2MB;
       #endif
       if (large_only || lflags != flags) {
@@ -1352,7 +1352,7 @@ void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
 #endif
 
 void _mi_prim_thread_init(void) {
-  #if MI_UNIX_LINUX_MTE
+  #ifdef MI_UNIX_LINUX_MTE
   // ensure tag checking is enabled on threads that existed before mimalloc was initialized (and keep any mode that is already set)
   if (_mi_os_has_memtag()) {
     const int ctrl = prctl(PR_GET_TAGGED_ADDR_CTRL, 0, 0, 0, 0);

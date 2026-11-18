@@ -344,7 +344,7 @@ void _mi_arenas_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t mem
   }
 
   // try to purge expired decommits
-  #if MI_ARENA_PURGE_ON_FREE
+  #ifdef MI_ARENA_PURGE_ON_FREE
   mi_arenas_try_purge(false, false, subproc, 0);
   #endif
 }

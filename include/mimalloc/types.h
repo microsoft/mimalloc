@@ -758,7 +758,7 @@ typedef struct mi_arena_pages_s mi_arena_pages_t;
 
 // A dynamic thread-local variable: a slot index and a version (see `util/threadlocal.c`); 0 for an invalid thread-local.
 // By default always 64-bit
-#if MI_TLS_KEY32
+#ifdef MI_TLS_KEY32
 typedef size_t   mi_thread_local_t;
 #else
 typedef uint64_t mi_thread_local_t;

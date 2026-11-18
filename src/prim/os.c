@@ -806,7 +806,7 @@ bool _mi_os_reset(mi_subproc_t* subproc, void* addr, size_t size) {
   mi_os_stat_counter_increase(subproc, reset, csize);
   mi_os_stat_counter_increase(subproc, reset_calls, 1);
 
-  #if (MI_DEBUG>1) && !MI_SECURE && !MI_TRACK_ENABLED // && !MI_TSAN
+  #if (MI_DEBUG>1) && !MI_SECURE && !MI_TRACK_ENABLED // && !defined(MI_TSAN)
   memset(start, 0, csize); // pretend it is eagerly reset
   #endif
 

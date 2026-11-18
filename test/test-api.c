@@ -730,7 +730,7 @@ int main(void) {
     result = (0==mi_reserve_os_memory(16*MI_GiB,false,true));
   }
 
-  #if TEST_ARENAS // normally disabled as it takes long and consumes a lot of memory
+  #ifdef TEST_ARENAS // normally disabled as it takes long and consumes a lot of memory
   CHECK_BODY("arena_reserve_child") {
     // With the following setup, the arena size is 24 GiB and the total
     // allocation requires over 16 GiB. mimalloc arena internally creates

@@ -152,7 +152,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
   mi_assert_internal(mi_page_alloc_count(page) + mi_page_last_used(page) >= mi_page_used(page));
 
   // in debug mode initialize with 0xD0
-  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
+  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !defined(MI_TSAN)
   if mi_likely(!zero && !mi_page_is_huge(page)) { mi_debug_fill(page, block, MI_DEBUG_UNINIT, bsize); }
   #endif
 

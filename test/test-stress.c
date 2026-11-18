@@ -106,7 +106,7 @@ static bool   main_participates = false;       // main thread participates as a 
 #else
 
 #ifdef MI_USE_HEAPS
-#if TEST_STRESS_SUBPROCS
+#ifdef TEST_STRESS_SUBPROCS
 #error "cannot test rolling heaps with multiple subprocesses (for now)"
 #endif
 static mi_heap_t* current_heap;
@@ -366,7 +366,7 @@ static void test_stress(mi_subproc_id_t subproc) {
   }
 }
 
-#if TEST_STRESS_SUBPROCS && !defined(USE_STD_MALLOC)
+#if defined(TEST_STRESS_SUBPROCS) && !defined(USE_STD_MALLOC)
 static mi_subproc_id_t subprocs[NSUBPROCS];
 
 static void test_stress_subproc( intptr_t i, void* arg ) {
@@ -389,7 +389,7 @@ static void test_stress_subprocs(void) {
 }
 #endif
 
-#if TEST_LEAK
+#ifdef TEST_LEAK
 static void leak(intptr_t tid) {
   size_t r = rand();
   void* p = alloc_items(1 /*pick(&r)%128*/, &r);
@@ -451,7 +451,7 @@ int main(int argc, char** argv) {
     allow_large_objects = true;
   }
   printf("Using %d threads with a %d%% load-per-thread and %d iterations%s", THREADS, SCALE, ITER, (allow_large_objects ? " (allow large objects)" : ""));
-  #if MI_USE_HEAPS
+  #ifdef MI_USE_HEAPS
   printf(" (using %d rolling heaps)", MI_USE_HEAPS);
   #endif
   printf("\n"); fflush(stdout);
@@ -476,11 +476,11 @@ int main(int argc, char** argv) {
     mi_profiler_start(stress_pprof_profiler);
   }
   #endif
-#if TEST_STRESS_SUBPROCS && !defined(USE_STD_MALLOC)
+#if defined(TEST_STRESS_SUBPROCS) && !defined(USE_STD_MALLOC)
     test_stress_subprocs();
 #elif TEST_STRESS
     test_stress(subproc_null);
-#elif TEST_LEAK
+#elif defined(TEST_LEAK)
     test_leak();
 #endif
   #ifdef TEST_STRESS_PPROF

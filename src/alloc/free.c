@@ -25,7 +25,7 @@ mi_decl_nodiscard static bool mi_check_padding_on_free(const mi_page_t* page, co
 mi_decl_nodiscard static bool mi_check_double_free(const mi_page_t* page, const mi_block_t* block);
 static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* block, bool was_guarded);
 
-#if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
+#if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !defined(MI_TSAN)
 // Fill a block with a debug pattern, preserving the first `heap->debug_fill_preserve` bytes
 // (used by CPython to keep object headers intact that may be read by concurrent lock-free readers)
 static inline void mi_debug_fill_prim(void* block, int c, size_t size, size_t preserve) {
@@ -87,7 +87,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   block = mi_block_free_clear(page, block, was_guarded, memtag);  // (before tracking the free)
   mi_track_free_size(block, usable_size);
 
-  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN
+  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !defined(MI_TSAN)
   const size_t dbgsize = (usable_size > MI_MiB ? MI_MiB : usable_size);
   mi_debug_fill(page, block, MI_DEBUG_FREED, dbgsize);
   #endif
@@ -129,7 +129,7 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
   mi_track_free_size(block, usable_size);
 
   // _mi_padding_shrink(page, block, sizeof(mi_block_t));
-  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
+  #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !defined(MI_TSAN)       // note: when tracking, cannot use mi_usable_size with multi-threading
   if (!was_guarded) {
     const size_t dbgsize = (usable_size > MI_MiB ? MI_MiB : usable_size);
     mi_debug_fill_mt(page, block, MI_DEBUG_FREED, dbgsize);
@@ -346,7 +346,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
     {
       // The `self` load can be relaxed here as we free a known pointer and thus it has been synchronized.
       // However, the ThreadSanitizer seems to require an acquire load to properly track memory dependencies.
-      #if MI_TSAN
+      #ifdef MI_TSAN
       page = mi_atomic_load_ptr_acquire(mi_page_t,&page->self);
       #else
       page = mi_atomic_load_ptr_relaxed(mi_page_t,&page->self);
@@ -356,7 +356,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
 
   mi_assert_internal(page!=NULL);
   mi_assert(cpage==page /* page_map lookup should be the same as aligned lookup */ );
-  #if MI_DEBUG && !MI_UNSAFE_GUARDED_PRECISE
+  #if MI_DEBUG && !defined(MI_UNSAFE_GUARDED_PRECISE)
   // pointers allocated at an offset (`mi_malloc_aligned_at`) or guarded precise pointers can be unaligned
   if mi_unlikely(!mi_is_aligned(p,MI_SIZE_SIZE) && !mi_page_has_interior_pointers(page)) {
     return mi_ptr_invalid(msg, p, " (unaligned)");

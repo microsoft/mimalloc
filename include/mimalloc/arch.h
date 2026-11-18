@@ -321,7 +321,7 @@ static inline size_t mi_ptr_bounds_limit(const void* p, size_t size) {
 // #define MI_BIG_ENDIAN  1
 
 // maximum virtual address bits in a user-space pointer
-#if MI_DEFAULT_VIRTUAL_ADDRESS_BITS > 0
+#if defined(MI_DEFAULT_VIRTUAL_ADDRESS_BITS) && MI_DEFAULT_VIRTUAL_ADDRESS_BITS > 0
 #define MI_MAX_VABITS     MI_DEFAULT_VIRTUAL_ADDRESS_BITS
 #elif MI_ARCH_X64 && (MI_INTPTR_SIZE > 4)   // not on x32
 #define MI_MAX_VABITS     (47)
@@ -397,9 +397,9 @@ typedef uintptr_t           mi_ptr_signed_t;
 #if (MI_MTE >= 2) && !defined(MI_PAC)
 #define MI_PAC  2
 #endif
-#if (MI_PAC >= 2) && !(MI_ARCH_ARM64 && defined(__GNUC__))
+#if defined(MI_PAC) && (MI_PAC >= 2) && !(MI_ARCH_ARM64 && defined(__GNUC__))
 #error "pointer authentication (MI_PAC=ON) is only supported on arm64 with GCC or clang"
-#elif (MI_PAC > 0) && (MI_CHERI || (MI_INTPTR_SIZE != 8))
+#elif defined(MI_PAC) && (MI_PAC > 0) && (MI_CHERI || (MI_INTPTR_SIZE != 8))
 #warning "pointer authentication (MI_PAC=ON) is not supported on CHERI or non-64-bit systems"
 #undef MI_PAC
 #define MI_PAC  0

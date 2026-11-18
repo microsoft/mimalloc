@@ -313,7 +313,7 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
   #if MI_PROFILE
   _mi_fprintf(out, arg, "profiling   : %s\n", MI_SAMPLE==2 ? "fine-grained" : "enabled");
   #endif
-  #if MI_TSAN
+  #ifdef MI_TSAN
   _mi_fprintf(out, arg, "thread santizer enabled\n");
   #endif
   #if MI_MTE

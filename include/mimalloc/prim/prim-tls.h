@@ -320,7 +320,7 @@ static inline void* mi_prim_theap_cached_raw(void) {
   return __mi_theap_cached;
 }
 
-#elif MI_TLS_MODEL_PTHREADS
+#elif defined(MI_TLS_MODEL_PTHREADS)
 // Dynamic pthread slots. This can be fast depending on the platform (default for macOS and OpenBSD)
 // On some platforms (like macOS), the loader might allocate on thread local declarations which
 // can be avoided with pthreads.

@@ -116,7 +116,7 @@ mi_decl_restrict void* _mi_theap_malloc_guarded(mi_theap_t* theap, size_t size, 
     return NULL;
   }
   const size_t os_page_size = _mi_os_page_size();
-  #if MI_UNSAFE_GUARDED_PRECISE
+  #ifdef MI_UNSAFE_GUARDED_PRECISE
   const size_t obj_size = size;
   #else
   const size_t obj_size = mi_align_up(size, MI_MAX_ALIGN_SIZE);

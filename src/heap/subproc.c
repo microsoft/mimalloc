@@ -480,7 +480,7 @@ void _mi_fork_child(void) {
 
 // Called at process initialization.
 void _mi_fork_init(void) {
-  #if defined(MI_USE_PTHREADS) && !defined(__wasi__) && !defined(__EMSCRIPTEN__) && !MI_NO_PTHREAD_ATFORK
+  #if defined(MI_USE_PTHREADS) && !defined(__wasi__) && !defined(__EMSCRIPTEN__) && !defined(MI_NO_PTHREAD_ATFORK)
   if (pthread_atfork(NULL, NULL, &_mi_fork_child) != 0) {
     _mi_warning_message("unable to register the pthread fork handler\n");
   }

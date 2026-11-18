@@ -15,7 +15,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #include <windows.h>
 #endif
-#if MI_TLS_MODEL_PTHREADS || (!defined(_WIN32) && !defined(__wasi__) && (!defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__)))
+#if defined(MI_TLS_MODEL_PTHREADS) || (!defined(_WIN32) && !defined(__wasi__) && (!defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__)))
 #define  MI_USE_PTHREADS        1
 #include <pthread.h>
 #endif
@@ -453,7 +453,7 @@ typedef _Atomic(size_t) mi_atomic_guard_t;
 // These should be light-weight in-process only locks.
 // Only used for reserving arena's and to maintain the abandoned list.
 // ----------------------------------------------------------------------
-#if _MSC_VER
+#ifdef _MSC_VER
 #pragma warning(disable:26110)  // unlock with holding lock
 #endif
 
