@@ -481,7 +481,7 @@ static void* mi_os_prim_alloc_at(mi_subproc_t* subproc, void* hint_addr, size_t 
     if (commit) {
       mi_os_stat_increase(subproc, committed, size);
       // seems needed for asan (or `mimalloc-test-api` fails)
-      #ifdef MI_TRACK_ASAN
+      #if MI_TRACK_ASAN
       if (*is_zero) { mi_track_mem_defined(p,size); }
                else { mi_track_mem_undefined(p,size); }
       #endif
@@ -760,7 +760,7 @@ bool _mi_os_commit_ex(mi_subproc_t* subproc, void* addr, size_t size, bool* is_z
     mi_assert_expensive(mi_mem_is_zero(start, csize));
   }
   // note: the following seems required for asan (otherwise `mimalloc-test-stress` fails)
-  #ifdef MI_TRACK_ASAN
+  #if MI_TRACK_ASAN
   if (os_is_zero) { mi_track_mem_defined(start,csize); }
              else { mi_track_mem_undefined(start,csize); }
   #endif
@@ -1014,7 +1014,7 @@ void* _mi_os_alloc_huge_os_pages(mi_subproc_t* subproc, size_t pages, int numa_n
     *memid = _mi_memid_create_os(start, allocated, allocated, all_zero, true /* is_large */);
     memid->memkind = MI_MEM_OS_HUGE;
     mi_assert(memid->is_pinned);
-    #ifdef MI_TRACK_ASAN
+    #if MI_TRACK_ASAN
     if (all_zero) { mi_track_mem_defined(start,allocated); }
     #endif
   }

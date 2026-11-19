@@ -125,7 +125,7 @@ int mi_version(void) {
 static const mi_option_desc_t mi_option_descs[_mi_option_last] =
 {
   // stable options
-#if MI_DEBUG || defined(MI_SHOW_ERRORS)
+#if MI_DEBUG || MI_SHOW_ERRORS
   { 1, MI_OPTION(show_errors) },
 #else
   { 0, MI_OPTION(show_errors) },
@@ -507,14 +507,14 @@ static mi_decl_noinline void mi_recurse_exit_prim(void) {
 }
 
 static bool mi_recurse_enter(void) {
-  #if defined(__APPLE__) || defined(__ANDROID__) || defined(MI_TLS_RECURSE_GUARD)
+  #if defined(__APPLE__) || defined(__ANDROID__) || MI_TLS_RECURSE_GUARD
   if (_mi_preloading()) return false;
   #endif
   return mi_recurse_enter_prim();
 }
 
 static void mi_recurse_exit(void) {
-  #if defined(__APPLE__) || defined(__ANDROID__) || defined(MI_TLS_RECURSE_GUARD)
+  #if defined(__APPLE__) || defined(__ANDROID__) || MI_TLS_RECURSE_GUARD
   if (_mi_preloading()) return;
   #endif
   mi_recurse_exit_prim();
@@ -636,7 +636,7 @@ static void mi_error_default(int err) {
       abort();
     }
   #endif
-  #if defined(MI_XMALLOC)
+  #if MI_XMALLOC
     if (err==ENOMEM || err==EOVERFLOW || err==EINVAL) { // abort on memory allocation fails in xmalloc mode
       abort();
     }

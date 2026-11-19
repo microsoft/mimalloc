@@ -45,9 +45,9 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <linux/mman.h>   // linux mmap flags
   #endif
   #if defined(__riscv) || defined(_M_RISCV)
-    #if defined(MI_HAS_SYS_HWPROBEH)
+    #if MI_HAS_SYS_HWPROBEH
       #include <sys/hwprobe.h>
-    #elif defined(MI_HAS_ASM_HWPROBEH)
+    #elif MI_HAS_ASM_HWPROBEH
       #include <asm/hwprobe.h>
     #endif
   #endif
@@ -296,7 +296,7 @@ static size_t unix_detect_virtual_address_bits(void) {
     #if defined(RISCV_HWPROBE_KEY_HIGHEST_VIRT_ADDRESS)
       struct riscv_hwprobe probe = { .key = RISCV_HWPROBE_KEY_HIGHEST_VIRT_ADDRESS, };
       // Prefer the GNU libc interface if available, as it can also use the VDSO
-      #if defined(MI_HAS_SYS_HWPROBEH)
+      #if MI_HAS_SYS_HWPROBEH
       if (__riscv_hwprobe(&probe, 1, 0, NULL, 0) == 0)
       #else
       if (syscall(__NR_riscv_hwprobe, &probe, 1, 0, NULL, 0) == 0)

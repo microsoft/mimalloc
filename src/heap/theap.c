@@ -304,7 +304,7 @@ bool _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   if (head==NULL) {  // first theap of the first thread?
     // will be initialized on the first random_next/split call. (see #1377, W20)
 
-    // #if defined(_WIN32) && !defined(MI_SHARED_LIB)
+    // #if defined(_WIN32) && !MI_SHARED_LIB
     // if (tld->thread_seq==0) {
     //   _mi_random_init_weak(&theap->random);    // prevent allocation failure during bcrypt dll initialization with static linking (issue #1185)
     // }

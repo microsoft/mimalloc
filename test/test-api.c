@@ -939,7 +939,7 @@ int main(void) {
   // ---------------------------------------------------
   // various
   // ---------------------------------------------------
-  #if !defined(MI_TRACK_ASAN)   // realpath may leak with ASAN enabled (as the ASAN allocator intercepts it)
+  #if !MI_TRACK_ASAN   // realpath may leak with ASAN enabled (as the ASAN allocator intercepts it)
   CHECK_BODY("realpath") {
     char* s = mi_realpath( ".", NULL );
     // printf("realpath: %s\n",s);

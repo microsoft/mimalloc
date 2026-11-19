@@ -465,7 +465,7 @@ static inline mi_theap_t* mi_theap_tls_auth(void* x, size_t tag) {
 }
 
 static inline mi_theap_t* _mi_theap_default(void) {
-  #if defined(MI_TLS_RECURSE_GUARD)
+  #if MI_TLS_RECURSE_GUARD
   if mi_unlikely(!_mi_process.process_is_initialized) return _mi_theap_empty_get();
   #endif
   return mi_theap_tls_auth(mi_prim_theap_default_raw(), MI_TLS_TAG_THEAP_DEFAULT);

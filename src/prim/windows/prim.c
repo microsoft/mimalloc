@@ -899,7 +899,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   #endif
 #endif
 
-#if defined(MI_WIN_INIT_USE_CRT_TLS)
+#if MI_WIN_INIT_USE_CRT_TLS
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
 
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
@@ -1035,7 +1035,7 @@ extern "C" {
   However, it can lead to link errors with on `_pRawDllMain` if other
   libraries also try to hook into this (like Boost).
 */
-#elif defined(MI_WIN_INIT_USE_RAW_DLLMAIN)
+#elif MI_WIN_INIT_USE_RAW_DLLMAIN
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) {}
@@ -1127,7 +1127,7 @@ extern "C" {
 /* --------------------------------------------------------------------
    Legacy options: DllMain, TLS, and FLS
    --------------------------------------------------------------------*/
-#elif defined(MI_WIN_INIT_USE_TLS_DLLMAIN) && defined(MI_SHARED_LIB)
+#elif MI_WIN_INIT_USE_TLS_DLLMAIN && MI_SHARED_LIB
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
 
   // Windows DLL: easy to hook into process_init and thread_done
@@ -1143,7 +1143,7 @@ extern "C" {
     MI_UNUSED(theap);
   }
 
-#elif defined(MI_WIN_INIT_USE_TLS_DLLMAIN)
+#elif MI_WIN_INIT_USE_TLS_DLLMAIN
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
 
   static void NTAPI mi_win_main_attach(PVOID module, DWORD reason, LPVOID reserved) {
@@ -1205,7 +1205,7 @@ extern "C" {
     MI_UNUSED(theap);
   }
 
-#elif defined(MI_WIN_INIT_USE_FLS) // deprecated: statically linked, use fiber api
+#elif MI_WIN_INIT_USE_FLS // deprecated: statically linked, use fiber api
 
   #if defined(_MSC_VER) // on clang/gcc use the constructor attribute (in `src/prim/prim.c`)
     // MSVC: use data section magic for static libraries
@@ -1279,7 +1279,7 @@ extern "C" {
 // ----------------------------------------------------
 // Communicate with the redirection module on Windows
 // ----------------------------------------------------
-#if defined(MI_SHARED_LIB) && !defined(MI_WIN_NOREDIRECT)
+#if MI_SHARED_LIB && !defined(MI_WIN_NOREDIRECT)
   #define MI_PRIM_HAS_ALLOCATOR_INIT 1
 
   bool _mi_is_redirected(void) {

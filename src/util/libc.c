@@ -199,7 +199,7 @@ bool _mi_strntoull(const char* s, size_t max_len, int base, const char** end, un
   return ok;
 }
 
-#ifdef MI_NO_GETENV
+#if MI_NO_GETENV
 int _mi_getenv(const char* name, char* result, size_t result_size) {
   MI_UNUSED(name);
   MI_UNUSED(result);

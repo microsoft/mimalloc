@@ -435,7 +435,7 @@ static inline mi_heap_t* mi_prim_get_default_heap(void) {
 #else // default using a thread local variable; used on most platforms.
 
 static inline mi_heap_t* mi_prim_get_default_heap(void) {
-  #if defined(MI_TLS_RECURSE_GUARD)
+  #if MI_TLS_RECURSE_GUARD
   if (mi_unlikely(!_mi_process_is_initialized)) return _mi_heap_main_get();
   #endif
   return _mi_heap_default;
