@@ -1027,8 +1027,12 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
   void* const p = _mi_page_malloc_zero(heap, page, size, zero, ppage);
   mi_assert_internal(p != NULL);
 
-  // move singleton pages to the full queue
-  if (page->reserved == page->used) {
+  // move singleton pages to the full queue (abandoned huge pages are not in a queue)
+  if (page->reserved == page->used
+      #if MI_HUGE_PAGE_ABANDON
+      && _mi_page_segment(page)->page_kind != MI_PAGE_HUGE
+      #endif
+     ) {
     mi_page_to_full(page, mi_page_queue_of(page));
   }
   return p;
