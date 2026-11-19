@@ -606,13 +606,61 @@ static void* unix_mmap_memtag(size_t size, size_t try_alignment, int protect_fla
 }
 #endif
 
+#if !defined(MAP_ANONYMOUS)
+#define MAP_ANONYMOUS  MAP_ANON
+#endif
+#if !defined(MAP_NORESERVE)
+#define MAP_NORESERVE  0
+#endif
+
+#if MI_OS_HAS_HUGE_PAGES
+// Try to allocate using large (2MiB) or huge (1GiB) OS pages. Returns NULL on failure.
+static void* unix_mmap_large(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd, bool large_only) {
+  // If the OS is not configured for large OS pages, or the user does not have
+  // enough permission, the `mmap` will always fail (but it might also fail for other reasons).
+  // Therefore, once a large page allocation failed, we don't try again for `os_large_page_backoff` times
+  // to avoid too many failing calls to mmap.
+  size_t backoff = mi_atomic_load_relaxed(&_mi_process.os.large_page_backoff);
+  if (!large_only && backoff > 0) {
+    mi_atomic_cas_strong_relaxed(&_mi_process.os.large_page_backoff, &backoff, backoff - 1);
+    return NULL;
+  }
+
+  int lflags = (flags & ~MAP_NORESERVE);  // using NORESERVE on huge pages seems to fail on Linux
+  #ifdef MAP_ALIGNED_SUPER
+  lflags |= MAP_ALIGNED_SUPER;
+  #endif
+  #ifdef MAP_HUGETLB
+  lflags |= MAP_HUGETLB;
+  #endif
+  #if MI_OS_HAS_SUPERPAGES
+  fd |= VM_FLAGS_SUPERPAGE_SIZE_2MB;
+  #endif
+
+  #ifdef MAP_HUGE_1GB
+  // try huge 1GiB pages first if explicitly requested
+  if (large_only && (size % MI_GiB) == 0 && mi_atomic_load_relaxed(&_mi_process.os.huge_page_unavailable) == 0) {
+    void* p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, lflags | MAP_HUGE_1GB, fd);
+    if (p != NULL) return p;
+    mi_atomic_store_relaxed(&_mi_process.os.huge_page_unavailable, 1);  // don't try huge 1GiB pages again
+    _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (errno: %i)\n", errno);
+  }
+  #endif
+
+  #ifdef MAP_HUGE_2MB
+  lflags |= MAP_HUGE_2MB;
+  #endif
+  if (!large_only && lflags == flags) return NULL;  // no large OS page flags available
+
+  void* p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, lflags, fd);
+  if (p == NULL && !large_only) {
+    mi_atomic_store_relaxed(&_mi_process.os.large_page_backoff, (size_t)8);  // on error, don't try again for the next N allocations
+  }
+  return p;
+}
+#endif
+
 static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protect_flags, bool large_only, bool allow_large, bool* is_large) {
-  #if !defined(MAP_ANONYMOUS)
-  #define MAP_ANONYMOUS  MAP_ANON
-  #endif
-  #if !defined(MAP_NORESERVE)
-  #define MAP_NORESERVE  0
-  #endif
   void* p = NULL;
   const int fd = unix_mmap_fd();
   bool allow_huge = allow_large;
@@ -638,58 +686,10 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   // huge page allocation
   #if MI_OS_HAS_HUGE_PAGES
   if (allow_huge && (large_only || (_mi_os_canuse_large_page(size, try_alignment) && mi_option_is_enabled(mi_option_allow_large_os_pages)))) {
-    size_t backoff = mi_atomic_load_relaxed(&_mi_process.os.large_page_backoff);
-    if (!large_only && backoff > 0) {
-      // If the OS is not configured for large OS pages, or the user does not have
-      // enough permission, the `mmap` will always fail (but it might also fail for other reasons).
-      // Therefore, once a large page allocation failed, we don't try again for `os_large_page_backoff` times
-      // to avoid too many failing calls to mmap.
-      mi_atomic_cas_strong_relaxed(&_mi_process.os.large_page_backoff, &backoff, backoff - 1);
-    }
-    else {
-      int lflags = flags & ~MAP_NORESERVE;  // using NORESERVE on huge pages seems to fail on Linux
-      int lfd = fd;
-      #ifdef MAP_ALIGNED_SUPER
-      lflags |= MAP_ALIGNED_SUPER;
-      #endif
-      #ifdef MAP_HUGETLB
-      lflags |= MAP_HUGETLB;
-      #endif
-      #ifdef MAP_HUGE_1GB
-      if (large_only && (size % MI_GiB) == 0 && (mi_atomic_load_relaxed(&_mi_process.os.huge_page_unavailable)==0)) {
-        lflags |= MAP_HUGE_1GB;
-      }
-      else
-      #endif
-      {
-        #ifdef MAP_HUGE_2MB
-        lflags |= MAP_HUGE_2MB;
-        #endif
-      }
-      #if MI_OS_HAS_SUPERPAGES
-      lfd |= VM_FLAGS_SUPERPAGE_SIZE_2MB;
-      #endif
-      if (large_only || lflags != flags) {
-        // try large OS page allocation
-        *is_large = true;
-        p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, lflags, lfd);
-        #ifdef MAP_HUGE_1GB
-        if (p == NULL && (lflags & MAP_HUGE_1GB) == MAP_HUGE_1GB) {
-          mi_atomic_store_relaxed(&_mi_process.os.huge_page_unavailable,1); // don't try huge 1GiB pages again
-          if (large_only) {
-            _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (errno: %i)\n", errno);
-          }
-          lflags = ((lflags & ~MAP_HUGE_1GB) | MAP_HUGE_2MB);
-          p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, lflags, lfd);
-        }
-        #endif
-        if (large_only) return p;
-        if (p == NULL) {
-          mi_atomic_store_relaxed(&_mi_process.os.large_page_backoff, (size_t)8);  // on error, don't try again for the next N allocations
-        }
-      }
-    }
-  } // huge pages
+    p = unix_mmap_large(addr, size, try_alignment, protect_flags, flags, fd, large_only);
+    *is_large = (p != NULL);
+    if (large_only) return p;
+  }
   #else
   MI_UNUSED(allow_huge);
   if (large_only) { *is_large = false; errno = ENOMEM; return NULL; }  // no huge OS pages available
