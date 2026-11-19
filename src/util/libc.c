@@ -420,7 +420,7 @@ static void mi_out_num(uintmax_t x, size_t base, char prefix, char** out, char* 
     int dcount = 0;
     while(x>0 && dcount < MI_MAX_OUT_DIGITS) {
       char digit = (char)(x % base);
-      num[dcount++] = (digit <= 9 ? '0' + digit : 'A' + digit - 10);
+      num[dcount++] = (digit <= 9 ? '0' + digit : 'a' + digit - 10);
       x = x / base;
     }
     if (dcount>=MI_MAX_OUT_DIGITS) return;  // don't output anything?
