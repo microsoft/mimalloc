@@ -1277,7 +1277,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
     uint8_t* decommit_start = start + sizeof(mi_block_t); // for the free list
     if (aligned_p > decommit_start) { //  any room for alignment ?
       size_t decommit_size = (size_t)(aligned_p - decommit_start);
-      _mi_os_reset(decommit_start, decommit_size);  // do not decommit as it may be in a region
+      _mi_os_reset(decommit_start, decommit_size, false);  // do not decommit as it may be in a region
     }
   }
 
@@ -1325,7 +1325,7 @@ void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_bloc
     if (usize > sizeof(mi_block_t)) {
       usize = usize - sizeof(mi_block_t);
       uint8_t* p = (uint8_t*)block + sizeof(mi_block_t);
-      _mi_os_reset(p, usize);
+      _mi_os_reset(p, usize, mi_option_is_enabled(mi_option_purge_decommits));
     }
   }
 }

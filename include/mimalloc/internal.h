@@ -176,7 +176,7 @@ size_t      _mi_os_good_alloc_size(size_t size);
 bool        _mi_os_has_overcommit(void);
 bool        _mi_os_has_virtual_reserve(void);
 
-bool        _mi_os_reset(void* addr, size_t size);
+bool        _mi_os_reset(void* addr, size_t size, bool eager);
 bool        _mi_os_decommit(void* addr, size_t size);
 bool        _mi_os_unprotect(void* addr, size_t size);
 bool        _mi_os_purge(void* p, size_t size);

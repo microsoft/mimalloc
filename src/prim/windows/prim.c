@@ -399,14 +399,12 @@ int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit) {
   return (ok ? 0 : (int)GetLastError());
 }
 
-int _mi_prim_reset(void* addr, size_t size) {
+int _mi_prim_reset(void* addr, size_t size, bool eager) {
   void* p = VirtualAlloc(addr, size, MEM_RESET, PAGE_READWRITE);
   mi_assert_internal(p == addr);
-  #if 0
-  if (p != NULL) {
-    VirtualUnlock(addr,size); // VirtualUnlock after MEM_RESET removes the memory directly from the working set
+  if (p != NULL && eager) {
+    VirtualUnlock(addr, size);  // removes the reset pages from the working set
   }
-  #endif
   return (p != NULL ? 0 : (int)GetLastError());
 }
 
