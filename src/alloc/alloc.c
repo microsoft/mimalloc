@@ -534,7 +534,7 @@ bool _mi_page_can_reset_tail(const mi_page_t* page) {
 void _mi_page_reset_tail(const mi_page_t* page, void* p, size_t newsize, size_t usable) {
   mi_assert_internal(newsize <= usable);
   if (usable - newsize < _mi_os_page_size() || !_mi_page_can_reset_tail(page)) return;
-  _mi_os_reset(mi_page_subproc(page), (uint8_t*)p + newsize, usable - newsize);  // aligns inward to whole OS pages
+  _mi_os_reset(mi_page_subproc(page), (uint8_t*)p + newsize, usable - newsize, false);  // aligns inward to whole OS pages
 }
 
 static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, void* p, size_t newsize, bool zero, size_t* pblock_size_pre, size_t* pblock_size_post) mi_attr_noexcept {

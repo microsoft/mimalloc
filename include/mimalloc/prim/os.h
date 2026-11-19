@@ -28,7 +28,7 @@ bool          _mi_os_is_elevated(void);                                     // s
 size_t        _mi_os_virtual_address_bits(void);
 size_t        _mi_os_minimal_purge_size(void);
 
-bool          _mi_os_reset(mi_subproc_t* subproc, void* addr, size_t size);
+bool          _mi_os_reset(mi_subproc_t* subproc, void* addr, size_t size, bool eager);
 bool          _mi_os_decommit(mi_subproc_t* subproc, void* addr, size_t size);
 void          _mi_os_reuse(mi_subproc_t* subproc, void* p, size_t size);
 mi_decl_nodiscard bool _mi_os_commit(mi_subproc_t* subproc, void* p, size_t size, bool* is_zero);

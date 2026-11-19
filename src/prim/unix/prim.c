@@ -825,7 +825,8 @@ int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   return err;
 }
 
-int _mi_prim_reset(void* start, size_t size) {
+int _mi_prim_reset(void* start, size_t size, bool eager) {
+  MI_UNUSED(eager);
   int err = 0;
 
   // on macOS can use MADV_FREE_REUSABLE (but we disable this for now as it seems slower)
@@ -839,8 +840,8 @@ int _mi_prim_reset(void* start, size_t size) {
   // Otherwise, we try to use `MADV_FREE` as that is the fastest. A drawback though is that it
   // will not reduce the `rss` stats in tools like `top` even though the memory is available
   // to other processes. With the default `MIMALLOC_PURGE_DECOMMITS=1` we ensure that by
-  // default `MADV_DONTNEED` is used though.
-  const bool lazy = (mi_atomic_load_relaxed(&_mi_process.os.lazy_reset_unavailable) == 0);
+  // default `MADV_DONTNEED` is used though. If `eager`, we use `MADV_DONTNEED` directly.
+  const bool lazy = (!eager && mi_atomic_load_relaxed(&_mi_process.os.lazy_reset_unavailable) == 0);
   while ((err = unix_madvise(start, size, (lazy ? MADV_FREE : MADV_DONTNEED))) != 0 && err == EAGAIN) { /* try again */ };
   if (err == EINVAL && lazy) {
     // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
