@@ -14,6 +14,13 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 
 #include "mimalloc.h"
+
+// Internal configuration treats undefined feature macros as zero by design.
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wundef"
+#endif
+
 #include "mimalloc/internal.h"
 
 // For a static override we create a single object file
@@ -38,4 +45,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "prim/prim.c"
 #if MI_OSX_ZONE
 #include "prim/osx/alloc-override-zone.c"
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
 #endif
