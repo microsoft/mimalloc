@@ -107,7 +107,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
     // and in such case the MI_BLOCK_TAG_ALIGNED is just not at the start of the real heap block
     if (adjust >= sizeof(mi_block_t)) {
       mi_block_t* const block = (mi_block_t*)p;
-      block->next = MI_BLOCK_TAG_ALIGNED;
+      mi_atomic_store_relaxed(&block->next, MI_BLOCK_TAG_ALIGNED);
     }
     #endif
     mi_block_t* const base = _mi_page_ptr_unalign(page, p);

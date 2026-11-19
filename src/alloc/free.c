@@ -236,13 +236,13 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
     #if MI_GUARDED || MI_PROFILE
     if (offset >= sizeof(mi_block_t)) {
       #if MI_PROFILE
-      if (block->next == MI_BLOCK_TAG_PROFILED) {
+      if (mi_atomic_load_relaxed(&block->next) == MI_BLOCK_TAG_PROFILED) {
         _mi_page_profile_on_free(page,block,p);
       }
       else
       #endif
       #if MI_GUARDED
-      if (block->next == MI_BLOCK_TAG_GUARDED) {
+      if (mi_atomic_load_relaxed(&block->next) == MI_BLOCK_TAG_GUARDED) {
         _mi_page_block_unguard(page, block, p);
         *was_guarded = true;
       }

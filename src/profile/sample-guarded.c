@@ -65,7 +65,7 @@ static void* mi_block_ptr_set_guarded(mi_block_t* block, size_t obj_size, size_t
   if mi_unlikely(page==NULL) return NULL;  // should not happen, but avoids gcc -Wstringop-overflow warnings
   block = (mi_block_t*)mi_ptr_rederive(mi_page_start(page), block);  // `block` is bounded to the requested size
   mi_page_set_has_interior_pointers(page, true);
-  block->next = MI_BLOCK_TAG_GUARDED;
+  mi_atomic_store_relaxed(&block->next, MI_BLOCK_TAG_GUARDED);
 
   // set guard page at the end of the block
   const size_t block_size = mi_page_block_size(page);  // must use `block_size` to match `mi_free_local`
@@ -167,7 +167,7 @@ void _mi_page_block_unguard(mi_page_t* page, mi_block_t* block, void* p) {
   mi_assert_internal(mi_block_ptr_is_guarded(block, p));
   mi_assert_internal(mi_page_has_interior_pointers(page));
   mi_assert_internal((uint8_t*)p - (uint8_t*)block >= (ptrdiff_t)sizeof(mi_block_t));
-  mi_assert_internal(block->next == MI_BLOCK_TAG_GUARDED);
+  mi_assert_internal(mi_atomic_load_relaxed(&block->next) == MI_BLOCK_TAG_GUARDED);
 
   const size_t bsize = mi_page_block_size(page);
   const size_t psize = _mi_os_page_size();

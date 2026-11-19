@@ -113,7 +113,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
   mi_track_mem_undefined(block,sizeof(*block));
 
   #if MI_SECURE>=2
-  if (!zero) block->next = 0;  // don't leak internal data
+  if (!zero) mi_atomic_store_relaxed(&block->next, 0);  // don't leak internal data
   #endif
 
   // update the page free list and used count
@@ -167,7 +167,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
       #endif
     }
     else {
-      block->next = 0;
+      mi_atomic_store_relaxed(&block->next, 0);
       mi_track_mem_defined(block, bsize);
     }
   }

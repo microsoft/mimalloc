@@ -410,9 +410,10 @@ typedef uintptr_t  mi_encoded_t;
 // thread id's
 typedef size_t     mi_thread_id_t;
 
-// free lists contain blocks
+// Free lists contain blocks
+// The next field is only declared atomic for the QSBR build, as regular builds always access it from a single thread only.
 typedef struct mi_block_s {
-  mi_encoded_t next;
+  _Atomic(mi_encoded_t) next;
 } mi_block_t;
 
 

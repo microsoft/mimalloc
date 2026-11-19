@@ -816,7 +816,7 @@ static inline mi_encoded_t mi_block_encode(const mi_page_t* page, const mi_block
 
 static inline mi_encoded_t mi_block_link(const mi_block_t* block) {
   mi_track_mem_defined(block,sizeof(mi_block_t));
-  const mi_encoded_t x = block->next;
+  const mi_encoded_t x = mi_atomic_load_relaxed(&block->next);
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
   return x;
 }
@@ -833,7 +833,7 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
 
 static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, const mi_block_t* next) {
   mi_track_mem_undefined(block,sizeof(mi_block_t));
-  block->next = mi_block_encode(page, block, next);
+  mi_atomic_store_relaxed(&block->next, mi_block_encode(page, block, next));
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
 }
 
