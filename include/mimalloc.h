@@ -15,7 +15,7 @@ terms of the MIT license. A copy of the license can be found in the file
 // ------------------------------------------------------
 
 #ifdef __cplusplus
-  #if (__cplusplus >= 201103L) || (_MSC_VER > 1900)  // C++11
+  #if (__cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER > 1900)  // C++11
     #define mi_attr_noexcept   noexcept
   #else
     #define mi_attr_noexcept   throw()
@@ -30,7 +30,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_decl_nodiscard    __attribute__((warn_unused_result))
 #elif defined(_HAS_NODISCARD)
   #define mi_decl_nodiscard    _NODISCARD
-#elif (_MSC_VER >= 1700)
+#elif defined(_MSC_VER) && (_MSC_VER >= 1700)
   #define mi_decl_nodiscard    _Check_return_
 #else
   #define mi_decl_nodiscard
@@ -513,7 +513,7 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_alloc_new_n(mi_h
 
 #include <cstddef>     // std::size_t
 #include <cstdint>     // PTRDIFF_MAX
-#if (__cplusplus >= 201103L) || (_MSC_VER > 1900)  // C++11
+#if (__cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER > 1900)  // C++11
 #include <type_traits> // std::true_type
 #include <utility>     // std::forward
 #endif
@@ -527,7 +527,7 @@ template<class T> struct _mi_stl_allocator_common {
   typedef value_type*       pointer;
   typedef value_type const* const_pointer;
 
-  #if ((__cplusplus >= 201103L) || (_MSC_VER > 1900))  // C++11
+  #if ((__cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER > 1900))  // C++11
   using propagate_on_container_copy_assignment = std::true_type;
   using propagate_on_container_move_assignment = std::true_type;
   using propagate_on_container_swap            = std::true_type;
@@ -562,7 +562,7 @@ template<class T> struct mi_stl_allocator : public _mi_stl_allocator_common<T> {
   mi_decl_nodiscard pointer allocate(size_type count, const void* = 0) { return static_cast<pointer>(mi_new_n(count, sizeof(value_type))); }
   #endif
 
-  #if ((__cplusplus >= 201103L) || (_MSC_VER > 1900))  // C++11
+  #if ((__cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER > 1900))  // C++11
   using is_always_equal = std::true_type;
   #endif
 };
@@ -571,7 +571,7 @@ template<class T1,class T2> bool operator==(const mi_stl_allocator<T1>& , const 
 template<class T1,class T2> bool operator!=(const mi_stl_allocator<T1>& , const mi_stl_allocator<T2>& ) mi_attr_noexcept { return false; }
 
 
-#if (__cplusplus >= 201103L) || (_MSC_VER >= 1900)  // C++11
+#if (__cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER >= 1900)  // C++11
 #define MI_HAS_HEAP_STL_ALLOCATOR 1
 
 #include <memory>      // std::shared_ptr
@@ -591,7 +591,7 @@ template<class T, bool _mi_destroy> struct _mi_heap_stl_allocator_common : publi
   mi_decl_nodiscard pointer allocate(size_type count, const void* = 0) { return static_cast<pointer>(mi_heap_alloc_new_n(this->heap.get(), count, sizeof(value_type))); }
   #endif
 
-  #if ((__cplusplus >= 201103L) || (_MSC_VER > 1900))  // C++11
+  #if ((__cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER > 1900))  // C++11
   using is_always_equal = std::false_type;
   #endif
 
