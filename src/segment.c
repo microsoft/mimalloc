@@ -1320,7 +1320,7 @@ void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_bloc
   mi_assert_internal(segment == _mi_page_segment(page));
   mi_assert_internal(page->used == 1); // this is called just before the free
   mi_assert_internal(page->free == NULL);
-  if (segment->allow_decommit && page->is_committed) {
+  if (segment->allow_purge && page->is_committed) {
     size_t usize = mi_usable_size(block);
     if (usize > sizeof(mi_block_t)) {
       usize = usize - sizeof(mi_block_t);
