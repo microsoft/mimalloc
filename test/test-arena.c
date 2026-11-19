@@ -604,6 +604,38 @@ static bool test_heap_visit_thread_exit(void) {
   return result;
 }
 
+#define VISIT_FREED_COUNT 100
+static void* visit_freed_blocks[VISIT_FREED_COUNT];
+
+static bool allocate_visit_freed_blocks(void) {
+  for (size_t i = 0; i < VISIT_FREED_COUNT; i++) {
+    visit_freed_blocks[i] = mi_heap_malloc(visit_heap, 64);
+    if (visit_freed_blocks[i] == NULL) return false;
+  }
+  return true;
+}
+
+// Visit an abandoned page after another thread freed some of its blocks
+// (these must not be visited even if the page's free list is not empty).
+static bool test_heap_visit_abandoned_freed(void) {
+  const long reclaim = mi_option_get(mi_option_page_reclaim_on_free);
+  const long guarded = mi_option_get(mi_option_guarded_sample_rate);
+  mi_option_set(mi_option_page_reclaim_on_free, -1);
+  mi_option_set(mi_option_guarded_sample_rate, 0);
+  visit_heap = mi_heap_new();
+  bool result = (visit_heap != NULL && mi_run_on_thread(&allocate_visit_freed_blocks));
+  if (result) {
+    for (size_t i = 0; i < VISIT_FREED_COUNT; i += 2) { mi_free(visit_freed_blocks[i]); }
+    block_visit_t visit = { 0, 0, false, false };
+    result = (mi_heap_visit_blocks(visit_heap, true, &block_record, &visit) && visit.blocks == VISIT_FREED_COUNT/2);
+  }
+  if (visit_heap != NULL) { mi_heap_destroy(visit_heap); }
+  visit_heap = NULL;
+  mi_option_set(mi_option_page_reclaim_on_free, reclaim);
+  mi_option_set(mi_option_guarded_sample_rate, guarded);
+  return result;
+}
+
 static bool test_theap_collect_detached(void) {
   mi_theap_t* const theap = mi_theap_get_default();
   mi_subproc_t* const subproc = theap->tld->subproc;
@@ -1084,5 +1116,6 @@ int main(void) {
   CHECK_THREADS("heap-visit-owned-os-mixed", test_heap_visit_owned_os(true));
   CHECK("heap-page-count-os", test_heap_page_count_os());
   CHECK_THREADS("heap-visit-thread-exit", test_heap_visit_thread_exit());
+  CHECK_THREADS("heap-visit-abandoned-freed", test_heap_visit_abandoned_freed());
   return print_test_summary();
 }
