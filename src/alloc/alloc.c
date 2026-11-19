@@ -523,9 +523,11 @@ void* mi_expand(void* p, size_t newsize) mi_attr_noexcept {
 }
 
 // Can we reset the unused tail of a block in `page` when shrinking in place? Only for singleton pages, and not
-// for pinned memory, memory tagged pages (as the OS may lose the tags of the reset part), or if the OS cannot reset.
+// for pinned memory, memory tagged pages (as the OS may lose the tags of the reset part), if the OS cannot reset,
+// or if purging is disabled.
 bool _mi_page_can_reset_tail(const mi_page_t* page) {
-  return (mi_page_is_singleton(page) && !page->memid.is_pinned && !mi_page_is_memtag(page) && _mi_os_has_reset());
+  return (mi_page_is_singleton(page) && !page->memid.is_pinned && !mi_page_is_memtag(page) && _mi_os_has_reset() &&
+          mi_option_get(mi_option_purge_delay) >= 0);
 }
 
 // Reset the OS pages of the unused tail of a block that is shrunk in place to release the memory.
@@ -534,7 +536,7 @@ bool _mi_page_can_reset_tail(const mi_page_t* page) {
 void _mi_page_reset_tail(const mi_page_t* page, void* p, size_t newsize, size_t usable) {
   mi_assert_internal(newsize <= usable);
   if (usable - newsize < _mi_os_page_size() || !_mi_page_can_reset_tail(page)) return;
-  _mi_os_reset(mi_page_subproc(page), (uint8_t*)p + newsize, usable - newsize, false);  // aligns inward to whole OS pages
+  _mi_os_reset(mi_page_subproc(page), (uint8_t*)p + newsize, usable - newsize, true);  // eager as it can be large; aligns inward to whole OS pages
 }
 
 static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, void* p, size_t newsize, bool zero, size_t* pblock_size_pre, size_t* pblock_size_post) mi_attr_noexcept {
