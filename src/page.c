@@ -313,7 +313,7 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
     return NULL;
   }
   #if MI_HUGE_PAGE_ABANDON
-  mi_assert_internal(pq==NULL || _mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
+  mi_assert_internal(pq==NULL || _mi_page_segment(page)->kind != MI_SEGMENT_HUGE);
   #endif
   mi_assert_internal(page_alignment >0 || block_size > MI_MEDIUM_OBJ_SIZE_MAX || _mi_page_segment(page)->kind != MI_SEGMENT_HUGE);
   mi_assert_internal(pq!=NULL || mi_page_block_size(page) >= block_size);
@@ -1068,8 +1068,12 @@ void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_al
   void* const p = _mi_page_malloc_zero(heap, page, size, zero, ppage);
   mi_assert_internal(p != NULL);
 
-  // move singleton pages to the full queue
-  if (page->reserved == page->used) {
+  // move singleton pages to the full queue (abandoned huge pages are not in a queue)
+  if (page->reserved == page->used
+      #if MI_HUGE_PAGE_ABANDON
+      && _mi_page_segment(page)->kind != MI_SEGMENT_HUGE
+      #endif
+     ) {
     mi_page_to_full(page, mi_page_queue_of(page));
   }
   return p;

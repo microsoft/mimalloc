@@ -518,7 +518,8 @@ bool _mi_os_decommit(void* addr, size_t size) {
 // but may be used later again. This will release physical memory
 // pages and reduce swapping while keeping the memory committed.
 // We page align to a conservative area inside the range to reset.
-bool _mi_os_reset(void* addr, size_t size) {
+// If `eager`, the memory is released immediately (e.g. `MADV_DONTNEED` instead of `MADV_FREE`).
+bool _mi_os_reset(void* addr, size_t size, bool eager) {
   // page align conservatively within the range
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
@@ -530,7 +531,7 @@ bool _mi_os_reset(void* addr, size_t size) {
   memset(start, 0, csize); // pretend it is eagerly reset
   #endif
 
-  int err = _mi_prim_reset(start, csize);
+  int err = _mi_prim_reset(start, csize, eager);
   if (err != 0) {
     _mi_warning_message("cannot reset OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
   }
@@ -566,7 +567,7 @@ bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset, size_t stat_size)
   }
   else {
     if (allow_reset) {  // this can sometimes be not allowed if the range is not fully committed
-      _mi_os_reset(p, size);
+      _mi_os_reset(p, size, false);
     }
     return false;  // needs no recommit
   }

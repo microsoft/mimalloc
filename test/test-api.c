@@ -281,7 +281,12 @@ int main(void) {
   CHECK_BODY("malloc_aligned11") {
     mi_heap_t* heap = mi_heap_new();
     void* p = mi_heap_malloc_aligned(heap, 33554426, 8);
+    #if MI_HUGE_PAGE_ABANDON
+    result = !mi_heap_contains_block(heap, p);  // abandoned huge pages are not part of a heap
+    mi_free(p);
+    #else
     result = mi_heap_contains_block(heap, p);
+    #endif
     mi_heap_destroy(heap);
   }
   

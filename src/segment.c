@@ -1046,7 +1046,7 @@ static mi_slice_t* mi_segment_page_clear(mi_page_t* page, mi_segments_tld_t* tld
   if (segment->allow_decommit && mi_option_is_enabled(mi_option_deprecated_page_reset)) {
     size_t psize;
     uint8_t* start = _mi_segment_page_start(segment, page, &psize);
-    _mi_os_reset(start, psize);
+    _mi_os_reset(start, psize, false);
   }
 
   // zero the page data, but not the segment fields and heap tag
@@ -1608,7 +1608,7 @@ static mi_page_t* mi_segment_huge_page_alloc(size_t size, size_t page_alignment,
     uint8_t* decommit_start = start + sizeof(mi_block_t);              // for the free list
     if (aligned_p > decommit_start) {
       size_t decommit_size = (size_t)(aligned_p - decommit_start);
-      _mi_os_reset(decommit_start, decommit_size);   // note: cannot use segment_decommit on huge segments
+      _mi_os_reset(decommit_start, decommit_size, false);   // note: cannot use segment_decommit on huge segments
     }
   }
 
@@ -1651,12 +1651,12 @@ void _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_bloc
   mi_assert_internal(segment == _mi_page_segment(page));
   mi_assert_internal(page->used == 1); // this is called just before the free
   mi_assert_internal(page->free == NULL);
-  if (segment->allow_decommit) {
+  if (segment->allow_purge) {
     size_t csize = mi_usable_size(block);
     if (csize > sizeof(mi_block_t)) {
       csize = csize - sizeof(mi_block_t);
       uint8_t* p = (uint8_t*)block + sizeof(mi_block_t);
-      _mi_os_reset(p, csize);  // note: cannot use segment_decommit on huge segments
+      _mi_os_reset(p, csize, mi_option_is_enabled(mi_option_purge_decommits));  // note: cannot use segment_decommit on huge segments
     }
   }
 }
