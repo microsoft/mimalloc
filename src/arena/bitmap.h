@@ -143,6 +143,22 @@ size_t mi_bitmap_size(size_t bit_count, size_t* chunk_count);
 // returns the size of the bitmap.
 size_t mi_bitmap_init(mi_bitmap_t* bitmap, size_t bit_count, bool already_zero);
 
+// A bitmap in already-zero memory can be initialized lazily: until `mi_bitmap_ensure_init` stores its
+// `chunk_count`, the bitmap has zero chunks and every search, visit, and popcount sees it as empty --
+// and, since nothing is written, its memory is never touched.  This matters for the per-bin
+// `pages_abandoned` bitmaps: there are `MI_ARENA_BIN_COUNT` of them per arena and per heap, each
+// sized by the arena (32 KiB for a 16 GiB arena), so storing every header eagerly commits one OS page
+// per bitmap even though most bins never see an abandoned page.  Call `mi_bitmap_ensure_init` before
+// the first set.  It is idempotent, so racing callers are fine; a reader that sees the old zero count
+// misses only a page that was abandoned concurrently with its search.
+static inline void mi_bitmap_ensure_init(mi_bitmap_t* bitmap, size_t bit_count) {
+  if mi_unlikely(mi_atomic_load_relaxed(&bitmap->chunk_count) == 0) {
+    size_t chunk_count;
+    mi_bitmap_size(bit_count, &chunk_count);
+    mi_atomic_store_release(&bitmap->chunk_count, chunk_count);
+  }
+}
+
 // Set/clear a sequence of `n` bits in the bitmap (and can cross chunks).
 // Not atomic so only use if still local to a thread.
 void mi_bitmap_unsafe_setN(mi_bitmap_t* bitmap, size_t idx, size_t n);
