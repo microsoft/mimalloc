@@ -613,7 +613,11 @@ typedef struct mi_span_queue_s {
   size_t      slice_count;
 } mi_span_queue_t;
 
-#define MI_SEGMENT_BIN_MAX (35)     // 35 == mi_segment_bin(MI_SLICES_PER_SEGMENT)
+#define MI_SEGMENT_BIN_MAX (35)     // mi_slice_bin8(1024)
+
+#if MI_SLICES_PER_SEGMENT > 1024
+#error "MI_SEGMENT_BIN_MAX supports at most 1024 slices per segment"
+#endif
 
 // Segments thread local data
 typedef struct mi_segments_tld_s {
