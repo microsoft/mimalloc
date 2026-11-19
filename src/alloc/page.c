@@ -753,24 +753,26 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
 
 // Collect pages in the full or huge queue that had blocks freed by other threads.
 // Visits at most MI_FULL_COLLECT_MAX_PAGES pages (unless forced) and rotates the queue so the next call continues after them.
-// With N live pages in the queue, a page freed by another thread is thus revisited after about N/MI_FULL_COLLECT_MAX_PAGES calls.
+// Each freed or revived page extends the budget by MI_FULL_COLLECT_MAX_PAGES so we keep scanning while cross-thread
+// frees revive pages (but visit each page at most once per call). Full pages are only revived once they are no longer
+// mostly used, which avoids churning pages with just a few free blocks between the queues.
 // note: normally full and huge pages get immediately abandoned and these queues stay (almost) empty;
 // this is used if abandoning is disabled for the theap, or for QSBR-protected huge pages.
 static void mi_theap_collect_special_pages(mi_page_queue_t* pq, bool force) {
   mi_assert_internal(mi_page_queue_is_special(pq));
   mi_page_t* page = pq->first;
-  for (size_t count = 0; page != NULL && (force || count < MI_FULL_COLLECT_MAX_PAGES); count++) {
+  size_t budget = MI_FULL_COLLECT_MAX_PAGES;
+  for (size_t count = 0; page != NULL && (force || count < budget); count++) {
     mi_page_t* next = page->next;         // get next in case we free the page
     _mi_page_free_collect(page, false);   // register concurrent free's
-    // no longer full?
-    if (!mi_page_is_full(page)) {
-      if (mi_page_all_free(page)) {
-        _mi_page_free(page, pq);
-      }
-      else {
-        mi_assert_internal(mi_page_queue_is_full(pq));  // huge pages contain a single block
-        _mi_page_unfull(page);
-      }
+    if (mi_page_all_free(page)) {
+      budget += MI_FULL_COLLECT_MAX_PAGES;
+      _mi_page_free(page, pq);
+    }
+    else if (!mi_page_is_mostly_used(page)) {
+      mi_assert_internal(mi_page_queue_is_full(pq));  // huge pages contain a single block
+      budget += MI_FULL_COLLECT_MAX_PAGES;
+      _mi_page_unfull(page);
     }
     page = next;
   }

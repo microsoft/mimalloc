@@ -177,6 +177,11 @@ static mi_decl_noinline mi_page_t* mi_page_queue_find_free_ex(mi_theap_t* theap,
 
   if (page == NULL) {
     _mi_theap_collect_retired(theap, false); // perhaps make a page available
+    if (first_try && !theap->allow_page_abandon && pq->last != NULL && mi_page_immediate_available(pq->last)) {
+      // a full page was revived by cross-thread frees and appended to this queue: reuse it before taking a fresh page
+      page = mi_page_queue_find_free_ex(theap, pq, false);
+      if (page != NULL) return page;
+    }
     page = _mi_page_fresh(theap, pq);
     mi_assert_internal(page == NULL || mi_page_immediate_available(page));
     if (page == NULL && first_try) {
