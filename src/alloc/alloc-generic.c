@@ -415,7 +415,7 @@ static bool mi_malloc_generic_check_size(size_t size) {
 }
 
 // Allocate from a page of the right size (without sampling)
-static void* mi_malloc_generic_from_page(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage, size_t sample_countdown_adjust)
+static mi_decl_func_align void* mi_malloc_generic_from_page(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage, size_t sample_countdown_adjust)
 {
   // find (or allocate) a page of the right size
   mi_page_t* page = mi_find_page(theap, size, huge_alignment);
@@ -520,7 +520,7 @@ static inline void* mi_malloc_generic_fallback_ex(mi_theap_t* theap, size_t size
 // Every failing allocation that reaches the generic path ends here (or in `_mi_theap_malloc_sampled`).
 // We always set `errno` to `ENOMEM` (as required by POSIX), independent of the error code passed to
 // the error handler (which may be more specific, like `EOVERFLOW`).
-static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage)
+static mi_decl_func_align mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage)
 {
   void* const p = mi_malloc_generic_fallback_ex(theap, size, zero, huge_alignment, ppage);
   if mi_unlikely(p==NULL) { errno = ENOMEM; }
@@ -534,7 +534,7 @@ static mi_decl_noinline void* mi_malloc_generic_fallback(mi_theap_t* theap, size
 // very large requested alignments in which case we use a huge singleton page.
 // Note: we put `bool zero, size_t huge_alignment` into one parameter (with zero in bit 0)
 // to use 4 parameters which compiles better on msvc for the malloc fast path.
-mi_decl_restrict void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, mi_page_t** ppage) mi_attr_noexcept
+mi_decl_func_align mi_decl_restrict void* _mi_malloc_generic(mi_theap_t* theap, size_t size, size_t zero_huge_alignment, mi_page_t** ppage) mi_attr_noexcept
 {
   #if !MI_THEAP_INITASNULL
   mi_assert_internal(theap != NULL);
