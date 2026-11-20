@@ -155,7 +155,7 @@ static inline void mi_free_block_mt_publish(mi_page_t* page, mi_block_t* head, m
 }
 
 // We can also batch remote free's
-mi_decl_maybe_unused static mi_decl_noinline void mi_free_block_mt_batch(mi_page_t* page, mi_block_t* block);
+mi_decl_maybe_unused static mi_decl_func_align mi_decl_noinline void mi_free_block_mt_batch(mi_page_t* page, mi_block_t* block);
 
 // Free a block multi-threaded
 #if defined(_MSC_VER)
