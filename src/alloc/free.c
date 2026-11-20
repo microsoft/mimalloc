@@ -113,7 +113,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
 }
 
 // Forward declaration for multi-threaded collect
-static void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t* mt_free, bool allow_reclaim) mi_attr_noexcept;
+static mi_decl_func_align void mi_decl_noinline mi_free_try_collect_mt(mi_page_t* page, mi_block_t* mt_free, bool allow_reclaim) mi_attr_noexcept;
 
 #if MI_BATCH_SPLICE
 // Splice the `count-1` blocks after `head` (up to `tail`) into the local free list of an owned page
@@ -295,7 +295,7 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
 }
 
 // free a local pointer  (page parameter comes first for better codegen)
-static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_attr_noexcept {
+static mi_decl_func_align void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_attr_noexcept {
   mi_assert_internal(p!=NULL && page != NULL);
   bool was_guarded = false;
   mi_block_t* block = mi_page_ptr_block_check(page,p,&was_guarded);
@@ -306,7 +306,7 @@ static void mi_decl_noinline mi_free_generic_local(mi_page_t* page, void* p) mi_
 }
 
 // free a pointer owned by another thread (page parameter comes first for better codegen)
-static void mi_decl_noinline mi_free_generic_mt(mi_page_t* page, void* p, bool allow_reclaim) mi_attr_noexcept {
+static mi_decl_func_align void mi_decl_noinline mi_free_generic_mt(mi_page_t* page, void* p, bool allow_reclaim) mi_attr_noexcept {
   mi_assert_internal(p!=NULL && page != NULL);
   bool was_guarded = false;
   mi_block_t* block = mi_page_ptr_block_check(page,p,&was_guarded);
@@ -496,7 +496,7 @@ static mi_decl_forceinline void mi_free_nonnull(void* p, mi_page_t* page, size_t
   }
 }
 
-void mi_free(void* p) mi_attr_noexcept {
+mi_decl_func_align void mi_free(void* p) mi_attr_noexcept {
   mi_page_t* page = NULL;
   if mi_likely(mi_ptr_page_is_valid(p,"mi_free",&page)) {
     mi_free_nonnull(p, page, NULL, true /* allow reclaim? */);
@@ -522,14 +522,14 @@ void _mi_free_subproc_safe(void* p) mi_attr_noexcept {
   }
 }
 
-void mi_free_small(void* p) mi_attr_noexcept {
+mi_decl_func_align void mi_free_small(void* p) mi_attr_noexcept {
   mi_page_t* page = NULL;
   if mi_likely(mi_ptr_page_is_valid_ex(p,"mi_free_small",true /* is_small? */,true /*check p for null*/, &page)) {
     mi_free_nonnull(p, page, NULL, true /* allow reclaim? */);
   }
 }
 
-void mi_free_small_nonnull(void* p) mi_attr_noexcept {
+mi_decl_func_align void mi_free_small_nonnull(void* p) mi_attr_noexcept {
   mi_assert(p!=NULL);
   mi_page_t* page = NULL;
   if mi_likely(mi_ptr_page_is_valid_ex(p,"mi_free_small_nonnull",true /* is_small? */,false /*check p for null*/, &page)) {
@@ -557,11 +557,11 @@ static mi_decl_forceinline void mi_free_small_local_ex(void* p, bool check_p_for
   }
 }
 
-void mi_free_small_local(void* p) mi_attr_noexcept {
+mi_decl_func_align void mi_free_small_local(void* p) mi_attr_noexcept {
   mi_free_small_local_ex(p, true /* check null */);
 }
 
-void mi_free_small_local_nonnull(void* p) mi_attr_noexcept {
+mi_decl_func_align void mi_free_small_local_nonnull(void* p) mi_attr_noexcept {
   mi_free_small_local_ex(p, false /* check null */);
 }
 
@@ -571,7 +571,7 @@ void mi_free_small_local_nonnull(void* p) mi_attr_noexcept {
 // Free variants
 // ------------------------------------------------------
 
-void mi_free_size(void* p, size_t size) mi_attr_noexcept {
+mi_decl_func_align void mi_free_size(void* p, size_t size) mi_attr_noexcept {
   MI_UNUSED_RELEASE(size);
   #if MI_DEBUG
     const mi_page_t* const page = mi_ptr_page_validate(p,"mi_free_size");
@@ -607,7 +607,7 @@ void mi_free_size(void* p, size_t size) mi_attr_noexcept {
   }
 }
 
-void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept {
+mi_decl_func_align void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexcept {
   mi_assert((mi_addr(p) % alignment) == 0);
   // If the alignment is smaller than the `size`, then for `size <= MI_SMALL_SIZE_MAX`
   // the block must be allocated within a small page and can thus be handled safely by `mi_free_size`.
@@ -620,14 +620,14 @@ void mi_free_size_aligned(void* p, size_t size, size_t alignment) mi_attr_noexce
   }
 }
 
-void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
+mi_decl_func_align void mi_free_aligned(void* p, size_t alignment) mi_attr_noexcept {
   MI_UNUSED_RELEASE(alignment);
   mi_assert((mi_addr(p) % alignment) == 0);
   mi_free(p);
 }
 
 // checked free
-bool mi_cfree(void* p) mi_attr_noexcept {
+mi_decl_func_align bool mi_cfree(void* p) mi_attr_noexcept {
   mi_page_t* const page = mi_checked_ptr_page(p);
   if mi_likely(page!=NULL) {
     mi_free_nonnull(p, page, NULL, true /* allow reclaim? */);
