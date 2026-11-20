@@ -22,11 +22,10 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 
 // Index a block in a page (with its memory tag if `memtag` is set)
-static inline mi_block_t* mi_page_block_at(const mi_page_t* page, void* page_start, size_t block_size, size_t i, bool memtag) {
-  MI_UNUSED(page);
+static inline mi_block_t* mi_page_block_at(const mi_page_t* page, size_t block_size, size_t i, bool memtag) {
   mi_assert_internal(page != NULL);
   mi_assert_internal(i <= page->reserved);
-  mi_block_t* const block = (mi_block_t*)((uint8_t*)page_start + (i * block_size));
+  mi_block_t* const block = (mi_block_t*)(mi_page_start(page) + (i * block_size));
   return (memtag ? (mi_block_t*)mi_memtag_load(block) : block);
 }
 
@@ -190,9 +189,9 @@ static void mi_theap_adjust_sample_countdown(mi_theap_t* theap, mi_page_t* page,
   if (alloc_count <= last_alloc) return;
 
   // update countdown
-  const size_t bsize = mi_page_usable_block_size(page);  mi_assert_internal(bsize >= MI_PADDING_SIZE);
+  const size_t bsize = mi_page_usable_block_size(page);  // (already excludes the padding)
   const size_t alloc_diff = alloc_count - last_alloc;
-  const uint64_t requested = (uint64_t)alloc_diff * (uint64_t)(bsize - MI_PADDING_SIZE);
+  const uint64_t requested = (uint64_t)alloc_diff * (uint64_t)bsize;
   mi_theap_sample_countdown_sub(theap, requested);
 }
 #endif
@@ -210,9 +209,6 @@ static void mi_theap_page_merge_stats(mi_theap_t* theapx, const mi_page_t* page,
   const size_t bsize = mi_page_usable_block_size(page);
   const uint64_t allocated = (uint64_t)alloc_count * (uint64_t)bsize;
   const uint64_t freed     = (uint64_t)free_count * (uint64_t)bsize;
-  #if MI_STATS==1
-  const uint64_t requested = allocated - ((uint64_t)alloc_count * MI_PADDING_SIZE);
-  #endif
   mi_assert_internal(allocated <= INT64_MAX);  // safe to cast to int64_t for stats
   mi_assert_internal(freed <= INT64_MAX);
 
@@ -224,8 +220,8 @@ static void mi_theap_page_merge_stats(mi_theap_t* theapx, const mi_page_t* page,
     mi_theapx_stat_increase(heap, theapx, malloc_bins[bin], alloc_count);
     if (bin==MI_BIN_HUGE) { mi_theapx_stat_increase(heap,theapx,malloc_huge,allocated); } // separate so we have a count and total
     #if MI_STATS==1
-    // use coarse total requested bytes
-    mi_theapx_stat_counter_increase(heap, theapx, malloc_requested, requested);
+    // use coarse total requested bytes (the usable block size, which already excludes the padding)
+    mi_theapx_stat_counter_increase(heap, theapx, malloc_requested, allocated);
     #endif
     // deprecated
     if (bin!=MI_BIN_HUGE) {
@@ -539,7 +535,9 @@ bool _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page)
   return (mi_page_all_free(page) && _mi_page_free(page, pq));
 }
 
-void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
+// Abandon a page. If `owner_done` is set, the owning theap abandons all its pages (e.g. as its thread terminates)
+// and `mi_thread_id_of` will return 0 for blocks in this page (until another thread reclaims it).
+void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq, bool owner_done) {
   _mi_page_free_collect(page, false); // ensure used count is up to date
   pq = mi_page_queue_of(page); // a preceding release attempt may have unfulled the page
   if (mi_page_all_free(page) && _mi_page_free(page, pq)) return;
@@ -547,6 +545,11 @@ void _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq) {
   mi_page_queue_remove(pq, page);
   mi_theap_t* theap = page->theap;
   mi_page_qsbr_unlink(page);
+  #if MI_QSBR
+  if (owner_done) { mi_page_qsbr_set_thread_id(page, 0); }  // while we still own the page
+  #else
+  MI_UNUSED(owner_done);
+  #endif
   mi_page_set_theap(page, NULL);
   mi_page_theap_store(page, theap); // don't actually set theap to NULL so we can reclaim_on_free within the same theap
   _mi_arenas_page_abandon(page, theap);
@@ -578,7 +581,7 @@ mi_page_t* _mi_page_fresh_alloc(mi_theap_t* theap, mi_page_queue_t* pq, size_t b
       if (mi_page_is_expandable(page)) {
         if (!_mi_page_extend_free(theap, page)) {
           // cannot commit
-          _mi_page_abandon(page,pq);
+          _mi_page_abandon(page,pq,false);
           return NULL;
         };
       }
@@ -633,9 +636,14 @@ void _mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_internal(!mi_page_is_in_full(page));
 
   mi_theap_t* theap = mi_page_theap(page);
-  if (theap->allow_page_abandon) {
+  if (theap->allow_page_abandon && !(mi_heap_qsbr_is_enabled(theap->heap) && mi_page_queue_is_huge(pq))) {
     // abandon full pages (this is the usual case in order to allow for sharing of memory between theaps)
-    _mi_page_abandon(page, pq);
+    _mi_page_abandon(page, pq, false);
+  }
+  else if (mi_page_queue_is_huge(pq)) {
+    // keep huge pages with their owner for QSBR or when abandonment is disabled;
+    // the huge queue is never searched for free blocks and is collected before each huge allocation
+    _mi_page_update_stats(page);
   }
   else if (!mi_page_is_in_full(page)) {
     // put full pages in a theap local queue (this is for theaps that cannot abandon, for example, if the theap can be destroyed)
@@ -647,7 +655,7 @@ void _mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
 
 
 // Physically release an empty page after its grace period has finished.
-static void mi_page_free_prim(mi_page_t* page, mi_page_queue_t* pq) {
+static void mi_page_free_direct(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_internal(page != NULL);
   mi_assert_internal(_mi_page_qsbr_is_clear(page));
   mi_assert_expensive(_mi_page_is_valid(page));
@@ -662,7 +670,7 @@ static void mi_page_free_prim(mi_page_t* page, mi_page_queue_t* pq) {
   // and free it
   mi_theap_t* theap = mi_page_theap(page); mi_assert_internal(theap!=NULL);
   mi_page_set_theap(page,NULL);
-  _mi_arenas_page_free(page, theap);
+  _mi_arenas_page_free_direct(page, theap);
   // _mi_arenas_collect(false, false, theap->tld);  // allow purging
 }
 
@@ -675,7 +683,7 @@ bool _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   mi_page_set_has_interior_pointers(page, false);
 
   // try to free
-  if (_mi_page_qsbr_should_delay(page)) {
+  if mi_unlikely(_mi_page_qsbr_should_delay(page)) {
     // for pages that are delayed due to qsbr (e.g. in CPython)
     page->retire_expire = 0;
     if (mi_page_is_in_full(page)) { _mi_page_unfull(page); }
@@ -685,13 +693,17 @@ bool _mi_page_free(mi_page_t* page, mi_page_queue_t* pq) {
   else {
     // free the page
     _mi_page_qsbr_clear(page);
-    mi_page_free_prim(page, pq);
+    mi_page_free_direct(page, pq);
     return true;
   }
 }
 
-#define MI_RETIRE_CYCLES      (16)      /* keep a retired page around for about 16 "admin cycles" before free'ing it */
+#ifndef MI_RETIRE_CYCLES
+#define MI_RETIRE_CYCLES      (32)      /* keep a retired page around for about N "admin cycles" before free'ing it */
+#endif
+#ifndef MI_RETIRE_MAX_PAGES
 #define MI_RETIRE_MAX_PAGES   (3)       /* keep at most N pages per size bin as retired */
+#endif
 
 // Retire a page with no more used blocks
 // Important to not retire too quickly though as new
@@ -737,30 +749,41 @@ void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {
 }
 
 
-#define MI_FULL_COLLECT_MAX_PAGES  (4)   /* visit at most N full pages per collect (unless forced) */
+#define MI_FULL_COLLECT_MAX_PAGES  (8)   /* visit at most N full (or huge) pages per collect (unless forced) */
 
-// Collect pages in the full queue that had blocks freed by other threads.
+// Collect pages in the full or huge queue that had blocks freed by other threads.
 // Visits at most MI_FULL_COLLECT_MAX_PAGES pages (unless forced) and rotates the queue so the next call continues after them.
-// note: normally full pages get immediately abandoned and the full queue is always empty;
-// this is only used if abandoning is disabled for the theap (see `theap.c:mi_theap_options_init`).
-static void mi_theap_collect_full_pages(mi_theap_t* theap, bool force) {
-  mi_page_queue_t* pq = &theap->pages[MI_BIN_FULL];
+// Each freed or revived page extends the budget by MI_FULL_COLLECT_MAX_PAGES so we keep scanning while cross-thread
+// frees revive pages (but visit each page at most once per call). Full pages are only revived once they are no longer
+// mostly used, which avoids churning pages with just a few free blocks between the queues.
+// note: normally full and huge pages get immediately abandoned and these queues stay (almost) empty;
+// this is used if abandoning is disabled for the theap, or for QSBR-protected huge pages.
+static void mi_theap_collect_special_pages(mi_page_queue_t* pq, bool force) {
+  mi_assert_internal(mi_page_queue_is_special(pq));
   mi_page_t* page = pq->first;
-  for (size_t count = 0; page != NULL && (force || count < MI_FULL_COLLECT_MAX_PAGES); count++) {
+  size_t budget = MI_FULL_COLLECT_MAX_PAGES;
+  for (size_t count = 0; page != NULL && (force || count < budget); count++) {
     mi_page_t* next = page->next;         // get next in case we free the page
     _mi_page_free_collect(page, false);   // register concurrent free's
-    // no longer full?
-    if (!mi_page_is_full(page)) {
-      if (mi_page_all_free(page)) {
-        _mi_page_free(page, pq);
-      }
-      else {
-        _mi_page_unfull(page);
-      }
+    if (mi_page_all_free(page)) {
+      budget += MI_FULL_COLLECT_MAX_PAGES;
+      _mi_page_free(page, pq);
+    }
+    else if (!mi_page_is_mostly_used(page)) {
+      mi_assert_internal(mi_page_queue_is_full(pq));  // huge pages contain a single block
+      budget += MI_FULL_COLLECT_MAX_PAGES;
+      _mi_page_unfull(page);
     }
     page = next;
   }
-  if (page != NULL) { mi_page_queue_full_rotate_to(pq, page); }
+  if (page != NULL) { mi_page_queue_rotate_to(pq, page); }
+}
+
+// Before allocating a fresh huge page, free huge pages whose block was freed by another thread.
+void _mi_theap_collect_huge_pages(mi_theap_t* theap) {
+  _mi_heap_qsbr_collect_delayed(theap->heap);
+  if (theap->allow_page_abandon && !mi_heap_qsbr_is_enabled(theap->heap)) return;  // unprotected huge pages were abandoned
+  mi_theap_collect_special_pages(&theap->pages[MI_BIN_HUGE], false);
 }
 
 static void mi_page_try_retire(mi_page_queue_t* pq, mi_page_t* page, size_t bin, bool force, size_t* min, size_t* max) {
@@ -798,7 +821,7 @@ void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {
   theap->page_retired_min = min;
   theap->page_retired_max = max;
   if (!theap->allow_page_abandon) {
-    mi_theap_collect_full_pages(theap, force);
+    mi_theap_collect_special_pages(&theap->pages[MI_BIN_FULL], force);
   }
   _mi_theap_qsbr_collect_delayed(theap);
 }
@@ -834,7 +857,6 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
   #endif
   mi_assert_internal(page->capacity + extend <= page->reserved);
   mi_assert_internal(bsize == mi_page_block_size(page));
-  void* const page_area = mi_page_start(page);
 
   // initialize a randomized free list
   // set up `slice_count` slices to alternate between
@@ -848,7 +870,7 @@ static void mi_page_free_list_extend_secure(mi_theap_t* const theap, mi_page_t* 
   mi_block_t* blocks[MI_MAX_SLICES];   // current start of the slice
   size_t      counts[MI_MAX_SLICES];   // available objects in the slice
   for (size_t i = 0; i < slice_count; i++) {
-    blocks[i] = mi_page_block_at(page, page_area, bsize, page->capacity + i*slice_extend, memtag);
+    blocks[i] = mi_page_block_at(page, bsize, page->capacity + i*slice_extend, memtag);
     counts[i] = slice_extend;
   }
   counts[slice_count-1] += (extend % slice_count);  // final slice holds the modulus too (todo: distribute evenly?)
@@ -893,12 +915,11 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
   #endif
   mi_assert_internal(page->capacity + extend <= page->reserved);
   mi_assert_internal(bsize == mi_page_block_size(page));
-  void* const page_area = mi_page_start(page);
 
-  mi_block_t* const start = mi_page_block_at(page, page_area, bsize, page->capacity, memtag);
+  mi_block_t* const start = mi_page_block_at(page, bsize, page->capacity, memtag);
 
   // initialize a sequential free list
-  mi_block_t* const last = mi_page_block_at(page, page_area, bsize, page->capacity + extend - 1, false);
+  mi_block_t* const last = mi_page_block_at(page, bsize, page->capacity + extend - 1, false);
   mi_block_t* block = start;
   while (mi_addr(block) < mi_addr(last)) {
     mi_block_t* const next = mi_block_after(block, bsize, memtag);
@@ -948,8 +969,14 @@ bool _mi_page_extend_free(mi_theap_t* theap, mi_page_t* page) {
   mi_assert_internal(extend > 0);
 
   const size_t min_extend = MI_MIN_EXTEND(bsize);
-  size_t max_extend = (bsize >= MI_MAX_EXTEND_SIZE ? min_extend : MI_MAX_EXTEND_SIZE/bsize);
-  if (max_extend < min_extend) { max_extend = min_extend; }
+  size_t max_extend = min_extend;
+  if (bsize < MI_MAX_EXTEND_SIZE) {
+    // extend up to an `MI_MAX_EXTEND_SIZE` aligned address (as the page start can be offset) to avoid touching an extra OS page
+    const mi_addr_t start = mi_addr(mi_page_block_at(page, bsize, page->capacity, false));
+    const mi_addr_t end = mi_align_down(start + MI_MAX_EXTEND_SIZE, MI_MAX_EXTEND_SIZE);
+    max_extend = (size_t)(end - start) / bsize;
+    if (max_extend < min_extend) { max_extend = min_extend; }
+  }
   mi_assert_internal(max_extend > 0);
 
   if (extend > max_extend) {

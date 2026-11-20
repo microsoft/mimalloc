@@ -28,6 +28,7 @@ var group__heap =
     [ "mi_heap_reallocf", "group__heap.html#gae7cd171425bee04c683c65a3701f0b4a", null ],
     [ "mi_heap_reallocn", "group__heap.html#gaccf7bfe10ce510a000d3547d9cf7fa29", null ],
     [ "mi_heap_realpath", "group__heap.html#ga55545a3ec6da29c5b4f62e540ecac1e2", null ],
+    [ "mi_heap_set_debug_fill_preserve", "group__heap.html#ga3309f6db82d14343dd84d9d71ec93e64", null ],
     [ "mi_heap_set_default", "group__heap.html#ga349b677dec7da5eacdbc7a385bd62a4a", null ],
     [ "mi_heap_set_numa_affinity", "group__heap.html#gaab93abbc0624f570e2900f95cac18591", null ],
     [ "mi_heap_strdup", "group__heap.html#ga5754e09ccc51dd6bc73885bb6ea21b7a", null ],
@@ -36,5 +37,6 @@ var group__heap =
     [ "mi_heap_zalloc_aligned", "group__heap.html#ga6466bde8b5712aa34e081a8317f9f471", null ],
     [ "mi_heap_zalloc_aligned_at", "group__heap.html#ga484e3d01cd174f78c7e53370e5a7c819", null ],
     [ "mi_heap_zalloc_small", "group__heap.html#ga0994f44cc595f9c1840a9af162d98597", null ],
-    [ "mi_is_in_heap_region", "group__heap.html#ga5f071b10d4df1c3658e04e7fd67a94e6", null ]
+    [ "mi_is_in_heap_region", "group__heap.html#ga5f071b10d4df1c3658e04e7fd67a94e6", null ],
+    [ "mi_thread_heap_release", "group__heap.html#ga5774713972f49144861270241f458864", null ]
 ];

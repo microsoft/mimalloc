@@ -52,23 +52,27 @@ static mi_profiler_t* stress_pprof_profiler = NULL;
 // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
 //
 // argument defaults
-#if defined(MI_TSAN) && MI_TEST_LIGHT         // with thread-sanitizer reduce the threads to test within the azure pipeline limits
-static int THREADS = NTHREADS/4;
+#if MI_TSAN && MI_TEST_LIGHT         // with thread-sanitizer reduce the threads to test within the azure pipeline limits
+static int THREADS = NTHREADS/8;
 static int SCALE   = 10;
 static int ITER    = 100;
-#elif defined(MI_TSAN)          // with thread-sanitizer reduce the threads to test within the azure pipeline limits
+#elif MI_TSAN          // with thread-sanitizer reduce the threads to test within the azure pipeline limits
 static int THREADS = NTHREADS/4;
 static int SCALE   = 25;
-static int ITER    = 500;
-#elif defined(MI_UBSAN)       // with undefined behavious sanitizer reduce parameters to stay within the azure pipeline limits
+static int ITER    = 400;
+#elif MI_TEST_LIGHT >= 2       // reduce the load further (e.g. under slow emulation)
+static int THREADS = NTHREADS/4;
+static int SCALE   = 5;
+static int ITER    = 5;
+#elif MI_TEST_LIGHT            // reduce the load in test integration (e.g. under emulation)
+static int THREADS = NTHREADS/4;
+static int SCALE   = 10;
+static int ITER    = 5;
+#elif MI_UBSAN       // with undefined behavious sanitizer reduce parameters to stay within the azure pipeline limits
 static int THREADS = NTHREADS/4;
 static int SCALE   = 25;
 static int ITER    = 20;
-#elif defined(MI_GUARDED)     // with debug guard pages reduce parameters to stay within the azure pipeline limits
-static int THREADS = NTHREADS/4;
-static int SCALE   = 25;
-static int ITER    = 10;
-#elif MI_DEBUG && MI_TEST_LIGHT
+#elif MI_GUARDED             // with debug guard pages reduce parameters to stay within the azure pipeline limits
 static int THREADS = NTHREADS/4;
 static int SCALE   = 25;
 static int ITER    = 10;
@@ -326,12 +330,12 @@ static void test_stress(mi_subproc_id_t subproc) {
     }
     #endif
 
-    #if !defined(NDEBUG) || defined(MI_TSAN)
+    #if !defined(NDEBUG) || MI_TSAN
     if ((n + 1) % 10 == 0) {
       printf("- iterations left: %3d\n", ITER - (n + 1));
-      #ifndef USE_STD_MALLOC
-      mi_debug_show_arenas();
-      #endif
+      // #if !defined(USE_STD_MALLOC) && !MI_TEST_LIGHT
+      // mi_debug_show_arenas();
+      // #endif
       //mi_collect(true);
       //mi_debug_show_arenas();
     }

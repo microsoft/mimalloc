@@ -68,6 +68,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
     if mi_unlikely(offset != 0) {
       // todo: cannot support offset alignment for very large alignments yet
       _mi_error_message(EOVERFLOW, "aligned allocation with a large alignment cannot be used with an alignment offset (size %zu, alignment %zu, offset %zu)\n", size, alignment, offset);
+      errno = EINVAL;
       return NULL;
     }
     oversize = (size <= MI_SMALL_SIZE_MAX ? MI_SMALL_SIZE_MAX + 1 /* ensure we use generic malloc path */ : size);
@@ -106,7 +107,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_overalloc(mi_theap
     // and in such case the MI_BLOCK_TAG_ALIGNED is just not at the start of the real heap block
     if (adjust >= sizeof(mi_block_t)) {
       mi_block_t* const block = (mi_block_t*)p;
-      block->next = MI_BLOCK_TAG_ALIGNED;
+      mi_atomic_store_relaxed(&block->next, MI_BLOCK_TAG_ALIGNED);
     }
     #endif
     mi_block_t* const base = _mi_page_ptr_unalign(page, p);
@@ -140,6 +141,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_generic(mi_theap_t
   // we don't allocate more than MI_MAX_ALLOC_SIZE (see <https://sourceware.org/ml/libc-announce/2019/msg00001.html>)
   if mi_unlikely(size > (MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE)) {
     _mi_error_message(EINVAL, "aligned allocation request is too large (size %zu, alignment %zu)\n", size, alignment);
+    errno = ENOMEM;
     return NULL;
   }
 
@@ -181,6 +183,7 @@ static mi_decl_noinline void* mi_theap_malloc_zero_aligned_at_generic(mi_theap_t
 
 static mi_decl_cold mi_decl_noinline void* mi_error_bad_alignment(size_t size, size_t alignment, size_t offset) {
   _mi_error_message(EINVAL, "aligned allocation requires the alignment to be a power-of-two (size %zu, alignment %zu, offset %zu)\n", size, alignment, offset);
+  errno = EINVAL;
   return NULL;
 }
 
@@ -353,9 +356,12 @@ static void* mi_theap_realloc_zero_aligned_at(mi_theap_t* theap, void* p, size_t
   }
   if (p == NULL) return mi_theap_malloc_zero_aligned_at(theap,newsize,alignment,offset,zero,NULL);
   const size_t size = mi_usable_size(p);
-  if (newsize <= size && newsize >= (size - (size / 2)) && ((mi_addr(p) + offset) & (alignment-1)) == 0 &&
-      theap != NULL && mi_page_heap(mi_ptr_page(p)) == mi_theap_heap_peek(theap)) {
-    return mi_ptr_bounded(p, mi_bounds_user_size(newsize));  // reallocation still fits, is aligned, not more than 50% waste, and in the same heap
+  const mi_page_t* const page = mi_ptr_page(p);
+  if (mi_realloc_is_in_place(page,size,newsize) && ((mi_addr(p) + offset) & (alignment-1)) == 0 &&
+      theap != NULL && mi_page_heap(page) == mi_theap_heap_peek(theap)) {
+    // reallocation still fits, is aligned, in the same heap, and has not too much waste
+    mi_realloc_shrink_in_place(page, p, newsize, size);
+    return mi_ptr_bounded(p, mi_bounds_user_size(newsize));
   }
   else {
     // note: we don't zero allocate upfront so we only zero initialize the expanded part (at the cost of calling mi_usable_size)

@@ -4,7 +4,7 @@ This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
-use crate::{Arena, MiString, free_sized, is_malloc_aligned, sys};
+use crate::{free_sized, is_malloc_aligned, sys, Arena, MiString};
 use core::alloc::Layout;
 use core::ptr::{self, NonNull};
 
@@ -28,7 +28,7 @@ impl Heap {
 
     /// Create a new heap.
     pub fn try_new() -> Option<Self> {
-        NonNull::new(sys::mi_heap_new()).map(|raw| Heap { raw })
+        NonNull::new(unsafe { sys::mi_heap_new() }).map(|raw| Heap { raw })
     }
 
     /// Create a new heap that only allocates in the given arena; panics if this fails.

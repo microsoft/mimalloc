@@ -1,5 +1,5 @@
 var searchData=
 [
-  ['the_20library_0',['Using the Library',['../using.html',1,'']]],
-  ['tools_1',['Tools',['../tools.html',1,'']]]
+  ['options_0',['Environment Options',['../environment.html',1,'']]],
+  ['overriding_20standard_20malloc_1',['Overriding Standard Malloc',['../overrides.html',1,'']]]
 ];

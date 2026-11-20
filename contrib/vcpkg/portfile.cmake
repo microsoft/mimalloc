@@ -53,8 +53,8 @@ if(VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
   # todo: why is this needed?
   vcpkg_replace_string(
     "${CURRENT_PACKAGES_DIR}/include/mimalloc.h"
-    "!defined(MI_SHARED_LIB)"
-    "0 // !defined(MI_SHARED_LIB)"
+    "!defined(MI_SHARED_LIB) || !MI_SHARED_LIB"
+    "0 // !defined(MI_SHARED_LIB) || !MI_SHARED_LIB"
   )
 endif()
 file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")

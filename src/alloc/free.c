@@ -28,11 +28,25 @@ static size_t mi_page_usable_size_of(const mi_page_t* page, const mi_block_t* bl
 #if (MI_DEBUG>0) && !MI_TRACK_ENABLED && !MI_TSAN
 // Fill a block with a debug pattern, preserving the first `heap->debug_fill_preserve` bytes
 // (used by CPython to keep object headers intact that may be read by concurrent lock-free readers)
-static inline void mi_debug_fill(const mi_page_t* page, void* block, int c, size_t size) {
-  const size_t preserve = mi_atomic_load_relaxed(&mi_page_heap(page)->debug_fill_preserve);
+static inline void mi_debug_fill_prim(void* block, int c, size_t size, size_t preserve) {
   if (preserve < size) {
     mi_memset((uint8_t*)block + preserve, c, size - preserve);
   }
+}
+
+// Fill by the owning thread: the heap is alive so we use its current setting and refresh the page copy
+static inline void mi_debug_fill(mi_page_t* page, void* block, int c, size_t size) {
+  const size_t preserve = mi_atomic_load_relaxed(&mi_page_heap(page)->debug_fill_preserve);
+  if mi_unlikely(preserve != mi_atomic_load_relaxed(&page->debug_fill_preserve)) {
+    mi_atomic_store_relaxed(&page->debug_fill_preserve, preserve);
+  }
+  mi_debug_fill_prim(block, c, size, preserve);
+}
+
+// Fill by a non-owning thread: the page heap may be deleted concurrently (and the page moved),
+// so we use the copy in the page instead
+static inline void mi_debug_fill_mt(const mi_page_t* page, void* block, int c, size_t size) {
+  mi_debug_fill_prim(block, c, size, mi_atomic_load_relaxed(&page->debug_fill_preserve));
 }
 #endif
 
@@ -160,7 +174,7 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading
   if (!was_guarded) {
     const size_t dbgsize = (usable_size > MI_MiB ? MI_MiB : usable_size);
-    mi_debug_fill(page, block, MI_DEBUG_FREED, dbgsize);
+    mi_debug_fill_mt(page, block, MI_DEBUG_FREED, dbgsize);
   }
   #endif
 
@@ -254,13 +268,13 @@ static inline mi_block_t* mi_page_ptr_block_check(mi_page_t* page, void* p, bool
     #if MI_GUARDED || MI_PROFILE
     if (offset >= sizeof(mi_block_t)) {
       #if MI_PROFILE
-      if (block->next == MI_BLOCK_TAG_PROFILED) {
+      if (mi_atomic_load_relaxed(&block->next) == MI_BLOCK_TAG_PROFILED) {
         _mi_page_profile_on_free(page,block,p);
       }
       else
       #endif
       #if MI_GUARDED
-      if (block->next == MI_BLOCK_TAG_GUARDED) {
+      if (mi_atomic_load_relaxed(&block->next) == MI_BLOCK_TAG_GUARDED) {
         _mi_page_block_unguard(page, block, p);
         *was_guarded = true;
       }
@@ -374,9 +388,9 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
 
   mi_assert_internal(page!=NULL);
   mi_assert(cpage==page /* page_map lookup should be the same as aligned lookup */ );
-  #if MI_DEBUG
+  #if MI_DEBUG && !MI_UNSAFE_GUARDED_PRECISE
   // pointers allocated at an offset (`mi_malloc_aligned_at`) or guarded precise pointers can be unaligned
-  if mi_unlikely(!mi_is_aligned(p,MI_SIZE_SIZE) && !mi_page_has_interior_pointers(page) && !mi_option_is_enabled(mi_option_unsafe_guarded_precise)) {
+  if mi_unlikely(!mi_is_aligned(p,MI_SIZE_SIZE) && !mi_page_has_interior_pointers(page)) {
     return mi_ptr_invalid(msg, p, " (unaligned)");
   }
   #endif
@@ -525,7 +539,7 @@ void mi_free_small_nonnull(void* p) mi_attr_noexcept {
 
 // For runtime systems: Free a pointer that is guaranteed to be small, and in a page owned by the current thread.
 static mi_decl_forceinline void mi_free_small_local_ex(void* p, bool check_p_for_null) mi_attr_noexcept {
-  mi_assert(p!=NULL);
+  mi_assert(check_p_for_null || p!=NULL);
   mi_page_t* page = NULL;
   if mi_likely(mi_ptr_page_is_valid_ex(p,"mi_free_small_local_ex", true /* is_small? */, check_p_for_null /*check p for null*/, &page)) {
     mi_assert_internal(mi_page_thread_id(page) == _mi_thread_id());
@@ -632,7 +646,7 @@ bool mi_cfree(void* p) mi_attr_noexcept {
 // 3. if it went to < 7/8th used, re-abandon to be mapped (so it can be found by theaps looking for free pages)
 // --------------------------------------------------------------------------------------------
 
-// Consume an empty page, reclaiming delayed pages if this thread has a theap for their heap.
+// Free or reclaim an empty page
 static bool mi_abandoned_page_collect_empty(mi_page_t* page)
 {
   if (!mi_page_all_free(page)) return false;
@@ -641,19 +655,18 @@ static bool mi_abandoned_page_collect_empty(mi_page_t* page)
   _mi_arenas_page_unabandon(page,NULL);
   if mi_likely(!should_delay) {
     _mi_page_qsbr_clear(page);
-    _mi_arenas_page_free(page,NULL);
+    _mi_arenas_page_free_direct(page,NULL);
   }
   else {
-    // reclaim into our theap such that it becomes part of the theap's qsbr list (see `doc/qsbr.md`)
-    // note: this may create a theap and initialize the thread; it returns a sentinel theap for a deleted heap,
-    // or if the thread is terminated or released this heap (see `heap/heap.c:_mi_heap_theap_get_or_init`)
-    mi_theap_t* const theap = _mi_heap_theap(mi_page_heap(page));
-    if (mi_theap_is_initialized(theap)) {
+    // A foreign theap may not collect again; only the originating theap may adopt a QSBR delayed page.
+    // note: we don't have to do this but reclaiming into the originating theap puts it in the qsbr list which may help with collection across size classes.
+    mi_theap_t* const theap = _mi_page_associated_theap_peek(page);
+    if (theap != NULL && theap == page->theap) {
       _mi_theap_page_reclaim(theap, page);
     }
     else {
-      // abandon as empty; it is collected later by an allocation reclaim or `_mi_heap_collect_abandoned`
-      _mi_arenas_page_abandon(page,NULL);
+      // keep the page in abandoned or in the heap qsbr delayed list
+      _mi_arenas_page_free(page,NULL);
     }
   }
   return true;
@@ -975,8 +988,9 @@ mi_decl_nodiscard size_t mi_thread_id_of(const void* p) mi_attr_noexcept {
   const mi_page_t* const page = mi_ptr_page_validate(p,"mi_thread_id_of");
   if (page == NULL) return 0;
   #if MI_QSBR
-  // on qsbr we keep the last owning thread id around so we can provide it even when the page is abandoned
-  // (this is needed for cpython where the thread id gets restored this way inside object headers)
+  // on qsbr we keep the last owning thread id around so we can provide it even when a full page is abandoned
+  // (this is needed for cpython where the thread id gets restored this way inside object headers);
+  // it is 0 once the owning theap abandoned all its pages (e.g. when its thread terminated)
   return mi_page_qsbr_thread_id(page);
   #else
   const mi_thread_id_t tid = mi_page_thread_id(page);
@@ -1061,8 +1075,8 @@ static inline bool mi_page_decode_padding(const mi_page_t* page, const mi_block_
   const uint32_t canary = padding->canary;
   const bool ok = (mi_ptr_encode_canary(page,block) == canary && *delta <= *bsize);
   if (double_free!=NULL) {
-    if mi_unlikely(!ok) { *double_free = mi_ptr_decode_canary_is_freed(canary); }   // double free?
-                   else { padding->canary = mi_ptr_encode_canary_freed(); }         // mark as freed
+    *double_free = (!ok && mi_ptr_decode_canary_is_freed(canary));
+    if (ok) { padding->canary = mi_ptr_encode_canary_freed(); }  // mark as freed
   }
   mi_track_mem_noaccess(padding,sizeof(mi_padding_t));
   return ok;

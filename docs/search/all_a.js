@@ -1,5 +1,6 @@
 var searchData=
 [
-  ['options_0',['Options',['../environment.html',1,'Environment Options'],['../group__options.html',1,'Runtime Options']]],
-  ['overriding_20malloc_1',['Overriding Malloc',['../overrides.html',1,'']]]
+  ['library_0',['Using the Library',['../using.html',1,'']]],
+  ['list_1',['Deprecated List',['../deprecated.html',1,'']]],
+  ['local_20heaps_2',['Thread-local heaps',['../group__theap.html',1,'']]]
 ];

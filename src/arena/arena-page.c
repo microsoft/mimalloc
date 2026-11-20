@@ -38,7 +38,7 @@ mi_page_t* mi_arena_page_at_slice(mi_arena_t* arena, size_t slice_index) {
   return page;
   #else
   if (arena->pages_meta != NULL) {
-    mi_page_t* const page = mi_page_meta_load(&arena->pages_meta[slice_index]);
+    mi_page_t* const page = mi_page_meta_load(mi_arena_page_meta_at_slice(arena, slice_index));
     #if MI_PAGE_META_SMALL_IS_ALIGNED
     // pages with small blocks still have the page at the start of the slice (and set the `block_size` in pages_meta to 0)
     if (page->block_size>0) return mi_page_meta_bounded(page);
@@ -83,7 +83,7 @@ static mi_arena_pages_t* mi_arena_pages_alloc(mi_arena_t* arena) {
   mi_assert_internal(mi_is_aligned(base, MI_BCHUNK_SIZE));
   arena_pages->pages = mi_arena_bitmap_init(slice_count, &base);
   for (size_t i = 0; i < MI_ARENA_BIN_COUNT; i++) {
-    arena_pages->pages_abandoned[i] = mi_arena_bitmap_init(slice_count, &base);
+    arena_pages->pages_abandoned[i] = mi_arena_bitmap_init_lazy(slice_count, &base);  // initialized on first abandonment
   }
   return arena_pages;
 }
@@ -255,6 +255,12 @@ bool _mi_abandoned_page_unown(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(mi_page_is_owned(page));
   mi_assert_internal(mi_page_is_abandoned(page));
   mi_assert_internal(mi_theap_matches_thread(current_theapx));
+  if (mi_page_is_singleton(page) && mi_page_all_free(page)) {
+    // an empty singleton is never found again by allocation or frees, so release or delay it now
+    // (this does not recurse as `_mi_arenas_page_free` never abandons a singleton)
+    _mi_arenas_page_unabandon(page, current_theapx);
+    return _mi_arenas_page_free(page, current_theapx);
+  }
   mi_thread_free_t tf_new;
   mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
   do {
@@ -262,22 +268,8 @@ bool _mi_abandoned_page_unown(mi_page_t* page, mi_theap_t* current_theapx) {
     while mi_unlikely(mi_tf_block(tf_old) != NULL) {
       _mi_page_free_collect(page, false);  // update used
       if (mi_page_all_free(page)) {
-        if (!_mi_page_qsbr_should_delay(page)) {
-          _mi_page_qsbr_clear(page);
-          _mi_arenas_page_unabandon(page, current_theapx);
-          _mi_arenas_page_free(page, current_theapx);
-          return true;
-        }
-        #if MI_QSBR
-        else if (page->memid.memkind == MI_MEM_ARENA &&
-                 !mi_page_is_singleton(page) && !mi_page_is_abandoned_mapped(page))
-        {
-          // if empty and qsbr delayed, we re-abandon to mapped so it can be reused
-          _mi_arenas_page_unabandon(page, current_theapx);
-          _mi_arenas_page_abandon(page, current_theapx);   // cannot recurse due to `!mi_page_is_abandoned_mapped(page)`
-          return false;
-        }
-        #endif
+        _mi_arenas_page_unabandon(page, current_theapx);
+        return _mi_arenas_page_free(page, current_theapx);
       }
       tf_old = mi_atomic_load_relaxed(&page->xthread_free);
     }
@@ -328,6 +320,7 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theapx) {
       mi_assert_internal(mi_bitmap_is_setN(arena->slices_dirty, slice_index, slice_count));
 
       mi_page_set_abandoned_mapped(page);
+      mi_bitmap_ensure_init(arena_pages->pages_abandoned[bin], arena->slice_count);
       const bool was_clear = mi_bitmap_set(arena_pages->pages_abandoned[bin], slice_index);
       MI_UNUSED(was_clear); mi_assert_internal(was_clear);
       mi_atomic_increment_relaxed(&heap->abandoned_count[bin]);

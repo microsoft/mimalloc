@@ -59,6 +59,9 @@ static const mi_page_t mi_page_empty = {
   NULL, NULL,             // qsbr_next, qsbr_prev
   mi_init_struct_zero,    // qsbr
   #endif
+  #if MI_DEBUG>0
+  MI_ATOMIC_VAR_INIT(0),  // debug_fill_preserve
+  #endif
 };
 
 #define MI_PAGE_EMPTY() ((mi_page_t*)&mi_page_empty)
@@ -172,7 +175,7 @@ mi_decl_hidden mi_decl_cache_align const mi_theap_t _mi_theap_empty = {
   { 0, false, false, { { NULL, NULL, NULL, 0 } } },
   MI_STATS_NULL,          // stats
   #if MI_QSBR
-  NULL, NULL,            // qsbr_first, qsbr_last
+  NULL, NULL,            // qsbr_delayed, qsbr_delayed_last
   #endif
 };
 
@@ -189,7 +192,7 @@ static mi_lock_t mi_sealed_lock = MI_LOCK_INITIALIZER;
 // Make the sealed process data writable; this takes the sealed lock until `_mi_process_seal`.
 mi_process_sealed_t* _mi_process_unseal(void) {
   mi_lock_acquire(&mi_sealed_lock);
-  mi_process_sealed_t* const sealed = mi_process_get_sealed();
+  mi_process_sealed_t* const sealed = (mi_process_sealed_t*)mi_process_get_sealed();
   if (mi_process_get_sealed_once()->is_protected) {
     _mi_prim_protect(sealed, MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READWRITE);  // on failure we fault on the first write
   }
@@ -198,7 +201,7 @@ mi_process_sealed_t* _mi_process_unseal(void) {
 
 // Make the sealed process data read-only again and release the sealed lock.
 void _mi_process_seal(void) {
-  mi_process_sealed_t* const sealed = mi_process_get_sealed();
+  mi_process_sealed_t* const sealed = (mi_process_sealed_t*)mi_process_get_sealed();
   const int err = (mi_process_get_sealed_once()->is_protected ? _mi_prim_protect(sealed, MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READ) : 0);
   mi_lock_release(&mi_sealed_lock);
   if (err != 0) {
@@ -206,11 +209,36 @@ void _mi_process_seal(void) {
   }
 }
 
+// Set a callback `fun` with `arg` in the sealed fields `pfun` and `parg` (using a seqlock so readers always see a consistent pair).
+// The fields must be in the sealed process data (and are writable once unsealed).
+void _mi_process_set_callback(const _Atomic(void*)* pfun, const _Atomic(void*)* parg, void* fun, void* arg) {
+  mi_process_sealed_t* const sealed = _mi_process_unseal();
+  const size_t seq = mi_atomic_load_relaxed(&sealed->callbacks_seq);
+  mi_atomic_store_relaxed(&sealed->callbacks_seq, seq + 1);           // odd while updating
+  mi_atomic_store_ptr_release(void, (_Atomic(void*)*)parg, arg);      // release stores keep the odd sequence visible first
+  mi_atomic_store_ptr_release(void, (_Atomic(void*)*)pfun, fun);
+  mi_atomic_store_release(&sealed->callbacks_seq, seq + 2);
+  _mi_process_seal();
+}
+
+// Get a consistent callback pair from the sealed fields `pfun` and `parg`.
+void* _mi_process_get_callback(const _Atomic(void*)* pfun, const _Atomic(void*)* parg, void** arg) {
+  const mi_process_sealed_t* const sealed = mi_process_get_sealed();
+  size_t seq;
+  void* fun;
+  do {
+    seq = mi_atomic_load_acquire(&sealed->callbacks_seq);
+    fun = mi_atomic_load_ptr_acquire(void, pfun);
+    *arg = mi_atomic_load_ptr_acquire(void, parg);
+  } while ((seq & 1) != 0 || mi_atomic_load_relaxed(&sealed->callbacks_seq) != seq);
+  return fun;
+}
+
 // Write the sealed-once process data; this takes the sealed lock until `_mi_process_seal_once`.
 // This is only allowed before `mi_process_sealed_init` (as the data is never made writable again).
 mi_process_sealed_once_t* _mi_process_unseal_once(void) {
   mi_lock_acquire(&mi_sealed_lock);
-  mi_process_sealed_once_t* const once = mi_process_get_sealed_once();
+  mi_process_sealed_once_t* const once = (mi_process_sealed_once_t*)mi_process_get_sealed_once();
   if mi_unlikely(once->is_sealed) {
     mi_lock_release(&mi_sealed_lock);
     _mi_fatal_error("attempt to write sealed process data after process initialization\n");
@@ -249,7 +277,7 @@ static void mi_process_sealed_init(void) {
   once->is_protected = protect;
   int err = 0;
   if (protect) {
-    err = _mi_prim_protect(mi_process_get_sealed(), MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READ);
+    err = _mi_prim_protect((void*)mi_process_get_sealed(), MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READ);
     if (err == 0) { err = _mi_prim_protect(once, MI_OS_PROBABLE_PAGE_SIZE, MI_PROTECT_READ_SEALED); }
   }
   _mi_process_seal_once();
@@ -454,7 +482,7 @@ mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
   Thread Init
 ----------------------------------------------------------- */
 
-#if MI_DEBUG || defined(MI_TLS_RECURSE_GUARD)
+#if MI_DEBUG || MI_TLS_RECURSE_GUARD
 static mi_theap_t* mi_heap_check_for_existing_theap(mi_heap_t* heap) {
   const mi_thread_id_t tid = _mi_thread_id();
   mi_theap_t* thread_theap = NULL;
@@ -491,9 +519,9 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
   }
   mi_assert_internal(heap_main!=NULL);
 
-  #if MI_DEBUG || defined(MI_TLS_RECURSE_GUARD)
+  #if MI_DEBUG || MI_TLS_RECURSE_GUARD
   theap = mi_heap_check_for_existing_theap(heap_main);  // recursion check
-  #if !defined(MI_TLS_RECURSE_GUARD)
+  #if !MI_TLS_RECURSE_GUARD
   mi_assert_internal(theap==NULL);
   #endif
   #else
@@ -743,7 +771,7 @@ static void mi_process_init_once(void) {
   _mi_process_metadata_init();  // after os_init so the OS page size is known
   mi_process_guard_init();   // after os_init so the OS page size is known
   mi_heap_main_init();       // before page_map_init so stats are working
-  _mi_page_map_init();       // todo: this could fail.. should we abort in that case?
+  if (!_mi_page_map_init()) { _mi_fatal_error("unable to initialize the allocation page map\n"); }
   mi_process_sealed_init();  // after page_map_init so the page map is stored before sealing (no sealed-once writes are allowed after this)
   mi_thread_init();
 
@@ -754,7 +782,7 @@ static void mi_process_init_once(void) {
   mi_process_setup_auto_thread_done();  // after the above mi_thread_init so it can add the current theap
   _mi_fork_init();                      // register fork handlers (can allocate)
 
-  #if defined(_WIN32) && defined(MI_WIN_INIT_USE_FLS)
+  #if defined(_WIN32) && MI_WIN_INIT_USE_FLS
   // On windows, when building as a static lib the FLS cleanup happens to early for the main thread.
   // To avoid this, set the FLS value for the main thread to NULL so the fls cleanup
   // will not call _mi_thread_done on the (still executing) main thread. See issue #508.
@@ -805,7 +833,7 @@ static void mi_process_unwind_once(void)
   _mi_prim_thread_done_auto_done();
 
 #ifndef MI_SKIP_COLLECT_ON_EXIT
-#if (MI_DEBUG || !defined(MI_SHARED_LIB))
+#if (MI_DEBUG || !MI_SHARED_LIB)
   // free all memory if possible on process exit. This is not needed for a stand-alone process
   // but should be done if mimalloc is statically linked into another shared library which
   // is repeatedly loaded/unloaded, see issue #281.

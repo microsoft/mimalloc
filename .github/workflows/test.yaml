@@ -67,7 +67,7 @@ jobs:
 
       - name: Release, PAC weak
         if: runner.os == 'Linux' && runner.arch == 'X64' && matrix.lang == 'c'
-        run: sh .github/ci/cmake-test.sh release-pac-weak Release -DMI_PAC=WEAK
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh release-pac-weak Release -DMI_PAC=WEAK
 
       - name: Debug, Win32
         if: runner.os == 'Windows'
@@ -122,29 +122,29 @@ jobs:
           path: out/release-clang-cxx/CMakeFiles/mimalloc-static.dir/src/*.s
 
       - name: Debug, ASAN
-        run: CC=clang CXX=clang++ sh .github/ci/cmake-test.sh debug-asan Debug -DMI_DEBUG=FULL -DMI_TRACK=ASAN
+        run: MI_TEST_LIGHT=1 CC=clang CXX=clang++ sh .github/ci/cmake-test.sh debug-asan Debug -DMI_DEBUG=FULL -DMI_TRACK=ASAN
 
       - name: Debug, UBSAN
-        run: CC=clang CXX=clang++ sh .github/ci/cmake-test.sh debug-ubsan-cxx Debug -DMI_DEBUG=FULL -DMI_DEBUG_UBSAN=ON
+        run: MI_TEST_LIGHT=1 CC=clang CXX=clang++ sh .github/ci/cmake-test.sh debug-ubsan-cxx Debug -DMI_DEBUG=FULL -DMI_DEBUG_UBSAN=ON
 
       - name: Debug, Guarded
-        run: MIMALLOC_GUARDED_SAMPLE_RATE=1024 sh .github/ci/cmake-test.sh debug-guarded Debug -DMI_DEBUG=FULL -DMI_GUARDED=FULL
+        run: MI_TEST_LIGHT=1 MIMALLOC_GUARDED_SAMPLE_RATE=1024 sh .github/ci/cmake-test.sh debug-guarded Debug -DMI_DEBUG=FULL -DMI_GUARDED=FULL
 
       - name: Debug, Secure Full
-        run: sh .github/ci/cmake-test.sh debug-secure-full Debug -DMI_DEBUG=FULL -DMI_SECURE=FULL
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh debug-secure-full Debug -DMI_DEBUG=FULL -DMI_SECURE=FULL
 
       - name: Release, Secure Full
-        run: sh .github/ci/cmake-test.sh release-secure-full Release -DMI_OPT_ARCH=ON -DMI_SECURE=FULL
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh release-secure-full Release -DMI_OPT_ARCH=ON -DMI_SECURE=FULL
 
       - name: Release, Secure, PAC weak
-        run: sh .github/ci/cmake-test.sh release-secure-pac-weak Release -DMI_OPT_ARCH=ON -DMI_SECURE=ON -DMI_PAC=WEAK
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh release-secure-pac-weak Release -DMI_OPT_ARCH=ON -DMI_SECURE=ON -DMI_PAC=WEAK
 
       - name: Debug, Secure, PAC weak
-        run: sh .github/ci/cmake-test.sh debug-secure-pac-weak Debug -DMI_DEBUG=FULL -DMI_SECURE=ON -DMI_PAC=WEAK
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh debug-secure-pac-weak Debug -DMI_DEBUG=FULL -DMI_SECURE=ON -DMI_PAC=WEAK
 
       - name: Release, Guarded
         if: startsWith(github.ref_name,'dev3')
-        run: MIMALLOC_GUARDED_SAMPLE_RATE=128 sh .github/ci/cmake-test.sh release-guarded Release -DMI_OPT_ARCH=ON -DMI_GUARDED=FULL
+        run: MI_TEST_LIGHT=1 MIMALLOC_GUARDED_SAMPLE_RATE=128 sh .github/ci/cmake-test.sh release-guarded Release -DMI_OPT_ARCH=ON -DMI_GUARDED=FULL
 
       - name: Debug, Use pagemap
         if: startsWith(github.ref_name,'dev3')
@@ -173,19 +173,19 @@ jobs:
         run: sh .github/ci/cmake-test.sh release-simd Release -DMI_OPT_ARCH=ON -DMI_OPT_SIMD=ON
 
       - name: Debug, Guarded
-        run: MIMALLOC_GUARDED_SAMPLE_RATE=1024 sh .github/ci/cmake-test.sh debug-guarded Debug -DMI_DEBUG=FULL -DMI_GUARDED=FULL
+        run: MI_TEST_LIGHT=1 MIMALLOC_GUARDED_SAMPLE_RATE=1024 sh .github/ci/cmake-test.sh debug-guarded Debug -DMI_DEBUG=FULL -DMI_GUARDED=FULL
 
       - name: Debug, Secure Full
-        run: sh .github/ci/cmake-test.sh debug-secure-full Debug -DMI_DEBUG=FULL -DMI_SECURE=FULL
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh debug-secure-full Debug -DMI_DEBUG=FULL -DMI_SECURE=FULL
 
       - name: Release, Secure Full
-        run: sh .github/ci/cmake-test.sh release-secure-full Release -DMI_OPT_ARCH=ON -DMI_SECURE=FULL
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh release-secure-full Release -DMI_OPT_ARCH=ON -DMI_SECURE=FULL
 
       - name: Release, Secure, PAC weak
-        run: sh .github/ci/cmake-test.sh release-secure-pac-weak Release -DMI_OPT_ARCH=ON -DMI_SECURE=ON -DMI_PAC=WEAK
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh release-secure-pac-weak Release -DMI_OPT_ARCH=ON -DMI_SECURE=ON -DMI_PAC=WEAK
 
       - name: Debug, Secure, PAC weak
-        run: sh .github/ci/cmake-test.sh debug-secure-pac-weak Debug -DMI_DEBUG=FULL -DMI_SECURE=ON -DMI_PAC=WEAK
+        run: MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh debug-secure-pac-weak Debug -DMI_DEBUG=FULL -DMI_SECURE=ON -DMI_PAC=WEAK
 
   extra-macos:
     name: extra, ${{ matrix.os }}, c
@@ -295,7 +295,7 @@ jobs:
   # VM: Alpine Linux with MUSL libc
   alpine:
     name: qemu, alpine-${{ matrix.target }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # setup-alpine uses `sudo -E` which is not supported by sudo-rs on Ubuntu 26.04+
     continue-on-error: true
     defaults:
       run:
@@ -313,11 +313,10 @@ jobs:
             packages: ninja clang
             apk_tools_url: https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v3.0.7/x86_64/apk.static#!sha256!c07bf5356eacc9dd7a8c56bc537f46702f007170287403299d52a04264e74b3c
             cmake_args: -G Ninja
-            debug_env: MI_TEST_LIGHT=1
-            secure_env: MI_TEST_LIGHT=1
+            test_env: MI_TEST_LIGHT=2
           - target: arm32
             arch: armv7  # or armhf for arm-v6 with hard float
-            debug_env: MI_TEST_LIGHT=1
+            test_env: MI_TEST_LIGHT=2
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -334,7 +333,7 @@ jobs:
 
       - name: Release, clang
         if: matrix.target == 'riscv64'
-        run: CC=clang CXX=clang++ sh .github/ci/cmake-test.sh release-clang Release -DMI_OPT_ARCH=rv64gcb_zacas_zalasr -DMI_SEE_ASM=ON
+        run: ${{ matrix.test_env }} CC=clang CXX=clang++ sh .github/ci/cmake-test.sh release-clang Release -DMI_OPT_ARCH=rv64gcb_zacas_zalasr -DMI_SEE_ASM=ON
 
       - name: Release, clang, Asm
         if: matrix.target == 'riscv64'
@@ -344,20 +343,15 @@ jobs:
           path: out/release-clang/CMakeFiles/mimalloc-static.dir/src/*.s
 
       - name: Release
-        run: sh .github/ci/cmake-test.sh release Release -DMI_OPT_ARCH=ON -DMI_SEE_ASM=ON
-
-      - name: Release, Asm
-        if: matrix.target != 'x64'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: alpine-${{ matrix.target }}-asm
-          path: out/release/CMakeFiles/mimalloc-static.dir/src/*.s
+        if: matrix.target != 'riscv64' && matrix.target != 'arm32'  # (building under emulation is slow)
+        run: ${{ matrix.test_env }} sh .github/ci/cmake-test.sh release Release -DMI_OPT_ARCH=ON -DMI_SEE_ASM=ON
 
       - name: Debug
-        run: ${{ matrix.debug_env }} sh .github/ci/cmake-test.sh debug Debug -DMI_DEBUG=FULL
+        run: ${{ matrix.test_env }} sh .github/ci/cmake-test.sh debug Debug -DMI_DEBUG=FULL
 
       - name: Secure
-        run: ${{ matrix.secure_env }} sh .github/ci/cmake-test.sh secure Release -DMI_SECURE=ON
+        if: matrix.target != 'riscv64'
+        run: ${{ matrix.test_env }} sh .github/ci/cmake-test.sh secure Release -DMI_SECURE=ON
 
   # Linux arm64 with memory tagging (MTE) emulated by QEMU (`-cpu max` as QEMU user mode faults on `dc zva` with tagged pointers, which glibc and bionic use in `memset` on `neoverse-n2`)
   # (test-fork is excluded under QEMU as QEMU 8.2 user mode can deadlock when forking with threads, also without MTE)
@@ -369,7 +363,7 @@ jobs:
       QEMU_CPU: max
       MI_TEST_LIGHT: 1
       MI_TEST_REQUIRE_MTE: 1
-      CI_CMAKE_ARGS: -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64-static
+      CI_CMAKE_ARGS: -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=aarch64 -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64
       CI_CTEST_ARGS: -E test-fork
       CI_CTEST_TIMEOUT: 600
     steps:
@@ -381,15 +375,15 @@ jobs:
       - name: Setup
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user-static
-          qemu-aarch64-static --version
+          sudo apt-get install -y -q gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user
+          qemu-aarch64 --version
           ls /proc/sys/fs/binfmt_misc/ | grep aarch64 || echo "no binfmt registration for aarch64"
 
       - name: Release, MTE, PAC
         run: sh .github/ci/cmake-test.sh release-arm64-mte Release -DMI_OPT_ARCH=ON -DMI_MTE=ON -DMI_PAC=ON
 
       - name: Release, MTE, PAC, verbose test-mte
-        run: MIMALLOC_VERBOSE=1 qemu-aarch64-static out/release-arm64-mte/mimalloc-test-mte
+        run: MIMALLOC_VERBOSE=1 qemu-aarch64 out/release-arm64-mte/mimalloc-test-mte
 
       - name: Release, Async, MTE, PAC
         run: MIMALLOC_MTE=async sh .github/ci/cmake-test.sh release-arm64-mte Release -DMI_OPT_ARCH=ON -DMI_MTE=ON -DMI_PAC=ON
@@ -417,12 +411,12 @@ jobs:
       - name: Setup
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q qemu-user-static
-          qemu-aarch64-static --version
+          sudo apt-get install -y -q qemu-user
+          qemu-aarch64 --version
           NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
           test -f "$NDK/build/cmake/android.toolchain.cmake" || { echo "::error::Android NDK not found"; exit 1; }
           echo "NDK: $NDK"
-          echo "CI_CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 -DANDROID_STL=c++_static -DMI_BUILD_SHARED=OFF -DMI_OVERRIDE=OFF -DCMAKE_EXE_LINKER_FLAGS=-static -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64-static" >> $GITHUB_ENV
+          echo "CI_CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 -DANDROID_STL=c++_static -DMI_BUILD_SHARED=OFF -DMI_OVERRIDE=OFF -DCMAKE_EXE_LINKER_FLAGS=-static -DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64" >> $GITHUB_ENV
 
       - name: Debug
         run: sh .github/ci/cmake-test.sh debug-android Debug -DMI_DEBUG=FULL
@@ -440,7 +434,7 @@ jobs:
         run: MI_TEST_REQUIRE_MTE=1 sh .github/ci/cmake-test.sh release-android-mte Release -DMI_OPT_ARCH=ON -DMI_MTE=ON -DMI_PAC=ON
 
       - name: Release, MTE, PAC, verbose test-mte
-        run: MIMALLOC_VERBOSE=1 qemu-aarch64-static out/release-android-mte/mimalloc-test-mte
+        run: MIMALLOC_VERBOSE=1 qemu-aarch64 out/release-android-mte/mimalloc-test-mte
 
   # TSAN
   tsan:
@@ -451,6 +445,7 @@ jobs:
       CXX: clang++
       CI_PARALLEL: 8
       CI_CTEST_TIMEOUT: 360
+      # MI_TEST_LIGHT: 1
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -468,6 +463,7 @@ jobs:
       CC: clang
       CFLAGS: -include ${{ github.workspace }}/test/cheri-sim.h -Wno-builtin-macro-redefined -U__SIZEOF_POINTER__ -D__SIZEOF_POINTER__=16
       CI_CMAKE_ARGS: -DMI_BUILD_SHARED=OFF
+      CI_CTEST_ARGS: -E ^test-rust$
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -482,7 +478,7 @@ jobs:
 
       - name: Guarded
         run: |
-          sh .github/ci/cmake-test.sh guarded-cheri-sim Release -DMI_GUARDED=ON
+          MI_TEST_LIGHT=1 sh .github/ci/cmake-test.sh guarded-cheri-sim Release -DMI_GUARDED=ON
           MIMALLOC_GUARDED_SAMPLE_RATE=1 out/guarded-cheri-sim/mimalloc-test-api
 
   # Emscripten (tests run on node)

@@ -13,19 +13,20 @@ terms of the MIT license. A copy of the license can be found in the file
 This is the API documentation of the
 [mimalloc](https://github.com/microsoft/mimalloc) allocator
 (pronounced "me-malloc") -- a
-general purpose allocator with excellent [performance](bench.html)
+general purpose allocator with excellent [performance](https://github.com/microsoft/mimalloc/blob/dev3/readme.md#performance)
 characteristics. Initially
 developed by Daan Leijen for the run-time systems of the
-[Koka](https://github.com/koka-lang/koka) and [Lean](https://github.com/leanprover/lean) languages.
+[Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-It is a drop-in replacement for `malloc` and can be used in other programs
-without code changes, for example, on Unix you can use it as:
+It is a drop-in replacement for `malloc/free` and can be used in other programs
+without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.):
 ```
-> LD_PRELOAD=/usr/bin/libmimalloc.so  myprogram
+> LD_PRELOAD=/usr/lib/libmimalloc.so  myprogram
 ```
+It also supports dynamic overriding on \ref override_on_windows "Windows".
 
 Notable aspects of the design include:
-- __small and consistent__: the core library is about 10k LOC using simple and
+- __small and consistent__: the core library is about 12k LOC using simple and
   consistent data structures. This makes it very suitable
   to integrate and adapt in other projects. For runtime systems it
   provides hooks for a monotonic _heartbeat_ and deferred freeing (for
@@ -52,22 +53,25 @@ Notable aspects of the design include:
   due to free list sharding) the memory is marked to the OS as unused (reset or decommitted)
   reducing (real) memory pressure and fragmentation, especially in long running
   programs.
-- __secure__: _mimalloc_ can be built in secure mode, adding guard pages,
+- __secure__: _mimalloc_ can be built in \ref secure_mode "secure mode", adding guard pages,
   randomized allocation, encrypted free lists, etc. to protect against various
   heap vulnerabilities. The performance penalty is usually around 10% on average
   over our benchmarks.
 - __first-class heaps__: efficiently create and use multiple heaps to allocate across different regions.
   A heap can be destroyed at once instead of deallocating each object separately.
-  v3.2+ has true first-class heaps where one can allocate in a heap from any thread.
-- __bounded__: it does not suffer from _blowup_ \[1\], has bounded worst-case allocation
+  v3 has true first-class heaps where one can allocate in a heap from any thread.
+- __bounded__: it does not suffer from _blowup_
+  (see the [references](https://github.com/microsoft/mimalloc/blob/dev3/readme.md#references)), has bounded worst-case allocation
   times (_wcat_) (upto OS primitives), bounded space overhead (~0.2% meta-data, with low
   internal fragmentation), and has no internal points of contention using only atomic operations.
-- __fast__: In our benchmarks (see [below](#bench)),
+- __fast__: In our benchmarks (see [Performance](https://github.com/microsoft/mimalloc/blob/dev3/readme.md#performance)),
   _mimalloc_ outperforms other leading allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc),
   and often uses less memory. A nice property is that it does consistently well over a wide range
   of benchmarks. There is also good huge OS page support for larger server programs.
 
-There are three maintained versions of mimalloc. All versions are mostly equal except for
+## Versions
+
+There are three maintained versions of mimalloc. These are mostly equal except for
 how the OS memory is handled. New development is mostly on v3, while v1 and v2 are maintained
 with security and bug fixes.
 
@@ -75,28 +79,36 @@ with security and bug fixes.
         memory between threads. On certain large workloads this version may use
         (much) less memory. Also supports true first-class heaps (that can allocate from any thread)
         and has more efficient heap-walking (for the CPython GC for example).
-        (release tags: `v3.4.x`, development branch `dev3`).
-- __v2__ __stable__: Uses thread-local segments to reduce fragmentation. (release tags: `v2.4.x`, development branch `dev2`)
-- __v1__ __legacy__: initial design of mimalloc (release tags: `v1.9.x`, development branch `dev`). Send PR's against this version if possible.
+        (release tags: `v3.x`, development branch `dev3`).
+- __v2__ __stable legacy__: Uses thread-local segments to reduce fragmentation.
+  (release tags: `v2.x`, development branches `dev2` and `main`).
+- __v1__ __legacy__: initial design of mimalloc (release tags: `v1.x`, development branch `dev`).
+  Send PRs against this version if possible, and otherwise against `dev3`.
+
+## Further Information
 
 You can read more on the design of mimalloc in the
 [technical report](https://www.microsoft.com/en-us/research/publication/mimalloc-free-list-sharding-in-action)
 which also has detailed benchmark results.
-To learn more about the internal implementation of mimalloc, see [include/mimalloc/types.h](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc/types.h).
-
-Further information:
+To learn more about the internal implementation of mimalloc, see
+[include/mimalloc/types.h](https://github.com/microsoft/mimalloc/blob/dev3/include/mimalloc/types.h).
 
 - \ref build
 - \ref using
 - \ref environment
 - \ref overrides
-- \ref modes
+- \ref security
+- \ref tuning
+- \ref guarded
+- \ref profiling_guide
 - \ref tools
-- \ref bench
+- [Performance](https://github.com/microsoft/mimalloc/blob/dev3/readme.md#performance)
+- \ref deprecated
 
 &nbsp;
 
 - \ref malloc
+- \ref sized
 - \ref aligned
 - \ref typed
 - \ref constantsize
@@ -109,6 +121,7 @@ Further information:
 
 - \ref extended
 - \ref stats
+- \ref profiling
 - \ref options
 - \ref theap
 - \ref posix
@@ -280,10 +293,13 @@ char* mi_realpath(const char* fname, char* resolved_name);
 /// @see mi_good_size()
 size_t mi_usable_size(void* p);
 
-/// Return the current owner thread-id of the page containing a live allocation.
+/// **experimental**: Return the current owner thread-id of the page containing a live allocation.
 /// @param p A mimalloc allocation, or \a NULL.
 /// @returns The mimalloc thread id, or 0 for \a NULL, abandoned pages, or
-///          pages belonging to a detached thread-local heap.
+///          pages belonging to a detached thread-local heap. For QSBR heaps
+///          (`MI_QSBR`), an abandoned full page still returns its last owner,
+///          and other abandoned pages return 0 once their owner abandoned all
+///          its pages (e.g. when its thread terminated).
 ///
 /// This is a snapshot of current page ownership, not the original allocating
 /// thread. This is mimalloc's internal thread identity scheme, not necessarily the native OS thread-id.
@@ -302,6 +318,53 @@ size_t mi_good_size(size_t size);
 
 /// \}
 
+
+// ------------------------------------------------------
+// Allocation with block sizes
+// ------------------------------------------------------
+
+/// \defgroup sized Allocation with Block Sizes
+/// __v3__: Allocate or free memory while reporting the allocator's block size in bytes.
+/// Reported sizes may include padding or alignment overhead and are not a guarantee
+/// of writable capacity. Size output pointers may be \a NULL.
+/// Allocation size outputs are only valid on success; they need not be cleared on failure.
+/// \{
+
+/// Allocate \a size bytes and report the block size through \a block_size.
+/// @return The allocation, or \a NULL on failure.
+/// @see mi_malloc()
+void* mi_umalloc(size_t size, size_t* block_size);
+
+/// Allocate \a count zero-initialized elements of \a size bytes and report the block size.
+/// @return The allocation, or \a NULL on failure or multiplication overflow.
+/// @see mi_calloc()
+void* mi_ucalloc(size_t count, size_t size, size_t* block_size);
+
+/// Reallocate \a p to \a newsize bytes and report the old and new block sizes.
+/// \a block_size_pre is 0 for \a NULL input; \a block_size_post is valid on success.
+/// @return The reallocated block, or \a NULL on failure without freeing \a p.
+/// @see mi_realloc()
+void* mi_urealloc(void* p, size_t newsize, size_t* block_size_pre, size_t* block_size_post);
+
+/// Free \a p and report its block size, or 0 if \a p is \a NULL.
+/// @see mi_free()
+void mi_ufree(void* p, size_t* block_size);
+
+/// As mi_malloc_aligned(), additionally reporting the block size on success.
+void* mi_umalloc_aligned(size_t size, size_t alignment, size_t* block_size);
+
+/// As mi_zalloc_aligned(), additionally reporting the block size on success.
+void* mi_uzalloc_aligned(size_t size, size_t alignment, size_t* block_size);
+
+/// As mi_malloc_small(), additionally reporting the block size on success.
+/// \a size must not exceed #MI_SMALL_SIZE_MAX.
+void* mi_umalloc_small(size_t size, size_t* block_size);
+
+/// As mi_zalloc_small(), additionally reporting the block size on success.
+/// \a size must not exceed #MI_SMALL_SIZE_MAX.
+void* mi_uzalloc_small(size_t size, size_t* block_size);
+
+/// \}
 
 // ------------------------------------------------------
 // Aligned allocation
@@ -469,6 +532,14 @@ void mi_free_csize(void* p, size_t size);
 /// @see mi_free_size_nonnull()
 void mi_free_csize_nonnull(void* p, size_t size);
 
+/// __v3__: Free a pointer using its known allocation size and alignment.
+/// \a p may be \a NULL. Constant arguments allow selecting the small-free path.
+/// @see mi_free_csize()
+void mi_free_csize_aligned(void* p, size_t size, size_t aligned);
+
+/// As mi_free_csize_aligned(), but \a p must not be \a NULL.
+void mi_free_csize_aligned_nonnull(void* p, size_t size, size_t aligned);
+
 /// \}
 
 /// \defgroup zeroinit Zero initialized re-allocation
@@ -622,6 +693,10 @@ mi_heap_t* mi_heap_get_backing();
 /// @param numa_node the numa node to associate to (`>=0`)
 void mi_heap_set_numa_affinity(mi_heap_t* heap, int numa_node);
 
+/// __v3__: Exclude the first \a preserve bytes of each block from debug filling on allocation and free.
+/// This does not prevent allocator metadata, zero-initialization, or security mitigations from changing those bytes.
+void mi_heap_set_debug_fill_preserve(mi_heap_t* heap, size_t preserve);
+
 /// @brief __v3__: the main heap (of the current sub-process)
 /// @return a pointer to the main heap
 /// Every (sub)process has a main heap that cannot be deleted
@@ -652,14 +727,14 @@ bool mi_any_heap_contains(const void* p);
 /// @param p The pointer to check.
 /// @returns \a true if this is a pointer into our heap.
 /// This function is relatively fast.
-/// @see mi_any_heap_contains() for __v3__.
+/// @deprecated In __v3__, use mi_any_heap_contains().
 bool mi_is_in_heap_region(const void* p);
 
 /// __v1__,__v2__: Check if any pointer is part of the default heap of this thread.
 /// @param p   Any pointer -- not required to be previously allocated by us.
 /// @returns \a true if \a p points to a block in default heap of this thread.
 /// Note: expensive function, linear in the pages in the heap.
-/// @see mi_any_heap_contains() for __v3__
+/// @deprecated In __v3__, use mi_any_heap_contains(); the legacy name checks all heaps, not just the default heap.
 bool mi_check_owned(const void* p);
 
 /// __v1__,__v2__: Does a heap contain a pointer to a previously allocated block?
@@ -781,6 +856,16 @@ typedef bool (mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* a
 /// lock and must not re-enter the heap (through allocating or free-ing).
 bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
+/// __v3__: Visit only abandoned pages of \a heap, optionally visiting their allocated blocks.
+/// The callback rules and synchronization requirements are the same as mi_heap_visit_blocks().
+/// @return \a true if the visit completed, or \a false if the visitor stopped it or the arguments were invalid.
+bool mi_heap_visit_abandoned_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
+
+/// __v3__, **experimental**: Test whether an eligible page containing \a p is at most \a perc_threshold percent utilized.
+/// \a heap may be \a NULL to match any heap. Full, partially extended, and active allocation pages are excluded.
+/// Only the calling thread may access the page during this call.
+bool mi_unsafe_heap_page_is_under_utilized(mi_heap_t* heap, void* p, size_t perc_threshold);
+
 /// @brief __v1__,__v2__: Visit all areas and blocks in abandoned heaps.
 /// @param subproc_id The sub-process id associated with the abandoned heaps.
 /// @param heap_tag Visit only abandoned memory with the specified heap tag, use -1 to visit all abandoned memory.
@@ -862,6 +947,12 @@ int mi_reserve_huge_os_pages_interleave(size_t pages, size_t numa_nodes, size_t 
 /// fragmented.
 int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size_t timeout_msecs);
 
+/// @deprecated Use mi_reserve_huge_os_pages_interleave() or mi_reserve_huge_os_pages_at().
+/// Reserve \a pages of 1 GiB memory with a time limit in seconds.
+/// Optional \a pages_reserved is set to \a pages on success, or 0 on failure.
+/// @return 0 on success, or an error code.
+int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved);
+
 /// @brief Reserve huge OS pages (1GiB) into a single arena.
 /// @param pages             Number of 1GiB pages to reserve.
 /// @param numa_node         The associated NUMA node, or -1 for no NUMA preference.
@@ -874,6 +965,14 @@ int   mi_reserve_huge_os_pages_at_ex(size_t pages, int numa_node, size_t timeout
 /// @brief Return the minimal alignment required for managed OS memory.
 /// @see mi_manage_os_memory(), mi_manage_os_memory_ex()
 size_t mi_arena_min_alignment(void);
+
+/// __v3__: Return the minimum arena size in bytes.
+/// Extra space may be needed if externally supplied memory must be aligned.
+size_t mi_arena_min_size(void);
+
+/// __v3__: Return the current maximum object size allowed in an arena, in bytes.
+/// Reflects the `arena_max_object_size` option, clamped to supported limits.
+size_t mi_arena_max_object_size(void);
 
 /// Manage a particular memory area for use by mimalloc.
 /// This is just like `mi_reserve_os_memory` except that the area should already be
@@ -900,9 +999,31 @@ bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_la
 /// @return `true` if successful.
 bool  mi_manage_os_memory_ex(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node, bool exclusive, mi_arena_id_t* arena_id);
 
+/// **experimental**: Callback for committing or decommitting a managed memory range.
+/// With \a commit true, return whether committing succeeded and, if \a is_zero is non-NULL,
+/// report whether the memory is zero-initialized. With \a commit false, return whether
+/// the range was decommitted and must be recommitted before reuse.
+/// Calls may be concurrent. \a user_arg is the argument passed to mi_manage_memory().
+typedef bool (mi_commit_fun_t)(bool commit, void* start, size_t size, bool* is_zero, void* user_arg);
+
+/// __v3__, **experimental**: As mi_manage_os_memory_ex(), with a custom commit/decommit callback.
+/// Pass \a NULL for \a commit_fun to use the OS primitives. The memory and callback argument
+/// must remain valid while the arena is used; mimalloc does not free externally supplied memory.
+/// Pinned memory cannot be decommitted or protected and is rejected in secure builds on platforms with guard pages.
+/// @return \a true on success; optional \a arena_id receives the arena identifier.
+bool mi_manage_memory(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive,
+                      mi_commit_fun_t* commit_fun, void* commit_fun_arg, mi_arena_id_t* arena_id);
+
 
 /// @brief Show all current arena's.
 void mi_debug_show_arenas(void);
+
+/// __v3__: Print the current subprocess's arenas; equivalent to mi_debug_show_arenas().
+void mi_arenas_print(void);
+
+/// __v3__: Try to purge unused memory in the main subprocess's arenas.
+/// Does not purge if purging is disabled by the runtime options.
+void mi_arenas_purge(void);
 
 /// @brief  Return the start and size of an arena.
 /// @param arena_id  The arena identifier.
@@ -910,7 +1031,9 @@ void mi_debug_show_arenas(void);
 /// @return base address of the arena (on CHERI this pointer has zero-length bounds and cannot be dereferenced).
 void* mi_arena_area(mi_arena_id_t arena_id, size_t* size);
 
-
+/// __v3__: Test whether \a p is inside the arena or one of its subarenas.
+/// This checks address ranges, not whether \a p is a live allocation.
+bool mi_arena_contains(mi_arena_id_t arena_id, const void* p);
 
 /// @brief Create a new heap that only allocates in the specified arena.
 /// @param arena_id The arena identifier.
@@ -998,10 +1121,14 @@ bool mi_subproc_visit_heaps(mi_subproc_id_t subproc, mi_heap_visit_fun* visitor,
 ///
 /// \{
 
-/// Maximum size allowed for small allocations in
+/// Maximum number of machine words allowed for mi_wmalloc_small().
+/// A machine word is `sizeof(size_t)` bytes.
+#define MI_SMALL_WSIZE_MAX  128
+
+/// Maximum size in bytes allowed for small allocations in
 /// #mi_malloc_small, #mi_zalloc_small, #mi_heap_malloc_small, #mi_heap_zalloc_small,
-/// #mi_theap_malloc_small, and #mi_theap_zalloc_small (usually `128*sizeof(void*)` (= 1KB on 64-bit systems))
-#define MI_SMALL_SIZE_MAX   (128*sizeof(void*))
+/// #mi_theap_malloc_small, and #mi_theap_zalloc_small (`128*sizeof(size_t)`, or 1 KiB on 64-bit systems).
+#define MI_SMALL_SIZE_MAX   (MI_SMALL_WSIZE_MAX*sizeof(size_t))
 
 /// @brief Return the mimalloc version.
 /// @return The version. For v1,v2 the version is 100*major + 10*minor + patch (for example 227 for v2.2.7).
@@ -1016,6 +1143,17 @@ int  mi_version(void);
 /// allocates a lot of blocks that are freed by other threads it may improve
 /// resource usage by calling this every once in a while.
 void mi_collect(bool force);
+
+/// @deprecated Historical collection API, declared but not implemented in __v3__.
+/// Use mi_collect() instead.
+void mi_collect_reduce(size_t target_thread_owned);
+
+/// Initialize mimalloc for the process. Normally called automatically; repeated calls have no effect.
+void mi_process_init(void);
+
+/// Perform process-exit cleanup. Normally called automatically on process exit or library unload.
+/// Not intended for use while the program continues allocating.
+void mi_process_done(void);
 
 /// __v3__: Communicate that a thread is in a threadpool.
 /// This is done automatically for threads in the Windows threadpool,
@@ -1067,6 +1205,8 @@ typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat, vo
 /// to be called deterministically after some number of allocations
 /// (regardless of freeing or available free memory).
 /// At most one \a deferred_free function can be active.
+/// The function is always called with the argument it was registered with, but after
+/// re-registration other threads may still call the previous function for a short while.
 void   mi_register_deferred_free(mi_deferred_free_fun* deferred_free, void* arg);
 
 /// Type of output functions.
@@ -1082,6 +1222,8 @@ typedef void (mi_output_fun)(const char* msg, void* arg);
 ///
 /// The `out` function is called to output any information from mimalloc,
 /// like verbose or warning messages.
+/// The function is always called with the argument it was registered with, but after
+/// re-registration other threads may still call the previous function for a short while.
 void mi_register_output(mi_output_fun* out, void* arg);
 
 /// Type of error callback functions.
@@ -1107,6 +1249,13 @@ typedef void (mi_error_fun)(int err, void* arg);
 /// * \a ENOMEM: Not enough memory available to satisfy the request.
 /// * \a EOVERFLOW: Too large a request, for example in mi_calloc(), the \a count and \a size parameters are too large.
 /// * \a EINVAL: Trying to free or re-allocate an invalid pointer.
+///
+/// Independent of the error code passed to \a errfun, allocation functions that return \a NULL
+/// set \a errno as required by POSIX: \a ENOMEM, or \a EINVAL for an invalid alignment.
+/// Other errors (like freeing an invalid pointer) do not modify \a errno.
+///
+/// The function is always called with the argument it was registered with, but after
+/// re-registration other threads may still call the previous function for a short while.
 void mi_register_error(mi_error_fun* errfun, void* arg);
 
 /// Allocate a small object.
@@ -1117,6 +1266,26 @@ void mi_register_error(mi_error_fun* errfun, void* arg);
 /// performance and does not check if \a size was indeed small -- use
 /// with care!
 void* mi_malloc_small(size_t size);
+
+/// __v3__: Allocate a small object with its size expressed in machine words.
+/// @param wsize The number of words, at most #MI_SMALL_WSIZE_MAX.
+/// Each word is `sizeof(size_t)` bytes, not necessarily the size of a pointer.
+/// @returns A pointer to newly allocated memory of at least \a wsize times
+/// `sizeof(size_t)` bytes, or \a NULL if out of memory.
+/// Like mi_malloc_small(), this function is intended for runtime systems and
+/// does not check the size bound in release builds. The caller must ensure
+/// that \a wsize is small enough.
+/// Free the result with mi_free() or mi_free_small().
+/// @see mi_malloc_small(), mi_malloc_csize()
+void* mi_wmalloc_small(size_t wsize);
+
+/// __v3__: As mi_wmalloc_small(), but zero-initialize the allocation.
+/// \a wsize must not exceed #MI_SMALL_WSIZE_MAX.
+void* mi_wzalloc_small(size_t wsize);
+
+/// __v3__: Convert a byte size to a number of `sizeof(size_t)` words, rounding up.
+/// \a size must not exceed `SIZE_MAX - (sizeof(size_t) - 1)` to avoid overflow.
+size_t mi_wsize_from_size(size_t size);
 
 /// Allocate a zero initialized small object.
 /// @param size The size in bytes, can be at most #MI_SMALL_SIZE_MAX.
@@ -1161,6 +1330,13 @@ void mi_free_small(void* p);
 /// @see mi_theap_zalloc_small()
 void mi_free_small_nonnull(void* p);
 
+/// __v3__: As mi_free_small(), but the block's page must be owned by the calling thread.
+/// \a p may be \a NULL. The caller must guarantee both the small size and page ownership.
+void mi_free_small_local(void* p);
+
+/// As mi_free_small_local(), but \a p must not be \a NULL.
+void mi_free_small_local_nonnull(void* p);
+
 /// \}
 
 
@@ -1200,6 +1376,13 @@ struct mi_stats_s {
 /// Statistics. See [include/mimalloc-stats.h](https://github.com/microsoft/mimalloc/blob/main/include/mimalloc-stats.h) for the full definition.
 typedef struct mi_stats_s mi_stats_t;
 
+/// Initialize only the size and version fields of \a stats, leaving counters unchanged.
+void mi_stats_header_init(mi_stats_t* stats);
+
+/// Zero all counters and initialize the size and version fields of \a stats.
+/// @see mi_stats_t_decl()
+void mi_stats_init(mi_stats_t* stats);
+
 
 /// @brief Print out all process info.
 /// @see mi_process_info()
@@ -1227,7 +1410,7 @@ void mi_process_info_print_out(mi_output_fun* out, void* arg);
 void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, size_t* system_msecs, size_t* current_rss, size_t* peak_rss, size_t* current_commit, size_t* peak_commit, size_t* page_faults);
 
 
-/// Deprecated
+/// @deprecated Use mi_stats_print_out() with \a NULL for the default output.
 /// @param out Ignored, outputs to the registered output function or stderr by default.
 ///
 /// Most detailed when using a debug build.
@@ -1239,6 +1422,10 @@ void mi_stats_print(void* out);
 ///
 /// Most detailed when using a debug build.
 void mi_stats_print_out(mi_output_fun* out, void* arg);
+
+/// @deprecated Print the current default theap's statistics, then merge them into its parent heap.
+/// \a out may be \a NULL for the default output. Prefer mi_heap_stats_print_out().
+void mi_thread_stats_print_out(mi_output_fun* out, void* arg);
 
 /// @brief Get the statistics for the current subprocess aggregated over all its heaps.
 /// @param stats Pointer to a mi_stats_t() structure (declared as `mi_stats_t_decl(name)`).
@@ -1292,6 +1479,20 @@ void mi_heap_stats_merge_to_subproc(mi_heap_t* heap);
 /// with the linked mimalloc version.
 bool mi_subproc_stats_get(mi_subproc_id_t subproc_id, mi_stats_t* stats);
 
+/// __v3__: Get subprocess statistics without aggregating its heaps.
+/// Initialize \a stats with mi_stats_init() or mi_stats_t_decl() first.
+/// @return \a false for an invalid subprocess or incompatible statistics size/version.
+bool mi_subproc_stats_get_exclusive(mi_subproc_id_t subproc_id, mi_stats_t* stats);
+
+/// __v3__: Get statistics for a theap belonging to the calling thread.
+/// Initialize \a stats with mi_stats_init() or mi_stats_t_decl() first.
+/// @return \a false if the statistics cannot be copied or their size/version is incompatible.
+bool mi_theap_stats_get(mi_theap_t* theap, mi_stats_t* stats);
+
+/// __v3__: Merge a theap's statistics into its parent heap and clear the theap counters.
+/// The theap must belong to the calling thread.
+void mi_theap_stats_merge_to_heap(mi_theap_t* theap);
+
 /// @brief __v3__: Show the subproc statistics aggregated over all its heaps as JSON.
 /// @param subproc_id The subprocess.
 /// @param buf_size Byte size of the buffer \a buf (or 0 if \a buf is \a NULL).
@@ -1322,10 +1523,138 @@ void mi_subproc_heap_stats_print_out(mi_subproc_id_t subproc_id, mi_output_fun* 
 char*  mi_stats_as_json( mi_stats_t* stats, size_t buf_size, char* buf);
 
 /// __v1__,__v2__: Reset statistics.
+/// @deprecated In __v3__, use the \ref stats "heap and subprocess statistics APIs".
 void mi_stats_reset(void);
 
 /// __v1__,__v2__: Merge thread local statistics with the main statistics and reset.
+/// @deprecated In __v3__, use the \ref stats "heap and subprocess statistics APIs".
 void mi_stats_merge(void);
+
+/// \}
+
+// ------------------------------------------------------
+// Heap Profiling
+// ------------------------------------------------------
+
+/// \defgroup profiling Heap Profiling
+/// __v3__: Sample allocations using the built-in pprof-compatible profiler or custom profiling hooks.
+///
+/// Include `<mimalloc-profile.h>` and build with profiling support (`-DMI_PROFILE=ON`).
+/// The profiling API is **experimental** and may still change.
+///
+/// **Programmatic profiling**
+///
+/// Explicit profiler APIs remain available in secure builds and when environment-based
+/// activation is disabled. Create a profiler, attach it, and then start sampling:
+///
+/// ```c
+/// #include <mimalloc.h>
+/// #include <mimalloc-profile.h>
+///
+/// int main(void) {
+///   mi_profiler_t* prof = mi_pprof_profiler_new(
+///       512 * 1024,    // sample roughly every 512 KiB
+///       "myprofile",   // output basename; protobuf format
+///       0, 0, 0);      // no automatic snapshots
+///   if (prof == NULL) return 1;
+///
+///   if (!mi_profile(prof)) {
+///     mi_profile(NULL);
+///     mi_pprof_profiler_delete(prof);
+///     return 1;
+///   }
+///   mi_profiler_start(prof);
+///
+///   // Run your workload here; join worker threads before cleanup.
+///
+///   mi_profiler_stop(prof);
+///   mi_profiler_snapshot(prof);
+///   mi_profile(NULL);                 // detach before deleting
+///   mi_pprof_profiler_delete(prof);
+///   return 0;
+/// }
+/// ```
+///
+/// Stopping sampling does not detach the profiler: its `on_free` callback can still
+/// be invoked for sampled allocations. Before deleting a profiler, detach it from
+/// all associated heaps and subprocesses, and ensure no other thread can still
+/// invoke its callbacks.
+///
+/// **Environment-based profiling**
+///
+/// When both `MI_SECURE=0` and `MI_SECURE_ENV=0`, `MIMALLOC_PROFILE=<basename>`
+/// activates the built-in profiler for the main subprocess. Elevated processes
+/// ignore this environment variable regardless of build settings.
+///
+/// - `MIMALLOC_PROFILE_SAMPLE_RATE`: approximate number of allocated bytes between samples
+///   (default: `512KiB`).
+/// - `MIMALLOC_PROFILE_ALLOC_INTERVAL`: allocated bytes between automatic snapshots
+///   (default: `1GiB`; `0` disables).
+/// - `MIMALLOC_PROFILE_INUSE_INTERVAL`: growth in in-use bytes between automatic snapshots
+///   (default: `0`, disabled).
+/// - `MIMALLOC_PROFILE_TIME_INTERVAL`: seconds between automatic snapshots, checked
+///   on allocation events (default: `0`, disabled).
+///
+/// Snapshots use protobuf format by default. A basename ending in `.heap` or `.text`
+/// selects the text heap-profile format instead.
+///
+/// \{
+
+/// Profiler type. Custom profiler fields and callback types are defined in `<mimalloc-profile.h>`.
+typedef struct mi_profiler_s mi_profiler_t;
+
+/// @brief **experimental**: Create the built-in pprof-compatible profiler.
+/// @param initial_threshold Approximate number of allocated bytes between samples (for example, `512 * 1024`).
+/// @param base_file_name Output basename. A `.heap` or `.text` extension selects text format;
+/// any other extension, or none, selects protobuf format. A filename extension is stripped.
+/// @param alloc_interval_size Allocated bytes between automatic snapshots, or `0` to disable.
+/// @param inuse_interval_size Growth in in-use bytes between automatic snapshots, or `0` to disable.
+/// @param time_interval_secs Seconds between automatic snapshots, or `0` to disable.
+/// Time intervals are checked on allocation events, not by a background timer.
+/// @return A profiler, or \a NULL on failure.
+/// The returned profiler must be attached and started before it samples allocations.
+/// @see mi_profile(), mi_profiler_start(), mi_pprof_profiler_delete()
+mi_profiler_t* mi_pprof_profiler_new(size_t initial_threshold, const char* base_file_name, size_t alloc_interval_size, size_t inuse_interval_size, size_t time_interval_secs);
+
+/// **experimental**: Delete a built-in profiler created by mi_pprof_profiler_new().
+/// First detach the profiler and ensure no other thread can still invoke its callbacks.
+/// Deleting a profiler does not take a final snapshot; use mi_profiler_snapshot() explicitly.
+void mi_pprof_profiler_delete(mi_profiler_t* profiler);
+
+/// **experimental**: Attach a profiler to the current and future heaps of the main subprocess.
+/// Heaps excluded by mi_heap_profile_disable() remain excluded.
+/// Pass \a NULL to detach. Attaching stops sampling; use mi_profiler_start() to start it.
+/// @return \a true on success.
+bool mi_profile(mi_profiler_t* profiler);
+
+/// **experimental**: Attach a profiler to the current and future heaps of a particular subprocess.
+/// Heaps excluded by mi_heap_profile_disable() remain excluded.
+/// Pass \a NULL as the profiler to detach. Attaching stops sampling.
+/// @return \a true on success.
+bool mi_subproc_profile(mi_subproc_id_t subproc_id, mi_profiler_t* profiler);
+
+/// **experimental**: Attach a profiler to a particular heap, or pass \a NULL as the profiler to detach.
+/// Attaching stops sampling. The `on_free` callback is only invoked for allocations
+/// sampled by this profiler since it was last attached.
+/// @return \a true on success.
+bool mi_heap_profile(mi_heap_t* heap, mi_profiler_t* profiler);
+
+/// **experimental**: Exclude a heap from profiling, even when a profiler is subsequently attached to its subprocess.
+/// Useful for a heap used by a custom profiler to allocate its own metadata.
+void mi_heap_profile_disable(mi_heap_t* heap);
+
+/// **experimental**: Start sampling with an attached profiler.
+/// @return Whether the profiler was already running; \a false on the first start is normal.
+bool mi_profiler_start(mi_profiler_t* profiler);
+
+/// **experimental**: Stop sampling. The `on_free` callback can still run until the profiler is detached.
+/// @return Whether the profiler was running before this call.
+bool mi_profiler_stop(mi_profiler_t* profiler);
+
+/// **experimental**: Take a snapshot of the current profile.
+/// May be called while sampling is stopped. Concurrent calls may skip a snapshot
+/// if another snapshot callback is already running.
+void mi_profiler_snapshot(mi_profiler_t* profiler);
 
 /// \}
 
@@ -1372,7 +1701,7 @@ typedef enum mi_option_e {
   mi_option_os_tag,                   ///< tag used for OS logging (macOS only for now) (=100)
   mi_option_retry_on_oom,             ///< retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries. (only on windows)
   mi_option_generic_collect,          ///< collect heaps every N (=10000) generic allocation calls
-  mi_option_allow_thp,                ///< allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
+  mi_option_allow_thp,                ///< Transparent huge pages: 0 disable for the process, 1 allow, 2 allow and avoid splitting on purge. Default: 2 on Linux, 0 on Android; an explicit mi_option_minimal_purge_size overrides the purge behavior.
 
   // guard pages
   mi_option_guarded_min,              ///< only used when building with MI_GUARDED: minimal rounded object size for guarded objects (=0)
@@ -1463,6 +1792,15 @@ mi_theap_t* mi_heap_theap(mi_heap_t* heap);
 /// Release outstanding resources in a specific theap.
 void mi_theap_collect(mi_theap_t* theap, bool force);
 
+/// **experimental**: Abandon a theap's pages and delete the theap, preserving its heap and live blocks.
+/// Only the owning thread may call this function.
+void mi_theap_delete(mi_theap_t* theap);
+
+/// **experimental**: Abandon all pages, preserving the theap and live blocks for reuse.
+/// The owner must be the calling thread or quiescent outside mimalloc.
+/// Heap and theap deletion must not run concurrently.
+void mi_theap_quiescent_abandon(mi_theap_t* theap);
+
 /// Set the default thread-local theap to use in the current thread for mi_malloc() et al.
 /// @param theap  The new default theap.
 /// @returns The previous default theap.
@@ -1482,6 +1820,14 @@ void* mi_theap_malloc(mi_theap_t* theap, size_t size);
 /// @see mi_malloc_small()
 void* mi_theap_malloc_small(mi_theap_t* theap, size_t size);
 
+/// As mi_wmalloc_small(), using a non-NULL theap belonging to the calling thread.
+/// \a wsize must not exceed #MI_SMALL_WSIZE_MAX.
+void* mi_theap_wmalloc_small(mi_theap_t* theap, size_t wsize);
+
+/// As mi_wzalloc_small(), using a non-NULL theap belonging to the calling thread.
+/// \a wsize must not exceed #MI_SMALL_WSIZE_MAX.
+void* mi_theap_wzalloc_small(mi_theap_t* theap, size_t wsize);
+
 /// Allocate zero-initialized in a specific heap.
 /// @see mi_zalloc()
 void* mi_theap_zalloc(mi_theap_t* theap, size_t size);
@@ -1494,6 +1840,34 @@ void* mi_theap_zalloc_small(mi_theap_t* theap, size_t size);
 void* mi_theap_calloc(mi_theap_t* theap, size_t count, size_t size);
 void* mi_theap_malloc_aligned(mi_theap_t* theap, size_t size, size_t alignment);
 void* mi_theap_realloc(mi_theap_t* theap, void* p, size_t newsize);
+
+/// As mi_zalloc_aligned(), using a theap belonging to the calling thread.
+void* mi_theap_zalloc_aligned(mi_theap_t* theap, size_t size, size_t alignment);
+
+/// As mi_rezalloc(), using a theap belonging to the calling thread.
+/// \a p must be \a NULL or originate from a zero-initialized allocation.
+void* mi_theap_rezalloc(mi_theap_t* theap, void* p, size_t newsize);
+
+/// As mi_realloc_aligned(), using a theap belonging to the calling thread.
+void* mi_theap_realloc_aligned(mi_theap_t* theap, void* p, size_t newsize, size_t alignment);
+
+/// As mi_rezalloc_aligned(), using a theap belonging to the calling thread.
+/// \a p must be \a NULL or originate from a zero-initialized allocation.
+void* mi_theap_rezalloc_aligned(mi_theap_t* theap, void* p, size_t newsize, size_t alignment);
+
+/// **experimental**: Set guarded-allocation sampling for a theap belonging to the calling thread.
+/// \a sample_rate is measured in bytes: 0 disables sampling, 1 guards every eligible allocation.
+/// \a seed is a reproducible sampling seed, or 0 for a random seed. Requires `MI_GUARDED`.
+void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed);
+
+/// **experimental**: Set inclusive size bounds in bytes for guarded allocations in this theap.
+/// Only the owning thread may call this function. Requires `MI_GUARDED`.
+void mi_theap_guarded_set_size_bound(mi_theap_t* theap, size_t min, size_t max);
+
+/// @deprecated Visit areas and optionally allocated blocks in a thread-local heap.
+/// Prevent concurrent mutation during the visit; prefer mi_heap_visit_blocks().
+/// @return \a true if the visit completed.
+bool mi_theap_visit_blocks(const mi_theap_t* theap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
 /// \}
 
@@ -1617,6 +1991,22 @@ void* mi_new_realloc(void* p, size_t newsize);
 /// like mi_reallocn(), but when out of memory, use `std::get_new_handler` and raise `std::bad_alloc` exception on failure.
 void* mi_new_reallocn(void* p, size_t newcount, size_t size);
 
+/// As mi_new(), allocating from the specified heap.
+void* mi_heap_alloc_new(mi_heap_t* heap, size_t size);
+
+/// As mi_new_n(), allocating \a count elements of \a size bytes from the specified heap.
+void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size);
+
+/// As mi_new(), using a theap belonging to the calling thread.
+void* mi_theap_alloc_new(mi_theap_t* theap, size_t size);
+
+/// As mi_new_n(), using a theap belonging to the calling thread.
+void* mi_theap_alloc_new_n(mi_theap_t* theap, size_t count, size_t size);
+
+/// As mi_new_nothrow(), using a theap belonging to the calling thread.
+/// @return The allocation, or \a NULL on failure.
+void* mi_theap_alloc_new_nothrow(mi_theap_t* theap, size_t size);
+
 /// \a std::allocator implementation for mimalloc for use in STL containers.
 /// For example:
 /// ```
@@ -1711,6 +2101,22 @@ on Windows to build with the `clang-cl` compiler directly:
 > cmake ../.. -G "Visual Studio 17 2022" -T ClangCl
 ```
 
+## Emscripten
+
+Build for WebAssembly with [Emscripten](https://emscripten.org) using `emcmake`.
+Add `-pthread` to the compiler flags for a multi-threaded build. Tests run under `node`:
+
+```
+> emcmake cmake ../.. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-pthread
+> cmake --build .
+> ctest
+```
+
+When linking, use `-sALLOW_MEMORY_GROWTH`, as mimalloc reserves arena memory up front.
+This option is added automatically when linking with the CMake target or `pkg-config`.
+Also use `-pthread` if mimalloc was built with it.
+Under `node`, pass host environment variables with `-sNODE_HOST_ENV`, or set `ENV`
+in the JavaScript module. The \ref security_environment "environment policy" still applies.
 
 ## Single Source
 
@@ -1733,7 +2139,7 @@ mimalloc uses only safe OS calls (`mmap` and `VirtualAlloc`) and can co-exist
 with other allocators linked to the same program.
 If you use `cmake`, you can simply use:
 ```
-find_package(mimalloc 2.1 REQUIRED)
+find_package(mimalloc 1.8 REQUIRED)
 ```
 in your `CMakeLists.txt` to find a locally installed mimalloc. Then use either:
 ```
@@ -1743,12 +2149,12 @@ to link with the shared (dynamic) library, or:
 ```
 target_link_libraries(myapp PUBLIC mimalloc-static)
 ```
-to link with the static library. See `test\CMakeLists.txt` for an example.
+to link with the static library. See the test targets in `CMakeLists.txt` for examples.
 
 ### C++
 For best performance in C++ programs, it is also recommended to override the
 global `new` and `delete` operators. For convenience, mimalloc provides
-[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
+[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/dev3/include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
 
 In C++, mimalloc also provides the `mi_stl_allocator` struct which implements the `std::allocator`
 interface. For example:
@@ -1760,7 +2166,8 @@ vec.push_back(some_struct());
 ### Statistics
 
 You can pass environment variables to print verbose messages (`MIMALLOC_VERBOSE=1`)
-and statistics (`MIMALLOC_SHOW_STATS=1`) (in the debug version):
+and statistics (`MIMALLOC_SHOW_STATS=1`). Debug builds provide the most detail.
+Elevated processes ignore these variables; see \ref security_environment "Environment Options".
 ```
 > env MIMALLOC_SHOW_STATS=1 ./cfrac 175451865205073170563711388363
 
@@ -1821,11 +2228,24 @@ completely and redirect all calls to the _mimalloc_ library instead.
 
 See \ref overrides for more info.
 
+## Debug Mode
+
+When _mimalloc_ is built using debug mode (`-DCMAKE_BUILD_TYPE=Debug`), or with
+`-DMI_DEBUG=ON` explicitly, various checks are done at runtime to catch development errors.
+
+- All objects have padding at the end to detect byte-precise heap block overflows.
+- Double frees and freeing invalid heap pointers are detected.
+- Corrupted free lists and some forms of use-after-free are detected.
+
 */
 
 /*! \page environment Environment Options
 
-You can set further options either programmatically (using mi_option_set(), see \ref options), or via environment variables:
+You can set further options either programmatically (using mi_option_set(), see \ref options), or via environment variables.
+Elevated processes ignore all environment options. Secure builds also restrict which environment
+options are accepted; see \ref security_environment "Environment Options".
+
+Common options:
 
 - `MIMALLOC_SHOW_STATS=1`: show statistics when the program terminates.
 - `MIMALLOC_VERBOSE=1`: show verbose messages (including statistics).
@@ -1852,15 +2272,17 @@ Advanced options:
 
 Further options for large workloads and services:
 
-- `MIMALLOC_ALLOW_THP=1`: By default always allow transparent huge pages (THP) on Linux systems. On Android only this is
-   by default off. When set to `0`, THP is disabled for the process that mimalloc runs in.
-   In mimalloc v3.2+, If enabled, mimalloc also sets
-   the `MIMALLOC_MINIMAL_PURGE_SIZE` to 2MiB to avoid potentially breaking up transparent huge pages.
+- `MIMALLOC_ALLOW_THP=[0,1,2]`: When set to `0`, transparent huge pages (THP) are disabled
+   for the process. Otherwise they are enabled when the [OS THP policy][linux-thp]
+   permits them (`[always]` or `[madvise]`). With `2` (the default on Linux), mimalloc v3
+   also uses a default minimal purge size of 2 MiB to avoid splitting transparent
+   huge pages during purging. This can improve performance but increase resident memory.
+   Android defaults to `0` to reduce resident memory.
 - `MIMALLOC_USE_NUMA_NODES=N`: pretend there are at most `N` NUMA nodes. If not set, the actual NUMA nodes are detected
    at runtime. Setting `N` to 1 may avoid problems in some virtual environments. Also, setting it to a lower number than
    the actual NUMA nodes is fine and will only cause threads to potentially allocate more memory across actual NUMA
    nodes (but this can happen in any case as NUMA local allocation is always a best effort but not guaranteed).
-- `MIMALLOC_ALLOW_LARGE_OS_PAGES=0`: Set to 1 to use large OS pages (usually 2MiB) when available; for some workloads this can
+- `MIMALLOC_ALLOW_LARGE_OS_PAGES=0`: Set to 1 to use large OS pages (2 or 4 MiB) when available; for some workloads this can
    significantly improve performance. However, large OS pages cannot be purged or shared with other processes so may lead
    to increased memory usage in some cases.
    Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
@@ -1882,14 +2304,40 @@ Use caution when using `fork` in combination with either large or huge OS pages:
 for all pages in the original process including the huge OS pages. When any memory is now written in that area, the
 OS will copy the entire 1GiB huge page (or 2MiB large page) which can cause the memory usage to grow in large increments.
 
+[linux-thp]: https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/7/html/performance_tuning_guide/sect-red_hat_enterprise_linux-performance_tuning_guide-configuring_transparent_huge_pages
 [linux-huge]: https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/5/html/tuning_and_optimizing_red_hat_enterprise_linux_for_oracle_9i_and_10g_databases/sect-oracle_9i_and_10g_tuning_guide-large_memory_optimization_big_pages_and_huge_pages-configuring_huge_pages_in_red_hat_enterprise_linux_4_or_5
 [windows-huge]: https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/enable-the-lock-pages-in-memory-option-windows?view=sql-server-2017
 
 */
 
-/*! \page overrides Overriding Malloc
+/*! \page overrides Overriding Standard Malloc
 
 Overriding the standard `malloc` (and `new`) can be done either _dynamically_ or _statically_.
+
+## Static override
+
+On Unix-like systems, link the final program with the single object file
+`mimalloc.o` to override the standard malloc interface. Link it as the first object
+so that its definitions take precedence over library archives:
+
+```
+> gcc -o myprogram mimalloc.o myfile1.c ...
+```
+
+Another approach, available on all platforms, is to link statically and include
+[`mimalloc-override.h`](https://github.com/microsoft/mimalloc/blob/dev3/include/mimalloc-override.h)
+in each source file to redefine `malloc` and related functions. This is reliable
+only when all sources are under your control; otherwise pointers from different
+heaps may be mixed.
+
+On Windows, static overriding requires the static CRT release runtime (`/MT`) and
+the `mimalloc(-debug).obj` object, linked before the CRT library. The debug CRT
+(`/MTd`) is not supported. Static overrides cover the `malloc` family, `_aligned_*`,
+`_expand`, `_msize`, `_strdup`, and `_wcsdup`.
+Other CRT functions returning allocated memory, including `_dupenv_s`,
+`_getcwd(NULL,...)`, `_fullpath(NULL,...)`, and `_tempnam`, still use the CRT heap;
+their results cannot be freed with the overridden `free`.
+Use dynamic overriding or the `mi_` equivalents, such as mi_dupenv_s(), where available.
 
 ## Dynamic override
 
@@ -1927,18 +2375,18 @@ Note that certain security restrictions may apply when doing this from
 the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-ignored-when-calling-application-through-bash).
 
 
+\anchor override_on_windows
+
 ### Dynamic Override on Windows
 
-<span id="override_on_windows">Dynamically overriding on mimalloc on Windows</span>
-is robust and has the particular advantage to be able to redirect all malloc/free calls
-that go through the (dynamic) C runtime allocator, including those from other DLL's or
-libraries. As it intercepts all allocation calls on a low level, it can be used reliably
-on large programs that include other 3rd party components.
+We use a separate redirection DLL to redirect malloc/free calls that go through
+the dynamic C runtime allocator, including calls from other DLLs and libraries.
+This low-level interception can be used in large programs containing third-party components.
 There are four requirements to make the overriding work well:
 
 1. Use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
 
-2. Link your program explicitly with the `mimalloc.lib` export library for the `mimalloc.dll`.
+2. Link your program explicitly with the `mimalloc.dll.lib` export library for the `mimalloc.dll`.
    (which must be compiled with `-DMI_OVERRIDE=ON`, which is the default though).
    To ensure the `mimalloc.dll` is actually loaded at run-time it is easiest
    to insert some call to the mimalloc API in the `main` function, like `mi_version()`
@@ -1957,37 +2405,20 @@ There are four requirements to make the overriding work well:
 
 For best performance on Windows with C++, it
 is also recommended to also override the `new`/`delete` operations (by including
-[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/main/include/mimalloc-new-delet.h)
+[`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/dev3/include/mimalloc-new-delete.h)
 a single(!) source file in your project).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
 overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully
 redirected.
 
-For different platforms than x64, you may need a specific [redirection dll](bin).
+For different platforms than x64, you may need a specific
+[redirection DLL](https://github.com/microsoft/mimalloc/tree/dev3/bin).
 Furthermore, we cannot always re-link an executable or ensure `mimalloc.dll` comes
-first in the import table. In such cases the [`minject`](bin) tool can be used
+first in the import table. In such cases the
+[`minject`](https://github.com/microsoft/mimalloc/tree/dev3/bin) tool can be used
 to patch the executable's import tables.
 
-
-## Static override
-
-On Unix-like systems, you can also statically link with _mimalloc_ to override the standard
-malloc interface. The recommended way is to link the final program with the
-_mimalloc_ single object file (`mimalloc.o`). We use
-an object file instead of a library file as linkers give preference to
-that over archives to resolve symbols. To ensure that the standard
-malloc interface resolves to the _mimalloc_ library, link it as the first
-object file. For example:
-```
-> gcc -o myprogram mimalloc.o  myfile1.c ...
-```
-
-Another way to override statically that works on all platforms, is to
-link statically to mimalloc (as shown in the introduction) and include a
-header file in each source file that re-defines `malloc` etc. to `mi_malloc`.
-This is provided by [`mimalloc-override.h`](https://github.com/microsoft/mimalloc/blob/main/include/mimalloc-override.h). This only works reliably though if all sources are
-under your control or otherwise mixing of pointers from different heaps may occur!
 
 ## List of Overrides:
 
@@ -2060,50 +2491,270 @@ void   _free_dbg(void* p, int block_type);
 
 */
 
-/*! \page modes Build Modes
+/*! \page security Security
 
-We can build mimalloc in various modes.
+There are various build options to make mimalloc more secure.
+
+\anchor security_environment
+
+## Environment Options
+
+With `-DMI_SECURE_ENV=ON`, only `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, and
+`MIMALLOC_ALLOW_THP` are accepted from the environment -- all other options are ignored.
+
+This is by default enabled for \ref secure_mode "secure mode", \ref memory_tagging "MTE", and \ref pointer_authentication "PAC".
+This can be overridden by explicitly building
+with `-DMI_SECURE_ENV=OFF`. Note: even with `OFF`, an elevated process ignores
+all environment options. Moreover, on platforms with guard pages, a program built
+with secure mode always ignores settings for large or huge OS pages
+(as pinned memory cannot be guarded).
+You can still set options programmatically for trusted programs.
+
+\anchor secure_mode
 
 ## Secure Mode
 
-_mimalloc_ can be build in secure mode by using the `-DMI_SECURE=ON` flags in `cmake`. This build enables various mitigations
-to make mimalloc more robust against exploits. In particular:
+_mimalloc_ can be built in secure mode using `-DMI_SECURE=OFF|MINIMAL|CHECKED|ON|FULL`
+with CMake. These modes enable software mitigations to make mimalloc more robust
+against exploits.
 
-- All internal mimalloc pages are surrounded by guard pages and the heap metadata is behind a guard page as well (so a buffer overflow
-  exploit cannot reach into the metadata).
-- All free list pointers are
-  [encoded](https://github.com/microsoft/mimalloc/blob/783e3377f79ee82af43a0793910a9f2d01ac7863/include/mimalloc-internal.h#L396)
-  with per-page keys which is used both to prevent overwrites with a known pointer, as well as to detect heap corruption.
-- Double free's are detected (and ignored).
-- The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
-  mitigate against attacks that rely on a predicable allocation order. Similarly, the larger heap blocks allocated by mimalloc
-  from the OS are also address randomized.
+With `MINIMAL`, only mitigations with a small performance impact are added
+(usually 1-3%):
+
+- Internal metadata, including the page map and static data, is surrounded by guard
+  pages so that a buffer overflow or underflow cannot reach allocator metadata.
+  Static pointers into metadata are kept in a sealed read-only area.
+  Free list entries are not encoded at this level and can still be corrupted through
+  a heap block buffer overflow.
+- OS allocation addresses are randomized where possible, and detected metadata
+  corruption aborts the process.
+- Large blocks (over 512 KiB) are followed by a guard page.
+- Pinned memory, including large and huge OS pages, is neither allocated nor accepted
+  as arena memory on platforms with guard pages.
+- `MI_SECURE_ENV` is enabled by default.
+
+With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance and
+memory impact is still relatively small (usually less than 10%, but can be 2x slower):
+
+- Free list pointers are encoded with per-page keys to prevent overwrites with a
+  known pointer and detect corruption. With \ref pointer_authentication "PAC",
+  hardware keys can be used.
+- Pointers passed to mi_free() and related functions are validated. Pointers that do
+  not originate from mimalloc are ignored, and interior pointers are adjusted to
+  the start of their block.
+- Free lists are initialized in random order, and allocation randomly chooses between
+  extension and reuse within a page to make allocation order less predictable.
+- Reuse of freed blocks is delayed until one eighth of a page is free, and a random
+  number of recently freed blocks is held back to make reclaiming a just-freed block harder.
+
+With `ON`, performance and memory usage are impacted further
+(usually less than 25%, but can be 2 to 3x slower):
+
+- Eight bytes of padding are added to each heap block to detect overflows when the
+  block is freed, and to detect double frees.
+- Some use-after-free accesses that modify the first word of a block are detected.
+- The first 1 KiB of a block is zeroed on free.
+- Free lists are randomized further.
+- The library is built as `mimalloc-secure`.
+
+The `FULL` mode additionally places a guard page at the end of each mimalloc page
+(normally 64 KiB) and checks for byte-precise heap block overflows when freeing.
+This mode is generally not recommended because it costs more time and memory, and
+large heaps can reach the maximum VMA limit on Linux.
 
 As always, evaluate with care as part of an overall security strategy as all of the above are mitigations but not guarantees.
 
-## Debug Mode
+\anchor memory_tagging
 
-When _mimalloc_ is built using debug mode, (`-DCMAKE_BUILD_TYPE=Debug`),
-various checks are done at runtime to catch development errors.
+## Memory Tagging (MTE)
 
-- Statistics are maintained in detail for each object size. They can be shown using `MIMALLOC_SHOW_STATS=1` at runtime.
-- All objects have padding at the end to detect (byte precise) heap block overflows.
-- Double free's, and freeing invalid heap pointers are detected.
-- Corrupted free-lists and some forms of use-after-free are detected.
+(__v3__ only, experimental)
 
-## Guarded Mode
+On recent arm64 hardware with the memory tagging extension ([MTE]), build with
+`-DMI_MTE=ON` to give heap blocks randomized memory tags. Memory can only be accessed
+through a pointer with the matching tag. Adjacent blocks almost always receive
+different tags, and freed blocks are retagged, causing most double-free and
+use-after-free accesses to fault. Tags are chosen from 15 values, excluding the tags
+of neighboring blocks. Blocks up to 512 KiB are tagged; larger blocks use a trailing
+guard page because tagging takes time proportional to the block size.
 
-<span id="guarded">_mimalloc_ can be build in guarded mode using the `-DMI_GUARDED=ON` flags in `cmake`.</span>
-This enables placing OS guard pages behind certain object allocations to catch buffer overflows as they occur.
+Performance depends on the hardware and workload. On an M5, an MTE build is usually
+within about 20% of a release build, but can be 2 to 3x slower.
+`-DMI_MTE=ON` also enables \ref pointer_authentication "PAC" (`-DMI_PAC=ON`),
+`-DMI_SECURE=CHECKED`, and `-DMI_SECURE_ENV=ON` by default.
+
+_These combined options provide strong mitigation against common heap exploitation techniques._
+As it is hardware assisted, this is stronger than `-DMI_SECURE=ON`.
+
+`-DMI_MTE=ON` requires CPU and OS support at runtime and aborts at initialization
+otherwise. On Linux, this also requires enabling tag checking for all threads.
+`-DMI_MTE=PREFER` uses tagging when available and otherwise runs untagged, with
+performance close to a regular release build.
+`-DMI_MTE=ON` builds have an `-mte-pac` library suffix, for example `mimalloc-mte-pac.o`,
+or `-mte` with `-DMI_PAC=OFF`.
+
+- **macOS:** requires an Apple M5 or later with macOS 26+. Executables need the
+  hardened-process entitlements; mimalloc tests are signed automatically:
+  ```
+  > cmake -DMI_MTE=ON ../.. && make -j
+  > codesign -s - -f --entitlements ../../cmake/mte-entitlements.plist myprogram
+  ```
+- **Linux:** requires an arm64 kernel with MTE support; check with
+  `grep mte /proc/cpuinfo`. Where environment policy permits it,
+  `MIMALLOC_MTE=sync`, `async`, or `preferred` selects the checking mode
+  (`sync` by default). Without MTE hardware, QEMU can be used for testing:
+  `QEMU_CPU=max qemu-aarch64 ./myprogram`.
+  Tag checking is enabled per thread and inherited by newly created threads, so
+  mimalloc should initialize before other threads are created, as happens when
+  dynamically linked or preloaded. Otherwise initialization reports a fatal error,
+  or a warning with `PREFER`, because existing threads may remain untagged until
+  they allocate and system calls with tagged pointers may fail in threads that
+  never call mimalloc.
+- **Android:** requires an MTE-capable device, such as a Pixel 8 or later, with
+  Memory Tagging Extension enabled in Developer options. Build with the Android NDK:
+  ```
+  > cmake -DMI_MTE=ON -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+          -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 ../..
+  ```
+- **iOS** (experimental, untested): requires an A19 or later with iOS 26+ and the
+  Enhanced Security capability enabling hardware memory tagging. Build with the iOS SDK:
+  ```
+  > cmake -DMI_MTE=ON -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=26.0 \
+          -DMI_BUILD_SHARED=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF ../..
+  ```
+  Link `libmimalloc-mte-pac.a` into the app and use the hardened-process entitlements.
+
+[MTE]: https://support.arm.com/documentation/108035/0100/How-does-MTE-work-
+
+\anchor pointer_authentication
+
+## Pointer Authentication (PAC)
+
+(__v3__ only, experimental)
+
+On arm64 hardware with pointer authentication ([PAC]), build with `-DMI_PAC=ON`.
+Mimalloc uses secret hardware keys to sign pointers and validates them on access to
+detect tampering. On an M5, the overhead is usually about 10%, but can be 1 to 2x slower.
+
+This is most effective together with MTE, and it is enabled by default with `-DMI_MTE=ON`.
+Without MTE, it is best combined with `-DMI_SECURE=ON` to get the most benefit.
+Mimalloc signs:
+
+- Free list links, so heap block overflows or use-after-free writes cannot forge
+  links even when the per-page keys are known.
+- Page map entries, thread-local theap pointers, and other root pointers that may
+  reside adjacent to user memory.
+
+Authentication failures abort the process. Like MTE, PAC enables `-DMI_SECURE=CHECKED` and
+`-DMI_SECURE_ENV=ON` by default. `-DMI_PAC=ON` requires CPU and OS support at runtime
+and aborts at initialization otherwise.
+On other platforms, or with MSVC, `-DMI_PAC=WEAK` signs pointers using a random
+software process key. An attacker who can read memory may recover that key, but it
+still prevents forging pointers through blind overwrites.
+
+PAC is part of Armv8.3-A and later. Supported examples include:
+
+- Apple A12 and M1 or later processors, on macOS and iOS.
+- Linux 5.0+ and Android on Arm Cortex-A710/X2 and later Armv9 cores, Arm Neoverse
+  V1/V2/N2, AmpereOne, and Qualcomm Oryon. Check with `grep pacg /proc/cpuinfo`.
+
+Older cores such as Cortex-A76/A78/X1, AWS Graviton2, Ampere Altra, and Raspberry Pi
+4 and 5 do not support it.
+
+[PAC]: https://developer.arm.com/documentation/102433/0200/Return-oriented-programming
+
+\anchor pointer_capabilities
+
+## Pointer Capabilities (CHERI)
+
+(__v3__ only, experimental)
+
+[CHERI] extends an architecture with capabilities: 128-bit pointers carrying
+bounds, permissions, and an unforgeable validity tag. Integers cannot be turned
+into valid pointers. Mimalloc supports the pure-capability ABI, bounding allocated
+blocks and keeping internal metadata unreachable through user capabilities.
+The default secure level is 3: `CHECKED` plus zeroing the first 1 KiB on free and
+double-free detection. Unlike MTE, CHERI does not prevent use-after-free by itself;
+that requires capability revocation.
+
+CHERI is available on the Arm [Morello] research platform and some CHERI RISC-V
+cores, such as the Codasip X730, running [CheriBSD]. For a native pure-capability
+CheriBSD build, use `cmake ../.. && make -j`. Cross-compilation with CHERI LLVM
+requires the pure-capability flags, for example:
+
+- Morello: `-DCMAKE_C_FLAGS="-march=morello -mabi=purecap"`.
+- CHERI-RISC-V: `-DCMAKE_C_FLAGS="-march=rv64imafdcxcheri -mabi=l64pc128d"`.
+
+We thank ARM and [Ian Stark](https://homepages.inf.ed.ac.uk/stark/) for providing
+a Morello system to test CHERI with mimalloc.
+
+[CHERI]: https://www.cl.cam.ac.uk/research/security/ctsrd/cheri/
+[Morello]: https://www.arm.com/architecture/cpu/morello
+[CheriBSD]: https://www.cheribsd.org
+
+*/
+
+/*! \page tuning Getting the Best Performance
+
+Consider the following build options (__v3__):
+
+- `-DMI_OPT_ARCH=ON` (the default on arm64) enables architecture-specific
+  optimizations: `-march=haswell -mavx2` on x64, `-march=armv8.1-a` on arm64,
+  and `-march=rv64gcb_zacas` on RISC-V. These improve bit operations and atomic
+  operations, but unsupported hardware or emulators may fail with an illegal instruction.
+  Apple arm64 defaults to `-march=armv8.3-a`, supported on M1 and later, for efficient
+  load-acquire instructions. RISC-V hardware supporting `zalasr` can use
+  `-DMI_OPT_ARCH=rv64gcb_zacas_zalasr`.
+- `-DMI_ALLOW_THP=OFF` can significantly reduce resident memory usage for some programs.
+- `-DMI_ALLOW_THP=FULL` can significantly improve performance for some programs,
+  but still respects an OS THP setting of `[never]`.
+- `-DMI_FREE_IS_CHECKED=ON` checks pointers passed to mi_free(), at a small
+  performance cost. This can be useful when overriding malloc/free process-wide.
+  Alternatively, mi_cfree() always checks pointer validity.
+  Pointer checking is always enabled at secure level `CHECKED` and higher.
+
+In source code:
+
+- Use mi_zalloc() for zero-initialized allocations.
+- Use typed macros such as mi_malloc_tp(): they are safer and use mi_malloc_csize()
+  internally.
+- Use mi_malloc_csize() and mi_free_csize() when the size is a compile-time constant.
+  These inline and select mi_malloc_small() or mi_free_small() where possible.
+  The C++ `mimalloc-new-delete.h` sized overrides use these too.
+  Use mi_free_csize_nonnull() when the pointer is known to be non-NULL.
+- Use mi_malloc_small() when the requested size is at most `MI_SMALL_SIZE_MAX`
+  (128 machine words, or 1 KiB on a 64-bit system).
+  Use mi_free_small() for pointers returned by mi_malloc_small(), and
+  mi_free_small_nonnull() when the pointer is known to be non-NULL.
+
+For runtimes and compilers, such as Koka, Lean, or Rust, prefer the constant-size
+or small-allocation APIs when sizes are known. If a runtime already carries
+thread-local state, it can cache mi_theap_get_default() for each thread and pass
+that thread's theap directly to mi_theap_malloc() or mi_theap_malloc_small().
+This avoids repeatedly looking up the thread-local pointer and skips a NULL
+theap check. The benefit depends on the OS implementation of thread-local storage.
+
+*/
+
+/*! \page guarded Guarded Mode
+
+_mimalloc_ can be built in guarded mode using `-DMI_GUARDED=ON` with CMake.
+This is enabled by default in debug builds. Guarded mode places OS guard pages
+behind selected allocations to catch buffer overflows as they occur.
+On hardware supporting \ref memory_tagging "MTE", tagging can detect many such
+overflows more efficiently.
+
 This can be invaluable to catch buffer-overflow bugs in large programs. However, it also means that any object
 allocated with a guard page takes at least 8 KiB memory for the guard page and its alignment. As such, allocating
 a guard page for every allocation may be too expensive both in terms of memory, and in terms of performance with
-many system calls. Therefore, there are various environment variables (and options) to tune this:
+many system calls. Therefore, there are various environment variables (and options) to tune this.
+When environment options are restricted (see \ref security_environment "Environment Options"), use mi_option_set() instead.
 
 - `MIMALLOC_GUARDED_SAMPLE_RATE=N`: Set the sample rate to `N` (by default 0). This mode places a guard page
   behind a suitable object about every `N` requested bytes (per thread). Since the performance in guarded mode without placing
   guard pages is close to release mode, this can be used to enable guard pages even in production to catch latent
-  buffer overflow bugs. Set the sample rate to `1` to guard every object, and to `0` to place no guard pages at all.
+  buffer overflow bugs, for example with `16KiB` or higher for a small performance impact.
+  Set the sample rate to `1` to guard every object, and to `0` to place no guard pages at all.
 
 - `MIMALLOC_GUARDED_SAMPLE_SEED=N`: Start sampling at `N` (by default random). Can be used to reproduce a buffer
   overflow if needed.
@@ -2111,27 +2762,93 @@ many system calls. Therefore, there are various environment variables (and optio
 - `MIMALLOC_GUARDED_MIN=N`, `MIMALLOC_GUARDED_MAX=N`: Minimal and maximal _rounded_ object sizes for which a guard
   page is considered (`0` and `1GiB` respectively). If you suspect a buffer overflow occurs with an object of size
   141, set the minimum and maximum to `148` and the sample rate to `1` to have all of those guarded.
+*/
 
-- `MIMALLOC_UNSAFE_GUARDED_PRECISE=1`: If we have an object of size 13, we would usually place it an aligned 16 bytes in
-  front of the guard page. Using `MIMALLOC_UNSAFE_GUARDED_PRECISE` places it exactly 13 bytes before a page so that even
-  a 1 byte overflow is detected. This violates the C/C++ minimal alignment guarantees though so use with care.
+/*! \page profiling_guide Profiling
+
+Profiling support is experimental and may still change. It is enabled by default,
+including in release builds, and adds overhead only when activated.
+The \ref profiling "profiling API" in `<mimalloc-profile.h>` supports both custom
+profiling hooks and the built-in pprof-compatible profiler.
+
+## Programmatic Profiling
+
+Explicit profiler APIs remain available in secure builds and when environment
+activation is disabled. Build with profiling support (`-DMI_PROFILE=ON`), then
+create a profiler, attach it, and start sampling:
+
+```c
+#include <mimalloc.h>
+#include <mimalloc-profile.h>
+
+int main(void) {
+  mi_profiler_t* prof = mi_pprof_profiler_new(
+      512 * 1024,    // sample roughly every 512 KiB
+      "myprofile",   // output basename; protobuf format
+      0, 0, 0);      // no automatic snapshots
+  if (prof == NULL) return 1;
+
+  if (!mi_profile(prof)) {
+    mi_profile(NULL);
+    mi_pprof_profiler_delete(prof);
+    return 1;
+  }
+  mi_profiler_start(prof);
+
+  // Run your workload here; join worker threads before cleanup.
+
+  mi_profiler_stop(prof);
+  mi_profiler_snapshot(prof);
+  mi_profile(NULL);                 // detach before deleting
+  mi_pprof_profiler_delete(prof);
+  return 0;
+}
+```
+
+Stopping sampling does not detach the profiler: its `on_free` callback can still
+run for sampled allocations. Detach it from all associated heaps and subprocesses,
+and ensure no other thread can still invoke its callbacks before deleting it.
+See \ref profiling for the complete API.
+
+## Environment-based Profiling
+
+The built-in profiler works with Google's [pprof](https://github.com/google/pprof)
+tools. When both `MI_SECURE=0` and `MI_SECURE_ENV=0`, and the process is not elevated,
+it can also be activated through the environment:
+
+- `MIMALLOC_PROFILE=<basename>` activates profiling for the main subprocess and writes
+  pprof-compatible `<basename>.<seq>.pb` files. A `.heap` or `.text` extension selects
+  the text heap-profile format instead.
+  For a basename of `profile`, view the results in a browser with
+  `pprof -http=:8080 ./myprogram profile.*`.
+- `MIMALLOC_PROFILE_ALLOC_INTERVAL=N` sets the approximate number of allocated bytes
+  between automatic snapshots (default: `1GiB`; `0` disables).
+- `MIMALLOC_PROFILE_INUSE_INTERVAL=N` takes a snapshot when in-use bytes grow by
+  that amount (default: `0`, disabled).
+- `MIMALLOC_PROFILE_TIME_INTERVAL=N` sets seconds between automatic snapshots,
+  checked on allocation events (default: `0`, disabled).
+- `MIMALLOC_PROFILE_SAMPLE_RATE=N` sets the average number of allocated bytes between
+  samples, using a Poisson distribution (default: `512KiB`).
 
 */
 
 /*! \page tools Tools
 
 Generally, we recommend using the standard allocator with memory tracking tools, but mimalloc
-can also be build to support the [address sanitizer][asan] or the excellent [Valgrind] tool.
-Moreover, it can be build to support Windows event tracing ([ETW]).
+can also be built to support the [address sanitizer][asan] or the excellent [Valgrind] tool.
+Moreover, it can be built to support Windows event tracing ([ETW]).
 This has a small performance overhead but does allow detecting memory leaks and byte-precise
 buffer overflows directly on final executables. See also the `test/test-wrong.c` file to test with various tools.
+Select a tool with `-DMI_TRACK=ASAN|VALGRIND|ETW`.
+The older `MI_TRACK_ASAN`, `MI_TRACK_VALGRIND`, and `MI_TRACK_ETW` options remain
+accepted as deprecated aliases.
 
 ## Valgrind
 
-To build with [valgrind] support, use the `MI_TRACK_VALGRIND=ON` cmake option:
+To build with [valgrind] support, use the `MI_TRACK=VALGRIND` CMake option:
 
 ```
-> cmake ../.. -DMI_TRACK_VALGRIND=ON
+> cmake ../.. -DMI_TRACK=VALGRIND
 ```
 
 This can also be combined with secure mode or debug mode.
@@ -2166,14 +2883,14 @@ Valgrind support is in its initial development -- please report any issues.
 
 ## ASAN
 
-To build with the address sanitizer, use the `-DMI_TRACK_ASAN=ON` cmake option:
+To build with the address sanitizer, use the `-DMI_TRACK=ASAN` CMake option:
 
 ```
-> cmake ../.. -DMI_TRACK_ASAN=ON
+> cmake ../.. -DMI_TRACK=ASAN
 ```
 
 This can also be combined with secure mode or debug mode.
-You can then run your programs as:'
+You can then run your programs as:
 
 ```
 > ASAN_OPTIONS=verbosity=1 <myprogram>
@@ -2195,8 +2912,8 @@ Address sanitizer support is in its initial development -- please report any iss
 
 ## ETW
 
-Event tracing for Windows ([ETW]) provides a high performance way to capture all allocations though
-mimalloc and analyze them later. To build with ETW support, use the `-DMI_TRACK_ETW=ON` cmake option.
+Event tracing for Windows ([ETW]) provides a high performance way to capture all allocations through
+mimalloc and analyze them later. To build with ETW support, use the `-DMI_TRACK=ETW` CMake option.
 
 You can then capture an allocation trace using the Windows performance recorder (WPR), using the
 `src/prim/windows/etw-mimalloc.wprp` profile. In an admin prompt, you can use:
@@ -2213,21 +2930,3 @@ use a tool like [TraceControl] that is specialized for analyzing mimalloc traces
 
 */
 
-/*! \page bench Performance
-
-We tested _mimalloc_ against many other top allocators over a wide
-range of benchmarks, ranging from various real world programs to
-synthetic benchmarks that see how the allocator behaves under more
-extreme circumstances.
-
-In our benchmarks, _mimalloc_ always outperforms all other leading
-allocators (_jemalloc_, _tcmalloc_, _Hoard_, etc) (Jan 2021),
-and usually uses less memory (up to 25% more in the worst case).
-A nice property is that it does *consistently* well over the wide
-range of benchmarks.
-
-See the [Performance](https://github.com/microsoft/mimalloc#Performance)
-section in the _mimalloc_ repository for benchmark results,
-or the the technical report for detailed benchmark results.
-
-*/

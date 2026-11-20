@@ -83,14 +83,8 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
 
   // initialize thread first in case this is the main heap
   // (which may allocate the default theap already for the main heap)
-  mi_theap_t* main = _mi_theap_main();
-  if (main == NULL || !mi_theap_is_initialized(main)) {
-    mi_thread_init();
-    main = _mi_theap_main();
-  }
-  if (main == NULL || main->tld == NULL) {
-    _mi_error_message(EFAULT, "unable to initialize thread local heap state\n");
-    return NULL;
+  if (!_mi_thread_is_initialized()) {
+    if (_mi_thread_init() == NULL) return NULL;
   }
 
   // get the thread local theap
@@ -99,7 +93,7 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
   // create a fresh theap?
   if (theap==NULL) {
     // allocate a fresh theap
-    theap = _mi_theap_create(heap, main->tld);
+    theap = _mi_theap_create(heap, mi_theap_get_default()->tld); // sets the theap thread local
     if (theap==NULL) {
       _mi_error_message(EFAULT, "unable to allocate memory for a thread local heap\n");
       return NULL;
@@ -144,6 +138,7 @@ mi_decl_cold mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
 
 void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool use_qsbr)
 {
+  mi_assert_internal(_mi_bin_size(_mi_bin(MI_LARGE_MAX_OBJ_SIZE)) == MI_LARGE_MAX_OBJ_SIZE);  // must be a bin size
   // init fields
   heap->cookie = mi_heap_cookie(heap);
   heap->theap = theap_slot;
@@ -155,6 +150,9 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
   heap->is_deleted = false;
   #if MI_QSBR
   heap->qsbr_enabled = use_qsbr;
+  mi_atomic_store_ptr_relaxed(mi_page_t, &heap->qsbr_delayed, NULL);
+  heap->qsbr_delayed_last = NULL;
+  mi_lock_init(&heap->qsbr_delayed_lock);
   if (use_qsbr) {
     if (heap->reclaim_on_free > 0) { heap->reclaim_on_free = 0; }
     mi_heap_qsbr_init(&heap->qsbr);
@@ -163,7 +161,7 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
   mi_assert_internal(!use_qsbr);
   MI_UNUSED(use_qsbr);
   #endif
-  heap->profiler = mi_atomic_load_ptr_acquire(mi_profiler_t,&subproc->profiler);
+  mi_atomic_store_ptr_relaxed(mi_profiler_t, &heap->profiler, NULL);  // set when the heap is linked into the subprocess
   mi_stats_header_init(&heap->stats);
   mi_lock_init(&heap->theaps_lock);
   mi_lock_init(&heap->os_abandoned_pages_lock);
@@ -171,6 +169,8 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
 
   // push onto the subproc heaps
   mi_lock(&heap->subproc->heaps_lock) {
+    // inherit the profiler under the lock so a concurrent `mi_subproc_profile` either sees this heap or we see its profiler
+    mi_atomic_store_ptr_relaxed(mi_profiler_t, &heap->profiler, mi_atomic_load_ptr_acquire(mi_profiler_t,&subproc->profiler));
     mi_heap_t* head = heap->subproc->heaps;
     heap->prev = NULL;
     heap->next = head;
@@ -183,15 +183,21 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
 }
 
 mi_heap_t* _mi_heap_new_for_subproc(mi_subproc_t* subproc, mi_arena_id_t exclusive_arena_id, bool is_main_heap, bool use_qsbr) {
-  mi_assert_internal(is_main_heap ? (subproc->heap_main == NULL && subproc->parent != NULL) : subproc->heap_main != NULL);
-  // heap data is allocated in the current subproc (or the parent for a main heap)
-  mi_subproc_t* const owner = (is_main_heap ? subproc->parent : subproc);
-  #if MI_SECURE
-  // in secure mode, keep heap data separate from user data (at the cost of taking a lock)
-  mi_heap_t* const heap = (mi_heap_t*)_mi_meta_zalloc(owner, sizeof(mi_heap_t), NULL);
-  #else
-  mi_heap_t* const heap = (mi_heap_t*)mi_heap_zalloc(owner->heap_main, sizeof(mi_heap_t));
-  #endif
+  mi_assert_internal(is_main_heap ? (subproc->heap_main == NULL && !_mi_subproc_is_main(subproc)) : subproc->heap_main != NULL);
+  mi_heap_t* heap;
+  if (is_main_heap) {
+    // the main heap of a subprocess is allocated in the main subprocess as that outlives all other subprocesses
+    // (and we use the detached meta theap as the current thread may belong to another subprocess)
+    heap = (mi_heap_t*)_mi_meta_zalloc(_mi_subproc_main(), sizeof(mi_heap_t), NULL);
+  }
+  else {
+    #if MI_SECURE
+    // in secure mode, keep heap data separate from user data (at the cost of taking a lock)
+    heap = (mi_heap_t*)_mi_meta_zalloc(subproc, sizeof(mi_heap_t), NULL);
+    #else
+    heap = (mi_heap_t*)mi_heap_zalloc(subproc->heap_main, sizeof(mi_heap_t));
+    #endif
+  }
   if (heap==NULL) return NULL;
   // reserve a thread local slot for this heap (see also issue #1230)
   mi_thread_local_t theap_slot = (is_main_heap ? mi_thread_local_key_fast : _mi_thread_local_create());
@@ -312,6 +318,10 @@ static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
   mi_lock_done(&heap->theaps_lock);
   mi_lock_done(&heap->os_abandoned_pages_lock);
   mi_lock_done(&heap->arena_pages_lock);
+  #if MI_QSBR
+  mi_assert_internal(mi_atomic_load_ptr_relaxed(mi_page_t, &heap->qsbr_delayed) == NULL);
+  mi_lock_done(&heap->qsbr_delayed_lock);
+  #endif
   if (!is_main) {  // main heaps of all subprocesses share the fast key which must never be released
     _mi_thread_local_free(heap->theap);
     heap->theap = 0;

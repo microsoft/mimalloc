@@ -103,7 +103,8 @@ size_t mi_arena_min_size(void) {
 // fixed limit for the maximum object size in an arena
 static size_t mi_arena_max_fixed_object_size(void) {
   #if MI_PAGE_META_IS_ALIGNED
-  return (MI_PAGE_META_ALIGNMENT - _mi_size_of_slices(mi_arena_page_meta_aligned_slice_count()));
+  // Huge allocations require fully free chunks; the first chunk of each aligned area contains metadata.
+  return ((MI_PAGE_META_ALIGNED_CHUNKS - 1) * MI_ARENA_CHUNK_SIZE);
   #else
   return (MI_ARENA_MAX_SIZE - MI_ARENA_CHUNK_SIZE); // minus an initial chunk to accommodate meta info
   #endif
@@ -592,7 +593,7 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
   arena->slices_purge = mi_arena_bitmap_init(slice_count, &base);
   arena->pages_main.pages = mi_arena_bitmap_init(slice_count, &base);
   for (size_t i = 0; i < MI_ARENA_BIN_COUNT; i++) {
-    arena->pages_main.pages_abandoned[i] = mi_arena_bitmap_init(slice_count, &base);
+    arena->pages_main.pages_abandoned[i] = mi_arena_bitmap_init_lazy(slice_count, &base);  // initialized on first abandonment
   }
   #if MI_PAGE_META_IS_SEPARATED && !MI_PAGE_META_IS_ALIGNED
   arena->pages_meta = (mi_page_t*)mi_ptr_bounded_data(base, slice_count * sizeof(mi_page_t));
@@ -657,6 +658,12 @@ static bool mi_manage_os_memory_ex2(mi_subproc_t* subproc, void* start, size_t s
   mi_assert(start!=NULL);
   if (arena_id != NULL) { *arena_id = _mi_arena_id_none(); }
   if (start==NULL) return false;
+  #if MI_SECURE > 0 && MI_OS_HAS_GUARD_PAGES
+  if (memid.is_pinned) {
+    _mi_warning_message("cannot manage pinned memory in secure mode as it cannot support guard pages\n");
+    return false;
+  }
+  #endif
   if (!mi_is_aligned(start, MI_ARENA_ALIGNMENT)) {
     // we can align the start since the memid tracks the real base of the memory.
     void* const aligned_start = mi_align_up_ptr(start, MI_ARENA_ALIGNMENT);

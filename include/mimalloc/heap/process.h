@@ -73,7 +73,7 @@ typedef struct mi_process_metadata_s {
 // Sealed process data that is only written during process initialization (see `heap/process.c:_mi_process_unseal_once`).
 // In secure mode it is read-only after initialization (and immutable if the OS supports it, see `MI_PROTECT_READ_SEALED`).
 typedef struct mi_process_sealed_once_s {
-  _Atomic(struct mi_page_map_s*)  page_map;     // the page map without memory tag (`NULL` before initialization) (see `heap/page-map.h:mi_page_map`); must be the first entry for better code-gen in secure mode
+  _Atomic(struct mi_page_map_s*)  page_map;     // the page map without memory tag (`NULL` before initialization) (see `heap/page-map.h:mi_page_map_untagged`); must be the first entry for better code-gen in secure mode
   mi_addr_t           process_key;              // random process key for encoded pointers (see `prim/prim-pac.h`) and heap cookies (see `heap/heap.h:mi_heap_cookie`); next to `page_map` as it is used for page map lookups
   mi_process_metadata_t* metadata;              // process meta data without memory tag (`NULL` before initialization) (see `mi_process_metadata`)
   mi_os_mem_config_t  os_mem_config;            // OS memory configuration (see `prim/os.c`)
@@ -89,7 +89,8 @@ typedef struct mi_process_sealed_once_s {
 typedef struct mi_process_sealed_s {
   _Atomic(size_t)     page_map_committed;       // committed entries in the page map
 
-  // user callbacks
+  // user callbacks (see `_mi_process_set_callback`)
+  _Atomic(size_t)     callbacks_seq;            // sequence number for the callbacks (odd while updating)
   _Atomic(void*)      deferred_free;            // is `mi_deferred_free_fun*` (but some platforms don't support atomic function pointers)
   _Atomic(void*)      deferred_arg;             // argument to the deferred free function
   _Atomic(void*)      out_default;              // is `mi_output_fun*`
@@ -197,23 +198,23 @@ typedef struct mi_process_s {
 
 extern mi_decl_hidden mi_decl_process_align mi_process_t _mi_process;
 
-// Get the sealed-once process data (for reading only).
+// Get the sealed-once process data (for reading only, see `_mi_process_unseal_once` for writing).
 // In secure mode, this is the second to last full OS page within `guard_front`.
-static inline mi_process_sealed_once_t* mi_process_get_sealed_once(void) {
+static inline const mi_process_sealed_once_t* mi_process_get_sealed_once(void) {
   #if MI_SECURE_SEALED_ALIGNED
-  return (mi_process_sealed_once_t*)((uint8_t*)&_mi_process + MI_SECURE_SEALED_GUARD - 2*MI_OS_PROBABLE_PAGE_SIZE);
+  return (const mi_process_sealed_once_t*)((uint8_t*)&_mi_process + MI_SECURE_SEALED_GUARD - 2*MI_OS_PROBABLE_PAGE_SIZE);
   #elif MI_SECURE_STATIC_SEALED
-  return (mi_process_sealed_once_t*)mi_align_down_ptr((uint8_t*)&_mi_process + MI_SECURE_SEALED_GUARD - 2*MI_OS_PROBABLE_PAGE_SIZE, MI_OS_PROBABLE_PAGE_SIZE);
+  return (const mi_process_sealed_once_t*)mi_align_down_ptr((uint8_t*)&_mi_process + MI_SECURE_SEALED_GUARD - 2*MI_OS_PROBABLE_PAGE_SIZE, MI_OS_PROBABLE_PAGE_SIZE);
   #else
   return &_mi_process.sealed_once;
   #endif
 }
 
-// Get the sealed process data (for reading only).
+// Get the sealed process data (for reading only, see `_mi_process_unseal` for writing).
 // In secure mode, this is the OS page just after the sealed-once page (and just before the page where the process data starts).
-static inline mi_process_sealed_t* mi_process_get_sealed(void) {
+static inline const mi_process_sealed_t* mi_process_get_sealed(void) {
   #if MI_SECURE_STATIC_SEALED
-  return (mi_process_sealed_t*)((uint8_t*)mi_process_get_sealed_once() + MI_OS_PROBABLE_PAGE_SIZE);
+  return (const mi_process_sealed_t*)((uint8_t*)mi_process_get_sealed_once() + MI_OS_PROBABLE_PAGE_SIZE);
   #else
   return &_mi_process.sealed;
   #endif
@@ -260,6 +261,10 @@ static inline bool _mi_theap_is_unavailable(const mi_theap_t* theap) {
 // Make the sealed process data writable (and take a lock); must be followed by `_mi_process_seal`.
 mi_process_sealed_t* _mi_process_unseal(void);
 void                 _mi_process_seal(void);
+
+// Set or get a callback function and argument pair in the sealed process data (as a consistent pair).
+void  _mi_process_set_callback(const _Atomic(void*)* pfun, const _Atomic(void*)* parg, void* fun, void* arg);
+void* _mi_process_get_callback(const _Atomic(void*)* pfun, const _Atomic(void*)* parg, void** arg);
 
 // Write the sealed-once process data (and take a lock); must be followed by `_mi_process_seal_once`.
 // This is only allowed during process initialization (and is a fatal error afterwards).

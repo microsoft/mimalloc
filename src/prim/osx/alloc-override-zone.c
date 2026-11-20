@@ -297,7 +297,7 @@ static bool is_mimalloc_zone( malloc_zone_t* zone ) {
   return (zone==NULL || zone==&mi_malloc_zone);
 }
 
-#if defined(MI_OSX_INTERPOSE) && defined(MI_SHARED_LIB_EXPORT)
+#if defined(MI_OSX_INTERPOSE) && MI_SHARED_LIB_EXPORT
 
 // ------------------------------------------------------
 // Override malloc_xxx and malloc_zone_xxx api's to use only

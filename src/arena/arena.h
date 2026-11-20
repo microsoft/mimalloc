@@ -66,6 +66,16 @@ static inline uint8_t* mi_arena_slice_start(mi_arena_t* arena, size_t slice_inde
   return (mi_arena_start(arena) + _mi_size_of_slices(slice_index));
 }
 
+// Permute within chunks: arena slice counts need not be powers of two.
+static inline mi_page_t* mi_arena_page_meta_at_slice(mi_arena_t* arena, size_t slice_index) {
+  mi_assert_internal(arena->pages_meta != NULL);
+  mi_assert_internal(slice_index < arena->slice_count);
+  mi_assert_internal((arena->slice_count % MI_BCHUNK_BITS) == 0);
+  mi_assert_internal(mi_is_power_of_two(MI_BCHUNK_BITS) && (MI_PAGE_META_IDX_MUL % 2) == 1);  // (gcd(MI_BCHUNK_BITS, MI_PAGE_META_IDX_MUL) == 1) => one-to-one maping
+  const size_t idx = mi_align_down(slice_index,MI_BCHUNK_BITS) + (slice_index * MI_PAGE_META_IDX_MUL) % MI_BCHUNK_BITS;   // unsigned multiply overflow is ok
+  return &arena->pages_meta[idx];
+}
+
 // get the arena and slice span
 static inline mi_arena_t* mi_arena_from_memid(mi_memid_t memid, size_t* slice_index, size_t* slice_count) {
   mi_assert_internal(memid.memkind == MI_MEM_ARENA);
@@ -90,11 +100,19 @@ static inline mi_page_t* mi_arena_page_meta_memtag(mi_arena_t* arena, mi_page_t*
 }
 
 // initialize the bitmap for `slice_count` slices at base (and advance the base pointer)
-static inline mi_bitmap_t* mi_arena_bitmap_init(size_t slice_count, uint8_t** base) {
+// reserve a bitmap for `slice_count` slices at base (and advance the base pointer) but leave it
+// uninitialized (zero chunks) until `mi_bitmap_ensure_init`; the memory must already be zero.
+static inline mi_bitmap_t* mi_arena_bitmap_init_lazy(size_t slice_count, uint8_t** base) {
   mi_bitmap_t* bitmap = (mi_bitmap_t*)(*base);
-  const size_t size = mi_bitmap_init(bitmap, slice_count, true /* already zero */);
+  const size_t size = mi_bitmap_size(slice_count, NULL);
   *base = (*base) + size;
   return (mi_bitmap_t*)mi_ptr_bounded_data(bitmap, size);
+}
+
+static inline mi_bitmap_t* mi_arena_bitmap_init(size_t slice_count, uint8_t** base) {
+  mi_bitmap_t* bitmap = mi_arena_bitmap_init_lazy(slice_count, base);
+  mi_bitmap_init(bitmap, slice_count, true /* already zero */);
+  return bitmap;
 }
 
 typedef bool (mi_forall_arena_fun_t)(mi_arena_t* arena, const void* arg, void** result);

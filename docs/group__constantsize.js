@@ -1,6 +1,8 @@
 var group__constantsize =
 [
     [ "mi_free_csize", "group__constantsize.html#ga7a421e302074e598527c3eb052a6a3c5", null ],
+    [ "mi_free_csize_aligned", "group__constantsize.html#ga6fb968bb46f18f107d8d933e44964b10", null ],
+    [ "mi_free_csize_aligned_nonnull", "group__constantsize.html#gaf6715d45503bba655a4e7407bf8e0f92", null ],
     [ "mi_free_csize_nonnull", "group__constantsize.html#ga38a93d373a9dc8edc8bca83edb6af5c5", null ],
     [ "mi_malloc_csize", "group__constantsize.html#ga9cd44d925d34f7180922e12bbf594571", null ],
     [ "mi_theap_malloc_csize", "group__constantsize.html#ga105bd667da91a15d113fe79be04d625c", null ],

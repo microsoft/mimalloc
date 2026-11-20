@@ -78,7 +78,7 @@ static inline bool mi_theap_matches_thread(mi_theap_t* theap) {
       && !defined(MI_LIBC_MUSL) \
       && (!defined(__clang_major__) || __clang_major__ >= 14)  /* older clang versions emit bad code; fall back to using the TLS slot (<https://lore.kernel.org/linux-arm-kernel/202110280952.352F66D8@keescook/T/>) */
     #if    (defined(__GNUC__) && (__GNUC__ >= 7)  && defined(__aarch64__)) /* aarch64 for older gcc versions (issue #851) */ \
-        || (defined(__GNUC__) && (__GNUC__ >= 7)  && defined(__riscv)) \
+        || (defined(__GNUC__) && (__GNUC__ >= 11) && defined(__riscv))     /* gcc 10.3+, issue #1497 */ \
         || (defined(__GNUC__) && (__GNUC__ >= 11) && defined(__x86_64__)) \
         || (defined(__clang_major__) && (__clang_major__ >= 14) && (defined(__aarch64__) || defined(__x86_64__) || defined(__riscv)))
       #define MI_USE_BUILTIN_THREAD_POINTER  1
@@ -187,11 +187,7 @@ static inline mi_thread_id_t __mi_prim_thread_id(void) {
 }
 #elif !MI_NO_THREAD_POINTER
 static inline mi_thread_id_t __mi_prim_thread_id(void) {
-  #if defined(__BIONIC__)
-  return (mi_thread_id_t)mi_addr(mi_prim_tls_slot(1));
-  #else
   return (mi_thread_id_t)(uintptr_t)mi_prim_thread_pointer();  // thread pointers are never memory tagged
-  #endif
 }
 #else
 // otherwise use portable C, taking the address of a thread local variable (this is still very fast on most platforms).
@@ -325,6 +321,10 @@ static inline void* mi_prim_theap_cached_raw(void) {
 }
 
 #elif MI_TLS_MODEL_PTHREADS
+#if !MI_USE_PTHREADS
+#error MI_TLS_MODEL_PTHREADS requires MI_USE_PTHREADS
+#endif
+
 // Dynamic pthread slots. This can be fast depending on the platform (default for macOS and OpenBSD)
 // On some platforms (like macOS), the loader might allocate on thread local declarations which
 // can be avoided with pthreads.
@@ -465,7 +465,7 @@ static inline mi_theap_t* mi_theap_tls_auth(void* x, size_t tag) {
 }
 
 static inline mi_theap_t* _mi_theap_default(void) {
-  #if defined(MI_TLS_RECURSE_GUARD)
+  #if MI_TLS_RECURSE_GUARD
   if mi_unlikely(!_mi_process.process_is_initialized) return _mi_theap_empty_get();
   #endif
   return mi_theap_tls_auth(mi_prim_theap_default_raw(), MI_TLS_TAG_THEAP_DEFAULT);

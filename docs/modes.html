@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.5/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.4/2.4/1.9</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -109,10 +109,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('modes.html',''
 <h2>Guarded Mode</h2>
 <p><span id="guarded"><em>mimalloc</em> can be build in guarded mode using the <span class="tt">-DMI_GUARDED=ON</span> flags in <span class="tt">cmake</span>.</span> This enables placing OS guard pages behind certain object allocations to catch buffer overflows as they occur. This can be invaluable to catch buffer-overflow bugs in large programs. However, it also means that any object allocated with a guard page takes at least 8 KiB memory for the guard page and its alignment. As such, allocating a guard page for every allocation may be too expensive both in terms of memory, and in terms of performance with many system calls. Therefore, there are various environment variables (and options) to tune this:</p>
 <ul>
-<li><span class="tt">MIMALLOC_GUARDED_SAMPLE_RATE=N</span>: Set the sample rate to <span class="tt">N</span> (by default 4000). This mode places a guard page behind every <span class="tt">N</span> suitable object allocations (per thread). Since the performance in guarded mode without placing guard pages is close to release mode, this can be used to enable guard pages even in production to catch latent buffer overflow bugs. Set the sample rate to <span class="tt">1</span> to guard every object, and to <span class="tt">0</span> to place no guard pages at all.</li>
+<li><span class="tt">MIMALLOC_GUARDED_SAMPLE_RATE=N</span>: Set the sample rate to <span class="tt">N</span> (by default 0). This mode places a guard page behind a suitable object about every <span class="tt">N</span> requested bytes (per thread). Since the performance in guarded mode without placing guard pages is close to release mode, this can be used to enable guard pages even in production to catch latent buffer overflow bugs. Set the sample rate to <span class="tt">1</span> to guard every object, and to <span class="tt">0</span> to place no guard pages at all.</li>
 <li><span class="tt">MIMALLOC_GUARDED_SAMPLE_SEED=N</span>: Start sampling at <span class="tt">N</span> (by default random). Can be used to reproduce a buffer overflow if needed.</li>
-<li><span class="tt">MIMALLOC_GUARDED_MIN=N</span>, <span class="tt">MIMALLOC_GUARDED_MAX=N</span>: Minimal and maximal <em>rounded</em> object sizes for which a guard page is considered (<span class="tt">0</span> and <span class="tt">1GiB</span> respectively). If you suspect a buffer overflow occurs with an object of size 141, set the minimum and maximum to <span class="tt">148</span> and the sample rate to <span class="tt">1</span> to have all of those guarded.</li>
-<li><span class="tt">MIMALLOC_UNSAFE_GUARDED_PRECISE=1</span>: If we have an object of size 13, we would usually place it an aligned 16 bytes in front of the guard page. Using <span class="tt">MIMALLOC_UNSAFE_GUARDED_PRECISE</span> places it exactly 13 bytes before a page so that even a 1 byte overflow is detected. This violates the C/C++ minimal alignment guarantees though so use with care. </li>
+<li><span class="tt">MIMALLOC_GUARDED_MIN=N</span>, <span class="tt">MIMALLOC_GUARDED_MAX=N</span>: Minimal and maximal <em>rounded</em> object sizes for which a guard page is considered (<span class="tt">0</span> and <span class="tt">1GiB</span> respectively). If you suspect a buffer overflow occurs with an object of size 141, set the minimum and maximum to <span class="tt">148</span> and the sample rate to <span class="tt">1</span> to have all of those guarded. </li>
 </ul>
 </div></div><!-- contents -->
 </div><!-- PageDoc -->

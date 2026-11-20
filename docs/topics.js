@@ -1,6 +1,7 @@
 var topics =
 [
     [ "Basic Allocation", "group__malloc.html", "group__malloc" ],
+    [ "Allocation with Block Sizes", "group__sized.html", "group__sized" ],
     [ "Aligned Allocation", "group__aligned.html", "group__aligned" ],
     [ "Typed Macros", "group__typed.html", "group__typed" ],
     [ "Constant size allocation", "group__constantsize.html", "group__constantsize" ],
@@ -11,6 +12,7 @@ var topics =
     [ "Subprocesses", "group__subproc.html", "group__subproc" ],
     [ "Extended Functions", "group__extended.html", "group__extended" ],
     [ "Statistics", "group__stats.html", "group__stats" ],
+    [ "Heap Profiling", "group__profiling.html", "group__profiling" ],
     [ "Runtime Options", "group__options.html", "group__options" ],
     [ "Thread-local heaps", "group__theap.html", "group__theap" ],
     [ "Posix", "group__posix.html", "group__posix" ],

@@ -8,14 +8,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 30602   // major + 2 digits minor + 2 digits patch
+#define MI_MALLOC_VERSION 30700   // major + 2 digits minor + 2 digits patch
 
 // ------------------------------------------------------
 // Compiler specific attributes
 // ------------------------------------------------------
 
 #ifdef __cplusplus
-  #if (__cplusplus >= 201103L) || (_MSC_VER > 1900)  // C++11
+  #if (__cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER > 1900)  // C++11
     #define mi_attr_noexcept   noexcept
   #else
     #define mi_attr_noexcept   throw()
@@ -30,16 +30,16 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_decl_nodiscard    __attribute__((warn_unused_result))
 #elif defined(_HAS_NODISCARD)
   #define mi_decl_nodiscard    _NODISCARD
-#elif (_MSC_VER >= 1700)
+#elif defined(_MSC_VER) && (_MSC_VER >= 1700)
   #define mi_decl_nodiscard    _Check_return_
 #else
   #define mi_decl_nodiscard
 #endif
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
-  #if !defined(MI_SHARED_LIB)
+  #if !defined(MI_SHARED_LIB) || !MI_SHARED_LIB
     #define mi_decl_export
-  #elif defined(MI_SHARED_LIB_EXPORT)
+  #elif defined(MI_SHARED_LIB_EXPORT) && MI_SHARED_LIB_EXPORT
     #define mi_decl_export              __declspec(dllexport)
   #else
     #define mi_decl_export              __declspec(dllimport)
@@ -60,7 +60,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_attr_alloc_size2(s1,s2)
   #define mi_attr_alloc_align(p)
 #elif defined(__GNUC__)                 // includes clang and icc
-  #if defined(MI_SHARED_LIB) && defined(MI_SHARED_LIB_EXPORT)
+  #if defined(MI_SHARED_LIB) && MI_SHARED_LIB && defined(MI_SHARED_LIB_EXPORT) && MI_SHARED_LIB_EXPORT
     #define mi_decl_export              __attribute__((visibility("default")))
   #else
     #define mi_decl_export
@@ -192,6 +192,7 @@ mi_decl_nodiscard mi_decl_export void* mi_realloc_aligned_at(void* p, size_t new
 // See also `mimalloc-stats.h` for statistics
 // ------------------------------------------------------
 
+// Callbacks are always called with their registered argument, but other threads may briefly call a previously registered one.
 typedef void (mi_cdecl mi_deferred_free_fun)(bool force, unsigned long long heartbeat, void* arg);
 mi_decl_export void mi_register_deferred_free(mi_deferred_free_fun* deferred_free, void* arg) mi_attr_noexcept;
 
@@ -505,7 +506,7 @@ typedef enum mi_option_e {
   mi_option_deprecated_visit_abandoned,
   mi_option_guarded_min,                // only used when building with MI_GUARDED: minimal rounded object size for guarded objects (=0)
   mi_option_guarded_max,                // only used when building with MI_GUARDED: maximal rounded object size for guarded objects (=0)
-  mi_option_unsafe_guarded_precise,     // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)
+  mi_option_deprecated_unsafe_guarded_precise,     // deprecated (but can be enabled at build time with -DMI_UNSAFE_GUARDED_PRECISE=1)
   mi_option_guarded_sample_rate,        // guard an object in the min/max range about every N requested bytes (=0)
   mi_option_guarded_sample_seed,        // can be set to allow for a (more) deterministic re-execution when a guard page is triggered (=0)
   mi_option_generic_collect,            // collect theaps every N (=10000) generic allocation calls
@@ -517,7 +518,8 @@ typedef enum mi_option_e {
   mi_option_page_commit_on_demand,      // commit page memory on-demand
   mi_option_page_max_reclaim,           // don't reclaim pages of the same originating theap if we already own N pages (in that size class) (=-1 (unlimited))
   mi_option_page_cross_thread_max_reclaim, // don't reclaim pages across threads if we already own N pages (in that size class) (=32)
-  mi_option_allow_thp,                  // allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
+  mi_option_allow_thp,                  // transparent huge pages: 0 disable for the process, 1 allow, 2 allow and avoid splitting on purge.
+                                       // default: 2 on Linux, 0 on Android; an explicit minimal_purge_size overrides the purge behavior.
   mi_option_arena_purge_min_size,       // set minimal purge size (in KiB) (=0). By default set to either 64 or 2048 if THP is enabled.
   mi_option_arena_max_object_size,      // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit).
   mi_option_arena_is_numa_local,        // experimental: associate local numa node with an initial arena allocation
@@ -681,7 +683,7 @@ mi_decl_export void mi_free_small_local_nonnull(void* p) mi_attr_noexcept;
 
 #include <cstddef>     // std::size_t
 #include <cstdint>     // PTRDIFF_MAX
-#if (__cplusplus >= 201103L) || (_MSC_VER > 1900)  // C++11
+#if (__cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER > 1900)  // C++11
 #include <type_traits> // std::true_type
 #include <utility>     // std::forward
 #endif
@@ -695,7 +697,7 @@ template<class T> struct _mi_stl_allocator_common {
   typedef value_type*       pointer;
   typedef value_type const* const_pointer;
 
-  #if ((__cplusplus >= 201103L) || (_MSC_VER > 1900))  // C++11
+  #if ((__cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER > 1900))  // C++11
   using propagate_on_container_copy_assignment = std::true_type;
   using propagate_on_container_move_assignment = std::true_type;
   using propagate_on_container_swap            = std::true_type;
@@ -730,7 +732,7 @@ template<class T> struct mi_stl_allocator : public _mi_stl_allocator_common<T> {
   mi_decl_nodiscard pointer allocate(size_type count, const void* = 0) { return static_cast<pointer>(mi_new_n(count, sizeof(value_type))); }
   #endif
 
-  #if ((__cplusplus >= 201103L) || (_MSC_VER > 1900))  // C++11
+  #if ((__cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER > 1900))  // C++11
   using is_always_equal = std::true_type;
   #endif
 };
@@ -739,7 +741,7 @@ template<class T1,class T2> bool operator==(const mi_stl_allocator<T1>& , const 
 template<class T1,class T2> bool operator!=(const mi_stl_allocator<T1>& , const mi_stl_allocator<T2>& ) mi_attr_noexcept { return false; }
 
 
-#if (__cplusplus >= 201103L) || (_MSC_VER >= 1900)  // C++11
+#if (__cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER >= 1900)  // C++11
 #define MI_HAS_HEAP_STL_ALLOCATOR 1
 
 #include <memory>      // std::shared_ptr
@@ -759,7 +761,7 @@ template<class T, bool _mi_destroy> struct _mi_heap_stl_allocator_common : publi
   mi_decl_nodiscard pointer allocate(size_type count, const void* = 0) { return static_cast<pointer>(mi_heap_alloc_new_n(this->heap.get(), count, sizeof(value_type))); }
   #endif
 
-  #if ((__cplusplus >= 201103L) || (_MSC_VER > 1900))  // C++11
+  #if ((__cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER > 1900))  // C++11
   using is_always_equal = std::false_type;
   #endif
 

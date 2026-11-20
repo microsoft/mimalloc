@@ -102,8 +102,7 @@ fn main() {
     };
 
     // build options
-    let debug = feature("debug")
-        || (feature("debug_in_debug") && is_rust_debug());
+    let debug = feature("debug") || (feature("debug_in_debug") && is_rust_debug());
     if debug {
         define("MI_DEBUG", "2");
     } else if !is_user("MI_DEBUG") {
@@ -111,13 +110,15 @@ fn main() {
         define("NDEBUG", "1");
     }
     // `mte` and `pac` require hardware and OS support at runtime (and fail at startup otherwise)
-    let hw_os = target_arch == "aarch64"
-        && (is_apple || target_os == "linux" || target_os == "android");
+    let hw_os =
+        target_arch == "aarch64" && (is_apple || target_os == "linux" || target_os == "android");
     if feature("mte") {
         if !hw_os {
-            panic!("the `mte` feature is only supported on aarch64 Linux, Android, and macOS targets");
+            panic!(
+                "the `mte` feature is only supported on aarch64 Linux, Android, and macOS targets"
+            );
         }
-        define("MI_MTE", "2"); // ON
+        define("MI_MTE", "2"); // ON (which also enables `MI_PAC=2` by default in `arch.h`)
     }
     if feature("pac") {
         if !hw_os || is_msvc {
@@ -222,5 +223,5 @@ fn main() {
 
 fn is_apple_clang(compiler: &cc::Tool) -> bool {
     let out = compiler.to_command().arg("--version").output();
-    out.is_ok_and(|out| String::from_utf8_lossy(&out.stdout).contains("Apple clang"))
+    matches!(out, Ok(out) if String::from_utf8_lossy(&out.stdout).contains("Apple clang"))
 }

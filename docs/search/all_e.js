@@ -1,7 +1,6 @@
 var searchData=
 [
-  ['the_20library_0',['Using the Library',['../using.html',1,'']]],
-  ['thread_20local_20heaps_1',['Thread-local heaps',['../group__theap.html',1,'']]],
-  ['tools_2',['Tools',['../tools.html',1,'']]],
-  ['typed_20macros_3',['Typed Macros',['../group__typed.html',1,'']]]
+  ['re_20allocation_0',['Zero initialized re-allocation',['../group__zeroinit.html',1,'']]],
+  ['reserved_1',['reserved',['../group__analysis.html#ae848a3e6840414891035423948ca0383',1,'mi_heap_area_t']]],
+  ['runtime_20options_2',['Runtime Options',['../group__options.html',1,'']]]
 ];

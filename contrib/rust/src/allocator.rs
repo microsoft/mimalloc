@@ -5,7 +5,7 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 use crate::heap::realloc_in;
-use crate::{Heap, MiMalloc, free_sized, realloc_aligned};
+use crate::{free_sized, realloc_aligned, Heap, MiMalloc};
 use core::alloc::{AllocError, Allocator, GlobalAlloc, Layout};
 use core::ptr::NonNull;
 

@@ -46,9 +46,9 @@ static size_t mi_page_guard_front_block_start(size_t guard_front, size_t block_s
   return mi_align_up(guard_front, mi_bounds_align(block_size));  // on CHERI, keep exact bounds
 }
 
-// Can we offset the first block to spread cache sets? (see `MI_PAGE_CACHE_OFFSET`)
-static bool mi_page_block_can_cache_offset(size_t block_size, bool os_align) {
-  if (os_align || !mi_block_size_has_cache_offset(block_size)) return false;
+// Can we offset the first block with a large cache offset to spread cache sets? (see `MI_PAGE_LARGE_CACHE_OFFSET`)
+static bool mi_page_block_can_use_large_cache_offset(size_t block_size) {
+  if (!mi_block_size_has_large_cache_offset(block_size)) return false;
   #if MI_GUARDED
   if (block_size % _mi_os_page_size() == 0) return false;  // guarded blocks must stay OS page aligned
   #endif
@@ -86,8 +86,9 @@ static size_t mi_page_meta_in_front_block_start(size_t block_size, bool os_align
     offset = mi_align_up(mi_page_info_size(), block_size);
   }
   else if (block_size != 0 && (block_size % MI_PAGE_OSPAGE_BLOCK_ALIGN2) == 0) {
-    // also align large pages that are a multiple of MI_PAGE_OSPAGE_BLOCK_ALIGN2 (4KiB)
-    offset = mi_align_up(mi_page_info_size(), MI_PAGE_OSPAGE_BLOCK_ALIGN2);
+    // align blocks that are a multiple of MI_PAGE_OSPAGE_BLOCK_ALIGN2 (4KiB) (or to the cache offset unit)
+    const size_t alignment = (mi_page_block_can_use_large_cache_offset(block_size) ? MI_PAGE_LARGE_CACHE_OFFSET_UNIT : MI_PAGE_OSPAGE_BLOCK_ALIGN2);
+    offset = mi_align_up(mi_page_info_size(), alignment);
   }
   else {
     // otherwise start after the info
@@ -116,17 +117,17 @@ static size_t mi_page_small_block_cache_offset(uint8_t* slice_start, size_t slic
 
 // Cache offset for the first block to spread the blocks of different pages over the cache sets (issue #1121).
 // The offset fits in the unused space at the end of the page; if there is none, we skip the last block
-// if that wastes less than 12.5% of the page (e.g. 64 KiB blocks in a 4 MiB page, but not 512 KiB blocks).
+// if that wastes at most 12.5% of the page.
 static size_t mi_page_block_cache_offset(uint8_t* slice_start, size_t slice_count, size_t block_size, size_t block_start, bool os_align, size_t page_noguard_size) {
-  if (MI_PAGE_CACHE_OFFSET == 0 || os_align) return 0;
-  if (!mi_block_size_has_cache_offset(block_size)) return mi_page_small_block_cache_offset(slice_start, slice_count, block_size);
-  if (!mi_page_block_can_cache_offset(block_size, os_align)) return 0;
-  const size_t unit = mi_max(MI_PAGE_CACHE_OFFSET_UNIT, mi_bounds_align(block_size));  // on CHERI, keep exact bounds
-  if (unit > MI_PAGE_CACHE_OFFSET_MAX) return 0;
+  if (MI_PAGE_LARGE_CACHE_OFFSET == 0 || os_align) return 0;
+  if (!mi_block_size_has_large_cache_offset(block_size)) return mi_page_small_block_cache_offset(slice_start, slice_count, block_size);
+  if (!mi_page_block_can_use_large_cache_offset(block_size)) return 0;
+  const size_t unit = mi_max(MI_PAGE_LARGE_CACHE_OFFSET_UNIT, mi_bounds_align(block_size));  // on CHERI, keep exact bounds
+  if (unit > MI_PAGE_LARGE_CACHE_OFFSET_MAX) return 0;
   mi_assert_internal(block_start + block_size <= page_noguard_size);
   size_t slack = (page_noguard_size - block_start) % block_size;
-  if (slack < unit && block_size < page_noguard_size/8) { slack += block_size; }
-  const size_t noffsets = 1 + (slack < MI_PAGE_CACHE_OFFSET_MAX ? slack : MI_PAGE_CACHE_OFFSET_MAX) / unit;
+  if (slack < unit && block_size <= page_noguard_size/8) { slack += block_size; }      // offset 0 still fits exact
+  const size_t noffsets = 1 + (slack < MI_PAGE_LARGE_CACHE_OFFSET_MAX ? slack : MI_PAGE_LARGE_CACHE_OFFSET_MAX) / unit;
   return mi_page_cache_offset_index(slice_start, slice_count, noffsets) * unit;
 }
 
@@ -217,12 +218,24 @@ static uint8_t* mi_arenas_page_alloc_from_slices(mi_theap_t* theap, size_t slice
   *ppage_meta = mi_aligned_ptr_page0(start);
   #else
   mi_assert_internal(MI_PAGE_META_IS_SEPARATED!=0 || arena->pages_meta == NULL);
-  *ppage_meta = (arena->pages_meta == NULL ? NULL : mi_page_meta_load(&arena->pages_meta[memid->mem.arena.slice_index]));
+  *ppage_meta = (arena->pages_meta == NULL ? NULL : mi_page_meta_load(mi_arena_page_meta_at_slice(arena, memid->mem.arena.slice_index)));
   #endif
   return start;
 }
 
 #if MI_PAGE_META_OS_IS_SEPARATED
+#if MI_PAGE_META_IS_ALIGNED
+// The size of the aligned page meta data up to and including the entries for a page at `page_offset` in an aligned OS area.
+static size_t mi_page_meta_os_aligned_size(size_t page_offset, size_t max_page_meta_count) {
+  size_t count = 0;
+  const size_t slice_end = mi_divide_up(page_offset + MI_ARENA_SLICE_SIZE, MI_ARENA_SLICE_SIZE) + max_page_meta_count;
+  for (size_t slice_idx = page_offset / MI_ARENA_SLICE_SIZE; slice_idx < slice_end; slice_idx++) {
+    count = mi_max(count, mi_page_meta_aligned_index(slice_idx) + 1);
+  }
+  return count * sizeof(mi_page_t);
+}
+#endif
+
 // Allocate slices from the OS with the (committed and zero'd) page meta data in front of the page area (returned in `*ppage_meta`).
 // The OS memory is `[guard slice | page meta data | guard slice | ... | page area]` where the guard slices are only reserved in secure mode.
 // With aligned page meta data, the OS memory is `MI_PAGE_META_ALIGNMENT` aligned and the page meta data is indexed by slice (see `mi_aligned_ptr_page`).
@@ -246,18 +259,23 @@ static uint8_t* mi_arenas_page_alloc_from_os(mi_heap_t* heap, size_t slice_count
   #endif
 
   // offset of the page area (leaving room for the guard slices around the page meta data)
-  const size_t page_offset = mi_align_up(_mi_size_of_slices(2*MI_ARENA_GUARD_SLICES + 1), page_alignment);
+  size_t page_offset = mi_align_up(_mi_size_of_slices(2*MI_ARENA_GUARD_SLICES + 1), page_alignment);
+  #if MI_PAGE_META_IS_ALIGNED
+  size_t page_meta_size = mi_page_meta_os_aligned_size(page_offset, max_page_meta_count);
+  while (_mi_size_of_slices(MI_ARENA_GUARD_SLICES) + mi_align_up(page_meta_size,_mi_os_page_size()) + _mi_os_secure_guard_page_size() > page_offset) {
+    // the spread page meta entries need more room in front of the page area
+    page_offset += page_alignment;
+    page_meta_size = mi_page_meta_os_aligned_size(page_offset, max_page_meta_count);
+  }
+  #else
+  const size_t page_meta_size = sizeof(mi_page_t);
+  #endif
   uint8_t* const os_start = (uint8_t*)_mi_arena_os_alloc_aligned(heap->subproc, alloc_size + page_offset, os_alignment, 0 /* align offset */, false /* commit */, false /* allow large */, req_arena, memid);
   if (os_start==NULL) return NULL;
   uint8_t* const start = os_start + page_offset;
 
   // commit the page meta data and page area
   uint8_t* const page_meta_start = os_start + _mi_size_of_slices(MI_ARENA_GUARD_SLICES);
-  #if MI_PAGE_META_IS_ALIGNED
-  const size_t page_meta_size = (mi_divide_up(page_offset + MI_ARENA_SLICE_SIZE,MI_ARENA_SLICE_SIZE) + max_page_meta_count) * sizeof(mi_page_t);
-  #else
-  const size_t page_meta_size = sizeof(mi_page_t);
-  #endif
   mi_assert_internal(page_meta_start + mi_align_up(page_meta_size,_mi_os_page_size()) + _mi_os_secure_guard_page_size() <= start);
   bool is_zero;
   bool ok = _mi_arena_commit(heap->subproc,req_arena,page_meta_start,page_meta_size,&is_zero,page_meta_size /* don't count in stats? */);
@@ -411,7 +429,7 @@ static mi_page_t* mi_page_meta_memtag(mi_page_t* page, uint8_t* slice_start, mi_
   }
   mi_arena_t* const arena = mi_memid_arena(memid);
   if (arena != NULL && arena->pages_meta != NULL) {
-    mi_assert_internal(mi_addr(page) == mi_addr(&arena->pages_meta[memid.mem.arena.slice_index]));
+    mi_assert_internal(mi_addr(page) == mi_addr(mi_arena_page_meta_at_slice(arena, memid.mem.arena.slice_index)));
     return mi_page_meta_bounded(mi_arena_page_meta_memtag(arena, page));
   }
   #if MI_PAGE_META_IS_ALIGNED
@@ -462,6 +480,9 @@ static void mi_arenas_page_init_meta(mi_theap_t* theap, mi_page_t* page, uint8_t
   page->slice_pcommitted = (uint16_t)(commit_size / _mi_os_page_size());
 
   page->heap = mi_theap_heap(theap);
+  #if MI_DEBUG>0
+  mi_atomic_store_relaxed(&page->debug_fill_preserve, mi_atomic_load_relaxed(&page->heap->debug_fill_preserve));
+  #endif
   if (block_size <= MI_LARGE_MAX_OBJ_SIZE && mi_memtag_use_for(memid.is_memtag, block_size)) {  // huge blocks are not tagged (but have an end guard page in secure mode); over-aligned singletons up to this size are tagged
     mi_page_flags_set(page, true, MI_PAGE_IS_MEMTAGGED);
   }
@@ -477,8 +498,9 @@ static void mi_arenas_page_link_aligned_meta(mi_page_t* page, uint8_t* slice_sta
   mi_atomic_store_ptr_release(mi_page_t,&mi_page_meta_load(page_meta)->self,page);
   if (slice_count > 1) {
     // at least two for large singleton blocks as guard pages can have a large offset beyond a single slice
+    // (note: the entries of adjacent slices are not adjacent, see `mi_page_meta_aligned_index`)
     for(size_t i = 1; i < max_page_meta_count; i++) {
-      mi_page_t* const meta = mi_page_meta_load(&page_meta[i]);
+      mi_page_t* const meta = mi_page_meta_load(mi_aligned_ptr_page0(slice_start + _mi_size_of_slices(i)));
       mi_assert_internal(meta->block_size == 0);
       mi_atomic_store_ptr_release(mi_page_t,&meta->self,page);
     }
@@ -624,7 +646,7 @@ static mi_page_t* mi_arenas_page_regular_alloc(mi_theap_t* theap, size_t slice_c
 
   mi_assert_internal(page->memid.memkind != MI_MEM_ARENA || page->memid.mem.arena.slice_count == slice_count);
   if (!_mi_page_init(theap, page)) {
-    _mi_arenas_page_free(page,theap);
+    _mi_arenas_page_free_direct(page,theap);
     return NULL;
   }
 
@@ -641,7 +663,7 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_theap_t* theap, size_t block
   const size_t info_size = (os_align ? MI_PAGE_ALIGN : mi_align_up(mi_page_info_size(), mi_bounds_align(block_size)));  // see `mi_page_meta_in_front_block_start`
   #endif
   // room for the cache offset of the block (committed but not touched)
-  const size_t cache_offset_size = (mi_page_block_can_cache_offset(block_size, os_align) ? MI_PAGE_CACHE_OFFSET_MAX : 0);
+  const size_t cache_offset_size = (!os_align && mi_page_block_can_use_large_cache_offset(block_size) ? MI_PAGE_LARGE_CACHE_OFFSET_MAX : 0);
   // determine the guard pages based on the page size without guard pages
   const size_t size = info_size + cache_offset_size + block_size;
   const mi_page_guards_t guards = mi_theap_page_guards(theap, _mi_size_of_slices(_mi_slice_count_of_size(size)), true, os_align);
@@ -659,7 +681,7 @@ static mi_page_t* mi_arenas_page_singleton_alloc(mi_theap_t* theap, size_t block
 
   mi_assert(page->reserved == 1);
   if (!_mi_page_init(theap, page)) {
-    _mi_arenas_page_free(page,theap);
+    _mi_arenas_page_free_direct(page,theap);
     return NULL;
   }
 
@@ -745,7 +767,7 @@ void _mi_arenas_page_free_prim(mi_page_t* page) {
       size_t bin = _mi_bin(mi_page_block_size(page));
       mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
       mi_assert_internal(mi_page_slice_committed(page) > 0 || mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
-      mi_assert_internal(bin >= MI_ARENA_BIN_COUNT || mi_bitmap_is_clearN(arena_pages->pages_abandoned[bin], slice_index, 1));
+      mi_assert_internal(bin >= MI_ARENA_BIN_COUNT || mi_bitmap_chunk_count(arena_pages->pages_abandoned[bin]) == 0 || mi_bitmap_is_clearN(arena_pages->pages_abandoned[bin], slice_index, 1));
       // note: we cannot check for `!mi_page_is_abandoned_and_mapped` since that may
       // be (temporarily) not true if the free happens while trying to reclaim
       // see `mi_arena_try_claim_abandoned`
@@ -806,7 +828,8 @@ void _mi_arenas_page_free_prim(mi_page_t* page) {
   _mi_arenas_free(subproc, slice_start, full_size, memid);
 }
 
-void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
+// Physically release an empty page whose QSBR state has already been cleared.
+void _mi_arenas_page_free_direct(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(_mi_page_qsbr_is_clear(page));
   mi_assert_internal(mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));
   mi_assert_internal(mi_ptr_page(mi_page_start(page))==page);
@@ -822,4 +845,26 @@ void _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
   _mi_page_free_collect(page,false);  // update used count for cross-thread free's
   _mi_page_update_stats(page);        // and update the stats
   _mi_arenas_page_free_prim(page);
+}
+
+// Free an empty page that was removed from the abandoned registries, or retain it if it is delayed by QSBR:
+// a delayed singleton goes to the heap QSBR delayed list, and other pages are abandoned (to be reclaimed or collected later).
+// Returns true if the page was freed.
+bool _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
+  mi_assert_internal(mi_page_is_owned(page) && mi_page_all_free(page));
+  mi_assert_internal(mi_page_is_abandoned(page) && !mi_page_is_abandoned_mapped(page));
+  mi_assert_internal(page->next == NULL && page->prev == NULL);
+  if (_mi_page_qsbr_should_delay(page)) {
+    #if MI_QSBR
+    if (mi_page_is_singleton(page)) {
+      _mi_heap_qsbr_delayed_enqueue(page);
+      return false;
+    }
+    #endif
+    _mi_arenas_page_abandon(page, current_theapx);
+    return false;
+  }
+  _mi_page_qsbr_clear(page);
+  _mi_arenas_page_free_direct(page, current_theapx);
+  return true;
 }

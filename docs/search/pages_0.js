@@ -1,5 +1,5 @@
 var searchData=
 [
-  ['build_20modes_0',['Build Modes',['../modes.html',1,'']]],
+  ['best_20performance_0',['Getting the Best Performance',['../tuning.html',1,'']]],
   ['building_1',['Building',['../build.html',1,'']]]
 ];

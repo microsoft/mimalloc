@@ -22,7 +22,7 @@ mi_decl_restrict void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t si
 void          _mi_page_retire(mi_page_t* page) mi_attr_noexcept;       // free the page if there are no other pages with many free blocks
 void          _mi_page_unfull(mi_page_t* page);
 bool          _mi_page_free(mi_page_t* page, mi_page_queue_t* pq);     // false if page release is delayed
-void          _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq);  // abandon the page, to be picked up by another thread...
+void          _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq, bool owner_done);  // abandon the page, to be picked up by another thread...
 void          _mi_deferred_free(mi_theap_t* theap, bool force);
 bool          _mi_page_free_collect(mi_page_t* page, bool force);  // returns `true` if cross-thread free'd blocks were collected
 mi_block_t*   _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
@@ -30,6 +30,7 @@ mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page);
 void          _mi_page_update_stats(mi_page_t* page);
 
 void          _mi_theap_collect_retired(mi_theap_t* theap, bool force);
+void          _mi_theap_collect_huge_pages(mi_theap_t* theap);
 bool          _mi_theap_page_reclaim(mi_theap_t* theap, mi_page_t* page);  // true if an empty page was freed
 #if MI_DEBUG>1
 bool          _mi_page_is_valid(mi_page_t* page);
@@ -72,16 +73,20 @@ static inline size_t mi_page_info_size(void) {
   return mi_align_up(sizeof(mi_page_t), MI_MAX_ALIGN_SIZE);
 }
 
-// Can the first block in a page with blocks of size `bsize` have a cache offset? (see `MI_PAGE_CACHE_OFFSET`)
-static inline bool mi_block_size_has_cache_offset(size_t bsize) {
-  return (MI_PAGE_CACHE_OFFSET != 0 && bsize > MI_SMALL_MAX_OBJ_SIZE);
+// Can the first block in a page with blocks of size `bsize` have a large cache offset? (see `MI_PAGE_LARGE_CACHE_OFFSET`; smaller blocks use a small cache offset)
+static inline bool mi_block_size_has_large_cache_offset(size_t bsize) {
+  #if MI_PAGE_LARGE_CACHE_OFFSET
+  return (bsize > MI_SMALL_MAX_OBJ_SIZE);
+  #else
+  return false;
+  #endif
 }
 
 // Is a (non-small) block of size `bsize` allocated in a medium page?
 // Blocks of 1/8th of a medium page (64 KiB) leave no space for a cache offset and use a large page instead.
 static inline bool mi_block_size_is_medium(size_t bsize) {
   #if MI_ENABLE_LARGE_PAGES
-  if (mi_block_size_has_cache_offset(bsize) && bsize == MI_MEDIUM_PAGE_SIZE/8) return false;
+  if (mi_block_size_has_large_cache_offset(bsize) && bsize == MI_MEDIUM_PAGE_SIZE/8) return false;
   #endif
   return (bsize <= MI_MEDIUM_MAX_OBJ_SIZE);
 }
@@ -91,10 +96,10 @@ static inline bool mi_block_size_is_medium(size_t bsize) {
 // and used by `mi_malloc_aligned` to avoid over-allocation for naturally aligned blocks.
 static inline size_t mi_natural_alignment_of_size(size_t bsize) {
   const size_t lowbit = bsize & (~bsize + 1);  // largest power of 2 that divides `bsize`
-  if (mi_is_power_of_two(bsize) && bsize <= MI_PAGE_MAX_START_BLOCK_ALIGN2) return bsize;   // power-of-two blocks up to 4KiB
   if (bsize <= MI_SMALL_SIZE_MAX) return lowbit;                                            // small blocks start at a multiple of their size
+  if (mi_is_power_of_two(bsize) && bsize <= MI_PAGE_MAX_START_BLOCK_ALIGN2) return bsize;   // power-of-two blocks up to 4KiB
   if ((bsize % MI_PAGE_OSPAGE_BLOCK_ALIGN2) == 0) {                                         // multiples of 4KiB are 4KiB aligned (or cache offset unit aligned)
-    return (mi_block_size_has_cache_offset(bsize) ? MI_PAGE_CACHE_OFFSET_UNIT : MI_PAGE_OSPAGE_BLOCK_ALIGN2);
+    return (mi_block_size_has_large_cache_offset(bsize) ? MI_PAGE_LARGE_CACHE_OFFSET_UNIT : MI_PAGE_OSPAGE_BLOCK_ALIGN2);
   }
   return (lowbit < MI_MAX_ALIGN_SIZE ? lowbit : MI_MAX_ALIGN_SIZE);                         // otherwise blocks start at least `MI_MAX_ALIGN_SIZE` aligned
 }
@@ -368,13 +373,19 @@ static inline size_t mi_page_memtag_parity(const mi_page_t* page) {
 // Only the first unit of the neighbours is read (as a guarded block may end in a guard page), and only for blocks below the capacity
 // (as later blocks are not yet tagged and may not be committed). The first and the last block of the page use the tag class of `idx`
 // (as the adjacent memory cannot be read).
-// (note: the capacity can be read concurrently by a non-owning thread but it only grows while the page has a used block)
+// (note: the capacity is read concurrently by a non-owning thread (using the atomic `capacity_size`) but it only grows while the page
+//  has a used block; a stale capacity only means the next block is not considered, which is the same as a free just before an extension)
 // (note: we branch on the (rare) edge case instead of selecting the mask as this keeps it off the critical path of the retagging)
 static inline size_t mi_page_block_memtag_adjacent(const mi_page_t* page, const void* block, size_t bsize, size_t idx, const void** prev, const void** next) {
   const uint8_t* const ublock = (const uint8_t*)mi_ptr_memtag_meta(block);
   const size_t ofs = (size_t)(mi_addr(ublock) - mi_addr(mi_page_start(page)));
+  #if MI_FREE_IS_CHECKED
+  const size_t capacity_size = mi_atomic_load_relaxed(&page->capacity_size);
+  #else
+  const size_t capacity_size = (size_t)page->capacity * bsize;  // not reached as memory tagging implies `MI_FREE_IS_CHECKED`
+  #endif
   *prev = (ofs == 0 ? NULL : ublock - bsize);
-  *next = (ofs + bsize >= (size_t)page->capacity * bsize ? NULL : ublock + bsize);
+  *next = (ofs + bsize >= capacity_size ? NULL : ublock + bsize);
   if mi_unlikely(ofs == 0 || ofs + bsize >= (size_t)page->reserved * bsize) {
     return mi_memtag_exclude_base(idx, true);
   }
@@ -393,7 +404,8 @@ static inline bool mi_page_is_zero_on_free(const mi_page_t* page) {
 }
 
 #if MI_QSBR
-// For qsbr, `qsbr_xthread_id` keeps the thread id of the last owning thread (so it is still available when the page is abandoned)
+// For qsbr, `qsbr_xthread_id` keeps the thread id of the last owning thread (so it is still available when a full page is abandoned)
+// It is cleared when the owning theap abandons all its pages (e.g. on thread termination).
 // The lowest bit is set if the page is in the qsbr queue of its theap. It is only written by the owning thread.
 #define MI_PAGE_QSBR_IN_QUEUE  MI_ZU(0x01)
 
@@ -555,13 +567,13 @@ static inline void mi_page_qsbr_unlink(mi_page_t* page) {
   mi_theap_t* theap = mi_page_theap(page);
   if (page->qsbr_prev != NULL) { page->qsbr_prev->qsbr_next = page->qsbr_next; }
   else {
-    mi_assert_internal(theap->qsbr_first == page);
-    theap->qsbr_first = page->qsbr_next;
+    mi_assert_internal(theap->qsbr_delayed == page);
+    theap->qsbr_delayed = page->qsbr_next;
   }
   if (page->qsbr_next != NULL) { page->qsbr_next->qsbr_prev = page->qsbr_prev; }
   else {
-    mi_assert_internal(theap->qsbr_last == page);
-    theap->qsbr_last = page->qsbr_prev;
+    mi_assert_internal(theap->qsbr_delayed_last == page);
+    theap->qsbr_delayed_last = page->qsbr_prev;
   }
   page->qsbr_next = page->qsbr_prev = NULL;
   mi_page_qsbr_set_in_queue(page, false);
@@ -578,10 +590,10 @@ static inline void mi_page_qsbr_enqueue(mi_page_t* page, mi_theap_t* theap) {
   mi_assert_internal(!mi_page_qsbr_is_clear(&page->qsbr));
   if (mi_page_qsbr_is_in_queue(page)) return;
   mi_assert_internal(page->qsbr_next == NULL && page->qsbr_prev == NULL);
-  page->qsbr_prev = theap->qsbr_last;
-  if (theap->qsbr_last != NULL) { theap->qsbr_last->qsbr_next = page; }
-  else { theap->qsbr_first = page; }
-  theap->qsbr_last = page;
+  page->qsbr_prev = theap->qsbr_delayed_last;
+  if (theap->qsbr_delayed_last != NULL) { theap->qsbr_delayed_last->qsbr_next = page; }
+  else { theap->qsbr_delayed = page; }
+  theap->qsbr_delayed_last = page;
   mi_page_qsbr_set_in_queue(page, true);
 #else
   MI_UNUSED(page);
@@ -640,12 +652,14 @@ cannot be copied). We use one of three encodings:
    We store the 32-bit page offset `v` of the next block (with `NULL` as
    the reserved offset `MI_BLOCK_OFS_NULL`) together with a keyed 32-bit tag:
 
-     x      = (T(b,v) << 32) | (v ^ m)
-     T(b,v) = let t = mulxor64(v ^ keys[0], b ^ keys[1]) in t ^ (t >> 32)
+     x      = (M(b,v) & H) | (v ^ m)
+     M(b,v) = mulxor64(v ^ keys[0], b ^ keys[1])
 
-   where `mulxor64` xor's the low and high halves of the full 128-bit
+   where `H` selects the upper 32 bits, `mulxor64` xor's the low and high halves of the full 128-bit
    product, and the mask `m` (the upper 32 bits of `keys[0]`) hides the
-   (randomized) free list order. Decoding is just an xor and an add; the tag
+   (randomized) free list order. (With memory tagging, the offset `v` is 24 bits and includes the
+   memory tag of the next block, and `H` selects all other bits; see `MI_BLOCK_OFS_MASK`).
+   Decoding is just an xor and an add; the tag
    is verified alongside with a predictable branch so the multiply mostly costs
    throughput. A corrupted or forged link validates with
    probability 2^-32, and it is difficult to recover the keys
@@ -657,13 +671,17 @@ cannot be copied). We use one of three encodings:
    As the tagged offsets, but the tag is computed with the (unreadable)
    hardware pointer authentication key:
 
-     x      = (T(b,v) << 32) | v
-     T(b,v) = let t = pacga(v, b ^ keys[0]) in t | (t >> 32)
+     x      = (M(b,v) & H) | (v ^ keys[1])
+     M(b,v) = let t = pacga(v, b ^ keys[0]) in t | (t >> 32)
 
-   The page keys need not be secret anymore: the offset is not masked, and
-   `keys[0]` only serves as a nonce such that links from a previous use of the
-   page do not validate. A forged link validates with probability 2^-32 even
-   if the page keys are known.
+   where `H` is as in the tagged offsets (the upper 32 bits, or with memory tagging all bits
+   outside the 24-bit offset), and `pacga` returns a 32-bit code in the upper 32 bits (and zeros
+   in the lower bits); the copy in the lower half provides the tag bits below bit 32 with memory tagging.
+   The integrity of the links does not depend on the page keys: `keys[0]` serves as a nonce
+   such that links from a previous use of the page do not validate, and a forged link validates
+   with probability 2^-32 even if the page keys are known. The mask `keys[1]` still hides the
+   (randomized) free list order (and the memory tags of the free blocks) from an attacker that
+   can only read freed memory.
 
 3. Xor-shift (the default on 32-bit, where we lack a cheap wide multiply).
    We store the full next address `p` (with `NULL` encoded as the page address):
@@ -709,8 +727,7 @@ static inline mi_addr_t mi_ptr_mac(const mi_page_t* page, mi_addr_t baddr, mi_ad
   return mi_keyed_mac(d, baddr ^ page->keys[0]);
 }
 static inline mi_addr_t mi_ptr_ofs_key(const mi_page_t* page) {
-  MI_UNUSED(page);
-  return 0;
+  return page->keys[1];
 }
 #else
 static inline mi_addr_t mi_ptr_mac(const mi_page_t* page, mi_addr_t baddr, mi_addr_t d) {
@@ -809,7 +826,7 @@ static inline mi_encoded_t mi_block_encode(const mi_page_t* page, const mi_block
 
 static inline mi_encoded_t mi_block_link(const mi_block_t* block) {
   mi_track_mem_defined(block,sizeof(mi_block_t));
-  const mi_encoded_t x = block->next;
+  const mi_encoded_t x = mi_atomic_load_relaxed(&block->next);
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
   return x;
 }
@@ -826,8 +843,33 @@ static inline mi_block_t* mi_block_next(const mi_page_t* page, const mi_block_t*
 
 static inline void mi_block_set_next(const mi_page_t* page, mi_block_t* block, const mi_block_t* next) {
   mi_track_mem_undefined(block,sizeof(mi_block_t));
-  block->next = mi_block_encode(page, block, next);
+  mi_atomic_store_relaxed(&block->next, mi_block_encode(page, block, next));
   mi_track_mem_noaccess(block,sizeof(mi_block_t));
 }
+
+
+/* -----------------------------------------------------------
+  Safe unlinking of doubly linked lists
+
+  In secure mode, check that a `node` is properly linked through its `prev` and `next`
+  fields before unlinking it, such that corrupted links cannot be used for arbitrary writes.
+  `first` is the head of the list, and `last` the tail (or `NULL` if the list has no tail).
+  A corrupted list is a fatal error.
+----------------------------------------------------------- */
+
+static inline bool mi_list_link_is(const void* link, const void* node) {
+  return (mi_addr(link) == mi_addr(node));  // ignore memory tags
+}
+
+#if MI_SECURE>=1
+#define mi_list_unlink_check(node,prev,next,first,last) \
+  do { \
+    if mi_unlikely(!((node)->prev==NULL ? mi_list_link_is(first,node) : mi_list_link_is((node)->prev->next,node)) || \
+                   !((node)->next==NULL ? ((last)==NULL || mi_list_link_is(last,node)) : mi_list_link_is((node)->next->prev,node))) \
+    { _mi_error_list_corrupted(node); } \
+  } while(0)
+#else
+#define mi_list_unlink_check(node,prev,next,first,last)  do { } while(0)
+#endif
 
 #endif

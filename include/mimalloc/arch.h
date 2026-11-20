@@ -18,6 +18,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdbool.h>  // bool
 #include <limits.h>   // LONG_MAX
 
+// Header availability for builds that do not use CMake.
+#if !defined(MI_HAS_UNISTDH) && !defined(_WIN32)
+#if defined(__has_include)
+#if __has_include(<unistd.h>)
+#define MI_HAS_UNISTDH  1
+#endif
+#elif defined(__unix__) || defined(__APPLE__) || defined(__HAIKU__)
+#define MI_HAS_UNISTDH  1
+#endif
+#endif
+
+// C++ versus C
 #if defined(__cplusplus)
 #define mi_decl_externc         extern "C"
 #define mi_init_struct_zero     { }
@@ -346,10 +358,10 @@ static inline size_t mi_ptr_bounds_limit(const void* p, size_t size) {
 #define MI_FREE_USE_PAGEMAP  1
 #endif
 
-// Probable OS page size (as statically known; the actual page size is determined at runtime).
+// Probable OS page size (as statically known; the actual page size is determined at runtime with `_mi_os_page_size()`).
 // Can be set explicitly, e.g. `-DMI_OS_PROBABLE_PAGE_SIZE=65536` for arm64 Linux kernels with 64 KiB pages.
 #if !defined(MI_OS_PROBABLE_PAGE_SIZE)
-#if defined(__APPLE__)                     // check first as `PAGE_SIZE` may be the runtime `vm_page_size` here
+#if defined(__APPLE__)                        // check first as `PAGE_SIZE` may be the runtime `vm_page_size` there
 #if MI_ARCH_ARM64
 #define MI_OS_PROBABLE_PAGE_SIZE  (16*MI_KiB) // macOS, iOS, etc. on Apple silicon
 #else
@@ -357,7 +369,7 @@ static inline size_t mi_ptr_bounds_limit(const void* p, size_t size) {
 #endif
 #elif defined(__wasm__) || defined(__EMSCRIPTEN__) || defined(__wasi__)
 #define MI_OS_PROBABLE_PAGE_SIZE  (64*MI_KiB) // fixed WebAssembly page size
-#elif defined(PAGE_SIZE)                   // only defined if constant (FreeBSD, musl on x86, bionic without flexible page sizes, ...)
+#elif defined(PAGE_SIZE)                      // only defined if constant (FreeBSD, musl on x86, bionic without flexible page sizes, ...)
 #define MI_OS_PROBABLE_PAGE_SIZE  PAGE_SIZE
 #elif defined(__linux__) && (defined(__powerpc64__) || defined(__ppc64__) || defined(__PPC64__))
 #define MI_OS_PROBABLE_PAGE_SIZE  (64*MI_KiB) // default for ppc64(le) distributions
@@ -387,17 +399,24 @@ static inline size_t mi_ptr_bounds_limit(const void* p, size_t size) {
 // (using ARM pointer authentication or a software keyed encoding); this is a `uintptr_t` so it can be atomic.
 // ------------------------------------------------------
 
-typedef uintptr_t  mi_ptr_signed_t;
+typedef uintptr_t           mi_ptr_signed_t;
 #define mi_ptr_signed(tp)   mi_ptr_signed_t     // a signed `tp*` (only documents the pointer type)
 
 // Pointer signing (see `prim/prim-pac.h`): 0=off, 1=weak (using a software process key), 2=required (using the
 // arm64 generic pointer authentication key (`pacga`), which must be supported at runtime).
 // Only on 64-bit systems (and not on CHERI); `required` only on arm64 with GCC or clang.
-#if !defined(MI_PAC) || MI_CHERI || (MI_INTPTR_SIZE != 8)
-#undef  MI_PAC
-#define MI_PAC  0
-#elif (MI_PAC >= 2) && !(MI_ARCH_ARM64 && defined(__GNUC__))
+// Defaults to `required` with `MI_MTE=2` as all MTE hardware supports PAC.
+#if (MI_MTE >= 2) && !defined(MI_PAC)
+#define MI_PAC  2
+#endif
+#if (MI_PAC >= 2) && !(MI_ARCH_ARM64 && defined(__GNUC__))
 #error "pointer authentication (MI_PAC=ON) is only supported on arm64 with GCC or clang"
+#elif (MI_PAC > 0) && (MI_CHERI || (MI_INTPTR_SIZE != 8))
+#warning "pointer authentication (MI_PAC=ON) is not supported on CHERI or non-64-bit systems"
+#undef MI_PAC
+#define MI_PAC  0
+#elif !defined(MI_PAC)
+#define MI_PAC  0
 #endif
 
 

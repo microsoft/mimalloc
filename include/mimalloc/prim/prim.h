@@ -33,6 +33,7 @@ typedef struct mi_os_mem_config_s {
   bool    has_overcommit;         // can we reserve more memory than can be actually committed?
   bool    has_partial_free;       // can allocated blocks be freed partially? (true for mmap, false for VirtualAlloc)
   bool    has_virtual_reserve;    // supports virtual address space reservation? (if true we can reserve virtual address space without using commit or physical memory)
+  bool    has_reset;              // can memory be reset? (if false, `_mi_prim_reset` is a no-op, e.g. on WebAssembly)
   bool    has_aligned_alloc;      // can the OS directly allocate at a requested alignment? (e.g. `VirtualAlloc2`, or `mmap` with `MAP_ALIGNED`)
   bool    has_transparent_huge_pages;  // true if transparent huge pages are enabled (on Linux)
   bool    is_elevated;            // running with elevated privileges (e.g. setuid)? (set in `_mi_os_init`)
@@ -68,8 +69,9 @@ int _mi_prim_commit(void* addr, size_t size, bool* is_zero);
 int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit);
 
 // Reset memory. The range keeps being accessible but the content might be reset to zero at any moment.
+// If `eager`, the memory should be released immediately (e.g. `MADV_DONTNEED` instead of `MADV_FREE`).
 // Returns error code or 0 on success.
-int _mi_prim_reset(void* addr, size_t size);
+int _mi_prim_reset(void* addr, size_t size, bool eager);
 
 // Reuse memory. This is called for memory that is already committed but
 // may have been reset (`_mi_prim_reset`) or decommitted (`_mi_prim_decommit`) where `needs_recommit` was false.

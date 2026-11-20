@@ -14,6 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/alloc/free.h"
 #include "mimalloc/arena/arena-alloc.h"
+#include "mimalloc/arena/arena-page.h"   // _mi_heap_qsbr_collect_delayed
 #include "mimalloc/profile/sample-guarded.h"
 #include "mimalloc/profile/sample-profile.h"
 #include "mimalloc/heap/heap.h"
@@ -120,7 +121,7 @@ static bool mi_theap_page_collect(mi_theap_t* theap, mi_page_queue_t* pq, mi_pag
     }
   }
   if (collect == MI_ABANDON) {
-    _mi_page_abandon(page, pq);
+    _mi_page_abandon(page, pq, true);
   }
   return true; // don't break
 }
@@ -155,6 +156,7 @@ static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)
   // collect arenas (this is program wide so don't force purges on abandonment of threads)
   //mi_atomic_storei64_release(&theap->tld->subproc->purge_expire, 1);
   if (collect != MI_ABANDON) {
+    _mi_heap_qsbr_collect_delayed(theap->heap);  // skip on thread shutdown as QSBR polling may call into the embedder
     _mi_arenas_collect(collect == MI_FORCE /* force purge? */, collect >= MI_FORCE /* visit all? */, theap->tld);
   }
 
@@ -182,7 +184,7 @@ void _mi_theap_abandon_owned_pages(mi_theap_t* theap) {
       mi_page_t* const next = page->next;  // save as the page is removed from the queue
       _mi_page_free_collect(page, true);   // collect cross-thread frees so `used` is precise
       if (!mi_page_all_free(page) || !_mi_page_free(page, pq)) {
-        _mi_page_abandon(page, pq);
+        _mi_page_abandon(page, pq, true);
       }
       page = next;
     }
@@ -308,7 +310,7 @@ bool _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   if (head==NULL) {  // first theap of the first thread?
     // will be initialized on the first random_next/split call. (see #1377, W20)
 
-    // #if defined(_WIN32) && !defined(MI_SHARED_LIB)
+    // #if defined(_WIN32) && !MI_SHARED_LIB
     // if (tld->thread_seq==0) {
     //   _mi_random_init_weak(&theap->random);    // prevent allocation failure during bcrypt dll initialization with static linking (issue #1185)
     // }
@@ -398,7 +400,7 @@ static void mi_theap_free_mem(mi_theap_t* theap) {
   if (theap!=NULL) {
     mi_assert_internal(theap->free_batch.batched_total == 0);
     #if MI_QSBR
-    mi_assert_internal(theap->qsbr_first == NULL && theap->qsbr_last == NULL);
+    mi_assert_internal(theap->qsbr_delayed == NULL && theap->qsbr_delayed_last == NULL);
     #endif
     mi_subproc_t* const subproc = mi_atomic_load_ptr_relaxed(mi_subproc_t,&theap->subproc);
     if (!theap->is_detached) {
@@ -527,14 +529,14 @@ void _mi_tld_detach_theaps( mi_tld_t* tld ) {
 void _mi_theap_release(mi_theap_t* theap, mi_theap_t* slot_theap) {
   if (theap==NULL) return;
   // The main theap stays alive even if a concurrent heap delete invalidates our default.
-  mi_theap_t* const main = _mi_theap_main();
-  if (main==NULL) {
+  mi_theap_t* const main_theap = _mi_theap_main();
+  if (main_theap==NULL) {
     _mi_warning_message("cannot delete a theap on an uninitialized thread\n");
     return;
   }
-  mi_tld_t* const tld = main->tld;
+  mi_tld_t* const tld = main_theap->tld;
   if (_mi_theap_default() == theap) {
-    _mi_theap_default_set(main);
+    _mi_theap_default_set(main_theap);
   }
 
   bool found = false;
@@ -548,7 +550,7 @@ void _mi_theap_release(mi_theap_t* theap, mi_theap_t* slot_theap) {
       mi_heap_t* const heap = mi_theap_heap(owned);
       mi_assert_internal(heap!=NULL);
       mi_lock(&heap->theaps_lock) {
-        if (owned == main) {
+        if (owned == main_theap) {
           _mi_theap_collect_abandon(owned);  // retain the backing theap and tld for the living thread
           _mi_theap_merge_stats(owned);
         }

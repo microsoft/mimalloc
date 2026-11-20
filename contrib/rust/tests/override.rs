@@ -3,7 +3,7 @@
 use core::ffi::c_void;
 use mimalloc::sys;
 
-unsafe extern "C" {
+extern "C" {
     fn malloc(size: usize) -> *mut c_void;
     fn free(p: *mut c_void);
 }

@@ -51,7 +51,7 @@ static size_t mi_sample_countdown_next(size_t rate, uint64_t carry) {
 }
 
 // Called when the theap sample countdown <= req_size; should call guarded or profiled allocation.
-mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) mi_attr_noexcept
+static void* mi_theap_malloc_sampled_ex(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage)
 {
   // the size has not yet been counted against the countdown (and does not include MI_PADDING_SIZE)
   mi_assert_internal(req_size <= MI_MAX_ALLOC_SIZE);
@@ -117,6 +117,13 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* the
     p = _mi_malloc_generic_no_sample(theap,size,zero,ppage);
   }
   mi_theap_sample_countdown_restart(theap);
+  return p;
+}
+
+mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_sampled(mi_theap_t* theap, size_t req_size, bool zero, mi_page_t** ppage) mi_attr_noexcept
+{
+  void* const p = mi_theap_malloc_sampled_ex(theap, req_size, zero, ppage);
+  if mi_unlikely(p==NULL) { errno = ENOMEM; }  // as in `alloc/alloc-generic.c:mi_malloc_generic_fallback`
   return p;
 }
 
@@ -203,7 +210,7 @@ mi_decl_noinline mi_decl_restrict void* _mi_theap_malloc_profiled(mi_theap_t* th
 
     // Set up the profiled block as an interior pointer so the interior "slow" path is taken on mi_free (where we catch it to call on_free)
     mi_page_set_has_interior_pointers(page, true);
-    block->next = MI_BLOCK_TAG_PROFILED;
+    mi_atomic_store_relaxed(&block->next, MI_BLOCK_TAG_PROFILED);
     p = mi_ptr_bounded((uint8_t*)block + user_offset, mi_bounds_user_size(req_size));  // exclude the profile data in front
     pblock->profiler_state = mi_profiler_state(prof);
     mi_profiler_sample_data_t* const sample_data = &pblock->sample_data;
@@ -245,16 +252,21 @@ void _mi_page_profile_on_free(mi_page_t* page, mi_block_t* block, void* p) {
 size_t _mi_theap_set_profile_sample_rate(mi_theap_t* theap, size_t sample_rate) {
   const size_t old_sample_rate = theap->profile_sample_rate;
   theap->profile_sample_rate = (sample_rate > MI_SAMPLE_RATE_MAX ? MI_SAMPLE_RATE_MAX : sample_rate);
-  if (theap->profile_sample_countdown > theap->profile_sample_rate) {
-    theap->profile_sample_countdown = theap->profile_sample_rate;  // todo: adjust difference?
-  }
   _mi_theap_update_sample_rate(theap);
+  // The shared countdown is already deducted from the profile countdown.
+  const size_t max_countdown = mi_sample_countdown_next(theap->profile_sample_rate, theap->sample_countdown);
+  if (theap->profile_sample_countdown > max_countdown) {
+    theap->profile_sample_countdown = max_countdown;
+  }
   return old_sample_rate;
 }
+
+static const mi_profiler_t mi_nosample_profiler = { NULL, 0, MI_SAMPLE_RATE_MAX, NULL, NULL, NULL, NULL };
 
 static bool mi_heap_set_profiler(mi_heap_t* heap, mi_profiler_t* profiler) {
   if (!mi_heap_handle_is_valid(heap)) return false;
   mi_profiler_t* previous = (profiler==NULL ? mi_atomic_load_ptr_acquire(mi_profiler_t,&heap->profiler) : NULL); // don't overwrite unless it is NULL
+  if (previous == &mi_nosample_profiler) return false;
   return mi_atomic_cas_ptr_strong_release(mi_profiler_t, &heap->profiler, &previous, profiler);
 }
 
@@ -266,16 +278,29 @@ static void mi_profiler_new_generation(mi_profiler_t* profiler) {
   mi_atomic_store_release(mi_profiler_pstate(profiler), generation << 1);
 }
 
+// Attach (or detach if `profiler==NULL`) a profiler to a heap or subprocess.
+// The new generation must be set before the profiler is published, as otherwise a concurrent free
+// could call `on_free` for a block sampled during a previous attachment (with the same generation).
+static bool mi_profiler_attach(_Atomic(mi_profiler_t*)* slot, mi_profiler_t* profiler) {
+  mi_profiler_stop(profiler);
+  mi_profiler_t* expected = NULL;
+  if (profiler==NULL) {
+    expected = mi_atomic_load_ptr_acquire(mi_profiler_t,slot);
+  }
+  else {
+    if (mi_atomic_load_ptr_relaxed(mi_profiler_t,slot) != NULL) return false;  // don't overwrite unless it is NULL
+    mi_profiler_new_generation(profiler);
+  }
+  return mi_atomic_cas_ptr_strong_release(mi_profiler_t, slot, &expected, profiler);
+}
+
 mi_decl_export bool mi_heap_profile(mi_heap_t* heap, mi_profiler_t* profiler) {
   // if (heap==NULL) { heap = mi_heap_main(); }
-  mi_profiler_stop(profiler);
-  if (!mi_heap_set_profiler(heap,profiler)) return false;
-  mi_profiler_new_generation(profiler);
-  return true;
+  if (!mi_heap_handle_is_valid(heap)) return false;
+  return mi_profiler_attach(&heap->profiler, profiler);
 }
 
 mi_decl_export void mi_heap_profile_disable(mi_heap_t* heap) {
-  static const mi_profiler_t mi_nosample_profiler = { NULL, 0, MI_SAMPLE_RATE_MAX, NULL, NULL, NULL, NULL };
   // if (heap==NULL) { heap = mi_heap_main(); }
   mi_heap_set_profiler(heap,NULL);                   // first clear any previous one
   mi_heap_set_profiler(heap,(mi_profiler_t*)&mi_nosample_profiler);  // and then install the nosample one
@@ -284,10 +309,7 @@ mi_decl_export void mi_heap_profile_disable(mi_heap_t* heap) {
 mi_decl_export bool mi_subproc_profile(mi_subproc_id_t subproc_id, mi_profiler_t* profiler) {
   mi_subproc_t* subproc = _mi_subproc_from_id(subproc_id);
   if (subproc==NULL) return false;
-  mi_profiler_stop(profiler);
-  mi_profiler_t* previous = (profiler==NULL ? mi_atomic_load_ptr_acquire(mi_profiler_t,&subproc->profiler) : NULL); // don't overwrite unless it is NULL
-  if (!mi_atomic_cas_ptr_strong_release(mi_profiler_t,&subproc->profiler, &previous, profiler)) { return false; }
-  mi_profiler_new_generation(profiler);
+  if (!mi_profiler_attach(&subproc->profiler, profiler)) { return false; }
   mi_lock(&subproc->heaps_lock) {
     for (mi_heap_t* heap = subproc->heaps; heap!=NULL; heap = heap->next) {
       mi_heap_set_profiler(heap,profiler);

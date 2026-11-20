@@ -28,6 +28,12 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 
+// Internal configuration treats undefined feature macros as zero by design.
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wundef"
+#endif
+
 #include "prim/os.c"
 #include "prim/prim.c"            // includes platform specific prim/<platform>/prim.c
 #include "prim/prim-tls.c"
@@ -68,3 +74,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "profile/pprof.c"
 #include "profile/pprof-os.c"
 #include "profile/pprof-write.c"
+
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif

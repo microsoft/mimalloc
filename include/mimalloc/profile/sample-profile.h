@@ -61,7 +61,7 @@ static inline void mi_theap_sample_countdown_sub(mi_theap_t* theap, uint64_t req
 static inline bool mi_block_ptr_is_sampled(const mi_block_t* block, const void* p) {
 #if MI_GUARDED || MI_PROFILE
   const ptrdiff_t offset = (uint8_t*)p - (uint8_t*)block;
-  return (offset >= (ptrdiff_t)(sizeof(mi_block_t)) && block->next != MI_BLOCK_TAG_ALIGNED);
+  return (offset >= (ptrdiff_t)(sizeof(mi_block_t)) && mi_atomic_load_relaxed(&block->next) != MI_BLOCK_TAG_ALIGNED);
 #else
   MI_UNUSED(block); MI_UNUSED(p);
   return false;

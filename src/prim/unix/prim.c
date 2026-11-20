@@ -45,9 +45,9 @@ terms of the MIT license. A copy of the license can be found in the file
   #include <linux/mman.h>   // linux mmap flags
   #endif
   #if defined(__riscv) || defined(_M_RISCV)
-    #if defined(MI_HAS_SYS_HWPROBEH)
+    #if MI_HAS_SYS_HWPROBEH
       #include <sys/hwprobe.h>
-    #elif defined(MI_HAS_ASM_HWPROBEH)
+    #elif MI_HAS_ASM_HWPROBEH
       #include <asm/hwprobe.h>
     #endif
   #endif
@@ -91,11 +91,13 @@ terms of the MIT license. A copy of the license can be found in the file
   #define MAC_OS_X_VERSION_10_7   1070
   #endif
   #include <sys/sysctl.h>
-  #if MI_MTE && defined(VM_FLAGS_MTE) && __has_include(<os/security_config.h>)
+  #if MI_MTE && defined(VM_FLAGS_MTE) && defined(__has_include)
+  #if __has_include(<os/security_config.h>)
   #include <os/security_config.h>   // os_security_config_get
   #include <mach/mach.h>
   #include <mach/vm_map.h>          // vm_map (as `mach/mach_vm.h` is not supported on iOS)
   #define MI_UNIX_MACH_MTE  1
+  #endif
   #endif
 #elif defined(__FreeBSD__) || defined(__DragonFly__)
   #include <sys/param.h>
@@ -294,7 +296,7 @@ static size_t unix_detect_virtual_address_bits(void) {
     #if defined(RISCV_HWPROBE_KEY_HIGHEST_VIRT_ADDRESS)
       struct riscv_hwprobe probe = { .key = RISCV_HWPROBE_KEY_HIGHEST_VIRT_ADDRESS, };
       // Prefer the GNU libc interface if available, as it can also use the VDSO
-      #if defined(MI_HAS_SYS_HWPROBEH)
+      #if MI_HAS_SYS_HWPROBEH
       if (__riscv_hwprobe(&probe, 1, 0, NULL, 0) == 0)
       #else
       if (syscall(__NR_riscv_hwprobe, &probe, 1, 0, NULL, 0) == 0)
@@ -503,8 +505,15 @@ static int unix_madvise(void* addr, size_t size, int advice) {
 static void* unix_mmap_prim(void* addr, size_t size, int protect_flags, int flags, int fd) {
   void* p = mmap(addr, size, protect_flags, flags, fd, 0 /* offset */);
   #if defined(__linux__) && defined(PR_SET_VMA)
-  if (p!=MAP_FAILED && p!=NULL) {
-    prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, p, size, "mimalloc");
+  static _Atomic(size_t) no_set_vma_name; // = 0
+  if (p!=MAP_FAILED && p!=NULL && mi_atomic_load_relaxed(&no_set_vma_name)==0) {
+    const int err = errno;
+    if (prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, p, size, "mimalloc") != 0) {
+      // `EINVAL` means naming is not supported (Linux < 5.17, or without `CONFIG_ANON_VMA_NAME`)
+      // as our arguments are always valid; in that case don't call again.
+      if (errno == EINVAL) { mi_atomic_store_relaxed(&no_set_vma_name, (size_t)1); }
+      errno = err;  // don't modify errno on a successful mmap
+    }
   }
   #endif
   return p;
@@ -597,13 +606,61 @@ static void* unix_mmap_memtag(size_t size, size_t try_alignment, int protect_fla
 }
 #endif
 
+#if !defined(MAP_ANONYMOUS)
+#define MAP_ANONYMOUS  MAP_ANON
+#endif
+#if !defined(MAP_NORESERVE)
+#define MAP_NORESERVE  0
+#endif
+
+#if MI_OS_HAS_HUGE_PAGES
+// Try to allocate using large (2MiB) or huge (1GiB) OS pages. Returns NULL on failure.
+static void* unix_mmap_large(void* addr, size_t size, size_t try_alignment, int protect_flags, int flags, int fd, bool large_only) {
+  // If the OS is not configured for large OS pages, or the user does not have
+  // enough permission, the `mmap` will always fail (but it might also fail for other reasons).
+  // Therefore, once a large page allocation failed, we don't try again for `os_large_page_backoff` times
+  // to avoid too many failing calls to mmap.
+  size_t backoff = mi_atomic_load_relaxed(&_mi_process.os.large_page_backoff);
+  if (!large_only && backoff > 0) {
+    mi_atomic_cas_strong_relaxed(&_mi_process.os.large_page_backoff, &backoff, backoff - 1);
+    return NULL;
+  }
+
+  int lflags = (flags & ~MAP_NORESERVE);  // using NORESERVE on huge pages seems to fail on Linux
+  #ifdef MAP_ALIGNED_SUPER
+  lflags |= MAP_ALIGNED_SUPER;
+  #endif
+  #ifdef MAP_HUGETLB
+  lflags |= MAP_HUGETLB;
+  #endif
+  #if MI_OS_HAS_SUPERPAGES
+  fd |= VM_FLAGS_SUPERPAGE_SIZE_2MB;
+  #endif
+
+  #ifdef MAP_HUGE_1GB
+  // try huge 1GiB pages first if explicitly requested
+  if (large_only && (size % MI_GiB) == 0 && mi_atomic_load_relaxed(&_mi_process.os.huge_page_unavailable) == 0) {
+    void* p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, lflags | MAP_HUGE_1GB, fd);
+    if (p != NULL) return p;
+    mi_atomic_store_relaxed(&_mi_process.os.huge_page_unavailable, 1);  // don't try huge 1GiB pages again
+    _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (errno: %i)\n", errno);
+  }
+  #endif
+
+  #ifdef MAP_HUGE_2MB
+  lflags |= MAP_HUGE_2MB;
+  #endif
+  if (!large_only && lflags == flags) return NULL;  // no large OS page flags available
+
+  void* p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, lflags, fd);
+  if (p == NULL && !large_only) {
+    mi_atomic_store_relaxed(&_mi_process.os.large_page_backoff, (size_t)8);  // on error, don't try again for the next N allocations
+  }
+  return p;
+}
+#endif
+
 static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protect_flags, bool large_only, bool allow_large, bool* is_large) {
-  #if !defined(MAP_ANONYMOUS)
-  #define MAP_ANONYMOUS  MAP_ANON
-  #endif
-  #if !defined(MAP_NORESERVE)
-  #define MAP_NORESERVE  0
-  #endif
   void* p = NULL;
   const int fd = unix_mmap_fd();
   bool allow_huge = allow_large;
@@ -629,58 +686,10 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
   // huge page allocation
   #if MI_OS_HAS_HUGE_PAGES
   if (allow_huge && (large_only || (_mi_os_canuse_large_page(size, try_alignment) && mi_option_is_enabled(mi_option_allow_large_os_pages)))) {
-    size_t backoff = mi_atomic_load_relaxed(&_mi_process.os.large_page_backoff);
-    if (!large_only && backoff > 0) {
-      // If the OS is not configured for large OS pages, or the user does not have
-      // enough permission, the `mmap` will always fail (but it might also fail for other reasons).
-      // Therefore, once a large page allocation failed, we don't try again for `os_large_page_backoff` times
-      // to avoid too many failing calls to mmap.
-      mi_atomic_cas_strong_relaxed(&_mi_process.os.large_page_backoff, &backoff, backoff - 1);
-    }
-    else {
-      int lflags = flags & ~MAP_NORESERVE;  // using NORESERVE on huge pages seems to fail on Linux
-      int lfd = fd;
-      #ifdef MAP_ALIGNED_SUPER
-      lflags |= MAP_ALIGNED_SUPER;
-      #endif
-      #ifdef MAP_HUGETLB
-      lflags |= MAP_HUGETLB;
-      #endif
-      #ifdef MAP_HUGE_1GB
-      if (large_only && (size % MI_GiB) == 0 && (mi_atomic_load_relaxed(&_mi_process.os.huge_page_unavailable)==0)) {
-        lflags |= MAP_HUGE_1GB;
-      }
-      else
-      #endif
-      {
-        #ifdef MAP_HUGE_2MB
-        lflags |= MAP_HUGE_2MB;
-        #endif
-      }
-      #if MI_OS_HAS_SUPERPAGES
-      lfd |= VM_FLAGS_SUPERPAGE_SIZE_2MB;
-      #endif
-      if (large_only || lflags != flags) {
-        // try large OS page allocation
-        *is_large = true;
-        p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, lflags, lfd);
-        #ifdef MAP_HUGE_1GB
-        if (p == NULL && (lflags & MAP_HUGE_1GB) == MAP_HUGE_1GB) {
-          mi_atomic_store_relaxed(&_mi_process.os.huge_page_unavailable,1); // don't try huge 1GiB pages again
-          if (large_only) {
-            _mi_warning_message("unable to allocate huge (1GiB) page, trying large (2MiB) pages instead (errno: %i)\n", errno);
-          }
-          lflags = ((lflags & ~MAP_HUGE_1GB) | MAP_HUGE_2MB);
-          p = unix_mmap_prim_aligned(addr, size, try_alignment, protect_flags, lflags, lfd);
-        }
-        #endif
-        if (large_only) return p;
-        if (p == NULL) {
-          mi_atomic_store_relaxed(&_mi_process.os.large_page_backoff, (size_t)8);  // on error, don't try again for the next N allocations
-        }
-      }
-    }
-  } // huge pages
+    p = unix_mmap_large(addr, size, try_alignment, protect_flags, flags, fd, large_only);
+    *is_large = (p != NULL);
+    if (large_only) return p;
+  }
   #else
   MI_UNUSED(allow_huge);
   if (large_only) { *is_large = false; errno = ENOMEM; return NULL; }  // no huge OS pages available
@@ -699,7 +708,7 @@ static void* unix_mmap(void* addr, size_t size, size_t try_alignment, int protec
       #endif
       {  // keep the `else` above well-formed when MI_NO_THP is defined
       #if !defined(MI_NO_THP)
-      if (allow_large && mi_option_is_enabled(mi_option_allow_thp) && _mi_os_canuse_large_page(size,try_alignment)) {
+      if (mi_option_is_enabled(mi_option_allow_thp) && _mi_os_canuse_thp(p,size)) {
         #if defined(MADV_HUGEPAGE)
         if (_mi_os_has_thp()) {
           // Many Linux systems don't allow MAP_HUGETLB but they support instead
@@ -816,7 +825,8 @@ int _mi_prim_decommit(void* start, size_t size, bool* needs_recommit) {
   return err;
 }
 
-int _mi_prim_reset(void* start, size_t size) {
+int _mi_prim_reset(void* start, size_t size, bool eager) {
+  MI_UNUSED(eager);
   int err = 0;
 
   // on macOS can use MADV_FREE_REUSABLE (but we disable this for now as it seems slower)
@@ -830,8 +840,8 @@ int _mi_prim_reset(void* start, size_t size) {
   // Otherwise, we try to use `MADV_FREE` as that is the fastest. A drawback though is that it
   // will not reduce the `rss` stats in tools like `top` even though the memory is available
   // to other processes. With the default `MIMALLOC_PURGE_DECOMMITS=1` we ensure that by
-  // default `MADV_DONTNEED` is used though.
-  const bool lazy = (mi_atomic_load_relaxed(&_mi_process.os.lazy_reset_unavailable) == 0);
+  // default `MADV_DONTNEED` is used though. If `eager`, we use `MADV_DONTNEED` directly.
+  const bool lazy = (!eager && mi_atomic_load_relaxed(&_mi_process.os.lazy_reset_unavailable) == 0);
   while ((err = unix_madvise(start, size, (lazy ? MADV_FREE : MADV_DONTNEED))) != 0 && err == EAGAIN) { /* try again */ };
   if (err == EINVAL && lazy) {
     // if MADV_FREE is not supported, fall back to MADV_DONTNEED from now on
@@ -1152,8 +1162,13 @@ void _mi_prim_out_stderr( const char* msg ) {
 #if !defined(MI_USE_ENVIRON) || (MI_USE_ENVIRON!=0)
 // On Posix systemsr use `environ` to access environment variables
 // even before the C runtime is initialized.
-#if defined(__APPLE__) && defined(__has_include) && __has_include(<crt_externs.h>)
+#if defined(__APPLE__) && defined(__has_include)
+#if __has_include(<crt_externs.h>)
 #include <crt_externs.h>
+#define MI_UNIX_HAS_CRT_EXTERNS_H  1
+#endif
+#endif
+#if MI_UNIX_HAS_CRT_EXTERNS_H
 static char** mi_get_environ(void) {
   return (*_NSGetEnviron());
 }
@@ -1292,7 +1307,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 // Thread init/done
 //----------------------------------------------------------------
 
-#if defined(MI_USE_PTHREADS)
+#if MI_USE_PTHREADS
 
 // use pthread local storage keys to detect thread ending
 // (and used with MI_TLS_PTHREADS for the default theap)

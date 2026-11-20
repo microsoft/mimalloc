@@ -38,8 +38,12 @@ static inline my_profiler_t* downcast( mi_profiler_t* prof ) {
 
 #define TEST_THRESHOLD (16 * 1024)
 
+static mi_heap_t* observed_heap;
+static uint64_t observed_heap_allocs;
+
 static size_t mi_cdecl on_alloc(mi_profiler_t* profiler, mi_profiler_sample_data_t* data, void* ptr, size_t requested_size, size_t threshold, uint64_t bytes_since_last_sample, mi_heap_t* heap) {
-  MI_UNUSED(threshold); MI_UNUSED(heap); MI_UNUSED(requested_size);
+  MI_UNUSED(threshold); MI_UNUSED(requested_size);
+  if (heap == observed_heap) { observed_heap_allocs++; }
   my_profiler_t* prof = downcast(profiler);
   assert(bytes_since_last_sample >= requested_size);
   prof->alloc_count++;
@@ -96,6 +100,33 @@ static void allocate_past_threshold(void) {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+#if MI_GUARDED >= 2
+static void test_profiler_restart_with_guarded_sampling(void) {
+  CHECK_BODY("profiler: restart accounts for the shared guarded countdown") {
+    mi_theap_t* theap = mi_theap_get_default();
+    mi_theap_guarded_set_sample_rate(theap, 1024, 1);
+    mi_theap_guarded_set_size_bound(theap, 0, SIZE_MAX);
+    void* sampled = mi_malloc(1024 * 1024);
+    // Let a guarded sample restart the shared countdown before restarting profiling.
+    void* guarded = mi_malloc(64);
+    mi_profiler_stop(&my_profiler.profiler);
+    mi_profiler_start(&my_profiler.profiler);
+    const uint64_t before = my_profiler.alloc_count;
+    void* p = mi_malloc(4096);
+    result = (sampled != NULL && guarded != NULL && p != NULL &&
+              my_profiler.alloc_count == before + 1 &&
+              my_profiler.last_size == 4096 && my_profiler.last_upscaled >= 4096);
+    mi_free(p);
+    mi_free(guarded);
+    mi_free(sampled);
+    mi_theap_guarded_set_sample_rate(theap, (size_t)mi_option_get(mi_option_guarded_sample_rate),
+                                   (size_t)mi_option_get(mi_option_guarded_sample_seed));
+    mi_theap_guarded_set_size_bound(theap, (size_t)mi_option_get(mi_option_guarded_min),
+                                   (size_t)mi_option_get(mi_option_guarded_max));
+  }
+}
+#endif
 
 bool test_profiler_samples(void) {
   CHECK_BODY("profiler: on_alloc called after threshold") {
@@ -226,16 +257,55 @@ bool test_profiler_switch(void) {
 // main
 // ---------------------------------------------------------------------------
 
+static bool allocate_from_heap(mi_heap_t* heap) {
+  for (size_t i = 0; i < 4096; i++) {
+    void* p = mi_heap_malloc(heap, 1024 * 1024);
+    if (p == NULL) return false;
+    mi_free(p);
+  }
+  return true;
+}
+
+static void test_profiler_disabled_heap(void) {
+  CHECK_BODY("profiler: disabled heap stays excluded after detach and reattach") {
+    mi_heap_t* disabled = mi_heap_new();
+    mi_heap_t* enabled = mi_heap_new();
+    result = (disabled != NULL && enabled != NULL);
+    if (result) {
+      mi_heap_profile_disable(disabled);
+      for (size_t i = 0; result && i < 2; i++) {
+        result = mi_profile(&my_profiler.profiler);
+        mi_profiler_start(&my_profiler.profiler);
+        observed_heap = disabled;
+        uint64_t before = observed_heap_allocs;
+        result = allocate_from_heap(disabled) && observed_heap_allocs == before && result;
+        observed_heap = enabled;
+        before = observed_heap_allocs;
+        result = allocate_from_heap(enabled) && observed_heap_allocs > before && result;
+        mi_profiler_stop(&my_profiler.profiler);
+        result = mi_profile(NULL) && result;
+      }
+    }
+    if (disabled != NULL) { mi_heap_delete(disabled); }
+    if (enabled != NULL) { mi_heap_delete(enabled); }
+    observed_heap = NULL;
+  }
+}
+
 int main(void) {
   mi_profile(&my_profiler.profiler);
   mi_profiler_start(&my_profiler.profiler);
 
+  #if MI_GUARDED >= 2
+  test_profiler_restart_with_guarded_sampling();
+  #endif
   test_profiler_upscaled_at_least_size();
   test_profiler_samples();
   test_profiler_record_fields();
   test_profiler_on_free_called();
   test_profiler_free_count_le_alloc_count();
   test_profiler_switch();
+  test_profiler_disabled_heap();
 
   return print_test_summary();
 }
