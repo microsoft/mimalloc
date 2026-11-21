@@ -246,7 +246,7 @@ static void mi_heap_move_page(const mi_heap_move_info_t* info, mi_page_t* page) 
       mi_assert_internal(mi_bitmap_is_clear(arena_pages_target->pages, slice_index));
       mi_bitmap_set(arena_pages_target->pages, slice_index);
     }
-    page->heap = heap_target;
+    mi_atomic_store_ptr_relaxed(mi_heap_t, (_Atomic(mi_heap_t*)*)&page->heap, heap_target);  // concurrent read in `mi_free_block_mt_batch`
     #if MI_DEBUG>0
     mi_atomic_store_relaxed(&page->debug_fill_preserve, mi_atomic_load_relaxed(&heap_target->debug_fill_preserve));
     #endif

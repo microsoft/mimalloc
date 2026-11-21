@@ -501,7 +501,8 @@ static inline mi_tld_t* mi_page_tld(const mi_page_t* page) {
 
 
 static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
-  mi_heap_t* heap = page->heap;
+  // atomic as a cross-thread free may read it while `mi_heap_delete` moves the page (see `mi_heap_move_page`)
+  mi_heap_t* heap = mi_atomic_load_ptr_relaxed(mi_heap_t, (_Atomic(mi_heap_t*)*)&page->heap);
   mi_assert_internal(heap != NULL);
   return heap;
 }
