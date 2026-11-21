@@ -156,6 +156,10 @@ void  mi_cfree(void* p);
 void* mi_malloc(size_t size);
 
 /// Allocate zero-initialized `size` bytes.
+///
+/// All bytes up to the `mi_usable_size` are guaranteed to be initialized,
+/// which may include more than what was originally requested
+///
 /// @param size The size in bytes.
 /// @returns Pointer to newly allocated zero initialized memory,
 /// or \a NULL if out of memory.
@@ -545,10 +549,21 @@ void mi_free_csize_aligned_nonnull(void* p, size_t size, size_t aligned);
 /// \defgroup zeroinit Zero initialized re-allocation
 /// Re-allocation of zero initialized blocks.
 ///
-/// __The zero-initialized re-allocations are only valid on memory that was
-/// originally allocated with zero initialization too,__
-/// e.g. `mi_calloc`, `mi_zalloc`, `mi_zalloc_aligned` etc.
-/// see also <https://github.com/microsoft/mimalloc/issues/63#issuecomment-508272992>
+/// When growing (`new_requested_size > old_usable_size`),
+/// the memory in the range `[old_usable_size, new_usable_size)` is guaranteed to be zeroed.
+/// Memory in the range `[0, old_usable_size)` is guaranteed to be preserved.
+///
+/// When shrinking (`new_requested_size <= old_usable_size`),
+/// the memory in the range `[0, new_requested_size)` is preserved.
+/// Depending on the implementation, memory in the range `[new_requested_size, new_usable_size)`
+/// may be either preserved or zero initialized.
+///
+/// Mixing zero-initialized reallocation with memory not originally zero-initialized
+/// is not immediately undefined behavior.
+/// However, if there were any uninitialized bytes in the original allocation,
+/// using zero-initialized re-allocation may preserve some of these bytes.
+/// In those cases, it is still possible to access memory that is uninitialized,
+/// despite these functions guaranteeing zero-initialization of the new memory.
 ///
 /// \{
 
