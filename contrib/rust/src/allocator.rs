@@ -24,6 +24,8 @@ unsafe fn zero_tail(ptr: *mut u8, old_size: usize, new_size: usize) -> *mut u8 {
     ptr
 }
 
+// Reports the requested size to stay as fast as `GlobalAlloc`; use `good_size` upfront
+// (or `sys::mi_umalloc`) to get the full usable size (issue #1513).
 unsafe impl Allocator for MiMalloc {
     #[inline]
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {

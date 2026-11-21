@@ -158,6 +158,9 @@ pub unsafe fn usable_size(ptr: *const u8) -> usize {
 }
 
 /// The size that would be allocated for a request of `size` bytes.
+///
+/// Request this size upfront to use the full capacity of a block, e.g. for vectors:
+/// `Allocator::allocate` only reports the requested size.
 pub fn good_size(size: usize) -> usize {
     unsafe { sys::mi_good_size(size) }
 }
