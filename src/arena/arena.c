@@ -21,6 +21,7 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 
 #include "mimalloc.h"
 #include "mimalloc/util/stats.h"
+#include "mimalloc/prim/prim-mte.h"  // mi_memtag_use_for_meta, mi_memtag_meta_init_adjacent
 #include "mimalloc/util/memid.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/heap/subproc.h"

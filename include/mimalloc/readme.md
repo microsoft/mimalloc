@@ -2,6 +2,7 @@
 
 - [`types.h`](types.h): Defines the types of all internal mimalloc datastructures
 and configuration options.
+- [`config.h`](config.h): Build configuration defines (like `MI_DEBUG`, `MI_SECURE`, etc.).
 - [`decl.h`](decl.h): Compiler attributes, assertions, initialization macros, and platform-specific declarations.
 - [`arch.h`](arch.h): Architecture dependent type definitions, bit operations, and pointer provenance support (as on CHERI).
 - [`atomic.h`](atomic.h): Portable atomic operations and locks.

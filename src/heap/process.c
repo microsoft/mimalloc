@@ -6,6 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
 #include "mimalloc/prim/prim.h"
+#include "mimalloc/prim/prim-mte.h"  // mi_memtag_use_for_meta, mi_memtag_meta_init_adjacent
 #include "mimalloc/track.h"
 #include "mimalloc/prim/os.h"
 #include "mimalloc/prim/prim-tls.h"

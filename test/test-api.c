@@ -39,6 +39,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 #include "mimalloc-stats.h"
 // #include "mimalloc/internal.h"
 #include "mimalloc/types.h" // for MI_DEBUG and MI_PAGE_MAX_OVERALLOC_ALIGN
+#include "mimalloc/prim/prim-mte.h"  // mi_ptr_with_memtag, mi_ptr_memtag, mi_ptr_memtag_meta
 
 #include "testhelper.h"
 

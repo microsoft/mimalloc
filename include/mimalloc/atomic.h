@@ -655,4 +655,4 @@ static inline void mi_pthread_key_delete(pthread_key_t* pkey) {
 #endif
 
 
-#endif // __MIMALLOC_ATOMIC_H
+#endif // MI_ATOMIC_H

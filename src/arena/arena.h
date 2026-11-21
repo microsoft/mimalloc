@@ -10,6 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ARENA_H
 
 #include "mimalloc/util/libc.h"
+#include "mimalloc/prim/prim-mte.h"  // mi_memtag_meta_init_adjacent
 #include "mimalloc/arena/arena.h"
 #include "bitmap.h"
 
