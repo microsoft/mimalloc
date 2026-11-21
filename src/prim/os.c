@@ -21,6 +21,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #if !defined(_WIN32) && MI_HAS_UNISTDH
 #include <unistd.h>   // issetugid, getuid, geteuid, getgid, getegid
 #endif
+#if defined(__linux__) && defined(__has_include) && (!defined(__ANDROID__) || __ANDROID_API__ >= 18)
+#if __has_include(<sys/auxv.h>)
+#include <sys/auxv.h> // getauxval, AT_SECURE
+#if defined(AT_SECURE)
+#define MI_HAS_AT_SECURE  1
+#endif
+#endif
+#endif
 
 /* -----------------------------------------------------------
   Initialization.
@@ -108,6 +116,10 @@ static bool mi_os_detect_elevated(void) {
   #elif MI_HAS_UNISTDH && (defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__))
   return (issetugid() != 0);
   #elif MI_HAS_UNISTDH
+  #if MI_HAS_AT_SECURE
+  // also covers file capabilities and LSM transitions where the uid/gid do not change
+  if (getauxval(AT_SECURE) != 0) return true;
+  #endif
   return (getuid() != geteuid() || getgid() != getegid());
   #else
   return false;  // no portable way to check without `unistd.h`; assume not elevated
