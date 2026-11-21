@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.18.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>mi-malloc: Allocation with Block Sizes</title>
+<title>mi-malloc: Allocation with Usable Sizes</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="codefolding.js"></script>
 <script type="text/javascript" src="clipboard.js"></script>
@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.6/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.7/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -85,38 +85,40 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('group__sized.h
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">Allocation with Block Sizes </div></div>
+  <div class="headertitle"><div class="title">Allocation with Usable Sizes </div></div>
 </div><!--header-->
 <div class="contents">
 
-<p><b>v3</b>: Allocate or free memory while reporting the allocator's block size in bytes.  
+<p><b>v3</b>: Allocate or free memory while reporting the usable size in bytes.  
 <a href="#details">More...</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
-<tr class="memitem:gada2639c52f265186a12429435739627b" id="r_gada2639c52f265186a12429435739627b"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#gada2639c52f265186a12429435739627b">mi_umalloc</a> (size_t size, size_t *block_size)</td></tr>
-<tr class="memdesc:gada2639c52f265186a12429435739627b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate <em class="arg">size</em> bytes and report the block size through <em class="arg">block_size</em>.  <br /></td></tr>
-<tr class="memitem:ga30d62ba1eb4c207590b7d7be011c9d56" id="r_ga30d62ba1eb4c207590b7d7be011c9d56"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga30d62ba1eb4c207590b7d7be011c9d56">mi_ucalloc</a> (size_t count, size_t size, size_t *block_size)</td></tr>
-<tr class="memdesc:ga30d62ba1eb4c207590b7d7be011c9d56"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate <em class="arg">count</em> zero-initialized elements of <em class="arg">size</em> bytes and report the block size.  <br /></td></tr>
-<tr class="memitem:ga93fd303998578e6cb0914d79c25efd4f" id="r_ga93fd303998578e6cb0914d79c25efd4f"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga93fd303998578e6cb0914d79c25efd4f">mi_urealloc</a> (void *p, size_t newsize, size_t *block_size_pre, size_t *block_size_post)</td></tr>
-<tr class="memdesc:ga93fd303998578e6cb0914d79c25efd4f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reallocate <em class="arg">p</em> to <em class="arg">newsize</em> bytes and report the old and new block sizes.  <br /></td></tr>
-<tr class="memitem:ga2dfaf5d485ce83c7230ee6cb868f299e" id="r_ga2dfaf5d485ce83c7230ee6cb868f299e"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga2dfaf5d485ce83c7230ee6cb868f299e">mi_ufree</a> (void *p, size_t *block_size)</td></tr>
-<tr class="memdesc:ga2dfaf5d485ce83c7230ee6cb868f299e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Free <em class="arg">p</em> and report its block size, or 0 if <em class="arg">p</em> is <em class="arg">NULL</em>.  <br /></td></tr>
-<tr class="memitem:ga46f2c3c334f83cd933671a392934053f" id="r_ga46f2c3c334f83cd933671a392934053f"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga46f2c3c334f83cd933671a392934053f">mi_umalloc_aligned</a> (size_t size, size_t alignment, size_t *block_size)</td></tr>
-<tr class="memdesc:ga46f2c3c334f83cd933671a392934053f"><td class="mdescLeft">&#160;</td><td class="mdescRight">As <a class="el" href="group__aligned.html#ga69578ff1a98ca16e1dcd02c0995cd65c" title="Allocate size bytes aligned by alignment.">mi_malloc_aligned()</a>, additionally reporting the block size on success.  <br /></td></tr>
-<tr class="memitem:ga822081073810a5e033b771625ab518ca" id="r_ga822081073810a5e033b771625ab518ca"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga822081073810a5e033b771625ab518ca">mi_uzalloc_aligned</a> (size_t size, size_t alignment, size_t *block_size)</td></tr>
-<tr class="memdesc:ga822081073810a5e033b771625ab518ca"><td class="mdescLeft">&#160;</td><td class="mdescRight">As <a class="el" href="group__aligned.html#gaac7d0beb782f9b9ac31f47492b130f82">mi_zalloc_aligned()</a>, additionally reporting the block size on success.  <br /></td></tr>
-<tr class="memitem:ga7e82d9c99fa8feaee9f1306732fba15d" id="r_ga7e82d9c99fa8feaee9f1306732fba15d"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga7e82d9c99fa8feaee9f1306732fba15d">mi_umalloc_small</a> (size_t size, size_t *block_size)</td></tr>
-<tr class="memdesc:ga7e82d9c99fa8feaee9f1306732fba15d"><td class="mdescLeft">&#160;</td><td class="mdescRight">As <a class="el" href="group__extended.html#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small()</a>, additionally reporting the block size on success.  <br /></td></tr>
-<tr class="memitem:gafe63673cd80308a142b454ec023ca22e" id="r_gafe63673cd80308a142b454ec023ca22e"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#gafe63673cd80308a142b454ec023ca22e">mi_uzalloc_small</a> (size_t size, size_t *block_size)</td></tr>
-<tr class="memdesc:gafe63673cd80308a142b454ec023ca22e"><td class="mdescLeft">&#160;</td><td class="mdescRight">As <a class="el" href="group__extended.html#ga51c47637e81df0e2f13a2d7a2dec123e" title="Allocate a zero initialized small object.">mi_zalloc_small()</a>, additionally reporting the block size on success.  <br /></td></tr>
+<tr class="memitem:gaaaa4a450db4e35cc9cd07767aea2f3ac" id="r_gaaaa4a450db4e35cc9cd07767aea2f3ac"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#gaaaa4a450db4e35cc9cd07767aea2f3ac">mi_umalloc</a> (size_t size, size_t *pusable_size)</td></tr>
+<tr class="memdesc:gaaaa4a450db4e35cc9cd07767aea2f3ac"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate <em class="arg">size</em> bytes and report the usable size through <em class="arg">pusable_size</em>.  <br /></td></tr>
+<tr class="memitem:gaac99a844ecebfe782c12b0b5f8ff6d62" id="r_gaac99a844ecebfe782c12b0b5f8ff6d62"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#gaac99a844ecebfe782c12b0b5f8ff6d62">mi_uzalloc</a> (size_t size, size_t *pusable_size)</td></tr>
+<tr class="memdesc:gaac99a844ecebfe782c12b0b5f8ff6d62"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate <em class="arg">size</em> zero-initialized bytes and report the usable size through <em class="arg">pusable_size</em>.  <br /></td></tr>
+<tr class="memitem:ga73f2ca674d142088695cbf08d11974bd" id="r_ga73f2ca674d142088695cbf08d11974bd"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga73f2ca674d142088695cbf08d11974bd">mi_ucalloc</a> (size_t count, size_t size, size_t *pusable_size)</td></tr>
+<tr class="memdesc:ga73f2ca674d142088695cbf08d11974bd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allocate <em class="arg">count</em> zero-initialized elements of <em class="arg">size</em> bytes and report the usable size.  <br /></td></tr>
+<tr class="memitem:gafd944360da6e25cfe3f3fd33721a9c02" id="r_gafd944360da6e25cfe3f3fd33721a9c02"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#gafd944360da6e25cfe3f3fd33721a9c02">mi_urealloc</a> (void *p, size_t newsize, size_t *pusable_size_pre, size_t *pusable_size_post)</td></tr>
+<tr class="memdesc:gafd944360da6e25cfe3f3fd33721a9c02"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reallocate <em class="arg">p</em> to <em class="arg">newsize</em> bytes and report the old and new usable sizes.  <br /></td></tr>
+<tr class="memitem:ga382bb8509b66a14da596f1b5debda5e1" id="r_ga382bb8509b66a14da596f1b5debda5e1"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ga382bb8509b66a14da596f1b5debda5e1">mi_ufree</a> (void *p, size_t *pusable_size)</td></tr>
+<tr class="memdesc:ga382bb8509b66a14da596f1b5debda5e1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Free <em class="arg">p</em> and report its usable size, or 0 if <em class="arg">p</em> is <em class="arg">NULL</em>.  <br /></td></tr>
+<tr class="memitem:gafc0908cfb88170015bacbb46f5474701" id="r_gafc0908cfb88170015bacbb46f5474701"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#gafc0908cfb88170015bacbb46f5474701">mi_umalloc_aligned</a> (size_t size, size_t alignment, size_t *pusable_size)</td></tr>
+<tr class="memdesc:gafc0908cfb88170015bacbb46f5474701"><td class="mdescLeft">&#160;</td><td class="mdescRight">As <a class="el" href="group__aligned.html#ga69578ff1a98ca16e1dcd02c0995cd65c" title="Allocate size bytes aligned by alignment.">mi_malloc_aligned()</a>, additionally reporting the usable size on success.  <br /></td></tr>
+<tr class="memitem:ga7f775084057899a42eabab3107090914" id="r_ga7f775084057899a42eabab3107090914"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga7f775084057899a42eabab3107090914">mi_uzalloc_aligned</a> (size_t size, size_t alignment, size_t *pusable_size)</td></tr>
+<tr class="memdesc:ga7f775084057899a42eabab3107090914"><td class="mdescLeft">&#160;</td><td class="mdescRight">As <a class="el" href="group__aligned.html#gaac7d0beb782f9b9ac31f47492b130f82">mi_zalloc_aligned()</a>, additionally reporting the usable size on success.  <br /></td></tr>
+<tr class="memitem:ga18763092b9db9d4a9e1df288550dffaa" id="r_ga18763092b9db9d4a9e1df288550dffaa"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga18763092b9db9d4a9e1df288550dffaa">mi_umalloc_small</a> (size_t size, size_t *pusable_size)</td></tr>
+<tr class="memdesc:ga18763092b9db9d4a9e1df288550dffaa"><td class="mdescLeft">&#160;</td><td class="mdescRight">As <a class="el" href="group__extended.html#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small()</a>, additionally reporting the usable size on success.  <br /></td></tr>
+<tr class="memitem:ga74bb02733f74aaec21f749749133b944" id="r_ga74bb02733f74aaec21f749749133b944"><td class="memItemLeft">void *&#160;</td><td class="memItemRight"><a class="el" href="#ga74bb02733f74aaec21f749749133b944">mi_uzalloc_small</a> (size_t size, size_t *pusable_size)</td></tr>
+<tr class="memdesc:ga74bb02733f74aaec21f749749133b944"><td class="mdescLeft">&#160;</td><td class="mdescRight">As <a class="el" href="group__extended.html#ga51c47637e81df0e2f13a2d7a2dec123e" title="Allocate a zero initialized small object.">mi_zalloc_small()</a>, additionally reporting the usable size on success.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p><b>v3</b>: Allocate or free memory while reporting the allocator's block size in bytes. </p>
-<p>Reported sizes may include padding or alignment overhead and are not a guarantee of writable capacity. Size output pointers may be <em class="arg">NULL</em>. Allocation size outputs are only valid on success; they need not be cleared on failure. </p>
+<div class="textblock"><p><b>v3</b>: Allocate or free memory while reporting the usable size in bytes. </p>
+<p>The reported size always equals <a class="el" href="group__malloc.html#ga089c859d9eddc5f9b4bd946cd53cebee" title="Return the available bytes in a memory block.">mi_usable_size()</a> of the returned (or freed) pointer, and can be used as the writable capacity. Size output pointers may be <em class="arg">NULL</em>. Allocation size outputs are only valid on success; they need not be cleared on failure. </p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
-<a id="ga30d62ba1eb4c207590b7d7be011c9d56" name="ga30d62ba1eb4c207590b7d7be011c9d56"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ga30d62ba1eb4c207590b7d7be011c9d56">&#9670;&#160;</a></span>mi_ucalloc()</h2>
+<a id="ga73f2ca674d142088695cbf08d11974bd" name="ga73f2ca674d142088695cbf08d11974bd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga73f2ca674d142088695cbf08d11974bd">&#9670;&#160;</a></span>mi_ucalloc()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -134,19 +136,19 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>block_size</em></span>&#160;)</td>
+          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>pusable_size</em></span>&#160;)</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
-<p>Allocate <em class="arg">count</em> zero-initialized elements of <em class="arg">size</em> bytes and report the block size. </p>
+<p>Allocate <em class="arg">count</em> zero-initialized elements of <em class="arg">size</em> bytes and report the usable size. </p>
 <dl class="section return"><dt>Returns</dt><dd>The allocation, or <em class="arg">NULL</em> on failure or multiplication overflow. </dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__malloc.html#ga6686568014b54d1e6c7ac64a076e4f56" title="Allocate zero-initialized count elements of size bytes.">mi_calloc()</a> </dd></dl>
 
 </div>
 </div>
-<a id="ga2dfaf5d485ce83c7230ee6cb868f299e" name="ga2dfaf5d485ce83c7230ee6cb868f299e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ga2dfaf5d485ce83c7230ee6cb868f299e">&#9670;&#160;</a></span>mi_ufree()</h2>
+<a id="ga382bb8509b66a14da596f1b5debda5e1" name="ga382bb8509b66a14da596f1b5debda5e1"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga382bb8509b66a14da596f1b5debda5e1">&#9670;&#160;</a></span>mi_ufree()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -159,18 +161,18 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>block_size</em></span>&#160;)</td>
+          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>pusable_size</em></span>&#160;)</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
-<p>Free <em class="arg">p</em> and report its block size, or 0 if <em class="arg">p</em> is <em class="arg">NULL</em>. </p>
+<p>Free <em class="arg">p</em> and report its usable size, or 0 if <em class="arg">p</em> is <em class="arg">NULL</em>. </p>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__malloc.html#gaf2c7b89c327d1f60f59e68b9ea644d95" title="Free previously allocated memory.">mi_free()</a> </dd></dl>
 
 </div>
 </div>
-<a id="gada2639c52f265186a12429435739627b" name="gada2639c52f265186a12429435739627b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#gada2639c52f265186a12429435739627b">&#9670;&#160;</a></span>mi_umalloc()</h2>
+<a id="gaaaa4a450db4e35cc9cd07767aea2f3ac" name="gaaaa4a450db4e35cc9cd07767aea2f3ac"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaaaa4a450db4e35cc9cd07767aea2f3ac">&#9670;&#160;</a></span>mi_umalloc()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -183,19 +185,19 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>block_size</em></span>&#160;)</td>
+          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>pusable_size</em></span>&#160;)</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
-<p>Allocate <em class="arg">size</em> bytes and report the block size through <em class="arg">block_size</em>. </p>
+<p>Allocate <em class="arg">size</em> bytes and report the usable size through <em class="arg">pusable_size</em>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The allocation, or <em class="arg">NULL</em> on failure. </dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__malloc.html#gae1dd97b542420c87ae085e822b1229e8" title="Allocate size bytes.">mi_malloc()</a> </dd></dl>
 
 </div>
 </div>
-<a id="ga46f2c3c334f83cd933671a392934053f" name="ga46f2c3c334f83cd933671a392934053f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ga46f2c3c334f83cd933671a392934053f">&#9670;&#160;</a></span>mi_umalloc_aligned()</h2>
+<a id="gafc0908cfb88170015bacbb46f5474701" name="gafc0908cfb88170015bacbb46f5474701"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gafc0908cfb88170015bacbb46f5474701">&#9670;&#160;</a></span>mi_umalloc_aligned()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -213,17 +215,17 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>block_size</em></span>&#160;)</td>
+          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>pusable_size</em></span>&#160;)</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
-<p>As <a class="el" href="group__aligned.html#ga69578ff1a98ca16e1dcd02c0995cd65c" title="Allocate size bytes aligned by alignment.">mi_malloc_aligned()</a>, additionally reporting the block size on success. </p>
+<p>As <a class="el" href="group__aligned.html#ga69578ff1a98ca16e1dcd02c0995cd65c" title="Allocate size bytes aligned by alignment.">mi_malloc_aligned()</a>, additionally reporting the usable size on success. </p>
 
 </div>
 </div>
-<a id="ga7e82d9c99fa8feaee9f1306732fba15d" name="ga7e82d9c99fa8feaee9f1306732fba15d"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ga7e82d9c99fa8feaee9f1306732fba15d">&#9670;&#160;</a></span>mi_umalloc_small()</h2>
+<a id="ga18763092b9db9d4a9e1df288550dffaa" name="ga18763092b9db9d4a9e1df288550dffaa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga18763092b9db9d4a9e1df288550dffaa">&#9670;&#160;</a></span>mi_umalloc_small()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -236,18 +238,18 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>block_size</em></span>&#160;)</td>
+          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>pusable_size</em></span>&#160;)</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
-<p>As <a class="el" href="group__extended.html#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small()</a>, additionally reporting the block size on success. </p>
+<p>As <a class="el" href="group__extended.html#ga7f050bc6b897da82692174f5fce59cde" title="Allocate a small object.">mi_malloc_small()</a>, additionally reporting the usable size on success. </p>
 <p><em class="arg">size</em> must not exceed <a class="el" href="group__extended.html#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size in bytes allowed for small allocations in mi_malloc_small, mi_zalloc_small,...">MI_SMALL_SIZE_MAX</a>. </p>
 
 </div>
 </div>
-<a id="ga93fd303998578e6cb0914d79c25efd4f" name="ga93fd303998578e6cb0914d79c25efd4f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ga93fd303998578e6cb0914d79c25efd4f">&#9670;&#160;</a></span>mi_urealloc()</h2>
+<a id="gafd944360da6e25cfe3f3fd33721a9c02" name="gafd944360da6e25cfe3f3fd33721a9c02"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gafd944360da6e25cfe3f3fd33721a9c02">&#9670;&#160;</a></span>mi_urealloc()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -265,24 +267,49 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>block_size_pre</em></span>, </td>
+          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>pusable_size_pre</em></span>, </td>
         </tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>block_size_post</em></span>&#160;)</td>
+          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>pusable_size_post</em></span>&#160;)</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
-<p>Reallocate <em class="arg">p</em> to <em class="arg">newsize</em> bytes and report the old and new block sizes. </p>
-<p><em class="arg">block_size_pre</em> is 0 for <em class="arg">NULL</em> input; <em class="arg">block_size_post</em> is valid on success. </p><dl class="section return"><dt>Returns</dt><dd>The reallocated block, or <em class="arg">NULL</em> on failure without freeing <em class="arg">p</em>. </dd></dl>
+<p>Reallocate <em class="arg">p</em> to <em class="arg">newsize</em> bytes and report the old and new usable sizes. </p>
+<p><em class="arg">pusable_size_pre</em> is 0 for <em class="arg">NULL</em> input; <em class="arg">pusable_size_post</em> is valid on success. </p><dl class="section return"><dt>Returns</dt><dd>The reallocated block, or <em class="arg">NULL</em> on failure without freeing <em class="arg">p</em>. </dd></dl>
 <dl class="section see"><dt>See also</dt><dd><a class="el" href="group__malloc.html#ga0621af6a5e3aa384e6a1b548958bf583" title="Re-allocate memory to newsize bytes.">mi_realloc()</a> </dd></dl>
 
 </div>
 </div>
-<a id="ga822081073810a5e033b771625ab518ca" name="ga822081073810a5e033b771625ab518ca"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ga822081073810a5e033b771625ab518ca">&#9670;&#160;</a></span>mi_uzalloc_aligned()</h2>
+<a id="gaac99a844ecebfe782c12b0b5f8ff6d62" name="gaac99a844ecebfe782c12b0b5f8ff6d62"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#gaac99a844ecebfe782c12b0b5f8ff6d62">&#9670;&#160;</a></span>mi_uzalloc()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void * mi_uzalloc </td>
+          <td>(</td>
+          <td class="paramtype">size_t</td>          <td class="paramname"><span class="paramname"><em>size</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>pusable_size</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Allocate <em class="arg">size</em> zero-initialized bytes and report the usable size through <em class="arg">pusable_size</em>. </p>
+<dl class="section return"><dt>Returns</dt><dd>The allocation, or <em class="arg">NULL</em> on failure. </dd></dl>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="group__malloc.html#gae6e38c4403247a7b40d80419e093bfb8" title="Allocate zero-initialized size bytes.">mi_zalloc()</a> </dd></dl>
+
+</div>
+</div>
+<a id="ga7f775084057899a42eabab3107090914" name="ga7f775084057899a42eabab3107090914"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga7f775084057899a42eabab3107090914">&#9670;&#160;</a></span>mi_uzalloc_aligned()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -300,17 +327,17 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>block_size</em></span>&#160;)</td>
+          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>pusable_size</em></span>&#160;)</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
-<p>As <a class="el" href="group__aligned.html#gaac7d0beb782f9b9ac31f47492b130f82">mi_zalloc_aligned()</a>, additionally reporting the block size on success. </p>
+<p>As <a class="el" href="group__aligned.html#gaac7d0beb782f9b9ac31f47492b130f82">mi_zalloc_aligned()</a>, additionally reporting the usable size on success. </p>
 
 </div>
 </div>
-<a id="gafe63673cd80308a142b454ec023ca22e" name="gafe63673cd80308a142b454ec023ca22e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#gafe63673cd80308a142b454ec023ca22e">&#9670;&#160;</a></span>mi_uzalloc_small()</h2>
+<a id="ga74bb02733f74aaec21f749749133b944" name="ga74bb02733f74aaec21f749749133b944"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga74bb02733f74aaec21f749749133b944">&#9670;&#160;</a></span>mi_uzalloc_small()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -323,12 +350,12 @@ Functions</h2></td></tr>
         <tr>
           <td class="paramkey"></td>
           <td></td>
-          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>block_size</em></span>&#160;)</td>
+          <td class="paramtype">size_t *</td>          <td class="paramname"><span class="paramname"><em>pusable_size</em></span>&#160;)</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
-<p>As <a class="el" href="group__extended.html#ga51c47637e81df0e2f13a2d7a2dec123e" title="Allocate a zero initialized small object.">mi_zalloc_small()</a>, additionally reporting the block size on success. </p>
+<p>As <a class="el" href="group__extended.html#ga51c47637e81df0e2f13a2d7a2dec123e" title="Allocate a zero initialized small object.">mi_zalloc_small()</a>, additionally reporting the usable size on success. </p>
 <p><em class="arg">size</em> must not exceed <a class="el" href="group__extended.html#ga1ea64283508718d9d645c38efc2f4305" title="Maximum size in bytes allowed for small allocations in mi_malloc_small, mi_zalloc_small,...">MI_SMALL_SIZE_MAX</a>. </p>
 
 </div>

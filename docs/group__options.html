@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.6/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.7/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -219,7 +219,7 @@ Functions</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca8b5815a577955fe8125f2b964f41ee7f" name="ggafebf7ed116adb38ae5218bc3ce06884ca8b5815a577955fe8125f2b964f41ee7f"></a>mi_option_generic_collect&#160;</td><td class="fielddoc"><p>collect heaps every N (=10000) generic allocation calls </p>
 </td></tr>
-<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca04c45931ce2c82a20d08ca1471e74087" name="ggafebf7ed116adb38ae5218bc3ce06884ca04c45931ce2c82a20d08ca1471e74087"></a>mi_option_allow_thp&#160;</td><td class="fielddoc"><p>allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process. </p>
+<tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca04c45931ce2c82a20d08ca1471e74087" name="ggafebf7ed116adb38ae5218bc3ce06884ca04c45931ce2c82a20d08ca1471e74087"></a>mi_option_allow_thp&#160;</td><td class="fielddoc"><p>Transparent huge pages: 0 disable for the process, 1 allow, 2 allow and avoid splitting on purge. Default: 2 on Linux, 0 on Android; an explicit mi_option_minimal_purge_size overrides the purge behavior. </p>
 </td></tr>
 <tr><td class="fieldname"><a id="ggafebf7ed116adb38ae5218bc3ce06884ca00734c528aae52784654a8db996ae62b" name="ggafebf7ed116adb38ae5218bc3ce06884ca00734c528aae52784654a8db996ae62b"></a>mi_option_guarded_min&#160;</td><td class="fielddoc"><p>only used when building with MI_GUARDED: minimal rounded object size for guarded objects (=0) </p>
 </td></tr>
