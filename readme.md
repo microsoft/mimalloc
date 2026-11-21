@@ -624,7 +624,7 @@ With `ON`, performance and memory usage is impacted a bit more (usually less tha
 - Some use-after-free accesses are detected (if these modify the first word in the block).
 - On free, the first 1KiB of a block is zero'd.
 - Free lists are randomized more to make allocation order less predictable.
-- Freed pages are decommitted and fault on an access.
+- Purged pages are protected and fault on an access.
 - The mimalloc library is build as `mimalloc-secure`.
 
 The `FULL` mode also adds:
