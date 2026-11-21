@@ -855,6 +855,7 @@ bool _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(mi_page_is_owned(page) && mi_page_all_free(page));
   mi_assert_internal(mi_page_is_abandoned(page) && !mi_page_is_abandoned_mapped(page));
   mi_assert_internal(page->next == NULL && page->prev == NULL);
+  _mi_page_check_free_lists(page);
   if (_mi_page_qsbr_should_delay(page)) {
     #if MI_QSBR
     if (mi_page_is_singleton(page)) {

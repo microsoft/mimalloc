@@ -199,6 +199,7 @@ static void mi_heap_move_page(const mi_heap_move_info_t* info, mi_page_t* page) 
 
   if (mi_page_used(page)==0) {
     // free the page
+    _mi_page_check_free_lists(page);
     _mi_arenas_page_free_direct(page, NULL);
   }
   else if (heap_target==NULL) {

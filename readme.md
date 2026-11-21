@@ -612,6 +612,8 @@ is still relatively small (usually less than 10%, but can be 2x slower):
   are ignored. Interior pointers are adjusted to the start of their block.
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
   mitigate against attacks that rely on a predictable allocation order.
+- Double frees are detected: immediately when a block is freed twice in a row, and otherwise on allocation
+  (as links are cleared on allocation) or when the page is freed (by checking its free lists).
 - Reuse of freed blocks is delayed (until 1/8th of a page is free) and a random number of the most recently
   freed blocks is held back, making it harder to reclaim a just-freed block (to exploit use-after-free).
 

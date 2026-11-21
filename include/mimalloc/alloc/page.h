@@ -25,6 +25,7 @@ void          _mi_page_unfull(mi_page_t* page);
 bool          _mi_page_free(mi_page_t* page, mi_page_queue_t* pq);     // false if page release is delayed
 void          _mi_page_abandon(mi_page_t* page, mi_page_queue_t* pq, bool owner_done);  // abandon the page, to be picked up by another thread...
 void          _mi_deferred_free(mi_theap_t* theap, bool force);
+void          _mi_page_check_free_lists(const mi_page_t* page);   // check an empty page before it is freed (at `MI_SECURE>=2`)
 bool          _mi_page_free_collect(mi_page_t* page, bool force);  // returns `true` if cross-thread free'd blocks were collected
 mi_block_t*   _mi_page_free_collect_partly(mi_page_t* page, mi_block_t* head);
 mi_decl_nodiscard bool _mi_page_init(mi_theap_t* theap, mi_page_t* page);

@@ -77,11 +77,21 @@ static inline mi_block_t* mi_block_free_clear(const mi_page_t* page, mi_block_t*
   return block;
 }
 
+#if MI_SECURE>=2
+static mi_decl_noinline mi_decl_cold void mi_free_double_immediate(const mi_page_t* page, const mi_block_t* block) {
+  _mi_error_message(EAGAIN, "double free detected of block %p with size %zu\n", block, mi_page_block_size(page));
+}
+#endif
+
 static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool was_guarded, bool check_full, bool memtag)
 {
   // checks
   size_t usable_size;
   if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return;
+  #if MI_SECURE>=2
+  // cheap check for an immediate double free (other double frees are detected on allocation or when the page is freed)
+  if mi_unlikely(block == page->local_free) { mi_free_double_immediate(page, block); return; }
+  #endif
   if mi_unlikely(!mi_check_double_free(page,block)) return;  // usually checked with padding
 
   // mi_stat_free(page, block);
