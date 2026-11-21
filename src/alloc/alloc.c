@@ -889,9 +889,16 @@ static bool mi_call_new_handler(size_t size) {
 #else
 typedef void (*std_new_handler_t)(void);
 
-// Define MI_NO_CXX_NEW_HANDLER to not define a weak `std::get_new_handler` (`_ZSt15get_new_handlerv`)
-// when the C++ new-handler is never used (e.g. when only the C API is used).
-#if (defined(__GNUC__) || defined(__clang__)) && !defined(MI_NO_CXX_NEW_HANDLER)
+// Define MI_NO_CXX_NEW_HANDLER to never call `std::get_new_handler` (`_ZSt15get_new_handlerv`),
+// and to not define a weak `std::get_new_handler` on non-ELF platforms (e.g. when only the C API is used).
+#if defined(__ELF__) && (defined(__GNUC__) || defined(__clang__)) && !defined(MI_NO_CXX_NEW_HANDLER)
+// weak reference: only non-NULL if the C++ runtime is linked in
+extern std_new_handler_t _ZSt15get_new_handlerv(void) __attribute__((weak));
+static std_new_handler_t mi_get_new_handler(void) {
+  return (_ZSt15get_new_handlerv != NULL ? _ZSt15get_new_handlerv() : NULL);
+}
+#elif (defined(__GNUC__) || defined(__clang__)) && !defined(MI_NO_CXX_NEW_HANDLER)
+// weak definition, as a weak reference to an absent symbol fails to link on macOS and Windows
 std_new_handler_t __attribute__((weak)) _ZSt15get_new_handlerv(void) {
   return NULL;
 }
