@@ -42,6 +42,7 @@ bool          _mi_page_queue_is_valid(mi_theap_t* theap, const mi_page_queue_t* 
 size_t        _mi_page_stats_bin(const mi_page_t* page); // for stats
 size_t        _mi_bin_size(size_t bin);                  // for stats
 size_t        _mi_bin(size_t size);                      // for stats
+size_t        _mi_block_size_of(size_t size);            // block size (including padding) for an allocation of `size` bytes
 
 
 static inline mi_page_queue_t* mi_page_queue(const mi_theap_t* theap, size_t size) {

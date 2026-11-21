@@ -741,6 +741,24 @@ int main(void) {
       }
     }
   }
+  CHECK_BODY("good-size") {
+    mi_heap_t* heap = mi_heap_new();
+    mi_theap_t* theap = (heap == NULL ? NULL : mi_heap_theap(heap));
+    if (theap == NULL) { result = false; }
+    else {
+      mi_theap_guarded_set_sample_rate(theap, 0, 0);  // guarded blocks have a different block size
+      for (size_t size = 1; result && size <= 64*MI_MiB; size = (size*5)/4 + 1) {
+        const size_t gsize = mi_good_size(size);
+        void* p = mi_theap_malloc(theap, size);
+        void* q = mi_theap_malloc(theap, gsize);
+        // the good size fits in the same block, and is exactly its usable size
+        result = (gsize >= size && mi_allocated_size(q) == mi_allocated_size(p) && mi_usable_size(q) == gsize);
+        mi_free(p);
+        mi_free(q);
+      }
+      mi_heap_delete(heap);
+    }
+  }
   CHECK_BODY("ucalloc-nomem") {
     size_t bsize = 42;
     void* p = mi_ucalloc(SIZE_MAX/4, 4, &bsize);

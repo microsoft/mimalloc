@@ -23,7 +23,7 @@ static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
   // (see `alloc/page.h:mi_natural_alignment_of_size`, asserted in `arena/arena-page-alloc.c:mi_arenas_page_alloc_fresh`).
   mi_assert_internal(mi_alignment_is_valid(alignment));
   if (alignment > size) return false;
-  const size_t bsize = mi_good_size(size);
+  const size_t bsize = _mi_block_size_of(size);
   const bool ok = (alignment <= mi_natural_alignment_of_size(bsize));
   if (ok) { mi_assert_internal((bsize & (alignment-1)) == 0); } // since the natural alignment always divides `bsize`
   return ok;

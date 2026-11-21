@@ -318,15 +318,19 @@ size_t mi_allocated_size(const void* p);
 /// thread. This is mimalloc's internal thread identity scheme, not necessarily the native OS thread-id.
 size_t mi_thread_id_of(const void* p);
 
-/// Return the probable allocation block size for a given required size.
+/// Return the full usable size of the block that an allocation of a given size would use.
 /// @param size The minimal required size in bytes.
-/// @returns the size `n` that will be allocated, where `n >= size`.
+/// @returns The size `n >= size` that fits in the same block as an allocation of \a size bytes.
 ///
-/// Generally, `mi_usable_size(mi_malloc(size)) == mi_good_size(size)`.
-/// This function can be used to reduce internal wasted space when
-/// allocating buffers for example.
+/// Allocating `n = mi_good_size(size)` bytes instead of \a size uses no more memory,
+/// and then `mi_usable_size(mi_malloc(n)) == n`. This can be used to avoid wasted space,
+/// for example by growing a buffer to the good size of its new capacity.
+///
+/// The result is exact for regular allocations, but aligned allocations and guarded
+/// allocations can use a larger block.
 ///
 /// @see mi_usable_size()
+/// @see mi_umalloc()
 size_t mi_good_size(size_t size);
 
 /// \}
