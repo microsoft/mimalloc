@@ -608,6 +608,19 @@ void _mi_error_message(int err, const char* fmt, ...) {
 #include <string.h> // strstr
 
 
+// Return the reason to ignore an environment option, or NULL if it can be used.
+static const char* mi_option_env_ignore_reason(mi_option_t option) {
+  #if MI_SECURE_ENV
+  if (option != mi_option_show_stats && option != mi_option_verbose && option != mi_option_allow_thp) {
+    return "secure environment mode";
+  }
+  #else
+  MI_UNUSED(option);
+  #endif
+  if (_mi_prim_is_elevated()) return "an elevated process";
+  return NULL;
+}
+
 static void mi_option_init(mi_option_desc_t* desc) {
   // Read option value from the environment
   char s[64 + 1];
@@ -615,11 +628,23 @@ static void mi_option_init(mi_option_desc_t* desc) {
   _mi_strlcpy(buf, "mimalloc_", sizeof(buf));
   _mi_strlcat(buf, desc->name, sizeof(buf));
   int err = _mi_getenv(buf, s, sizeof(s));
+  bool legacy = false;
   if (err==ENOENT && desc->legacy_name != NULL) {
     _mi_strlcpy(buf, "mimalloc_", sizeof(buf));
     _mi_strlcat(buf, desc->legacy_name, sizeof(buf));
     err = _mi_getenv(buf, s, sizeof(s));
-    if (err==0) {
+    legacy = (err==0);
+  }
+
+  if (err==0) {
+    // don't let the environment weaken secure builds or influence a privileged process
+    const char* const ignore_reason = mi_option_env_ignore_reason(desc->option);
+    if (ignore_reason != NULL) {
+      desc->init = DEFAULTED;  // set first to avoid recursion through _mi_warning_message
+      _mi_warning_message("environment option \"%s\" is ignored in %s\n", buf, ignore_reason);
+      return;
+    }
+    if (legacy) {
       _mi_warning_message("environment option \"mimalloc_%s\" is deprecated -- use \"mimalloc_%s\" instead.\n", desc->legacy_name, desc->name);
     }
   }

@@ -859,6 +859,27 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
 }
 #endif  // !MI_USE_ENVIRON
 
+#if defined(__linux__) && defined(__has_include) && (!defined(__ANDROID__) || __ANDROID_API__ >= 18)
+#if __has_include(<sys/auxv.h>)
+#include <sys/auxv.h> // getauxval, AT_SECURE
+#if defined(AT_SECURE)
+#define MI_HAS_AT_SECURE  1
+#endif
+#endif
+#endif
+
+bool _mi_prim_is_elevated(void) {
+  #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
+  return (issetugid() != 0);
+  #else
+  #if MI_HAS_AT_SECURE
+  // also covers file capabilities and LSM transitions where the uid/gid do not change
+  if (getauxval(AT_SECURE) != 0) return true;
+  #endif
+  return (getuid() != geteuid() || getgid() != getegid());
+  #endif
+}
+
 
 //----------------------------------------------------------------
 // Random

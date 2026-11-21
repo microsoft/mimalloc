@@ -353,7 +353,7 @@ completely and redirect all calls to the _mimalloc_ library instead .
 
 ## Environment Options
 
-You can set further options either programmatically (using [`mi_option_set`](https://microsoft.github.io/mimalloc/group__options.html)), or via environment variables:
+You can set further options either programmatically (using [`mi_option_set`](https://microsoft.github.io/mimalloc/group__options.html)), or via environment variables (which are ignored in processes with elevated privileges, like a `setuid` executable):
 
 - `MIMALLOC_SHOW_STATS=1`: show statistics when the program terminates.
 - `MIMALLOC_VERBOSE=1`: show verbose messages (including statistics).
@@ -428,6 +428,10 @@ to make mimalloc more robust against exploits. In particular:
 - If enabling `-DMI_SECURE_FULL=ON` there will also be guard pages at the end of each (64KiB) mimalloc page (thus interleaving
   valid block data with inaccessible gaps). This setting is not recommended in general as it is more expensive and can lead to
   reaching the maximum VMA limit on Linux systems if the heap gets too large.
+
+In secure mode, only the `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, and `MIMALLOC_ALLOW_THP` environment options are accepted
+(and all others are ignored). This can be controlled explicitly with `-DMI_SECURE_ENV=ON|OFF`. Note: an elevated process
+always ignores all environment options. Also, addresses are not shown in messages in a secure release build.
 
 As always, evaluate with care as part of an overall security strategy as all of the above are mitigations but not guarantees.
 

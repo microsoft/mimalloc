@@ -263,6 +263,10 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   return 1; // found
 }
 
+bool _mi_prim_is_elevated(void) {
+  return false;
+}
+
 
 //----------------------------------------------------------------
 // Random

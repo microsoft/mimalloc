@@ -111,6 +111,10 @@ void _mi_prim_out_stderr( const char* msg );
 // and -1 on error (for example, if `getenv` cannot be called yet during preloading).
 int _mi_prim_getenv(const char* name, char* result, size_t result_size);
 
+// Running with elevated privileges (e.g. a setuid/setgid executable)?
+// In that case the environment is untrusted.
+bool _mi_prim_is_elevated(void);
+
 
 // Fill a buffer with strong randomness; return `false` on error or if
 // there is no strong randomization available.
