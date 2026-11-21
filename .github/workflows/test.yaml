@@ -333,7 +333,10 @@ jobs:
 
       - name: Release, clang
         if: matrix.target == 'riscv64'
-        run: ${{ matrix.test_env }} CC=clang CXX=clang++ sh .github/ci/cmake-test.sh release-clang Release -DMI_OPT_ARCH=rv64gcb_zacas_zalasr -DMI_SEE_ASM=ON
+        # note: zalasr miscompiles on QEMU 10.2+
+        # run: ${{ matrix.test_env }} CC=clang CXX=clang++ sh .github/ci/cmake-test.sh release-clang Release -DMI_OPT_ARCH=rv64gcb_zacas_zalasr -DMI_SEE_ASM=ON
+        run: ${{ matrix.test_env }} CC=clang CXX=clang++ sh .github/ci/cmake-test.sh release-clang Release -DMI_OPT_ARCH=rv64gcb_zacas -DMI_SEE_ASM=ON
+
 
       - name: Release, clang, Asm
         if: matrix.target == 'riscv64'

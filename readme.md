@@ -597,7 +597,7 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
   corrupted through a heap block buffer overflow).
 - The start address of OS allocated memory is randomized
   (if possible), and mimalloc aborts on corrupted meta data detection.
-- Large blocks (> 512 KiB) are followed by a guard page.
+- Larger blocks (> 80 KiB) are followed by a guard page.
 - Does not allocate or reserve large OS pages as pinned memory cannot hold a guard page.
 - Enables `MI_SECURE_ENV=ON`
 
@@ -620,7 +620,7 @@ is still relatively small (usually less than 10%, but can be 2x slower on synthe
 With `ON`, performance and memory usage is impacted a bit more (usually less than 25%, but can be 2 to 3x slower):
 
 - Padding (8 bytes) is added at the end of each heap block to detect heap block overflows (detected once the block is freed),
-  and this is also used to always immediately detect double frees.
+  and also to immediately detect double frees.
 - On free, the first 1KiB of a block is zero'd.
 - Free lists are randomized more to make allocation order less predictable.
 - Purged pages are protected and fault on an access.
