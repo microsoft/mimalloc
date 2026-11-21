@@ -665,6 +665,10 @@ int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
   return (len < result_size ? (len > 0 ? 1 /* success */ : 0 /* not found */) : -1 /* error */);
 }
 
+bool _mi_prim_is_elevated(void) {
+  return false;  // no direct setuid/setgid equivalent; a UAC elevation does not inherit the parent's environment
+}
+
 
 //----------------------------------------------------------------
 // Random

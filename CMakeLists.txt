@@ -15,6 +15,9 @@ option(MI_GUARDED           "Build with guard pages behind certain object alloca
 set(MI_USE_CXX "DEFAULT" CACHE STRING "Use the C++ compiler to compile the library (instead of the C compiler)")
 set_property(CACHE MI_USE_CXX PROPERTY STRINGS "OFF" "ON" "DEFAULT")
 
+set(MI_SECURE_ENV "DEFAULT" CACHE STRING "Restrict environment options to show_stats, verbose, and allow_thp (DEFAULT enables this with MI_SECURE)")
+set_property(CACHE MI_SECURE_ENV PROPERTY STRINGS "OFF" "ON" "DEFAULT")
+
 option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for arm64: '-march=armv8.1-a' (2016))" OFF)
 option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS" ON)
@@ -238,6 +241,12 @@ if(MI_SECURE_FULL)
 elseif(MI_SECURE)
   message(STATUS "Set secure build (MI_SECURE=ON)")
   list(APPEND mi_defines MI_SECURE=4)
+endif()
+
+if(MI_SECURE_ENV STREQUAL "ON")
+  list(APPEND mi_defines MI_SECURE_ENV=1)
+elseif(MI_SECURE_ENV STREQUAL "OFF")
+  list(APPEND mi_defines MI_SECURE_ENV=0)
 endif()
 
 if(MI_TRACK_VALGRIND)

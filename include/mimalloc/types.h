@@ -63,6 +63,15 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SECURE 0
 #endif
 
+// Restrict environment options to `show_stats`, `verbose`, and `allow_thp` (by default in secure builds)
+#if !defined(MI_SECURE_ENV)
+#if MI_SECURE >= 1
+#define MI_SECURE_ENV 1
+#else
+#define MI_SECURE_ENV 0
+#endif
+#endif
+
 // Define MI_DEBUG for assertion and invariant checking
 // #define MI_DEBUG 1  // basic assertion checks and statistics, check double free, corrupted free list, and invalid pointer free. (cmake -DMI_DEBUG=ON)
 // #define MI_DEBUG 2  // + internal assertion checks (cmake -DMI_DEBUG_INTERNAL=ON)
