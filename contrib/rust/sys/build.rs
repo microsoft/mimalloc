@@ -144,6 +144,8 @@ fn main() {
     if is_musl {
         define("MI_LIBC_MUSL", "1");
     }
+    // Rust never uses the C++ `new` API, so don't define or reference `std::get_new_handler`
+    define("MI_NO_CXX_NEW_HANDLER", "1");
     if feature("win_direct_tls") && is_windows {
         define("MI_WIN_DIRECT_TLS", "1");
     }

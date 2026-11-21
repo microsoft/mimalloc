@@ -13,6 +13,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "../util/options.h"
 #include "../util/libc.h"     // mi_align_down_ptr
 
+#if MI_MTE
+#include "../prim/prim-mte.h"  // mi_memtag_load
+#endif
+
 mi_heap_t*    _mi_subproc_heap_main(mi_subproc_t* subproc);
 mi_theap_t*   _mi_theap_main(void);  // current thread's backing theap, without initialization
 mi_page_t*    _mi_page_empty_get(void);

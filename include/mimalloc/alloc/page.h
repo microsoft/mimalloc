@@ -9,6 +9,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ALLOC_PAGE_H
 
 #include "../types.h"
+#include "../prim/prim-mte.h"  // mi_ptr_memtag_meta, mi_memtag_exclude_base, MI_ZERO_ON_FREE_MAX
 #include "../prim/os.h"
 #include "../heap/heap.h"
 #include "../heap/page-map.h"

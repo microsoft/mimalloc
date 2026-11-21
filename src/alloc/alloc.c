@@ -857,29 +857,54 @@ static void mi_new_fail(void) {
   throw std::bad_alloc();
   #endif
 }
+#else
+// cannot throw in plain C, use abort
+static void mi_new_fail(void) {
+  _mi_error_message(ENOMEM, "out of memory in 'new'");
+  abort();
+}
+#endif
 
-static bool mi_try_new_handler(void) {
-  #if defined(_MSC_VER) || (__cplusplus >= 201103L)
+// Call the C++ new handler if one is installed; returns `false` if there is none.
+// Define MI_NO_CXX_NEW_HANDLER to never call the new handler (e.g. when only the C API is used);
+// this also avoids defining or referencing `std::get_new_handler` (`_ZSt15get_new_handlerv`).
+#if defined(MI_NO_CXX_NEW_HANDLER)
+static bool mi_call_new_handler(size_t size) {
+  MI_UNUSED(size);
+  return false;
+}
+#elif defined(_MSC_VER)
+// Use the CRT new handler, which `std::set_new_handler` also installs. This works in C as well
+// and avoids importing `std::get_new_handler` from the C++ runtime DLL (issue #1511).
+#include <malloc.h>  // _callnewh
+static bool mi_call_new_handler(size_t size) {
+  return (_callnewh(size) != 0);
+}
+#elif defined(__cplusplus)
+static bool mi_call_new_handler(size_t size) {
+  MI_UNUSED(size);
+  #if (__cplusplus >= 201103L)
     std::new_handler h = std::get_new_handler();
   #else
     std::new_handler h = std::set_new_handler();
     std::set_new_handler(h);
   #endif
-  if (h==NULL) {
-    mi_new_fail();
-    return false;
-  }
-  else {
-    h();
-    return true;
-  }
+  if (h==NULL) return false;
+  h();
+  return true;
 }
 #else
+// C build
 typedef void (*std_new_handler_t)(void);
 
-// Define MI_NO_CXX_NEW_HANDLER to not define a weak `std::get_new_handler` (`_ZSt15get_new_handlerv`)
-// when the C++ new-handler is never used (e.g. when only the C API is used).
-#if (defined(__GNUC__) || (defined(__clang__) && !defined(_MSC_VER))) && !defined(MI_NO_CXX_NEW_HANDLER)  // exclude clang-cl, see issue #631
+#if defined(__ELF__) && (defined(__GNUC__) || defined(__clang__))
+// weak reference: only non-NULL if the C++ runtime is linked in
+extern std_new_handler_t _ZSt15get_new_handlerv(void) __attribute__((weak));
+static std_new_handler_t mi_get_new_handler(void) {
+  return (_ZSt15get_new_handlerv != NULL ? _ZSt15get_new_handlerv() : NULL);
+}
+#elif defined(__GNUC__) || defined(__clang__)
+// weak definition, as a weak reference to an absent symbol fails to link on macOS and Windows
 std_new_handler_t __attribute__((weak)) _ZSt15get_new_handlerv(void) {
   return NULL;
 }
@@ -887,30 +912,28 @@ static std_new_handler_t mi_get_new_handler(void) {
   return _ZSt15get_new_handlerv();
 }
 #else
-// note: on windows we could dynamically link to `?get_new_handler@std@@YAP6AXXZXZ`.
 static std_new_handler_t mi_get_new_handler(void) {
   return NULL;
 }
 #endif
 
-// cannot throw in plain C, use abort
-static void mi_new_fail(void) {
-  _mi_error_message(ENOMEM, "out of memory in 'new'");
-  abort();
-}
-
-static bool mi_try_new_handler(void) {
+static bool mi_call_new_handler(size_t size) {
+  MI_UNUSED(size);
   std_new_handler_t h = mi_get_new_handler();
-  if (h==NULL) {
+  if (h==NULL) return false;
+  h();
+  return true;
+}
+#endif
+
+// Call the new handler, or fail (throw `std::bad_alloc` or abort) if there is none.
+static bool mi_try_new_handler(size_t size) {
+  if (!mi_call_new_handler(size)) {
     mi_new_fail();
     return false;
   }
-  else {
-    h();
-    return true;
-  }
+  return true;
 }
-#endif
 
 // Called when a `new` allocation cannot be retried after invoking the new handler.
 // Throws `std::bad_alloc` (or aborts in C) so a throwing `new` never returns NULL;
@@ -922,14 +945,14 @@ static mi_decl_noinline void* mi_new_fail_null(void) {
 
 // on overflow we invoke the new handler once and then fail
 static mi_decl_noinline mi_decl_restrict void* mi_try_new_handler_null(void) {
-  if (!mi_try_new_handler()) return NULL;
+  if (!mi_try_new_handler(SIZE_MAX)) return NULL;
   return mi_new_fail_null();
 }
 
 // called when an allocation fails and the new handler needs to be invoked
 static mi_decl_noinline void* mi_theap_new_handler(mi_theap_t* theap, size_t size) {
   for(int i = 0; i < MI_TRY_NEW_MAX; i++) {
-    if (!mi_try_new_handler()) return NULL;
+    if (!mi_try_new_handler(size)) return NULL;
     if (size > MI_MAX_ALLOC_SIZE) break; // call try_new_handler at least once
     void* const p = mi_theap_malloc(theap,size);
     if (p != NULL) return p;
@@ -1014,7 +1037,7 @@ mi_decl_nodiscard mi_decl_func_align mi_decl_restrict void* mi_new_nothrow(size_
 
 static mi_decl_noinline void* mi_try_new_aligned(size_t size, size_t alignment) {
   for(int i = 0; i < MI_TRY_NEW_MAX; i++) {
-    if (!mi_try_new_handler()) return NULL;
+    if (!mi_try_new_handler(size)) return NULL;
     if (!mi_alignment_is_valid(alignment) || size > MI_MAX_ALLOC_SIZE) break;
     void* const p = mi_malloc_aligned(size,alignment);
     if (p != NULL) return p;
@@ -1034,7 +1057,7 @@ mi_decl_nodiscard mi_decl_func_align mi_decl_restrict void* mi_new_aligned_nothr
 
 static mi_decl_noinline void* mi_try_new_realloc(void* p, size_t newsize) {
   for(int i = 0; i < MI_TRY_NEW_MAX; i++) {
-    if (!mi_try_new_handler()) return NULL;
+    if (!mi_try_new_handler(newsize)) return NULL;
     if (newsize > MI_MAX_ALLOC_SIZE) break;
     void* const q = mi_realloc(p,newsize);
     if (q != NULL) return q;

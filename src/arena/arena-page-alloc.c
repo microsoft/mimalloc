@@ -12,6 +12,7 @@ and meta data of a fresh arena or OS page and initialize it. Also frees pages ag
 
 #include "mimalloc.h"
 #include "mimalloc/prim/prim-tls.h"
+#include "mimalloc/prim/prim-mte.h"
 #include "mimalloc/util/stats.h"
 #include "mimalloc/util/memid.h"
 #include "mimalloc/alloc/page.h"

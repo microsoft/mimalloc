@@ -7,6 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/prim/prim-tls.h"
+#include "mimalloc/prim/prim-mte.h"  // mi_ptr_memtag_meta
 #include "mimalloc/util/stats.h"
 #include "mimalloc/util/memid.h"
 #include "mimalloc/arena/arena-alloc.h"

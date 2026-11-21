@@ -7,6 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/prim/os.h"
+#include "mimalloc/prim/prim-mte.h"  // mi_memtag_is_enabled
 #include "mimalloc/heap/subproc.h"
 #include "mimalloc/alloc/free.h"
 #if defined(MI_MALLOC_OVERRIDE)
