@@ -307,7 +307,9 @@ static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t ne
   if mi_unlikely(!mi_alignment_is_valid(alignment)) { // require power-of-two (see <https://en.cppreference.com/w/c/memory/aligned_alloc>)
     return mi_error_bad_alignment(newsize,alignment,offset);
   }
-  if (alignment <= sizeof(uintptr_t) && offset==0) return _mi_heap_realloc_zero(heap,p,newsize,zero,NULL,NULL); 
+  if (alignment <= sizeof(uintptr_t) && offset==0 && ((uintptr_t)p & (alignment-1))==0) {  // `p` may be misaligned if allocated with an offset
+    return _mi_heap_realloc_zero(heap,p,newsize,zero,NULL,NULL);
+  }
   if (p == NULL) return mi_heap_malloc_zero_aligned_at(heap,newsize,alignment,offset,zero,NULL);
   const size_t size = mi_usable_size(p);
   if (newsize <= size && newsize >= (size - (size / 2)) && (((uintptr_t)p + offset) & (alignment-1)) == 0) {
@@ -335,7 +337,6 @@ static void* mi_heap_realloc_zero_aligned_at(mi_heap_t* heap, void* p, size_t ne
 
 static void* mi_heap_realloc_zero_aligned(mi_heap_t* heap, void* p, size_t newsize, size_t alignment, bool zero) mi_attr_noexcept {
   mi_assert(alignment > 0);
-  if (alignment <= sizeof(uintptr_t)) return _mi_heap_realloc_zero(heap,p,newsize,zero,NULL,NULL);
   return mi_heap_realloc_zero_aligned_at(heap,p,newsize,alignment,0,zero);
 }
 

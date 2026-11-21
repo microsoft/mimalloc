@@ -500,6 +500,9 @@ static size_t mi_path_max(void) {
     else if (m < 256) pmax = 256; // at least 256
     else if (m > 64*1024) pmax = 64*1024;  // at most 64 KiB
     else pmax = m;
+    #ifdef PATH_MAX
+    if (pmax < PATH_MAX) pmax = PATH_MAX;  // realpath requires at least PATH_MAX bytes
+    #endif
     size_t expected = 0;
     mi_atomic_cas_strong_acq_rel(&path_max, &expected, pmax);
   }
@@ -546,12 +549,25 @@ with a C++ compiler we can implement this precisely. If we
 use a C compiler we cannot throw a `bad_alloc` exception
 but we call `abort` instead (i.e. not returning).
 Also, the standard requires calling the new handler until
-it returns false, but we limit the total calls.
+it returns false, but we limit the total calls; when the
+limit is reached we fail as if there is no new handler.
 -------------------------------------------------------*/
 #define MI_TRY_NEW_MAX (4)
 
 #ifdef __cplusplus
 #include <new>
+// throw `std::bad_alloc` (unless `nothrow` or exceptions are disabled)
+static void mi_new_fail(bool nothrow) {
+  _mi_error_message(ENOMEM, "out of memory in 'new'");
+  #if defined(_CPPUNWIND) || defined(__cpp_exceptions)  // exceptions are not always enabled
+  if (!nothrow) {
+    throw std::bad_alloc();
+  }
+  #else
+  MI_UNUSED(nothrow);
+  #endif
+}
+
 static bool mi_try_new_handler(bool nothrow) {
   #if defined(_MSC_VER) || (__cplusplus >= 201103L)
     std::new_handler h = std::get_new_handler();
@@ -560,14 +576,7 @@ static bool mi_try_new_handler(bool nothrow) {
     std::set_new_handler(h);
   #endif
   if (h==NULL) {
-    _mi_error_message(ENOMEM, "out of memory in 'new'");
-    #if defined(_CPPUNWIND) || defined(__cpp_exceptions)  // exceptions are not always enabled
-    if (!nothrow) {
-      throw std::bad_alloc();
-    }
-    #else
-    MI_UNUSED(nothrow);
-    #endif
+    mi_new_fail(nothrow);
     return false;
   }
   else if (!nothrow) {
@@ -601,13 +610,18 @@ static std_new_handler_t mi_get_new_handler(void) {
 }
 #endif
 
+// cannot throw in plain C, use abort (unless `nothrow`)
+static void mi_new_fail(bool nothrow) {
+  _mi_error_message(ENOMEM, "out of memory in 'new'");
+  if (!nothrow) {
+    abort();
+  }
+}
+
 static bool mi_try_new_handler(bool nothrow) {
   std_new_handler_t h = mi_get_new_handler();
   if (h==NULL) {
-    _mi_error_message(ENOMEM, "out of memory in 'new'");
-    if (!nothrow) {
-      abort();  // cannot throw in plain C, use abort
-    }
+    mi_new_fail(nothrow);
     return false;
   }
   else {
@@ -617,13 +631,28 @@ static bool mi_try_new_handler(bool nothrow) {
 }
 #endif
 
+// Called when a `new` allocation cannot be retried after invoking the new handler.
+// Throws `std::bad_alloc` (or aborts in C) so a throwing `new` never returns NULL;
+// only returns NULL for `nothrow` or in C++ when exceptions are disabled.
+static mi_decl_noinline void* mi_new_fail_null(bool nothrow) {
+  mi_new_fail(nothrow);
+  return NULL;
+}
+
+// on overflow we invoke the new handler once and then fail
+static mi_decl_noinline void* mi_try_new_handler_null(bool nothrow) {
+  if (!mi_try_new_handler(nothrow)) return NULL;
+  return mi_new_fail_null(nothrow);
+}
+
 mi_decl_export mi_decl_noinline void* mi_heap_try_new(mi_heap_t* heap, size_t size, bool nothrow ) {
-  void* p = NULL;
-  for(int i = 0; i < MI_TRY_NEW_MAX && p == NULL && mi_try_new_handler(nothrow); i++) {
-    if (size > MI_MAX_ALLOC_SIZE) return NULL; // call try_new_handler at least once
-    p = mi_heap_malloc(heap,size);
+  for(int i = 0; i < MI_TRY_NEW_MAX; i++) {
+    if (!mi_try_new_handler(nothrow)) return NULL;
+    if (size > MI_MAX_ALLOC_SIZE) break; // call try_new_handler at least once
+    void* const p = mi_heap_malloc(heap,size);
+    if (p != NULL) return p;
   }
-  return p;
+  return mi_new_fail_null(nothrow);
 }
 
 static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow) {
@@ -643,8 +672,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new(size_t size) {
 mi_decl_nodiscard mi_decl_restrict void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) {
   size_t total;
   if mi_unlikely(mi_count_size_overflow(count, size, &total)) {
-    mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
-    return NULL;
+    return mi_try_new_handler_null(false);
   }
   else {
     return mi_heap_alloc_new(heap,total);
@@ -662,12 +690,13 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new_nothrow(size_t size) mi_attr_noe
 }
 
 static mi_decl_noinline void* mi_try_new_aligned(size_t size, size_t alignment, bool nothrow) {
-  void* p = NULL;
-  for(int i = 0; i < MI_TRY_NEW_MAX && p==NULL && mi_try_new_handler(nothrow); i++) {
-    if (!mi_alignment_is_valid(alignment)) return NULL;
-    p = mi_malloc_aligned(size,alignment);
+  for(int i = 0; i < MI_TRY_NEW_MAX; i++) {
+    if (!mi_try_new_handler(nothrow)) return NULL;
+    if (!mi_alignment_is_valid(alignment) || size > MI_MAX_ALLOC_SIZE) break;
+    void* const p = mi_malloc_aligned(size,alignment);
+    if (p != NULL) return p;
   }
-  return p;
+  return mi_new_fail_null(nothrow);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_new_aligned(size_t size, size_t alignment) {
@@ -683,12 +712,13 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new_aligned_nothrow(size_t size, siz
 }
 
 static mi_decl_noinline void* mi_try_new_realloc(void* p, size_t newsize) {
-  void* q = NULL;
-  for(int i = 0; i < MI_TRY_NEW_MAX && q==NULL && mi_try_new_handler(false); i++) {
-    if (newsize > MI_MAX_ALLOC_SIZE) return NULL;
-    q = mi_realloc(p,newsize);
+  for(int i = 0; i < MI_TRY_NEW_MAX; i++) {
+    if (!mi_try_new_handler(false)) return NULL;
+    if (newsize > MI_MAX_ALLOC_SIZE) break;
+    void* const q = mi_realloc(p,newsize);
+    if (q != NULL) return q;
   }
-  return q;
+  return mi_new_fail_null(false);
 }
 
 mi_decl_nodiscard void* mi_new_realloc(void* p, size_t newsize) {
@@ -700,8 +730,7 @@ mi_decl_nodiscard void* mi_new_realloc(void* p, size_t newsize) {
 mi_decl_nodiscard void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
   size_t total;
   if mi_unlikely(mi_count_size_overflow(newcount, size, &total)) {
-    mi_try_new_handler(false);
-    return NULL;
+    return mi_try_new_handler_null(false);
   }
   else {
     return mi_new_realloc(p, total);
