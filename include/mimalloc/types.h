@@ -34,9 +34,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "decl.h"           // compiler dependent definitions
 #include "arch.h"           // size defines (MI_SIZE_SIZE etc), bit operations
 #include "atomic.h"         // _Atomic primitives
-#include "config.h"         // build configuration defines (MI_DEBUG, MI_SECURE, etc.)
-
 #include "qsbr.h"           // quiescent state-based reclamation (qsbr) primitives (for runtime systems like CPython)
+#include "config.h"         // build configuration defines (MI_DEBUG, MI_SECURE, etc.)
 
 // ------------------------------------------------------
 // Arena's are large reserved areas of memory allocated from
@@ -94,8 +93,8 @@ static inline bool mi_memkind_needs_no_free(mi_memkind_t memkind) {
 }
 
 // OS memory sizes in a memid are counted in 32-bit 4 KiB pages (up to 16 TiB)
-#define MI_MEMID_OS_PAGE_SHIFT  (12)
-#define MI_MEMID_OS_PAGE_SIZE   (MI_ZU(1) << MI_MEMID_OS_PAGE_SHIFT)
+#define MI_MEMID_OS_PAGE_SHIFT      (12)
+#define MI_MEMID_OS_PAGE_SIZE       (MI_ZU(1) << MI_MEMID_OS_PAGE_SHIFT)
 
 typedef struct mi_memid_os_info {
   void*         base;               // actual base address of the block (used for offset aligned allocations)
@@ -116,9 +115,9 @@ typedef struct mi_memid_malloc_info {
 
 typedef struct mi_memid_s {
   union {
-    mi_memid_os_info_t     os;       // only used for MI_MEM_OS(_HUGE/_REMAP)
-    mi_memid_arena_info_t  arena;    // only used for MI_MEM_ARENA
-    mi_memid_malloc_info_t malloc;   // only used for MI_MEM_MALLOC, MI_MEM_STATIC, and MI_MEM_EXTERNAL
+    mi_memid_os_info_t     os;      // only used for MI_MEM_OS(_HUGE/_REMAP)
+    mi_memid_arena_info_t  arena;   // only used for MI_MEM_ARENA
+    mi_memid_malloc_info_t malloc;  // only used for MI_MEM_MALLOC, MI_MEM_STATIC, and MI_MEM_EXTERNAL
   } mem;
   mi_memkind_t  memkind;
   bool          is_pinned;          // `true` if we cannot decommit/reset/protect in this memory (e.g. when allocated using large (2Mib) or huge (1GiB) OS pages)
@@ -138,16 +137,16 @@ typedef struct mi_memid_s {
 // ------------------------------------------------------
 
 // The free lists use encoded next fields
-// (Only actually encodes when MI_ENCODED_FREELIST is defined; on CHERI and MTE it only holds a (tagged) address.)
+// (Only actually encodes when MI_ENCODED_FREELIST is defined; on CHERI and MTE it only holds an offset or address.)
 typedef uintptr_t  mi_encoded_t;
 
 // thread id's
 typedef size_t     mi_thread_id_t;
 
-// Free lists contain blocks
-// The next field is only declared atomic for the QSBR build, as regular builds always access it from a single thread only.
+// Free lists link heap blocks together where the first field is the encoded next pointer.
+// The next field is only declared atomic for the qsbr build (as regular builds always access it from a single thread only).
 typedef struct mi_block_s {
-  _Atomic(mi_encoded_t) next;
+  _Atomic(mi_encoded_t)  next;
 } mi_block_t;
 
 
@@ -184,8 +183,8 @@ typedef uintptr_t mi_thread_free_t;
 
 // We store the currently used block count together with the total malloc call count as 16-bit numbers.
 // This is done for better codegen `mi_malloc/mi_free` (where we can increment both at once as `used_alloc += 0x10001` for example).
-// The `last_used` is the `used` count since the statistics are last updated; on 32-bit platforms this
-// is a separate field in `mi_page_t` but on 64-bit we use the upper 32-bits to store it.
+// The `last_used`/`last_alloc` fields store the `used`/`alloc` count since the statistics are last updated; on 32-bit platforms this
+// is a separate field in `mi_page_t` but on 64-bit we use the upper 32-bits to store them.
 // We need the `alloc_count` and `last_used` to efficiently calculate allocation and free statistics even
 // in a release build; this way we can update the stats in the slow path (`_mi_page_update_stats`).
 typedef union mi_used_s {
