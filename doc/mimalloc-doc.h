@@ -291,7 +291,20 @@ char* mi_realpath(const char* fname, char* resolved_name);
 /// @see [_msize](https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/msize?view=vs-2017) (Windows)
 /// @see [malloc_usable_size](http://man7.org/linux/man-pages/man3/malloc_usable_size.3.html) (Linux)
 /// @see mi_good_size()
+/// @see mi_allocated_size()
 size_t mi_usable_size(void* p);
+
+/// __v3__: Return the full size of the memory block containing \a p.
+/// @param p Pointer to previously allocated memory (or \a NULL)
+/// @returns Returns the size in bytes of the block that holds \a p, or
+/// 0 if \a p was \a NULL.
+///
+/// This is the size the allocator reserved for \a p, which can be larger
+/// than mi_usable_size() (for example due to padding, alignment, or guard pages).
+/// Only use mi_usable_size() to determine how many bytes can be written.
+///
+/// @see mi_usable_size()
+size_t mi_allocated_size(const void* p);
 
 /// **experimental**: Return the current owner thread-id of the page containing a live allocation.
 /// @param p A mimalloc allocation, or \a NULL.
@@ -320,49 +333,49 @@ size_t mi_good_size(size_t size);
 
 
 // ------------------------------------------------------
-// Allocation with block sizes
+// Allocation with usable sizes
 // ------------------------------------------------------
 
-/// \defgroup sized Allocation with Block Sizes
-/// __v3__: Allocate or free memory while reporting the allocator's block size in bytes.
-/// Reported sizes may include padding or alignment overhead and are not a guarantee
-/// of writable capacity. Size output pointers may be \a NULL.
+/// \defgroup sized Allocation with Usable Sizes
+/// __v3__: Allocate or free memory while reporting the usable size in bytes.
+/// The reported size always equals mi_usable_size() of the returned (or freed) pointer,
+/// and can be used as the writable capacity. Size output pointers may be \a NULL.
 /// Allocation size outputs are only valid on success; they need not be cleared on failure.
 /// \{
 
-/// Allocate \a size bytes and report the block size through \a block_size.
+/// Allocate \a size bytes and report the usable size through \a pusable_size.
 /// @return The allocation, or \a NULL on failure.
 /// @see mi_malloc()
-void* mi_umalloc(size_t size, size_t* block_size);
+void* mi_umalloc(size_t size, size_t* pusable_size);
 
-/// Allocate \a count zero-initialized elements of \a size bytes and report the block size.
+/// Allocate \a count zero-initialized elements of \a size bytes and report the usable size.
 /// @return The allocation, or \a NULL on failure or multiplication overflow.
 /// @see mi_calloc()
-void* mi_ucalloc(size_t count, size_t size, size_t* block_size);
+void* mi_ucalloc(size_t count, size_t size, size_t* pusable_size);
 
-/// Reallocate \a p to \a newsize bytes and report the old and new block sizes.
-/// \a block_size_pre is 0 for \a NULL input; \a block_size_post is valid on success.
+/// Reallocate \a p to \a newsize bytes and report the old and new usable sizes.
+/// \a pusable_size_pre is 0 for \a NULL input; \a pusable_size_post is valid on success.
 /// @return The reallocated block, or \a NULL on failure without freeing \a p.
 /// @see mi_realloc()
-void* mi_urealloc(void* p, size_t newsize, size_t* block_size_pre, size_t* block_size_post);
+void* mi_urealloc(void* p, size_t newsize, size_t* pusable_size_pre, size_t* pusable_size_post);
 
-/// Free \a p and report its block size, or 0 if \a p is \a NULL.
+/// Free \a p and report its usable size, or 0 if \a p is \a NULL.
 /// @see mi_free()
-void mi_ufree(void* p, size_t* block_size);
+void mi_ufree(void* p, size_t* pusable_size);
 
-/// As mi_malloc_aligned(), additionally reporting the block size on success.
-void* mi_umalloc_aligned(size_t size, size_t alignment, size_t* block_size);
+/// As mi_malloc_aligned(), additionally reporting the usable size on success.
+void* mi_umalloc_aligned(size_t size, size_t alignment, size_t* pusable_size);
 
-/// As mi_zalloc_aligned(), additionally reporting the block size on success.
-void* mi_uzalloc_aligned(size_t size, size_t alignment, size_t* block_size);
+/// As mi_zalloc_aligned(), additionally reporting the usable size on success.
+void* mi_uzalloc_aligned(size_t size, size_t alignment, size_t* pusable_size);
 
-/// As mi_malloc_small(), additionally reporting the block size on success.
+/// As mi_malloc_small(), additionally reporting the usable size on success.
 /// \a size must not exceed #MI_SMALL_SIZE_MAX.
-void* mi_umalloc_small(size_t size, size_t* block_size);
+void* mi_umalloc_small(size_t size, size_t* pusable_size);
 
-/// As mi_zalloc_small(), additionally reporting the block size on success.
+/// As mi_zalloc_small(), additionally reporting the usable size on success.
 /// \a size must not exceed #MI_SMALL_SIZE_MAX.
-void* mi_uzalloc_small(size_t size, size_t* block_size);
+void* mi_uzalloc_small(size_t size, size_t* pusable_size);
 
 /// \}
 

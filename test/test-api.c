@@ -707,18 +707,38 @@ int main(void) {
   // Returned block sizes
   // ---------------------------------------------------
   CHECK_BODY("umalloc1") {
-    for(size_t size = 1; size <= 32*MI_MiB; size *= 2 ) {
+    for(size_t size = 0; size <= 32*MI_MiB; size = (size==0 ? 1 : 2*size) ) {
       size_t bsize;
       void* p = mi_umalloc(size,&bsize);
-      assert(bsize >= size);
+      result = result && (bsize >= size && bsize == mi_usable_size(p));
       size_t pre_size;
       size_t post_size;
       p = mi_urealloc(p, size + 1024, &pre_size, &post_size);
-      assert(pre_size == bsize);
-      assert(post_size >= size + 1024);
+      result = result && (pre_size == bsize && post_size >= size + 1024 && post_size == mi_usable_size(p));
       size_t fsize;
       mi_ufree(p,&fsize);
-      assert(fsize == post_size);
+      result = result && (fsize == post_size);
+    }
+  }
+  CHECK_BODY("umalloc-aligned") {
+    for (size_t align = 1; result && align <= 4*MI_MiB; align *= 4) {
+      for (size_t size = 1; result && size <= MI_MiB; size = 3*size + 1) {
+        size_t psize = 0;
+        void* p = mi_umalloc_aligned(size, align, &psize);
+        result = (p != NULL && psize >= size && psize == mi_usable_size(p));
+        memset(p, 0x5A, psize);  // the full usable size must be writable
+        size_t qsize = 0;
+        void* q = mi_uzalloc_aligned(size, align, &qsize);
+        result = result && (q != NULL && qsize == mi_usable_size(q));
+        size_t pre = 0, post = 0;
+        q = mi_urealloc(q, size/2 + 1, &pre, &post);
+        result = result && (pre == qsize && post == mi_usable_size(q));
+        size_t fsize = 0;
+        mi_ufree(p, &fsize);
+        result = result && (fsize == psize);
+        mi_ufree(q, &fsize);
+        result = result && (fsize == post);
+      }
     }
   }
   CHECK_BODY("ucalloc-nomem") {
