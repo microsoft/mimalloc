@@ -865,8 +865,15 @@ static void mi_new_fail(void) {
 }
 #endif
 
-// Call the new handler if one is installed; returns `false` if there is none.
-#if defined(_MSC_VER)
+// Call the C++ new handler if one is installed; returns `false` if there is none.
+// Define MI_NO_CXX_NEW_HANDLER to never call the new handler (e.g. when only the C API is used);
+// this also avoids defining or referencing `std::get_new_handler` (`_ZSt15get_new_handlerv`).
+#if defined(MI_NO_CXX_NEW_HANDLER)
+static bool mi_call_new_handler(size_t size) {
+  MI_UNUSED(size);
+  return false;
+}
+#elif defined(_MSC_VER)
 // Use the CRT new handler, which `std::set_new_handler` also installs. This works in C as well
 // and avoids importing `std::get_new_handler` from the C++ runtime DLL (issue #1511).
 #include <malloc.h>  // _callnewh
@@ -887,17 +894,16 @@ static bool mi_call_new_handler(size_t size) {
   return true;
 }
 #else
+// C build
 typedef void (*std_new_handler_t)(void);
 
-// Define MI_NO_CXX_NEW_HANDLER to never call `std::get_new_handler` (`_ZSt15get_new_handlerv`),
-// and to not define a weak `std::get_new_handler` on non-ELF platforms (e.g. when only the C API is used).
-#if defined(__ELF__) && (defined(__GNUC__) || defined(__clang__)) && !defined(MI_NO_CXX_NEW_HANDLER)
+#if defined(__ELF__) && (defined(__GNUC__) || defined(__clang__))
 // weak reference: only non-NULL if the C++ runtime is linked in
 extern std_new_handler_t _ZSt15get_new_handlerv(void) __attribute__((weak));
 static std_new_handler_t mi_get_new_handler(void) {
   return (_ZSt15get_new_handlerv != NULL ? _ZSt15get_new_handlerv() : NULL);
 }
-#elif (defined(__GNUC__) || defined(__clang__)) && !defined(MI_NO_CXX_NEW_HANDLER)
+#elif defined(__GNUC__) || defined(__clang__)
 // weak definition, as a weak reference to an absent symbol fails to link on macOS and Windows
 std_new_handler_t __attribute__((weak)) _ZSt15get_new_handlerv(void) {
   return NULL;
