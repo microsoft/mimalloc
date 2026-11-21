@@ -352,6 +352,11 @@ size_t mi_good_size(size_t size);
 /// @see mi_malloc()
 void* mi_umalloc(size_t size, size_t* pusable_size);
 
+/// Allocate \a size zero-initialized bytes and report the usable size through \a pusable_size.
+/// @return The allocation, or \a NULL on failure.
+/// @see mi_zalloc()
+void* mi_uzalloc(size_t size, size_t* pusable_size);
+
 /// Allocate \a count zero-initialized elements of \a size bytes and report the usable size.
 /// @return The allocation, or \a NULL on failure or multiplication overflow.
 /// @see mi_calloc()

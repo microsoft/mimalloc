@@ -199,6 +199,7 @@ extern "C" {
 
     // allocation that also returns the usable size (as `mi_usable_size`)
     pub fn mi_umalloc(size: usize, usable_size: *mut usize) -> *mut c_void;
+    pub fn mi_uzalloc(size: usize, usable_size: *mut usize) -> *mut c_void;
     pub fn mi_ucalloc(count: usize, size: usize, usable_size: *mut usize) -> *mut c_void;
     pub fn mi_urealloc(
         p: *mut c_void,
@@ -207,10 +208,16 @@ extern "C" {
         usable_size_post: *mut usize,
     ) -> *mut c_void;
     pub fn mi_ufree(p: *mut c_void, usable_size: *mut usize);
-    pub fn mi_umalloc_aligned(size: usize, alignment: usize, usable_size: *mut usize)
-        -> *mut c_void;
-    pub fn mi_uzalloc_aligned(size: usize, alignment: usize, usable_size: *mut usize)
-        -> *mut c_void;
+    pub fn mi_umalloc_aligned(
+        size: usize,
+        alignment: usize,
+        usable_size: *mut usize,
+    ) -> *mut c_void;
+    pub fn mi_uzalloc_aligned(
+        size: usize,
+        alignment: usize,
+        usable_size: *mut usize,
+    ) -> *mut c_void;
     pub fn mi_umalloc_small(size: usize, usable_size: *mut usize) -> *mut c_void;
     pub fn mi_uzalloc_small(size: usize, usable_size: *mut usize) -> *mut c_void;
 
