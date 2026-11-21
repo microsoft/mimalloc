@@ -500,6 +500,9 @@ static size_t mi_path_max(void) {
     else if (m < 256) pmax = 256; // at least 256
     else if (m > 64*1024) pmax = 64*1024;  // at most 64 KiB
     else pmax = m;
+    #ifdef PATH_MAX
+    if (pmax < PATH_MAX) pmax = PATH_MAX;  // realpath requires at least PATH_MAX bytes
+    #endif
     size_t expected = 0;
     mi_atomic_cas_strong_acq_rel(&path_max, &expected, pmax);
   }
