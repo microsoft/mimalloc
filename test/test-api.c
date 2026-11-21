@@ -444,6 +444,18 @@ int main(void) {
     }
     result = ok;
   };
+  CHECK_BODY("csize-small") {
+    // the small branch of the csize helpers (and `mi_malloc_tp`) calls the wsize allocation
+    // functions, which must be exported to link against the shared library (issue #1512)
+    mi_theap_t* theap = mi_theap_get_default();
+    uint8_t* p1 = (uint8_t*)mi_malloc_csize(24);
+    uint8_t* p2 = (uint8_t*)mi_zalloc_csize(24);
+    uint8_t* p3 = (uint8_t*)mi_theap_malloc_csize(theap, 24);
+    uint8_t* p4 = (uint8_t*)mi_theap_zalloc_csize(theap, 24);
+    result = (p1 != NULL && p3 != NULL && mem_is_zero(p2, 24) && mem_is_zero(p4, 24));
+    mi_free_csize(p1, 24); mi_free_csize(p2, 24);
+    mi_free_csize(p3, 24); mi_free_csize(p4, 24);
+  };
   CHECK_BODY("zalloc-aligned-small1") {
     size_t zalloc_size = MI_SMALL_SIZE_MAX / 2;
     uint8_t* p = (uint8_t*)mi_zalloc_aligned(zalloc_size, MI_MAX_ALIGN_SIZE * 2);

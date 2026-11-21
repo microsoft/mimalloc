@@ -621,10 +621,10 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_theap_alloc_new_nothr
 // --------------------------------------------------------------------------
 
 // Internal machine word size allocation. `wsize` is the allocation size in machine words (`sizeof(size_t)`)
-mi_decl_nodiscard mi_decl_restrict void* mi_wzalloc_small(size_t wsize) mi_attr_noexcept mi_attr_malloc;
-mi_decl_nodiscard mi_decl_restrict void* mi_wmalloc_small(size_t wsize) mi_attr_noexcept mi_attr_malloc;
-mi_decl_nodiscard mi_decl_restrict void* mi_theap_wmalloc_small(mi_theap_t* theap, size_t wsize) mi_attr_noexcept mi_attr_malloc;
-mi_decl_nodiscard mi_decl_restrict void* mi_theap_wzalloc_small(mi_theap_t* theap, size_t wsize) mi_attr_noexcept mi_attr_malloc;
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_wzalloc_small(size_t wsize) mi_attr_noexcept mi_attr_malloc;
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_wmalloc_small(size_t wsize) mi_attr_noexcept mi_attr_malloc;
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_theap_wmalloc_small(mi_theap_t* theap, size_t wsize) mi_attr_noexcept mi_attr_malloc;
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_theap_wzalloc_small(mi_theap_t* theap, size_t wsize) mi_attr_noexcept mi_attr_malloc;
 
 static inline size_t mi_wsize_from_size(size_t size) mi_attr_noexcept {
   return (size + sizeof(size_t) - 1) / sizeof(size_t);
