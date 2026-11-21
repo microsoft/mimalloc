@@ -621,7 +621,6 @@ With `ON`, performance and memory usage is impacted a bit more (usually less tha
 
 - Padding (8 bytes) is added at the end of each heap block to detect heap block overflows (detected once the block is freed),
   and this is also used to always immediately detect double frees.
-- Some use-after-free accesses are detected (if these modify the first word in the block).
 - On free, the first 1KiB of a block is zero'd.
 - Free lists are randomized more to make allocation order less predictable.
 - Purged pages are protected and fault on an access.
@@ -643,7 +642,7 @@ On recent arm64 hardware with the memory tagging extensions ([MTE]), _mimalloc_ 
 to give every heap block a randomized memory tag that can only be accessed with a matching pointer that has the same
 tag. Adjacent blocks (almost) always get different tags (and linear block overflows fault), and blocks are retagged when freed
 (so (most) double-free and use-after-free accesses fault). Each block tag is chosen from 15 possible tags (excluding the tags of
-its neighbours). All blocks up to 512KiB are tagged, but larger blocks get a guard page
+its neighbours). All blocks up to 80KiB are tagged, and larger blocks get a guard page
 at the end so overflows still fault (this is done as tagging memory is linear in the size of the block).
 
 It depends on the hardware and workload, but on an M5 an MTE build is usually within about 20% of a release

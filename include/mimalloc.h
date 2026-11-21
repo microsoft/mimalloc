@@ -225,19 +225,20 @@ mi_decl_export void mi_thread_set_in_threadpool(void) mi_attr_noexcept; // commu
 
 // -----------------------------------------------------------------
 // Return the usable size (`mi_usable_size`) (if the return value is not NULL)
+// (no `alloc_size` attribute as the full usable size can be used, see `_FORTIFY_SOURCE`)
 // -----------------------------------------------------------------
 
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_umalloc(size_t size, size_t* usable_size)  mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_uzalloc(size_t size, size_t* usable_size)  mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_ucalloc(size_t count, size_t size, size_t* usable_size)  mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(1,2);
-mi_decl_nodiscard mi_decl_export void* mi_urealloc(void* p, size_t newsize, size_t* usable_size_pre, size_t* usable_size_post) mi_attr_noexcept mi_attr_alloc_size(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_umalloc(size_t size, size_t* usable_size)  mi_attr_noexcept mi_attr_malloc;
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_uzalloc(size_t size, size_t* usable_size)  mi_attr_noexcept mi_attr_malloc;
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_ucalloc(size_t count, size_t size, size_t* usable_size)  mi_attr_noexcept mi_attr_malloc;
+mi_decl_nodiscard mi_decl_export void* mi_urealloc(void* p, size_t newsize, size_t* usable_size_pre, size_t* usable_size_post) mi_attr_noexcept;
 mi_decl_export void mi_ufree(void* p, size_t* usable_size) mi_attr_noexcept;
 
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_umalloc_aligned(size_t size, size_t alignment, size_t* usable_size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_uzalloc_aligned(size_t size, size_t alignment, size_t* usable_size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_umalloc_aligned(size_t size, size_t alignment, size_t* usable_size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_align(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_uzalloc_aligned(size_t size, size_t alignment, size_t* usable_size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_align(2);
 
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_umalloc_small(size_t size, size_t* usable_size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
-mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_uzalloc_small(size_t size, size_t* usable_size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_umalloc_small(size_t size, size_t* usable_size) mi_attr_noexcept mi_attr_malloc;
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_uzalloc_small(size_t size, size_t* usable_size) mi_attr_noexcept mi_attr_malloc;
 
 
 // -------------------------------------------------------------------------------------
