@@ -751,6 +751,10 @@ int main(void) {
         size_t pre = 0, post = 0;
         q = mi_urealloc(q, size/2 + 1, &pre, &post);
         result = result && (pre == qsize && post == mi_usable_size(q));
+        size_t apre = 0, apost = 0;
+        q = mi_urealloc_aligned(q, 2*size, align, &apre, &apost);
+        result = result && (q != NULL && ((uintptr_t)q % align) == 0 && apre == post && apost >= 2*size && apost == mi_usable_size(q));
+        post = apost;
         size_t fsize = 0;
         mi_ufree(p, &fsize);
         result = result && (fsize == psize);

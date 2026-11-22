@@ -43,10 +43,16 @@ use core::ptr::{self, NonNull};
 // As `MI_MAX_ALIGN_SIZE`
 pub(crate) const MAX_ALIGN_SIZE: usize = 16;
 
-// Fast check if `mi_malloc(size)` is already `align`-aligned (a subset of `mi_malloc_is_naturally_aligned`)
+// The size for which `mi_malloc` returns an `align`-aligned block, or `None` if `mi_malloc_aligned` is needed
 #[inline(always)]
-pub(crate) const fn is_malloc_aligned(size: usize, align: usize) -> bool {
-    align <= MAX_ALIGN_SIZE && align <= size
+pub(crate) const fn malloc_aligned_size(size: usize, align: usize) -> Option<usize> {
+    if align > MAX_ALIGN_SIZE {
+        None
+    } else if size < align {
+        Some(align)
+    } else {
+        Some(size)
+    }
 }
 
 // As `_mi_wsize_from_size`
@@ -80,10 +86,9 @@ pub(crate) unsafe fn free_sized(ptr: *mut u8, layout: Layout) {
 #[inline(always)]
 pub(crate) unsafe fn realloc_aligned(ptr: *mut u8, align: usize, new_size: usize) -> *mut u8 {
     unsafe {
-        if is_malloc_aligned(new_size, align) {
-            sys::mi_realloc(ptr.cast(), new_size)
-        } else {
-            sys::mi_realloc_aligned(ptr.cast(), new_size, align)
+        match malloc_aligned_size(new_size, align) {
+            Some(size) => sys::mi_realloc(ptr.cast(), size),
+            None => sys::mi_realloc_aligned(ptr.cast(), new_size, align),
         }
     }
     .cast()
@@ -92,14 +97,13 @@ pub(crate) unsafe fn realloc_aligned(ptr: *mut u8, align: usize, new_size: usize
 unsafe impl GlobalAlloc for MiMalloc {
     #[inline]
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let size = layout.size();
         unsafe {
-            if !is_malloc_aligned(size, layout.align()) {
-                sys::mi_malloc_aligned(size, layout.align())
-            } else if size <= sys::MI_SMALL_SIZE_MAX {
-                sys::mi_wmalloc_small(wsize_from_size(size))
-            } else {
-                sys::mi_malloc(size)
+            match malloc_aligned_size(layout.size(), layout.align()) {
+                Some(size) if size <= sys::MI_SMALL_SIZE_MAX => {
+                    sys::mi_wmalloc_small(wsize_from_size(size))
+                }
+                Some(size) => sys::mi_malloc(size),
+                None => sys::mi_malloc_aligned(layout.size(), layout.align()),
             }
         }
         .cast()
@@ -107,14 +111,13 @@ unsafe impl GlobalAlloc for MiMalloc {
 
     #[inline]
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        let size = layout.size();
         unsafe {
-            if !is_malloc_aligned(size, layout.align()) {
-                sys::mi_zalloc_aligned(size, layout.align())
-            } else if size <= sys::MI_SMALL_SIZE_MAX {
-                sys::mi_wzalloc_small(wsize_from_size(size))
-            } else {
-                sys::mi_zalloc(size)
+            match malloc_aligned_size(layout.size(), layout.align()) {
+                Some(size) if size <= sys::MI_SMALL_SIZE_MAX => {
+                    sys::mi_wzalloc_small(wsize_from_size(size))
+                }
+                Some(size) => sys::mi_zalloc(size),
+                None => sys::mi_zalloc_aligned(layout.size(), layout.align()),
             }
         }
         .cast()

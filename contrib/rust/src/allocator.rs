@@ -5,10 +5,9 @@ terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
 use crate::heap::realloc_in;
-use crate::{free_sized, realloc_aligned, sys, Heap, MiMalloc, MAX_ALIGN_SIZE};
+use crate::{free_sized, malloc_aligned_size, realloc_aligned, sys, Heap, MiMalloc};
 use core::alloc::{AllocError, Allocator, GlobalAlloc, Layout};
-use core::mem::size_of;
-use core::ptr::NonNull;
+use core::ptr::{self, NonNull};
 
 #[inline(always)]
 fn block(ptr: *mut u8, size: usize) -> Result<NonNull<[u8]>, AllocError> {
@@ -135,70 +134,56 @@ unsafe impl Allocator for &Heap {
     }
 }
 
-/// As [`MiMalloc`] but `allocate` returns the full usable size by requesting `good_size` bytes.
+/// As [`MiMalloc`] but returns the full usable size of the allocated block (using the `mi_u*` functions).
 /// This can be useful for vector or buffer allocations to maximise the usable memory and reduce reallocations.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct MiMallocExcess;
 
-// As `mi_good_size` for sizes up to `MI_SMALL_SIZE_MAX` (in words, see `mi_bin`); a mismatch only wastes space as we allocate the returned size.
-// (If the size classes ever change, we catch this in the tests where we verify `small_good_wsize` against `mi_good_size`.)
 #[inline(always)]
-pub(crate) const fn small_good_wsize(size: usize) -> usize {
-    const ALIGN_WSIZE: usize = MAX_ALIGN_SIZE / size_of::<usize>();
-    let wsize = crate::wsize_from_size(size);
-    if wsize <= 1 {
-        1
-    } else if size <= 16 {
-        (wsize + 1) & !1
-    } else if size <= 64 {
-        (wsize + ALIGN_WSIZE - 1) & !(ALIGN_WSIZE - 1)
-    } else {
-        // 4 size classes per power of two
-        let w = wsize - 1;
-        let shift = (usize::BITS - 1 - w.leading_zeros()) - 2;
-        ((w >> shift) + 1) << shift
-    }
-}
-
-#[inline(always)]
-fn small_alloc(layout: Layout, zero: bool) -> Option<Result<NonNull<[u8]>, AllocError>> {
-    if layout.align() > MAX_ALIGN_SIZE || layout.size() > sys::MI_SMALL_SIZE_MAX {
-        return None;
-    }
-    let wsize = small_good_wsize(layout.size());
+unsafe fn urealloc(ptr: *mut u8, new: Layout) -> (*mut u8, usize) {
+    let mut usable = 0;
     let p = unsafe {
-        if zero {
-            sys::mi_wzalloc_small(wsize)
-        } else {
-            sys::mi_wmalloc_small(wsize)
+        match malloc_aligned_size(new.size(), new.align()) {
+            Some(size) => sys::mi_urealloc(ptr.cast(), size, ptr::null_mut(), &mut usable),
+            None => sys::mi_urealloc_aligned(
+                ptr.cast(),
+                new.size(),
+                new.align(),
+                ptr::null_mut(),
+                &mut usable,
+            ),
         }
     };
-    Some(block(p.cast(), wsize * size_of::<usize>()))
-}
-
-#[inline(always)]
-fn good_layout(layout: Layout) -> Layout {
-    let size = crate::good_size(layout.size());
-    unsafe { Layout::from_size_align_unchecked(size, layout.align()) }
+    (p.cast(), usable)
 }
 
 unsafe impl Allocator for MiMallocExcess {
     #[inline]
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        if let Some(r) = small_alloc(layout, false) {
-            return r;
-        }
-        let layout = good_layout(layout);
-        block(unsafe { MiMalloc.alloc(layout) }, layout.size())
+        let (size, align) = (layout.size(), layout.align());
+        let mut usable = 0;
+        let p = unsafe {
+            if let Some(size) = malloc_aligned_size(size, align) {
+                sys::mi_umalloc(size, &mut usable)
+            } else {
+                sys::mi_umalloc_aligned(size, align, &mut usable)
+            }
+        };
+        block(p.cast(), usable)
     }
 
     #[inline]
     fn allocate_zeroed(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        if let Some(r) = small_alloc(layout, true) {
-            return r;
-        }
-        let layout = good_layout(layout);
-        block(unsafe { MiMalloc.alloc_zeroed(layout) }, layout.size())
+        let (size, align) = (layout.size(), layout.align());
+        let mut usable = 0;
+        let p = unsafe {
+            if let Some(size) = malloc_aligned_size(size, align) {
+                sys::mi_uzalloc(size, &mut usable)
+            } else {
+                sys::mi_uzalloc_aligned(size, align, &mut usable)
+            }
+        };
+        block(p.cast(), usable)
     }
 
     #[inline]
@@ -213,11 +198,8 @@ unsafe impl Allocator for MiMallocExcess {
         _old: Layout,
         new: Layout,
     ) -> Result<NonNull<[u8]>, AllocError> {
-        let size = crate::good_size(new.size());
-        block(
-            unsafe { realloc_aligned(ptr.as_ptr(), new.align(), size) },
-            size,
-        )
+        let (p, usable) = unsafe { urealloc(ptr.as_ptr(), new) };
+        block(p, usable)
     }
 
     #[inline]
@@ -227,9 +209,8 @@ unsafe impl Allocator for MiMallocExcess {
         old: Layout,
         new: Layout,
     ) -> Result<NonNull<[u8]>, AllocError> {
-        let size = crate::good_size(new.size());
-        let p = unsafe { realloc_aligned(ptr.as_ptr(), new.align(), size) };
-        block(unsafe { zero_tail(p, old.size(), size) }, size)
+        let (p, usable) = unsafe { urealloc(ptr.as_ptr(), new) };
+        block(unsafe { zero_tail(p, old.size(), usable) }, usable)
     }
 
     #[inline]
@@ -239,10 +220,7 @@ unsafe impl Allocator for MiMallocExcess {
         _old: Layout,
         new: Layout,
     ) -> Result<NonNull<[u8]>, AllocError> {
-        let size = crate::good_size(new.size());
-        block(
-            unsafe { realloc_aligned(ptr.as_ptr(), new.align(), size) },
-            size,
-        )
+        let (p, usable) = unsafe { urealloc(ptr.as_ptr(), new) };
+        block(p, usable)
     }
 }
