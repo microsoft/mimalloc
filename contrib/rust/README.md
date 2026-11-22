@@ -21,7 +21,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 - Both `MiMalloc` and `&Heap` implement `core::alloc::Allocator` on Rust 1.100+
   (or on an older nightly with the `nightly` feature). For speed, `allocate` returns the
   requested size instead of the full usable size; to use the full capacity, request
-  `good_size(n)` bytes upfront (or use `sys::mi_umalloc`).
+  `good_size(n)` bytes upfront, or use `MiMallocExcess` that returns the full usable size.
 - Helpers such as `collect`, `option_set`, `stats_print` and `stats_json`.
 
 ## Arenas
