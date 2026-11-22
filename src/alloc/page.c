@@ -956,7 +956,8 @@ static mi_decl_noinline void mi_page_free_list_extend( mi_page_t* const page, co
 
 #define MI_MAX_EXTEND_SIZE    (8*1024)      // heuristic, one or two OS pages seems to work well.
 #if MI_SECURE_SHUFFLE_FREELIST
-#define MI_MIN_EXTEND(bsize)  ((bsize) <= MI_SMALL_MAX_OBJ_SIZE ? 32 : 8)  // extend at least by this many (for free list randomization)
+// extend at least by this many (for free list randomization): 32 blocks, but at most `2*MI_MAX_EXTEND_SIZE` bytes (and at least 4 blocks)
+#define MI_MIN_EXTEND(bsize)  ((bsize) <= (2*MI_MAX_EXTEND_SIZE)/32 ? 32 : ((bsize) >= (2*MI_MAX_EXTEND_SIZE)/4 ? 4 : (2*MI_MAX_EXTEND_SIZE)/(bsize)))
 #else
 #define MI_MIN_EXTEND(bsize)  (1)
 #endif
