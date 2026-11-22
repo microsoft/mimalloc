@@ -1316,6 +1316,9 @@ if (MI_BUILD_TESTS)
     if((TEST_NAME STREQUAL "arena" OR TEST_NAME STREQUAL "bitmap" OR TEST_NAME STREQUAL "secure") AND (NOT MI_BUILD_STATIC OR MI_DEBUG_TSAN))
       continue()
     endif()
+    if(CMAKE_SYSTEM_NAME STREQUAL "WASI" AND TEST_NAME MATCHES "^stress")
+      continue()  # multi-threaded tests are not supported on WASI
+    endif()
     add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
     mi_test_sign(mimalloc-test-${TEST_NAME})
     target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
@@ -1352,7 +1355,7 @@ if (MI_BUILD_TESTS)
   endforeach()
 
   # static override test
-  if(MI_BUILD_OBJECT AND MI_OVERRIDE AND NOT (MI_CYGWIN OR (MI_TRACK STREQUAL "ASAN") OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN))
+  if(MI_BUILD_OBJECT AND MI_OVERRIDE AND NOT (MI_CYGWIN OR CMAKE_SYSTEM_NAME STREQUAL "WASI" OR (MI_TRACK STREQUAL "ASAN") OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN))
     add_executable(mimalloc-test-stress-static test/test-stress.c)
     mi_test_sign(mimalloc-test-stress-static)
     target_compile_definitions(mimalloc-test-stress-static PRIVATE ${mi_defines} "USE_STD_MALLOC=1")

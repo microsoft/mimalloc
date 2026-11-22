@@ -508,7 +508,7 @@ jobs:
       - name: Single threaded
         run: sh .github/ci/cmake-test.sh single-wasm Release
 
-  # WASI: build `src/static.c` directly with wasi-sdk (as done by builds without CMake) and run with wasmtime
+  # WASI: build with wasi-sdk (with CMake and directly from `src/static.c`) and run with wasmtime
   wasi:
     name: wasi
     runs-on: ubuntu-latest
@@ -531,13 +531,20 @@ jobs:
           curl -sSfL -o wasmtime.tar.xz "$WASMTIME_URL"
           echo "$WASMTIME_SHA256  wasmtime.tar.xz" | sha256sum -c
           mkdir -p "$RUNNER_TEMP/wasmtime" && tar xJf wasmtime.tar.xz -C "$RUNNER_TEMP/wasmtime" --strip-components=1
+          echo "CI_CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=$RUNNER_TEMP/wasi-sdk/share/cmake/wasi-sdk-p1.cmake -DWASI_SDK_PREFIX=$RUNNER_TEMP/wasi-sdk -DCMAKE_CROSSCOMPILING_EMULATOR=$RUNNER_TEMP/wasmtime/wasmtime;-S;inherit-env=y -DMI_BUILD_SHARED=OFF" >> "$GITHUB_ENV"
 
       - name: Release
+        run: sh .github/ci/cmake-test.sh release-wasi Release
+
+      - name: Debug
+        run: sh .github/ci/cmake-test.sh debug-wasi Debug -DMI_DEBUG=FULL
+
+      - name: Release, Static
         run: |
           "$RUNNER_TEMP/wasi-sdk/bin/clang" --sysroot="$RUNNER_TEMP/wasi-sdk/share/wasi-sysroot" -O2 -Iinclude src/static.c test/main.c -o main.wasm
           "$RUNNER_TEMP/wasmtime/wasmtime" main.wasm
 
-      - name: Debug
+      - name: Debug, Static
         run: |
           "$RUNNER_TEMP/wasi-sdk/bin/clang" --sysroot="$RUNNER_TEMP/wasi-sdk/share/wasi-sysroot" -O0 -g -DMI_DEBUG=3 -Iinclude src/static.c test/main.c -o main-debug.wasm
           "$RUNNER_TEMP/wasmtime/wasmtime" main-debug.wasm

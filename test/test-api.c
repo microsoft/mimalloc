@@ -990,7 +990,7 @@ int main(void) {
   // ---------------------------------------------------
   // various
   // ---------------------------------------------------
-  #if !MI_TRACK_ASAN   // realpath may leak with ASAN enabled (as the ASAN allocator intercepts it)
+  #if !MI_TRACK_ASAN && !defined(__wasi__)  // realpath may leak with ASAN enabled (as the ASAN allocator intercepts it), and is not available on WASI
   CHECK_BODY("realpath") {
     char* s = mi_realpath( ".", NULL );
     // printf("realpath: %s\n",s);

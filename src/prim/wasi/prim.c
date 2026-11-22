@@ -255,28 +255,39 @@ void _mi_prim_out_stderr( const char* msg ) {
 // Environment
 //----------------------------------------------------------------
 
-int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
-  // cannot call getenv() when still initializing the C runtime.
-  if (_mi_preloading()) return -1;  // error, try again later
-  const char* s = getenv(name);
-  if (s == NULL) {
-    // we check the upper case name too.
-    char buf[64+1];
-    size_t len = _mi_strnlen(name,sizeof(buf)-1);
-    for (size_t i = 0; i < len; i++) {
-      buf[i] = _mi_toupper(name[i]);
-    }
-    buf[len] = 0;
-    s = getenv(buf);
-  }
-  if (s == NULL) return 0; // not found
-  if (!_mi_strlcpy(result, s, result_size)) return -2;  // too long
-  return 1; // found
-}
+#include <wasi/api.h>  // __wasi_environ_sizes_get, __wasi_environ_get
+
+// Read the environment directly as `getenv` allocates on first use (which can recurse into the allocator).
+// A small environment is read into a stack buffer, while a large one is read once into memory from `memory.grow`.
+#define MI_WASI_ENV_BUF_SIZE  (4*MI_KiB)
+static uint8_t** mi_wasi_env_large;  // = NULL
 
 bool _mi_prim_env_visit(mi_env_visit_fun* visit, void* arg) {
-  MI_UNUSED(visit); MI_UNUSED(arg);
-  return false;  // cannot iterate the environment
+  __wasi_size_t count = 0;
+  __wasi_size_t size  = 0;
+  if (__wasi_environ_sizes_get(&count, &size) != 0) return false;
+  uint8_t* buf[MI_WASI_ENV_BUF_SIZE / sizeof(uint8_t*)];
+  uint8_t** env = buf;
+  const size_t env_size = (count + 1)*sizeof(uint8_t*) + size;
+  if (env_size <= sizeof(buf)) {
+    if (__wasi_environ_get(env, (uint8_t*)&env[count + 1]) != 0) return false;
+  }
+  else if (mi_wasi_env_large != NULL) {
+    env = mi_wasi_env_large;
+  }
+  else {
+    env = (uint8_t**)mi_prim_mem_grow(mi_align_up(env_size, 64*MI_KiB), 0);  // the WASI environment does not change
+    if (env == NULL || __wasi_environ_get(env, (uint8_t*)&env[count + 1]) != 0) return false;
+    mi_wasi_env_large = env;
+  }
+  for (__wasi_size_t i = 0; i < count; i++) {
+    visit((const char*)env[i], arg);
+  }
+  return true;
+}
+
+int _mi_prim_getenv(const char* name, char* result, size_t result_size) {
+  return _mi_prim_getenv_by_visit(name, result, result_size);
 }
 
 
