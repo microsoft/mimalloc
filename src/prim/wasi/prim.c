@@ -195,6 +195,9 @@ size_t _mi_prim_numa_node_count(void) {
 
 // low resolution timer
 static mi_msecs_t mi_prim_clock_now_lowres(void) {
+  #if !defined(_WASI_EMULATED_PROCESS_CLOCKS)
+  return 0;  // `clock` is only available with -D_WASI_EMULATED_PROCESS_CLOCKS -lwasi-emulated-process-clocks
+  #else
   const int64_t ticks = (int64_t)clock();
   #if !defined(CLOCKS_PER_SEC)
     return ticks;
@@ -208,6 +211,7 @@ static mi_msecs_t mi_prim_clock_now_lowres(void) {
     else {
       return ticks / ((mi_msecs_t)CLOCKS_PER_SEC / 1000);
     }
+  #endif
   #endif
 }
 
