@@ -192,7 +192,14 @@ void mi_theap_collect(mi_theap_t* theap, bool force) mi_attr_noexcept {
 
 void mi_collect(bool force) mi_attr_noexcept {
   // cannot really collect process wide, just a theap..
-  mi_theap_collect(_mi_theap_default(), force);
+  mi_theap_t* const theap = _mi_theap_default();
+  if (mi_theap_is_initialized(theap)) {
+    mi_theap_collect(theap, force);
+  }
+  else {
+    // ..but a thread without a theap can still purge the arenas (for example a thread that only calls `mi_collect` periodically)
+    _mi_arenas_collect(force /* force purge? */, force /* visit all? */, NULL /* tld */);
+  }
 }
 
 void mi_heap_collect(mi_heap_t* heap, bool force) {
