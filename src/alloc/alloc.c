@@ -449,7 +449,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_calloc(mi_heap_t* heap, size_t 
 // ----------------------------------------------------------
 
 // Return usable size (equal to `mi_usable_size(p)`)
-static inline void* mi_ublock_size( void* p, const mi_page_t* page, size_t size, size_t* pusable_size ) {
+static inline void* mi_block_usable_size( void* p, const mi_page_t* page, size_t size, size_t* pusable_size ) {
   MI_UNUSED(page); MI_UNUSED(size);
   if mi_likely(p!=NULL && pusable_size!=NULL) {
     mi_assert_internal(page == mi_ptr_page(p));
@@ -471,7 +471,7 @@ static inline void* mi_ublock_size( void* p, const mi_page_t* page, size_t size,
 static mi_decl_noinline mi_decl_restrict void* mi_theap_umalloc_zero_generic(mi_theap_t* theap, size_t size, bool zero, size_t* pusable_size) mi_attr_noexcept {
   mi_page_t* page = NULL;
   void* const p = _mi_theap_malloc_zero(theap, size, zero, 0, &page);
-  return mi_ublock_size(p,page,size,pusable_size);
+  return mi_block_usable_size(p,page,size,pusable_size);
 }
 
 // Allocate and return the usable size. If a small page has a free block, we know the usable
@@ -487,7 +487,9 @@ static mi_decl_forceinline mi_decl_restrict void* mi_theap_umalloc_zero(mi_theap
     mi_page_t* const page = mi_theap_get_free_small_page(theap, size, false);
     if mi_likely(page->free != NULL) {
       *pusable_size = mi_page_block_size(page);
-      return mi_theap_nonnull_xmalloc_small_zero(theap, size, false, zero, false, NULL);
+      void* p = mi_theap_nonnull_xmalloc_small_zero(theap, size, false, zero, false, NULL);
+      mi_assert_internal(*pusable_size == mi_usable_size(p));
+      return p;
     }
   }
   #endif
