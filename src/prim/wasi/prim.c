@@ -124,8 +124,8 @@ static void* mi_prim_mem_grow(size_t size, size_t try_alignment) {
 int _mi_prim_alloc(void* hint_addr, size_t size, size_t try_alignment, bool commit, bool allow_large, bool* is_large, bool* is_zero, void** addr) {
   MI_UNUSED(allow_large); MI_UNUSED(commit); MI_UNUSED(hint_addr);
   *is_large = false;
-  *is_zero = false;
   *addr = mi_prim_mem_grow(size, try_alignment);
+  *is_zero = (*addr != NULL);  // memory.grow (and wasi-libc sbrk) always appends zero-initialized pages
   return (*addr != NULL ? 0 : ENOMEM);
 }
 
@@ -196,7 +196,7 @@ size_t _mi_prim_numa_node_count(void) {
 // low resolution timer
 static mi_msecs_t mi_prim_clock_now_lowres(void) {
   #if !defined(_WASI_EMULATED_PROCESS_CLOCKS)
-  return 0;  // `clock` is only available with -D_WASI_EMULATED_PROCESS_CLOCKS -lwasi-emulated-process-clocks
+  return 0;  // `clock` requires -D_WASI_EMULATED_PROCESS_CLOCKS -lwasi-emulated-process-clocks
   #else
   const int64_t ticks = (int64_t)clock();
   #if !defined(CLOCKS_PER_SEC)
