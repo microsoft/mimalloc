@@ -73,7 +73,9 @@ fn excess_allocator_api() {
     use mimalloc::{good_size, usable_size, MiMallocExcess};
     let a = MiMallocExcess;
     // returned sizes match `good_size` (unless padding is enabled)
-    let exact = good_size(0) == 8;
+    let exact = good_size(mimalloc::sys::MI_SMALL_SIZE_MAX) == mimalloc::sys::MI_SMALL_SIZE_MAX;
+    // (with memory tagging the minimal block is 16 bytes but we may still return 8)
+    let is_good = |len: usize, size: usize| !exact || len == good_size(size) || len == 8;
     for (size, align) in [
         (0, 1),
         (100, 8),
@@ -86,7 +88,7 @@ fn excess_allocator_api() {
             .allocate_zeroed(Layout::from_size_align(size, align).unwrap())
             .unwrap();
         let q = p.cast::<u8>().as_ptr();
-        assert!(p.len() >= size && (!exact || p.len() == good_size(size)));
+        assert!(p.len() >= size && is_good(p.len(), size));
         assert!(p.len() <= unsafe { usable_size(q) });
         assert!((0..p.len()).all(|i| unsafe { q.add(i).read() } == 0));
         assert_eq!(q as usize % align, 0);
@@ -96,7 +98,7 @@ fn excess_allocator_api() {
         );
         let r = unsafe { a.grow_zeroed(p.cast(), old, new) }.unwrap();
         let q = r.cast::<u8>().as_ptr();
-        assert!(r.len() >= new.size() && (!exact || r.len() == good_size(new.size())));
+        assert!(r.len() >= new.size() && is_good(r.len(), new.size()));
         assert!(r.len() <= unsafe { usable_size(q) });
         assert!((old.size()..r.len()).all(|i| unsafe { q.add(i).read() } == 0));
         unsafe { a.deallocate(r.cast(), Layout::from_size_align(r.len(), align).unwrap()) };
@@ -105,7 +107,7 @@ fn excess_allocator_api() {
         let layout = Layout::from_size_align(size, 1).unwrap();
         let p = a.allocate(layout).unwrap();
         let len = unsafe { usable_size(p.cast::<u8>().as_ptr()) };
-        assert!(p.len() >= size && p.len() <= len && (!exact || p.len() == good_size(size)));
+        assert!(p.len() >= size && p.len() <= len && is_good(p.len(), size));
         unsafe { a.deallocate(p.cast(), Layout::from_size_align(p.len(), 1).unwrap()) };
     }
     // `Vec` ignores the excess for now
