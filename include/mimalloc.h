@@ -56,6 +56,7 @@ terms of the MIT license. A copy of the license can be found in the file
     #define mi_attr_malloc
   #endif
   #define mi_cdecl                      __cdecl
+  #define mi_attr_pure
   #define mi_attr_alloc_size(s)
   #define mi_attr_alloc_size2(s1,s2)
   #define mi_attr_alloc_align(p)
@@ -68,6 +69,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_cdecl                      // leads to warnings... __attribute__((cdecl))
   #define mi_decl_restrict
   #define mi_attr_malloc                __attribute__((malloc))
+  #define mi_attr_pure                  __attribute__((pure))
   #if (defined(__clang_major__) && (__clang_major__ < 4)) || (__GNUC__ < 5)
     #define mi_attr_alloc_size(s)
     #define mi_attr_alloc_size2(s1,s2)
@@ -86,6 +88,7 @@ terms of the MIT license. A copy of the license can be found in the file
   #define mi_decl_export
   #define mi_decl_restrict
   #define mi_attr_malloc
+  #define mi_attr_pure
   #define mi_attr_alloc_size(s)
   #define mi_attr_alloc_size2(s1,s2)
   #define mi_attr_alloc_align(p)
@@ -131,9 +134,9 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_mallocn(size_t count,
 mi_decl_nodiscard mi_decl_export void* mi_reallocn(void* p, size_t count, size_t size)        mi_attr_noexcept mi_attr_alloc_size2(2,3);
 mi_decl_nodiscard mi_decl_export void* mi_reallocf(void* p, size_t newsize)                   mi_attr_noexcept mi_attr_alloc_size(2);
 
-mi_decl_nodiscard mi_decl_export size_t mi_usable_size(const void* p) mi_attr_noexcept;
-mi_decl_nodiscard mi_decl_export size_t mi_allocated_size(const void* p) mi_attr_noexcept;
-mi_decl_nodiscard mi_decl_export size_t mi_good_size(size_t size)     mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export size_t mi_usable_size(const void* p) mi_attr_noexcept mi_attr_pure;
+mi_decl_nodiscard mi_decl_export size_t mi_allocated_size(const void* p) mi_attr_noexcept mi_attr_pure;
+mi_decl_nodiscard mi_decl_export size_t mi_good_size(size_t size)     mi_attr_noexcept mi_attr_pure;
 
 // `mi_free_size` can be more efficient (as it calls mi_free_small internally).
 mi_decl_export void mi_free_size(void* p, size_t size) mi_attr_noexcept;
@@ -204,7 +207,7 @@ typedef void (mi_cdecl mi_error_fun)(int err, void* arg);
 mi_decl_export void mi_register_error(mi_error_fun* fun, void* arg);
 
 mi_decl_export void mi_collect(bool force)      mi_attr_noexcept;
-mi_decl_export int  mi_version(void);
+mi_decl_export int  mi_version(void) mi_attr_pure;
 mi_decl_export void mi_options_print(void)      mi_attr_noexcept;
 mi_decl_export void mi_process_info_print(void) mi_attr_noexcept;
 mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg)      mi_attr_noexcept;
@@ -564,9 +567,9 @@ mi_decl_export void mi_option_set_default(mi_option_t option, long value);
 // note: we use `mi_cfree` as "checked free" and it checks if the pointer is in our theap before free-ing.
 // -------------------------------------------------------------------------------------------------------
 
-mi_decl_nodiscard mi_decl_export size_t mi_malloc_size(const void* p)        mi_attr_noexcept;
-mi_decl_nodiscard mi_decl_export size_t mi_malloc_good_size(size_t size)     mi_attr_noexcept;
-mi_decl_nodiscard mi_decl_export size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept;
+mi_decl_nodiscard mi_decl_export size_t mi_malloc_size(const void* p)        mi_attr_noexcept mi_attr_pure;
+mi_decl_nodiscard mi_decl_export size_t mi_malloc_good_size(size_t size)     mi_attr_noexcept mi_attr_pure;
+mi_decl_nodiscard mi_decl_export size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept mi_attr_pure;
 
 mi_decl_export int mi_posix_memalign(void** p, size_t alignment, size_t size); // mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_memalign(size_t alignment, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2) mi_attr_alloc_align(1);
