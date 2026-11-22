@@ -597,12 +597,12 @@ With `MINIMAL` only security mitigations are added that have minimal impact on p
   corrupted through a heap block buffer overflow).
 - The start address of OS allocated memory is randomized
   (if possible), and mimalloc aborts on corrupted meta data detection.
-- Large blocks (> 512 KiB) are followed by a guard page.
+- Larger blocks (> 80 KiB) are followed by a guard page.
 - Does not allocate or reserve large OS pages as pinned memory cannot hold a guard page.
 - Enables `MI_SECURE_ENV=ON`
 
 With `CHECKED` (the default with `-DMI_MTE` and `-DMI_PAC`), the performance and memory impact
-is still relatively small (usually less than 10%, but can be 2x slower):
+is still relatively small (usually less than 10%, but can be 2x slower on synthetic benchmarks):
 
 - All free list pointers are
   [encoded](include/mimalloc/alloc/page.h#L582)
@@ -612,21 +612,23 @@ is still relatively small (usually less than 10%, but can be 2x slower):
   are ignored. Interior pointers are adjusted to the start of their block.
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
   mitigate against attacks that rely on a predictable allocation order.
+- Double frees are always detected: either immediately when a block is freed twice in a row, or otherwise on allocation
+  or when the page is freed. Heap block overflows that overflow into a free block are also detected with the same mechanism.
 - Reuse of freed blocks is delayed (until 1/8th of a page is free) and a random number of the most recently
-  freed blocks is held back, making it harder to reclaim a just-freed block (to exploit use-after-free).
+  freed blocks is held back, making it harder to reclaim a just-freed block (to exploit a use-after-free).
 
 With `ON`, performance and memory usage is impacted a bit more (usually less than 25%, but can be 2 to 3x slower):
 
 - Padding (8 bytes) is added at the end of each heap block to detect heap block overflows (detected once the block is freed),
-and double free's.
-- Some use-after-free accesses are detected (if these modify the first word in the block).
+  and also to immediately detect double frees.
 - On free, the first 1KiB of a block is zero'd.
 - Free lists are randomized more to make allocation order less predictable.
+- Purged pages are protected and fault on an access.
 - The mimalloc library is build as `mimalloc-secure`.
 
 The `FULL` mode also adds:
 
-- If using `-DMI_SECURE=FULL` there will also be guard pages at the end of each (64KiB) mimalloc page (thus interleaving
+- There are guard pages at the end of each (64KiB) mimalloc page (thus interleaving
   valid block data with inaccessible gaps). This setting is not recommended in general as it is more expensive (and uses
   more memory), and can also lead to reaching the maximum VMA limit on Linux systems if the heap gets too large.
 - Byte-precise heap block overflow check (once the block is freed).
@@ -640,7 +642,7 @@ On recent arm64 hardware with the memory tagging extensions ([MTE]), _mimalloc_ 
 to give every heap block a randomized memory tag that can only be accessed with a matching pointer that has the same
 tag. Adjacent blocks (almost) always get different tags (and linear block overflows fault), and blocks are retagged when freed
 (so (most) double-free and use-after-free accesses fault). Each block tag is chosen from 15 possible tags (excluding the tags of
-its neighbours). All blocks up to 512KiB are tagged, but larger blocks get a guard page
+its neighbours). All blocks up to 80KiB are tagged, and larger blocks get a guard page
 at the end so overflows still fault (this is done as tagging memory is linear in the size of the block).
 
 It depends on the hardware and workload, but on an M5 an MTE build is usually within about 20% of a release

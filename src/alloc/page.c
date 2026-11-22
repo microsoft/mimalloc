@@ -655,6 +655,23 @@ void _mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
 }
 
 
+// Before an empty page is freed, check that its free lists hold exactly `capacity` blocks. A double free
+// lowers the used count, so a page could otherwise be freed (and reused) while one of its blocks is still in use.
+// (a cycle makes the lists too long, and a block that was allocated again has a cleared link which fails to decode)
+void _mi_page_check_free_lists(const mi_page_t* page) {
+  #if MI_SECURE>=2
+  const size_t capacity = page->capacity;
+  size_t count = 0;
+  for (const mi_block_t* b = page->free; b != NULL && count <= capacity; b = mi_block_next(page, b)) { count++; }
+  for (const mi_block_t* b = page->local_free; b != NULL && count <= capacity; b = mi_block_next(page, b)) { count++; }
+  if mi_unlikely(count != capacity) {
+    _mi_error_message(EFAULT, "corrupted free list in an empty page with block size %zu (possibly due to a double free)\n", mi_page_block_size(page));
+  }
+  #else
+  MI_UNUSED(page);
+  #endif
+}
+
 // Physically release an empty page after its grace period has finished.
 static void mi_page_free_direct(mi_page_t* page, mi_page_queue_t* pq) {
   mi_assert_internal(page != NULL);
@@ -667,6 +684,7 @@ static void mi_page_free_direct(mi_page_t* page, mi_page_queue_t* pq) {
   // remove from the page list
   // (no need to do _mi_theap_delayed_free first as all blocks are already free)
   mi_page_queue_remove(pq, page);
+  _mi_page_check_free_lists(page);
 
   // and free it
   mi_theap_t* theap = mi_page_theap(page); mi_assert_internal(theap!=NULL);

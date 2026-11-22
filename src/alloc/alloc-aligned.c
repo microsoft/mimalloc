@@ -23,7 +23,7 @@ static bool mi_malloc_is_naturally_aligned( size_t size, size_t alignment ) {
   // (see `alloc/page.h:mi_natural_alignment_of_size`, asserted in `arena/arena-page-alloc.c:mi_arenas_page_alloc_fresh`).
   mi_assert_internal(mi_alignment_is_valid(alignment));
   if (alignment > size) return false;
-  const size_t bsize = mi_good_size(size);
+  const size_t bsize = _mi_block_size_of(size);
   const bool ok = (alignment <= mi_natural_alignment_of_size(bsize));
   if (ok) { mi_assert_internal((bsize & (alignment-1)) == 0); } // since the natural alignment always divides `bsize`
   return ok;
@@ -282,15 +282,27 @@ mi_decl_nodiscard mi_decl_restrict void* mi_malloc_aligned_at(size_t size, size_
   return mi_theap_malloc_aligned_at(_mi_theap_default(), size, alignment, offset);
 }
 
+// Allocate aligned and return the usable size (equal to `mi_usable_size(p)`)
+static void* mi_umalloc_zero_aligned(size_t size, size_t alignment, bool zero, size_t* pusable_size) mi_attr_noexcept {
+  mi_page_t* page;
+  void* const p = mi_theap_malloc_zero_aligned_at(_mi_theap_default(), size, alignment, 0, zero, &page);
+  if (p!=NULL && pusable_size!=NULL) {
+    #if !MI_PADDING && !MI_CHERI
+    if mi_likely(!mi_page_has_interior_pointers(page)) { *pusable_size = mi_page_block_size(page); }  // block start
+    else
+    #endif
+    { *pusable_size = _mi_page_usable_size(page,p); }
+    mi_assert_internal(*pusable_size == mi_usable_size(p));
+  }
+  return p;
+}
+
 mi_decl_nodiscard mi_decl_func_align mi_decl_restrict void* mi_malloc_aligned(size_t size, size_t alignment) mi_attr_noexcept {
   return mi_theap_malloc_aligned(_mi_theap_default(), size, alignment);
 }
 
-mi_decl_nodiscard mi_decl_restrict void* mi_umalloc_aligned(size_t size, size_t alignment, size_t* pblock_size) mi_attr_noexcept {
-  mi_page_t* page;
-  void* p = mi_theap_malloc_zero_aligned_at(_mi_theap_default(), size, alignment, 0, false, &page);
-  if (p!=NULL && pblock_size!=NULL) { *pblock_size = mi_page_block_size(page); }
-  return p;
+mi_decl_nodiscard mi_decl_restrict void* mi_umalloc_aligned(size_t size, size_t alignment, size_t* pusable_size) mi_attr_noexcept {
+  return mi_umalloc_zero_aligned(size, alignment, false, pusable_size);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_zalloc_aligned_at(size_t size, size_t alignment, size_t offset) mi_attr_noexcept {
@@ -301,11 +313,8 @@ mi_decl_nodiscard mi_decl_func_align mi_decl_restrict void* mi_zalloc_aligned(si
   return mi_theap_zalloc_aligned(_mi_theap_default(), size, alignment);
 }
 
-mi_decl_nodiscard mi_decl_restrict void* mi_uzalloc_aligned(size_t size, size_t alignment, size_t* pblock_size) mi_attr_noexcept {
-  mi_page_t* page;
-  void* p = mi_theap_malloc_zero_aligned_at(_mi_theap_default(), size, alignment, 0, true, &page);
-  if (p!=NULL && pblock_size!=NULL) { *pblock_size = mi_page_block_size(page); }
-  return p;
+mi_decl_nodiscard mi_decl_restrict void* mi_uzalloc_aligned(size_t size, size_t alignment, size_t* pusable_size) mi_attr_noexcept {
+  return mi_umalloc_zero_aligned(size, alignment, true, pusable_size);
 }
 
 mi_decl_nodiscard mi_decl_restrict void* mi_calloc_aligned_at(size_t count, size_t size, size_t alignment, size_t offset) mi_attr_noexcept {

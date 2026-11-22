@@ -19,7 +19,9 @@ static GLOBAL: MiMalloc = MiMalloc;
 - `Arena`: reserve memory for heaps that only allocate in it (see [Arenas](#arenas)).
 - `sys`: the raw C API (`mimalloc.h`).
 - Both `MiMalloc` and `&Heap` implement `core::alloc::Allocator` on Rust 1.100+
-  (or on an older nightly with the `nightly` feature).
+  (or on an older nightly with the `nightly` feature). For speed, `allocate` returns the
+  requested size instead of the full usable size; to use the full capacity, request
+  `good_size(n)` bytes upfront, or use `MiMallocExcess` that returns the full usable size.
 - Helpers such as `collect`, `option_set`, `stats_print` and `stats_json`.
 
 ## Arenas

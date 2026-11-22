@@ -448,43 +448,72 @@ mi_decl_nodiscard mi_decl_restrict void* mi_heap_calloc(mi_heap_t* heap, size_t 
 // Usable block sizes
 // ----------------------------------------------------------
 
-// Return usable size
-static void* mi_ublock_size( void* p, mi_page_t* page, size_t* pblock_size ) {
-  if (p!=NULL && pblock_size!=NULL) {
+// Return usable size (equal to `mi_usable_size(p)`)
+static inline void* mi_ublock_size( void* p, const mi_page_t* page, size_t size, size_t* pusable_size ) {
+  MI_UNUSED(page); MI_UNUSED(size);
+  if mi_likely(p!=NULL && pusable_size!=NULL) {
     mi_assert_internal(page == mi_ptr_page(p));
-    *pblock_size = mi_page_block_size(page);
+    #if MI_GUARDED
+    if mi_unlikely(mi_page_has_interior_pointers(page)) { *pusable_size = _mi_page_usable_size(page,p); return p; }  // guarded blocks are at an offset
+    #endif
+    #if MI_CHERI
+    *pusable_size = _mi_page_usable_size(page,p);      // limited by the capability bounds
+    #elif MI_PADDING
+    *pusable_size = (size==0 ? MI_SIZE_SIZE : size);   // padding makes the usable size byte-precise (and size 0 is bumped)
+    #else
+    *pusable_size = mi_page_block_size(page);          // never an interior pointer
+    #endif
+    mi_assert_internal(*pusable_size == mi_usable_size(p));
   }
   return p;
 }
 
-mi_decl_nodiscard mi_decl_restrict void* mi_umalloc_small(size_t size, size_t* pblock_size) mi_attr_noexcept {
+static mi_decl_noinline mi_decl_restrict void* mi_theap_umalloc_zero_generic(mi_theap_t* theap, size_t size, bool zero, size_t* pusable_size) mi_attr_noexcept {
   mi_page_t* page = NULL;
-  void* p = mi_theap_xmalloc_small_zero(_mi_theap_default(), size, false, false, &page);
-  return mi_ublock_size(p,page,pblock_size);
+  void* const p = _mi_theap_malloc_zero(theap, size, zero, 0, &page);
+  return mi_ublock_size(p,page,size,pusable_size);
 }
 
-mi_decl_nodiscard mi_decl_restrict void* mi_uzalloc_small(size_t size, size_t* pblock_size) mi_attr_noexcept {
-  mi_page_t* page = NULL;
-  void* p = mi_theap_xmalloc_small_zero(_mi_theap_default(), size, false, true, &page);
-  return mi_ublock_size(p,page,pblock_size);
+// Allocate and return the usable size. If a small page has a free block, we know the usable
+// size before allocating, which lets the allocation be a tail call (so no stack frame is needed).
+static mi_decl_forceinline mi_decl_restrict void* mi_theap_umalloc_zero(mi_theap_t* theap, size_t size, bool zero, size_t* pusable_size) mi_attr_noexcept {
+  #if !MI_PADDING && !MI_GUARDED && !MI_CHERI && MI_SAMPLE<2
+  #if MI_THEAP_INITASNULL
+  if mi_likely(theap!=NULL && size <= MI_SMALL_SIZE_MAX && pusable_size!=NULL)
+  #else
+  if mi_likely(size <= MI_SMALL_SIZE_MAX && pusable_size!=NULL)
+  #endif
+  {
+    mi_page_t* const page = mi_theap_get_free_small_page(theap, size, false);
+    if mi_likely(page->free != NULL) {
+      *pusable_size = mi_page_block_size(page);
+      return mi_theap_nonnull_xmalloc_small_zero(theap, size, false, zero, false, NULL);
+    }
+  }
+  #endif
+  return mi_theap_umalloc_zero_generic(theap, size, zero, pusable_size);
 }
 
-mi_decl_nodiscard mi_decl_restrict void* mi_umalloc(size_t size, size_t* pblock_size) mi_attr_noexcept {
-  mi_page_t* page = NULL;
-  void* p = _mi_theap_malloc_zero(_mi_theap_default(), size, false, 0, &page);
-  return mi_ublock_size(p,page,pblock_size);
+mi_decl_nodiscard mi_decl_func_align mi_decl_restrict void* mi_umalloc_small(size_t size, size_t* pusable_size) mi_attr_noexcept {
+  return mi_theap_umalloc_zero(_mi_theap_default(), size, false, pusable_size);
 }
 
-mi_decl_nodiscard mi_decl_restrict void* mi_uzalloc(size_t size, size_t* pblock_size) mi_attr_noexcept {
-  mi_page_t* page = NULL;
-  void* p = _mi_theap_malloc_zero(_mi_theap_default(), size, true, 0, &page);
-  return mi_ublock_size(p,page,pblock_size);
+mi_decl_nodiscard mi_decl_func_align mi_decl_restrict void* mi_uzalloc_small(size_t size, size_t* pusable_size) mi_attr_noexcept {
+  return mi_theap_umalloc_zero(_mi_theap_default(), size, true, pusable_size);
 }
 
-mi_decl_nodiscard mi_decl_restrict void* mi_ucalloc(size_t count, size_t size, size_t* pblock_size) mi_attr_noexcept {
+mi_decl_nodiscard mi_decl_func_align mi_decl_restrict void* mi_umalloc(size_t size, size_t* pusable_size) mi_attr_noexcept {
+  return mi_theap_umalloc_zero(_mi_theap_default(), size, false, pusable_size);
+}
+
+mi_decl_nodiscard mi_decl_func_align mi_decl_restrict void* mi_uzalloc(size_t size, size_t* pusable_size) mi_attr_noexcept {
+  return mi_theap_umalloc_zero(_mi_theap_default(), size, true, pusable_size);
+}
+
+mi_decl_nodiscard mi_decl_func_align mi_decl_restrict void* mi_ucalloc(size_t count, size_t size, size_t* pusable_size) mi_attr_noexcept {
   size_t total;
   if (mi_count_size_overflow(count,size,&total)) return NULL;
-  return mi_uzalloc(total, pblock_size);
+  return mi_uzalloc(total, pusable_size);
 }
 
 // ----------------------------------------------------------
@@ -539,7 +568,7 @@ void _mi_page_reset_tail(const mi_page_t* page, void* p, size_t newsize, size_t 
   _mi_os_reset(mi_page_subproc(page), (uint8_t*)p + newsize, usable - newsize, true);  // eager as it can be large; aligns inward to whole OS pages
 }
 
-static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, void* p, size_t newsize, bool zero, size_t* pblock_size_pre, size_t* pblock_size_post) mi_attr_noexcept {
+static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, void* p, size_t newsize, bool zero, size_t* pusable_size_pre, size_t* pusable_size_post) mi_attr_noexcept {
   // if p == NULL then behave as malloc.
   // else if size == 0 then reallocate to a zero-sized block (and don't return NULL, just as mi_malloc(0)).
   // (this means that returning NULL always indicates an error, and `p` will not have been freed in that case.)
@@ -548,17 +577,17 @@ static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, voi
   if (p==NULL) {
     page = NULL;
     size = 0;
-    if (pblock_size_pre!=NULL) { *pblock_size_pre = 0; }
+    if (pusable_size_pre!=NULL) { *pusable_size_pre = 0; }
   }
   else {
     page = mi_ptr_page_validate(p,"mi_realloc");
     if mi_unlikely(page==NULL) {  // invalid pointer
-      if (pblock_size_pre!=NULL) { *pblock_size_pre = 0; }
-      if (pblock_size_post!=NULL) { *pblock_size_post = 0; }
+      if (pusable_size_pre!=NULL) { *pusable_size_pre = 0; }
+      if (pusable_size_post!=NULL) { *pusable_size_post = 0; }
       return NULL;
     }
     size = _mi_page_usable_size(page,p);
-    if (pblock_size_pre!=NULL) { *pblock_size_pre = mi_page_block_size(page); }
+    if (pusable_size_pre!=NULL) { *pusable_size_pre = size; }
   }
   // check if we can reuse the existing block
   if mi_unlikely(mi_realloc_is_in_place(page,size,newsize) && newsize>0) { // note: newsize must be > 0 or otherwise we return NULL for realloc(NULL,0)
@@ -573,8 +602,9 @@ static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, voi
         // mi_track_resize(p,size,newsize)
         // if (newsize < size) { mi_track_mem_noaccess((uint8_t*)p + newsize, size - newsize); }
         mi_realloc_shrink_in_place(page, p, newsize, size);
-        if (pblock_size_post!=NULL) { *pblock_size_post = mi_page_block_size(page); }
-        return mi_ptr_bounded(p, mi_bounds_user_size(newsize));
+        void* const q = mi_ptr_bounded(p, mi_bounds_user_size(newsize));
+        if (pusable_size_post!=NULL) { *pusable_size_post = _mi_page_usable_size(page,q); }
+        return q;
       }
     }
   }
@@ -582,11 +612,11 @@ static mi_decl_forceinline void* mi_theap_realloc_zero_ex(mi_theap_t* theap, voi
   mi_page_t* newpage; // use block_size for zero-ing, issue #763
   void* const newp = _mi_theap_malloc_zero(theap,newsize,false /* no zero */,0,&newpage);
   if mi_likely(newp != NULL) {
-    if (pblock_size_post!=NULL) { *pblock_size_post = mi_page_block_size(newpage); }
     const size_t copy_size  = (newsize > size ? size : newsize);
     const size_t zero_start = mi_align_down( (copy_size >= sizeof(intptr_t) ? copy_size - sizeof(intptr_t) : 0), sizeof(intptr_t)); // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
     const size_t usable = _mi_page_usable_size(newpage,newp);
     mi_assert_internal(usable >= newsize);
+    if (pusable_size_post!=NULL) { *pusable_size_post = usable; }
     if (zero && usable > zero_start) {
       mi_memzero_aligned((uint8_t*)newp + zero_start, usable - zero_start);
     }
@@ -641,8 +671,8 @@ mi_decl_nodiscard void* mi_reallocn(void* p, size_t count, size_t size) mi_attr_
   return mi_theap_realloc(_mi_theap_default(),p,total);
 }
 
-mi_decl_nodiscard void* mi_urealloc(void* p, size_t newsize, size_t* pblock_size_pre, size_t* pblock_size_post) mi_attr_noexcept {
-  return mi_theap_realloc_zero_ex(_mi_theap_default(),p,newsize, false, pblock_size_pre, pblock_size_post);
+mi_decl_nodiscard void* mi_urealloc(void* p, size_t newsize, size_t* pusable_size_pre, size_t* pusable_size_post) mi_attr_noexcept {
+  return mi_theap_realloc_zero_ex(_mi_theap_default(),p,newsize, false, pusable_size_pre, pusable_size_post);
 }
 
 // Reallocate but free `p` on errors

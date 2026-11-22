@@ -27,6 +27,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #[allow(clippy::incompatible_msrv)]
 mod allocator;
 mod arena;
+#[cfg(any(feature = "nightly", allocator_api_stable))]
+pub use allocator::MiMallocExcess;
 mod heap;
 pub use mimalloc_sys as sys;
 
@@ -39,7 +41,7 @@ use core::mem::size_of;
 use core::ptr::{self, NonNull};
 
 // As `MI_MAX_ALIGN_SIZE`
-const MAX_ALIGN_SIZE: usize = 16;
+pub(crate) const MAX_ALIGN_SIZE: usize = 16;
 
 // Fast check if `mi_malloc(size)` is already `align`-aligned (a subset of `mi_malloc_is_naturally_aligned`)
 #[inline(always)]
@@ -49,7 +51,7 @@ pub(crate) const fn is_malloc_aligned(size: usize, align: usize) -> bool {
 
 // As `_mi_wsize_from_size`
 #[inline(always)]
-const fn wsize_from_size(size: usize) -> usize {
+pub(crate) const fn wsize_from_size(size: usize) -> usize {
     (size + size_of::<usize>() - 1) / size_of::<usize>()
 }
 
@@ -158,6 +160,9 @@ pub unsafe fn usable_size(ptr: *const u8) -> usize {
 }
 
 /// The size that would be allocated for a request of `size` bytes.
+///
+/// Request this size upfront to use the full capacity of a block, e.g. for vectors:
+/// `Allocator::allocate` only reports the requested size.
 pub fn good_size(size: usize) -> usize {
     unsafe { sys::mi_good_size(size) }
 }
