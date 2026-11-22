@@ -210,8 +210,8 @@ static inline mi_page_t* mi_page_queue_lookup_free_first(mi_theap_t* theap, mi_p
   mi_page_t* page = pq->first;
   if mi_likely(page!=NULL && mi_page_free_quick_collect(page)) {
     // fast path
-    #if MI_SECURE_RANDOM_EXTEND  // in secure mode, we extend half the time to increase randomness
-    if (page->capacity < page->reserved && ((_mi_theap_random_next(theap) & 1) == 1)) {
+    #if MI_SECURE_RANDOM_EXTEND  // in secure mode, we extend half the time to increase randomness (but only if at least half used to limit the working set)
+    if (page->capacity < page->reserved && mi_page_used(page) >= page->capacity/2 && ((_mi_theap_random_next(theap) & 1) == 1)) {
       (void)_mi_page_extend_free(theap, page);  // ok if this fails
       mi_assert_internal(mi_page_immediate_available(page));
     }
