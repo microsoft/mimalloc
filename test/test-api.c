@@ -200,8 +200,13 @@ int main(void) {
     void* p = mi_malloc(64);
     size_t pre, post;
     void* q = mi_urealloc((char*)p + 3, 58, &pre, &post);  // stays in place in release (no interior pointer check)
-    mi_free(p);
-    result = (q==NULL || q==(uint8_t*)p+3);
+    const bool moved = (q!=NULL && q!=(uint8_t*)p+3);      // can move if `p` is guarded (as guarded pages allow interior pointers)
+    mi_free(moved ? q : p);                                // if moved, `p` was freed by the realloc
+    #if MI_GUARDED
+    result = true;
+    #else
+    result = !moved;
+    #endif
   }
 
   // ---------------------------------------------------
