@@ -350,10 +350,10 @@ void _mi_arenas_free(mi_subproc_t* subproc, void* p, size_t size, mi_memid_t mem
 }
 
 // Purge the arenas; if `force_purge` is true, amenable parts are purged even if not yet expired
-// (`tld` is NULL on a thread without a theap, see `mi_collect`)
+// (`tld` is NULL on a thread without a theap which always belongs to the main subprocess, see `mi_collect`)
 void _mi_arenas_collect(bool force_purge, bool visit_all, mi_tld_t* tld) {
   if (tld==NULL) {
-    mi_arenas_try_purge(force_purge, visit_all, _mi_subproc(), 0);
+    mi_arenas_try_purge(force_purge, visit_all, _mi_subproc_main(), 0);
   }
   else {
     mi_arenas_try_purge(force_purge, visit_all, tld->subproc, tld->thread_seq);
