@@ -64,6 +64,7 @@ static bool test_aligned_all(void);
 static bool test_heap_destroy_xthread_free(void);
 static bool test_heap_destroy_stale_theap(void);
 static bool test_thread_done_no_reinit(void);
+static bool test_collect_fresh_thread(void);
 static bool test_thread_heap_release(void);
 static bool test_heap_delete_concurrent_free(void);
 #ifdef __cplusplus
@@ -959,6 +960,9 @@ int main(void) {
   CHECK_THREADS_BODY("thread-done-no-reinit") {      // allocation after `mi_thread_done` (e.g. in thread-local destructors) must not re-initialize the thread
     result = test_thread_done_no_reinit();
   }
+  CHECK_THREADS_BODY("collect-fresh-thread") {       // `mi_collect` on a thread without a theap still purges the arenas
+    result = test_collect_fresh_thread();
+  }
   CHECK_THREADS_BODY("thread-heap-release") {        // after `mi_thread_heap_release` a thread can still free but no longer allocate in the heap
     result = test_thread_heap_release();
   }
@@ -1401,6 +1405,33 @@ static bool thread_done_no_reinit_fun(void) {
 
 static bool test_thread_done_no_reinit(void) {
   return mi_run_on_thread(&thread_done_no_reinit_fun);
+}
+
+
+// ---------------------------------------------------------------------------
+// `mi_collect` on a thread without a theap still purges the arenas
+// ---------------------------------------------------------------------------
+
+static int64_t current_arena_purges(void) {
+  mi_stats_t_decl(stats);
+  mi_stats_get(&stats);
+  return stats.arena_purges.total;
+}
+
+static bool collect_fresh_thread_fun(void) {
+  mi_collect(true);  // the first call into mimalloc on this thread
+  return true;
+}
+
+static bool test_collect_fresh_thread(void) {
+  mi_free(mi_malloc(MI_MiB));  // a huge page; its arena range is scheduled for a delayed purge (by default)
+  const int64_t purges = current_arena_purges();
+  if (!mi_run_on_thread(&collect_fresh_thread_fun)) return false;
+  if (current_arena_purges() > purges) return true;
+  mi_collect(true);  // nothing was purged: fail only if there was something to purge
+  if (current_arena_purges() > purges) return false;
+  fprintf(stderr, "(nothing to purge, inconclusive) ");
+  return true;
 }
 
 
