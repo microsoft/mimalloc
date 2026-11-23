@@ -378,6 +378,9 @@ void* mi_umalloc_aligned(size_t size, size_t alignment, size_t* pusable_size);
 /// As mi_zalloc_aligned(), additionally reporting the usable size on success.
 void* mi_uzalloc_aligned(size_t size, size_t alignment, size_t* pusable_size);
 
+/// As mi_realloc_aligned(), additionally reporting the old and new usable sizes (as mi_urealloc()).
+void* mi_urealloc_aligned(void* p, size_t newsize, size_t alignment, size_t* pusable_size_pre, size_t* pusable_size_post);
+
 /// As mi_malloc_small(), additionally reporting the usable size on success.
 /// \a size must not exceed #MI_SMALL_SIZE_MAX.
 void* mi_umalloc_small(size_t size, size_t* pusable_size);

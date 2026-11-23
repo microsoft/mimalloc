@@ -14,7 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/prim/os.h"
 #include "testhelper.h"
 
-#if !defined(_WIN32) && !MI_TRACK_ENABLED
+#if !defined(_WIN32) && !defined(__wasi__) && !MI_TRACK_ENABLED
 #define MI_TEST_FAULTS  (1)
 #include <signal.h>
 #include <sys/wait.h>

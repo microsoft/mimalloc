@@ -64,6 +64,7 @@ static bool test_aligned_all(void);
 static bool test_heap_destroy_xthread_free(void);
 static bool test_heap_destroy_stale_theap(void);
 static bool test_thread_done_no_reinit(void);
+static bool test_collect_fresh_thread(void);
 static bool test_thread_heap_release(void);
 static bool test_heap_delete_concurrent_free(void);
 #ifdef __cplusplus
@@ -199,8 +200,13 @@ int main(void) {
     void* p = mi_malloc(64);
     size_t pre, post;
     void* q = mi_urealloc((char*)p + 3, 58, &pre, &post);  // stays in place in release (no interior pointer check)
-    mi_free(p);
-    result = (q==NULL || q==(uint8_t*)p+3);
+    const bool moved = (q!=NULL && q!=(uint8_t*)p+3);      // can move if `p` is guarded (as guarded pages allow interior pointers)
+    mi_free(moved ? q : p);                                // if moved, `p` was freed by the realloc
+    #if MI_GUARDED
+    result = true;
+    #else
+    result = !moved;
+    #endif
   }
 
   // ---------------------------------------------------
@@ -745,6 +751,10 @@ int main(void) {
         size_t pre = 0, post = 0;
         q = mi_urealloc(q, size/2 + 1, &pre, &post);
         result = result && (pre == qsize && post == mi_usable_size(q));
+        size_t apre = 0, apost = 0;
+        q = mi_urealloc_aligned(q, 2*size, align, &apre, &apost);
+        result = result && (q != NULL && ((uintptr_t)q % align) == 0 && apre == post && apost >= 2*size && apost == mi_usable_size(q));
+        post = apost;
         size_t fsize = 0;
         mi_ufree(p, &fsize);
         result = result && (fsize == psize);
@@ -959,6 +969,9 @@ int main(void) {
   CHECK_THREADS_BODY("thread-done-no-reinit") {      // allocation after `mi_thread_done` (e.g. in thread-local destructors) must not re-initialize the thread
     result = test_thread_done_no_reinit();
   }
+  CHECK_THREADS_BODY("collect-fresh-thread") {       // `mi_collect` on a thread without a theap still purges the arenas
+    result = test_collect_fresh_thread();
+  }
   CHECK_THREADS_BODY("thread-heap-release") {        // after `mi_thread_heap_release` a thread can still free but no longer allocate in the heap
     result = test_thread_heap_release();
   }
@@ -990,7 +1003,7 @@ int main(void) {
   // ---------------------------------------------------
   // various
   // ---------------------------------------------------
-  #if !MI_TRACK_ASAN   // realpath may leak with ASAN enabled (as the ASAN allocator intercepts it)
+  #if !MI_TRACK_ASAN && !defined(__wasi__)  // realpath may leak with ASAN enabled (as the ASAN allocator intercepts it), and is not available on WASI
   CHECK_BODY("realpath") {
     char* s = mi_realpath( ".", NULL );
     // printf("realpath: %s\n",s);
@@ -1401,6 +1414,33 @@ static bool thread_done_no_reinit_fun(void) {
 
 static bool test_thread_done_no_reinit(void) {
   return mi_run_on_thread(&thread_done_no_reinit_fun);
+}
+
+
+// ---------------------------------------------------------------------------
+// `mi_collect` on a thread without a theap still purges the arenas
+// ---------------------------------------------------------------------------
+
+static int64_t current_arena_purges(void) {
+  mi_stats_t_decl(stats);
+  mi_stats_get(&stats);
+  return stats.arena_purges.total;
+}
+
+static bool collect_fresh_thread_fun(void) {
+  mi_collect(true);  // the first call into mimalloc on this thread
+  return true;
+}
+
+static bool test_collect_fresh_thread(void) {
+  mi_free(mi_malloc(MI_MiB));  // a huge page; its arena range is scheduled for a delayed purge (by default)
+  const int64_t purges = current_arena_purges();
+  if (!mi_run_on_thread(&collect_fresh_thread_fun)) return false;
+  if (current_arena_purges() > purges) return true;
+  mi_collect(true);  // nothing was purged: fail only if there was something to purge
+  if (current_arena_purges() > purges) return false;
+  fprintf(stderr, "(nothing to purge, inconclusive) ");
+  return true;
 }
 
 

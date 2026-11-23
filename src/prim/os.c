@@ -113,6 +113,8 @@ size_t _mi_os_memtag_line_size(void) {
 static bool mi_os_detect_elevated(void) {
   #if defined(_WIN32)
   return false;  // no direct setuid/setgid equivalent; a UAC elevation does not inherit the parent's environment
+  #elif defined(__wasi__)
+  return false;  // no users or setuid/setgid in WASI
   #elif MI_HAS_UNISTDH && (defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__))
   return (issetugid() != 0);
   #elif MI_HAS_UNISTDH

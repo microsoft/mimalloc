@@ -508,6 +508,47 @@ jobs:
       - name: Single threaded
         run: sh .github/ci/cmake-test.sh single-wasm Release
 
+  # WASI: build with wasi-sdk (with CMake and directly from `src/static.c`) and run with wasmtime
+  wasi:
+    name: wasi
+    runs-on: ubuntu-latest
+    env:
+      WASI_SDK_URL: https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz
+      WASI_SDK_SHA256: b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4
+      WASMTIME_URL: https://github.com/bytecodealliance/wasmtime/releases/download/v51.0.0/wasmtime-v51.0.0-x86_64-linux.tar.xz
+      WASMTIME_SHA256: a18020674fac4107f329bc9ed720ea9c88e4b30a61e8a527787bcce051123d32
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup
+        run: |
+          curl -sSfL -o wasi-sdk.tar.gz "$WASI_SDK_URL"
+          echo "$WASI_SDK_SHA256  wasi-sdk.tar.gz" | sha256sum -c
+          mkdir -p "$RUNNER_TEMP/wasi-sdk" && tar xzf wasi-sdk.tar.gz -C "$RUNNER_TEMP/wasi-sdk" --strip-components=1
+          curl -sSfL -o wasmtime.tar.xz "$WASMTIME_URL"
+          echo "$WASMTIME_SHA256  wasmtime.tar.xz" | sha256sum -c
+          mkdir -p "$RUNNER_TEMP/wasmtime" && tar xJf wasmtime.tar.xz -C "$RUNNER_TEMP/wasmtime" --strip-components=1
+          echo "CI_CMAKE_ARGS=-DCMAKE_TOOLCHAIN_FILE=$RUNNER_TEMP/wasi-sdk/share/cmake/wasi-sdk-p1.cmake -DWASI_SDK_PREFIX=$RUNNER_TEMP/wasi-sdk -DCMAKE_CROSSCOMPILING_EMULATOR=$RUNNER_TEMP/wasmtime/wasmtime;-S;inherit-env=y -DMI_BUILD_SHARED=OFF" >> "$GITHUB_ENV"
+
+      - name: Release
+        run: sh .github/ci/cmake-test.sh release-wasi Release
+
+      - name: Debug
+        run: sh .github/ci/cmake-test.sh debug-wasi Debug -DMI_DEBUG=FULL
+
+      - name: Release, Static
+        run: |
+          "$RUNNER_TEMP/wasi-sdk/bin/clang" --sysroot="$RUNNER_TEMP/wasi-sdk/share/wasi-sysroot" -O2 -Iinclude src/static.c test/main.c -o main.wasm
+          "$RUNNER_TEMP/wasmtime/wasmtime" main.wasm
+
+      - name: Debug, Static
+        run: |
+          "$RUNNER_TEMP/wasi-sdk/bin/clang" --sysroot="$RUNNER_TEMP/wasi-sdk/share/wasi-sysroot" -O0 -g -DMI_DEBUG=3 -Iinclude src/static.c test/main.c -o main-debug.wasm
+          "$RUNNER_TEMP/wasmtime/wasmtime" main-debug.wasm
+
   # MSYS2
   mingw:
     name: mingw-${{ matrix.target }}

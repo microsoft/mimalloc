@@ -218,6 +218,13 @@ extern "C" {
         alignment: usize,
         usable_size: *mut usize,
     ) -> *mut c_void;
+    pub fn mi_urealloc_aligned(
+        p: *mut c_void,
+        newsize: usize,
+        alignment: usize,
+        usable_size_pre: *mut usize,
+        usable_size_post: *mut usize,
+    ) -> *mut c_void;
     pub fn mi_umalloc_small(size: usize, usable_size: *mut usize) -> *mut c_void;
     pub fn mi_uzalloc_small(size: usize, usable_size: *mut usize) -> *mut c_void;
 

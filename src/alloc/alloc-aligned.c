@@ -434,6 +434,13 @@ mi_decl_nodiscard void* mi_realloc_aligned(void* p, size_t newsize, size_t align
   return mi_theap_realloc_aligned(_mi_theap_default(), p, newsize, alignment);
 }
 
+mi_decl_nodiscard void* mi_urealloc_aligned(void* p, size_t newsize, size_t alignment, size_t* pusable_size_pre, size_t* pusable_size_post) mi_attr_noexcept {
+  if (pusable_size_pre!=NULL) { *pusable_size_pre = mi_usable_size(p); }
+  void* const q = mi_realloc_aligned(p, newsize, alignment);
+  if (pusable_size_post!=NULL) { *pusable_size_post = mi_usable_size(q); }
+  return q;
+}
+
 mi_decl_nodiscard void* mi_rezalloc_aligned_at(void* p, size_t newsize, size_t alignment, size_t offset) mi_attr_noexcept {
   return mi_theap_rezalloc_aligned_at(_mi_theap_default(), p, newsize, alignment, offset);
 }
