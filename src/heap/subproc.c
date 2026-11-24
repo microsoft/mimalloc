@@ -7,6 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/prim/prim-tls.h"
+#include "mimalloc/prim/prim-mte.h"  // mi_ptr_memtag_meta
 #include "mimalloc/util/stats.h"
 #include "mimalloc/util/memid.h"
 #include "mimalloc/arena/arena-alloc.h"
@@ -480,7 +481,7 @@ void _mi_fork_child(void) {
 
 // Called at process initialization.
 void _mi_fork_init(void) {
-  #if defined(MI_USE_PTHREADS) && !defined(__wasi__) && !defined(__EMSCRIPTEN__) && !MI_NO_PTHREAD_ATFORK
+  #if MI_USE_PTHREADS && !defined(__wasi__) && !defined(__EMSCRIPTEN__) && !MI_NO_PTHREAD_ATFORK
   if (pthread_atfork(NULL, NULL, &_mi_fork_child) != 0) {
     _mi_warning_message("unable to register the pthread fork handler\n");
   }

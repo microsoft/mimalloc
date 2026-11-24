@@ -127,8 +127,8 @@ int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit) {
   return 0;
 }
 
-int _mi_prim_reset(void* addr, size_t size) {
-  MI_UNUSED(addr); MI_UNUSED(size);
+int _mi_prim_reset(void* addr, size_t size, bool eager) {
+  MI_UNUSED(addr); MI_UNUSED(size); MI_UNUSED(eager);
   return 0;
 }
 
@@ -238,7 +238,7 @@ bool _mi_prim_random_buf(void* buf, size_t buf_len) {
 // Thread init/done
 //----------------------------------------------------------------
 
-#if defined(MI_USE_PTHREADS)
+#if MI_USE_PTHREADS
 
 // use pthread local storage keys to detect thread ending
 // (and used with MI_TLS_PTHREADS for the default theap)

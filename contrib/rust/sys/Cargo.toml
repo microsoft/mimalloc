@@ -6,7 +6,7 @@
 # -----------------------------------------------------------------------------
 [package]
 name = "mimalloc-sys"
-version = "3.7.0"
+version = "3.7.1"
 edition = "2021"
 rust-version = "1.65"
 license = "MIT"
@@ -20,8 +20,12 @@ include = ["/src", "/build.rs", "/README.md", "/mimalloc/LICENSE", "/mimalloc/in
 
 [features]
 default = []
-# security mitigations (guard pages, randomization, encoded free lists, double free detection)
+# security mitigations (as cmake `-DMI_SECURE=ON`); with several secure features the highest level is used
 secure = []
+# cheap security mitigations: guard pages around metadata, randomization, encoded free lists, double free detection (as `-DMI_SECURE=BASIC`)
+secure_basic = []
+# `secure_basic` plus validated free pointers, stronger free list encoding, and randomized free lists (as `-DMI_SECURE=CHECKED`)
+secure_checked = []
 # also override the standard `malloc`, `free`, etc. in the final binary
 override = []
 # build mimalloc with assertions and internal invariant checks
@@ -30,8 +34,6 @@ debug = []
 debug_in_debug = []
 # use the local-dynamic TLS model (when mimalloc is part of a dynamically loaded library)
 local_dynamic_tls = []
-# use only direct TLS slots on Windows (faster but requires fewer than 64 TLS slots in total)
-win_direct_tls = []
 # disable transparent huge pages by default on Linux
 no_thp = []
 # use architecture specific optimizations (as cmake `-DMI_OPT_ARCH=ON`)

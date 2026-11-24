@@ -19,7 +19,7 @@ static int failed = 0;
 static int skipped = 0;
 
 // can tests create threads?
-#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+#if (defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)) || defined(__wasi__)
 #define MI_TEST_HAS_THREADS  0
 #else
 #define MI_TEST_HAS_THREADS  1

@@ -17,8 +17,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdlib.h>  // atexit
 
 // xbox has no console IO (and might not be able to use GetModuleHandle)
-#if !defined(WINAPI_FAMILY_PARTITION) || WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)
+#if !defined(WINAPI_FAMILY_PARTITION)
 #define MI_WIN_DESKTOP  1
+#elif WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM)
+#define MI_WIN_DESKTOP  1
+#elif WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP)
+#define MI_WIN_APP_ONLY  1
 #endif
 
 //---------------------------------------------
@@ -443,14 +447,12 @@ int _mi_prim_decommit(void* addr, size_t size, bool* needs_recommit) {
   return (ok ? 0 : (int)GetLastError());
 }
 
-int _mi_prim_reset(void* addr, size_t size) {
+int _mi_prim_reset(void* addr, size_t size, bool eager) {
   void* p = VirtualAlloc(addr, size, MEM_RESET, PAGE_READWRITE);
   mi_assert_internal(p == addr);
-  #if 0
-  if (p != NULL) {
-    VirtualUnlock(addr,size); // VirtualUnlock after MEM_RESET removes the memory directly from the working set
+  if (p != NULL && eager) {
+    VirtualUnlock(addr, size);  // removes the reset pages from the working set
   }
-  #endif
   return (p != NULL ? 0 : (int)GetLastError());
 }
 
@@ -461,7 +463,7 @@ int _mi_prim_reuse(void* addr, size_t size) {
 
 int _mi_prim_protect(void* addr, size_t size, mi_protect_t protect) {
   const ULONG prot = (protect == MI_PROTECT_NONE ? PAGE_NOACCESS : (protect == MI_PROTECT_READWRITE ? PAGE_READWRITE : PAGE_READONLY));
-  #if !MI_WIN_DESKTOP && WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP)
+  #if MI_WIN_APP_ONLY
   ULONG oldprotect = 0;
   BOOL ok = VirtualProtectFromApp(addr, size, prot, &oldprotect);
   #else
@@ -895,7 +897,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   #endif
 #endif
 
-#if defined(MI_WIN_INIT_USE_CRT_TLS)
+#if MI_WIN_INIT_USE_CRT_TLS
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
 
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
@@ -1031,7 +1033,7 @@ extern "C" {
   However, it can lead to link errors with on `_pRawDllMain` if other
   libraries also try to hook into this (like Boost).
 */
-#elif defined(MI_WIN_INIT_USE_RAW_DLLMAIN)
+#elif MI_WIN_INIT_USE_RAW_DLLMAIN
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) {}
@@ -1123,7 +1125,7 @@ extern "C" {
 /* --------------------------------------------------------------------
    Legacy options: DllMain, TLS, and FLS
    --------------------------------------------------------------------*/
-#elif defined(MI_WIN_INIT_USE_TLS_DLLMAIN) && defined(MI_SHARED_LIB)
+#elif MI_WIN_INIT_USE_TLS_DLLMAIN && MI_SHARED_LIB
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
 
   // Windows DLL: easy to hook into process_init and thread_done
@@ -1139,7 +1141,7 @@ extern "C" {
     MI_UNUSED(theap);
   }
 
-#elif defined(MI_WIN_INIT_USE_TLS_DLLMAIN)
+#elif MI_WIN_INIT_USE_TLS_DLLMAIN
   #define MI_PRIM_HAS_PROCESS_ATTACH  1
 
   static void NTAPI mi_win_main_attach(PVOID module, DWORD reason, LPVOID reserved) {
@@ -1201,7 +1203,7 @@ extern "C" {
     MI_UNUSED(theap);
   }
 
-#elif defined(MI_WIN_INIT_USE_FLS) // deprecated: statically linked, use fiber api
+#elif MI_WIN_INIT_USE_FLS // deprecated: statically linked, use fiber api
 
   #if defined(_MSC_VER) // on clang/gcc use the constructor attribute (in `src/prim/prim.c`)
     // MSVC: use data section magic for static libraries
@@ -1275,7 +1277,7 @@ extern "C" {
 // ----------------------------------------------------
 // Communicate with the redirection module on Windows
 // ----------------------------------------------------
-#if defined(MI_SHARED_LIB) && !defined(MI_WIN_NOREDIRECT)
+#if MI_SHARED_LIB && !defined(MI_WIN_NOREDIRECT)
   #define MI_PRIM_HAS_ALLOCATOR_INIT 1
 
   bool _mi_is_redirected(void) {

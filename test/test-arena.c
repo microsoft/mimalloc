@@ -266,6 +266,24 @@ static bool test_os_aligned_offset_stats(void) {
 }
 #endif
 
+static bool test_os_canuse_thp(void) {
+  const size_t lpsize = _mi_os_large_page_size();
+  if (!_mi_os_canuse_large_page(lpsize, lpsize)) return check_skip("no large OS page size");
+  mi_subproc_t* subproc = mi_theap_subproc(mi_theap_get_default());
+  mi_memid_t memid;
+  uint8_t* p = (uint8_t*)_mi_os_alloc_aligned(subproc, 3*lpsize, lpsize, false, false, &memid);
+  if (p == NULL) return false;
+  const bool result = (!_mi_os_canuse_thp(p, 0) &&
+                       !_mi_os_canuse_thp(p, lpsize - 1) &&
+                        _mi_os_canuse_thp(p, lpsize) &&
+                        _mi_os_canuse_thp(p, lpsize + 1) &&
+                       !_mi_os_canuse_thp(p + 1, lpsize - 2) &&
+                       !_mi_os_canuse_thp(p + 1, 2*lpsize - 2) &&
+                        _mi_os_canuse_thp(p + 1, 2*lpsize - 1));
+  _mi_os_free(subproc, p, 3*lpsize, memid);
+  return result;
+}
+
 static bool test_os_allow_large(void) {
   const long allow_large = mi_option_get(mi_option_allow_large_os_pages);
   mi_option_enable(mi_option_allow_large_os_pages);
@@ -582,6 +600,38 @@ static bool test_heap_visit_thread_exit(void) {
     visit_heap = NULL;
   }
   mi_option_set(mi_option_disallow_arena_alloc, disallow);
+  mi_option_set(mi_option_guarded_sample_rate, guarded);
+  return result;
+}
+
+#define VISIT_FREED_COUNT 100
+static void* visit_freed_blocks[VISIT_FREED_COUNT];
+
+static bool allocate_visit_freed_blocks(void) {
+  for (size_t i = 0; i < VISIT_FREED_COUNT; i++) {
+    visit_freed_blocks[i] = mi_heap_malloc(visit_heap, 64);
+    if (visit_freed_blocks[i] == NULL) return false;
+  }
+  return true;
+}
+
+// Visit an abandoned page after another thread freed some of its blocks
+// (these must not be visited even if the page's free list is not empty).
+static bool test_heap_visit_abandoned_freed(void) {
+  const long reclaim = mi_option_get(mi_option_page_reclaim_on_free);
+  const long guarded = mi_option_get(mi_option_guarded_sample_rate);
+  mi_option_set(mi_option_page_reclaim_on_free, -1);
+  mi_option_set(mi_option_guarded_sample_rate, 0);
+  visit_heap = mi_heap_new();
+  bool result = (visit_heap != NULL && mi_run_on_thread(&allocate_visit_freed_blocks));
+  if (result) {
+    for (size_t i = 0; i < VISIT_FREED_COUNT; i += 2) { mi_free(visit_freed_blocks[i]); }
+    block_visit_t visit = { 0, 0, false, false };
+    result = (mi_heap_visit_blocks(visit_heap, true, &block_record, &visit) && visit.blocks == VISIT_FREED_COUNT/2);
+  }
+  if (visit_heap != NULL) { mi_heap_destroy(visit_heap); }
+  visit_heap = NULL;
+  mi_option_set(mi_option_page_reclaim_on_free, reclaim);
   mi_option_set(mi_option_guarded_sample_rate, guarded);
   return result;
 }
@@ -950,14 +1000,18 @@ static bool test_free_list_cycle(bool collect, bool self_cycle) {
       _mi_heap_area_init(&area, page);
       mi_register_error(&record_free_list_error, &errors);
       if (collect) {
+        // the cycle is cut and the local free list is appended in front of the free list
         _mi_page_free_collect(page, true);
-        result = (page->local_free == head && page->free == saved_free);
+        result = (page->local_free == NULL && page->free == head);
+        mi_block_t* const second = (self_cycle ? saved_next : link);
+        mi_block_set_next(page, head, second);
+        mi_block_set_next(page, second, saved_free);
       }
       else {
         result = (_mi_theap_area_visit_blocks(&area, page, &record_free_list_block, &visited) &&
                   visited == (size_t)page->capacity - (self_cycle ? 1 : 2));
+        mi_block_set_next(page, link, saved_next);
       }
-      mi_block_set_next(page, link, saved_next);
       mi_register_error(NULL, NULL);
       result = (errors == (collect ? 1 : 0) && result);
       _mi_page_free_collect(page, true);
@@ -1022,6 +1076,7 @@ static bool test_efault(bool (*test)(void)) {
 }
 
 int main(void) {
+  CHECK("os-canuse-thp", test_os_canuse_thp());
   CHECK("os-allow-large", test_os_allow_large());
   #if MI_SECURE > 0 && MI_OS_HAS_GUARD_PAGES
   CHECK("arena-reject-pinned", test_arena_reject_pinned());
@@ -1065,5 +1120,6 @@ int main(void) {
   CHECK_THREADS("heap-visit-owned-os-mixed", test_heap_visit_owned_os(true));
   CHECK("heap-page-count-os", test_heap_page_count_os());
   CHECK_THREADS("heap-visit-thread-exit", test_heap_visit_thread_exit());
+  CHECK_THREADS("heap-visit-abandoned-freed", test_heap_visit_abandoned_freed());
   return print_test_summary();
 }

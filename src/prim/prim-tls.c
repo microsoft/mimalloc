@@ -168,13 +168,18 @@ static void mi_theap_cached_key_destroy(void* theapv) {
   }
 }
 
+// without the keys each allocation would re-initialize the thread
+static void mi_tls_slots_init_once(void) {
+  pthread_key_t key = MI_PTHREAD_KEY_INVALID;
+  if (!_mi_pthread_key_create(&key,NULL,NULL)) { _mi_fatal_error("unable to allocate the thread local keys\n"); }
+  mi_atomic_store_release(&_mi_theap_default_key,key);
+  key = MI_PTHREAD_KEY_INVALID;
+  if (!_mi_pthread_key_create(&key,&mi_theap_cached_key_destroy,NULL)) { _mi_fatal_error("unable to allocate the thread local keys\n"); }
+  mi_atomic_store_release(&_mi_theap_cached_key,key);
+}
+
 void _mi_tls_slots_init(void) {
-  mi_atomic_do_once {
-    pthread_key_t key = MI_PTHREAD_KEY_INVALID;
-    if (_mi_pthread_key_create(&key,NULL,NULL)) { mi_atomic_store_release(&_mi_theap_default_key,key); }
-    key = MI_PTHREAD_KEY_INVALID;
-    if (_mi_pthread_key_create(&key,&mi_theap_cached_key_destroy,NULL)) { mi_atomic_store_release(&_mi_theap_cached_key,key); }
-  }
+  mi_atomic_do_once { mi_tls_slots_init_once(); }
 }
 
 void _mi_tls_slots_done(void) {

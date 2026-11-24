@@ -6,6 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
 #include "mimalloc/prim/prim.h"
+#include "mimalloc/prim/prim-mte.h"  // mi_memtag_use_for_meta, mi_memtag_meta_init_adjacent
 #include "mimalloc/track.h"
 #include "mimalloc/prim/os.h"
 #include "mimalloc/prim/prim-tls.h"
@@ -478,7 +479,7 @@ mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
   Thread Init
 ----------------------------------------------------------- */
 
-#if MI_DEBUG || defined(MI_TLS_RECURSE_GUARD)
+#if MI_DEBUG || MI_TLS_RECURSE_GUARD
 static mi_theap_t* mi_heap_check_for_existing_theap(mi_heap_t* heap) {
   const mi_thread_id_t tid = _mi_thread_id();
   mi_theap_t* thread_theap = NULL;
@@ -515,9 +516,9 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
   }
   mi_assert_internal(heap_main!=NULL);
 
-  #if MI_DEBUG || defined(MI_TLS_RECURSE_GUARD)
+  #if MI_DEBUG || MI_TLS_RECURSE_GUARD
   theap = mi_heap_check_for_existing_theap(heap_main);  // recursion check
-  #if !defined(MI_TLS_RECURSE_GUARD)
+  #if !MI_TLS_RECURSE_GUARD
   mi_assert_internal(theap==NULL);
   #endif
   #else
@@ -611,7 +612,9 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
       theap->tld = NULL;
       theap->tnext = NULL;
       theap->tprev = NULL;
-      mi_assert_internal(mi_atomic_load_relaxed(&theap->refcount) == 1); // as the cached entry is set to empty
+      // the cached entry is set to empty, but the platform may have reset its TLS slot before us (macOS dyld, issue #1518)
+      if (mi_atomic_load_relaxed(&theap->refcount) > 1) { _mi_theap_decref(theap); }  // safe as it is detached and there are no concurrent references anymore
+      mi_assert_internal(mi_atomic_load_relaxed(&theap->refcount) == 1);
       _mi_theap_decref(theap);
       theap = next;
     }
@@ -774,7 +777,7 @@ static void mi_process_init_once(void) {
   mi_process_setup_auto_thread_done();  // after the above mi_thread_init so it can add the current theap
   _mi_fork_init();                      // register fork handlers (can allocate)
 
-  #if defined(_WIN32) && defined(MI_WIN_INIT_USE_FLS)
+  #if defined(_WIN32) && MI_WIN_INIT_USE_FLS
   // On windows, when building as a static lib the FLS cleanup happens to early for the main thread.
   // To avoid this, set the FLS value for the main thread to NULL so the fls cleanup
   // will not call _mi_thread_done on the (still executing) main thread. See issue #508.
@@ -820,7 +823,7 @@ static void mi_process_unwind_once(void)
   _mi_prim_thread_done_auto_done();
 
 #ifndef MI_SKIP_COLLECT_ON_EXIT
-#if (MI_DEBUG || !defined(MI_SHARED_LIB))
+#if (MI_DEBUG || !MI_SHARED_LIB)
   // free all memory if possible on process exit. This is not needed for a stand-alone process
   // but should be done if mimalloc is statically linked into another shared library which
   // is repeatedly loaded/unloaded, see issue #281.

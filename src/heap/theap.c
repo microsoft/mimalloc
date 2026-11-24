@@ -8,6 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc/prim/prim.h"           // _mi_prim_thread_yield
 #include "mimalloc/prim/prim-tls.h"  // _mi_theap_default
+#include "mimalloc/prim/prim-mte.h"  // mi_memtag_load
 #include "mimalloc/util/random.h"
 #include "mimalloc/util/stats.h"
 #include "mimalloc/util/memid.h"
@@ -191,7 +192,14 @@ void mi_theap_collect(mi_theap_t* theap, bool force) mi_attr_noexcept {
 
 void mi_collect(bool force) mi_attr_noexcept {
   // cannot really collect process wide, just a theap..
-  mi_theap_collect(_mi_theap_default(), force);
+  mi_theap_t* const theap = _mi_theap_default();
+  if (mi_theap_is_initialized(theap)) {
+    mi_theap_collect(theap, force);
+  }
+  else {
+    // ..but a thread without a theap can still purge the arenas (for example a thread that only calls `mi_collect` periodically)
+    _mi_arenas_collect(force /* force purge? */, force /* visit all? */, NULL /* tld */);
+  }
 }
 
 void mi_heap_collect(mi_heap_t* heap, bool force) {
@@ -304,7 +312,7 @@ bool _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   if (head==NULL) {  // first theap of the first thread?
     // will be initialized on the first random_next/split call. (see #1377, W20)
 
-    // #if defined(_WIN32) && !defined(MI_SHARED_LIB)
+    // #if defined(_WIN32) && !MI_SHARED_LIB
     // if (tld->thread_seq==0) {
     //   _mi_random_init_weak(&theap->random);    // prevent allocation failure during bcrypt dll initialization with static linking (issue #1185)
     // }
@@ -661,7 +669,7 @@ void _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page) {
   const size_t bsize = mi_page_block_size(page);
   const size_t ubsize = mi_page_usable_block_size(page);
   area->reserved = page->reserved * bsize;
-  area->committed = page->capacity * bsize;
+  area->committed = mi_page_capacity_size(page);
   area->blocks = mi_ptr_bounded_data(mi_page_start(page), area->reserved);
   area->used = mi_page_used(page);   // number of blocks in use (#553)
   area->block_size = ubsize;

@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.6/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.7/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -122,14 +122,44 @@ Functions</h2></td></tr>
 <tr class="memdesc:ga94c3afcc086e85d75a57e9f76b9b71dd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolve a file path name.  <br /></td></tr>
 <tr class="memitem:ga089c859d9eddc5f9b4bd946cd53cebee" id="r_ga089c859d9eddc5f9b4bd946cd53cebee"><td class="memItemLeft">size_t&#160;</td><td class="memItemRight"><a class="el" href="#ga089c859d9eddc5f9b4bd946cd53cebee">mi_usable_size</a> (void *p)</td></tr>
 <tr class="memdesc:ga089c859d9eddc5f9b4bd946cd53cebee"><td class="mdescLeft">&#160;</td><td class="mdescRight">Return the available bytes in a memory block.  <br /></td></tr>
+<tr class="memitem:ga877ee9c313d73ec0fb8c433707440b2c" id="r_ga877ee9c313d73ec0fb8c433707440b2c"><td class="memItemLeft">size_t&#160;</td><td class="memItemRight"><a class="el" href="#ga877ee9c313d73ec0fb8c433707440b2c">mi_allocated_size</a> (const void *p)</td></tr>
+<tr class="memdesc:ga877ee9c313d73ec0fb8c433707440b2c"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>v3</b>: Return the full size of the memory block containing <em class="arg">p</em>.  <br /></td></tr>
 <tr class="memitem:ga22252f0d9e380047d3684a6c99d330ae" id="r_ga22252f0d9e380047d3684a6c99d330ae"><td class="memItemLeft">size_t&#160;</td><td class="memItemRight"><a class="el" href="#ga22252f0d9e380047d3684a6c99d330ae">mi_thread_id_of</a> (const void *p)</td></tr>
 <tr class="memdesc:ga22252f0d9e380047d3684a6c99d330ae"><td class="mdescLeft">&#160;</td><td class="mdescRight"><b>experimental</b>: Return the current owner thread-id of the page containing a live allocation.  <br /></td></tr>
 <tr class="memitem:gac057927cd06c854b45fe7847e921bd47" id="r_gac057927cd06c854b45fe7847e921bd47"><td class="memItemLeft">size_t&#160;</td><td class="memItemRight"><a class="el" href="#gac057927cd06c854b45fe7847e921bd47">mi_good_size</a> (size_t size)</td></tr>
-<tr class="memdesc:gac057927cd06c854b45fe7847e921bd47"><td class="mdescLeft">&#160;</td><td class="mdescRight">Return the probable allocation block size for a given required size.  <br /></td></tr>
+<tr class="memdesc:gac057927cd06c854b45fe7847e921bd47"><td class="mdescLeft">&#160;</td><td class="mdescRight">Return the full usable size of the block that an allocation of a given size would use.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>The basic allocation interface. </p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
+<a id="ga877ee9c313d73ec0fb8c433707440b2c" name="ga877ee9c313d73ec0fb8c433707440b2c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ga877ee9c313d73ec0fb8c433707440b2c">&#9670;&#160;</a></span>mi_allocated_size()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t mi_allocated_size </td>
+          <td>(</td>
+          <td class="paramtype">const void *</td>          <td class="paramname"><span class="paramname"><em>p</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><b>v3</b>: Return the full size of the memory block containing <em class="arg">p</em>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">p</td><td>Pointer to previously allocated memory (or <em class="arg">NULL</em>) </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Returns the size in bytes of the block that holds <em class="arg">p</em>, or 0 if <em class="arg">p</em> was <em class="arg">NULL</em>.</dd></dl>
+<p>This is the size the allocator reserved for <em class="arg">p</em>, which can be larger than <a class="el" href="#ga089c859d9eddc5f9b4bd946cd53cebee" title="Return the available bytes in a memory block.">mi_usable_size()</a> (for example due to padding, alignment, or guard pages). Only use <a class="el" href="#ga089c859d9eddc5f9b4bd946cd53cebee" title="Return the available bytes in a memory block.">mi_usable_size()</a> to determine how many bytes can be written.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga089c859d9eddc5f9b4bd946cd53cebee" title="Return the available bytes in a memory block.">mi_usable_size()</a> </dd></dl>
+
+</div>
+</div>
 <a id="ga6686568014b54d1e6c7ac64a076e4f56" name="ga6686568014b54d1e6c7ac64a076e4f56"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ga6686568014b54d1e6c7ac64a076e4f56">&#9670;&#160;</a></span>mi_calloc()</h2>
 
@@ -259,16 +289,19 @@ Functions</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Return the probable allocation block size for a given required size. </p>
+<p>Return the full usable size of the block that an allocation of a given size would use. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">size</td><td>The minimal required size in bytes. </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>the size <span class="tt">n</span> that will be allocated, where <span class="tt">n &gt;= size</span>.</dd></dl>
-<p>Generally, <span class="tt">mi_usable_size(mi_malloc(size)) == mi_good_size(size)</span>. This function can be used to reduce internal wasted space when allocating buffers for example.</p>
-<dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga089c859d9eddc5f9b4bd946cd53cebee" title="Return the available bytes in a memory block.">mi_usable_size()</a> </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>The size <span class="tt">n &gt;= size</span> that fits in the same block as an allocation of <em class="arg">size</em> bytes.</dd></dl>
+<p>Allocating <span class="tt">n = mi_good_size(size)</span> bytes instead of <em class="arg">size</em> uses no more memory, and then <span class="tt">mi_usable_size(mi_malloc(n)) == n</span>. This can be used to avoid wasted space, for example by growing a buffer to the good size of its new capacity.</p>
+<p>The result is exact for regular allocations, but aligned allocations and guarded allocations can use a larger block.</p>
+<dl class="section see"><dt>See also</dt><dd><a class="el" href="#ga089c859d9eddc5f9b4bd946cd53cebee" title="Return the available bytes in a memory block.">mi_usable_size()</a> </dd>
+<dd>
+<a class="el" href="group__sized.html#gaaaa4a450db4e35cc9cd07767aea2f3ac" title="Allocate size bytes and report the usable size through pusable_size.">mi_umalloc()</a> </dd></dl>
 
 </div>
 </div>
@@ -582,7 +615,9 @@ mi_zallocn() </dd></dl>
 <dd>
 <a href="http://man7.org/linux/man-pages/man3/malloc_usable_size.3.html">malloc_usable_size</a> (Linux) </dd>
 <dd>
-<a class="el" href="#gac057927cd06c854b45fe7847e921bd47" title="Return the probable allocation block size for a given required size.">mi_good_size()</a> </dd></dl>
+<a class="el" href="#gac057927cd06c854b45fe7847e921bd47" title="Return the full usable size of the block that an allocation of a given size would use.">mi_good_size()</a> </dd>
+<dd>
+<a class="el" href="#ga877ee9c313d73ec0fb8c433707440b2c" title="v3: Return the full size of the memory block containing p.">mi_allocated_size()</a> </dd></dl>
 
 </div>
 </div>

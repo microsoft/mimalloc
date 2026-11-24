@@ -7,6 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/prim/os.h"
+#include "mimalloc/prim/prim-mte.h"  // mi_memtag_is_enabled
 #include "mimalloc/heap/subproc.h"
 #include "mimalloc/alloc/free.h"
 #if defined(MI_MALLOC_OVERRIDE)
@@ -297,7 +298,7 @@ static bool is_mimalloc_zone( malloc_zone_t* zone ) {
   return (zone==NULL || zone==&mi_malloc_zone);
 }
 
-#if defined(MI_OSX_INTERPOSE) && defined(MI_SHARED_LIB_EXPORT)
+#if defined(MI_OSX_INTERPOSE) && MI_SHARED_LIB_EXPORT
 
 // ------------------------------------------------------
 // Override malloc_xxx and malloc_zone_xxx api's to use only

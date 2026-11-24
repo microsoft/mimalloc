@@ -1,6 +1,7 @@
 #![cfg(any(feature = "nightly", allocator_api_stable))]
 #![cfg_attr(feature = "nightly", feature(allocator_api), allow(stable_features))]
 
+use core::alloc::{Allocator, Layout};
 use mimalloc::{Heap, MiMalloc};
 
 #[repr(align(64))]
@@ -38,7 +39,6 @@ fn heap_allocator_api() {
 
 #[test]
 fn grow_zeroed() {
-    use core::alloc::{Allocator, Layout};
     let heap = Heap::new();
     for (old, new, align) in [
         (8, 1000, 8),
@@ -65,4 +65,50 @@ fn grow_zeroed() {
             }
         }
     }
+}
+
+#[test]
+fn excess_allocator_api() {
+    use mimalloc::{usable_size, MiMallocExcess};
+    // returns exactly the usable size
+    let a = MiMallocExcess;
+    for (size, align) in [
+        (0, 1),
+        (1, 16),
+        (8, 16),
+        (100, 8),
+        (1000, 8),
+        (5000, 16),
+        (100, 64),
+        (300_000, 4096),
+    ] {
+        let p = a
+            .allocate_zeroed(Layout::from_size_align(size, align).unwrap())
+            .unwrap();
+        let q = p.cast::<u8>().as_ptr();
+        assert!(p.len() >= size && p.len() == unsafe { usable_size(q) });
+        assert!((0..p.len()).all(|i| unsafe { q.add(i).read() } == 0));
+        assert_eq!(q as usize % align, 0);
+        let (old, new) = (
+            Layout::from_size_align(p.len(), align).unwrap(),
+            Layout::from_size_align(p.len() + 1, align).unwrap(),
+        );
+        let r = unsafe { a.grow_zeroed(p.cast(), old, new) }.unwrap();
+        let q = r.cast::<u8>().as_ptr();
+        assert!(r.len() >= new.size() && r.len() == unsafe { usable_size(q) });
+        assert!((old.size()..r.len()).all(|i| unsafe { q.add(i).read() } == 0));
+        unsafe { a.deallocate(r.cast(), Layout::from_size_align(r.len(), align).unwrap()) };
+    }
+    for size in 0..=mimalloc::sys::MI_SMALL_SIZE_MAX {
+        let layout = Layout::from_size_align(size, 1).unwrap();
+        let p = a.allocate(layout).unwrap();
+        assert!(p.len() >= size && p.len() == unsafe { usable_size(p.cast::<u8>().as_ptr()) });
+        unsafe { a.deallocate(p.cast(), Layout::from_size_align(p.len(), 1).unwrap()) };
+    }
+    // `Vec` ignores the excess for now
+    let mut v = Vec::with_capacity_in(100, a);
+    v.extend(0..10_000u32);
+    v.truncate(10);
+    v.shrink_to_fit();
+    assert_eq!(v[9], 9);
 }

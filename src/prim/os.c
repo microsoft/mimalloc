@@ -6,6 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
 #include "mimalloc/prim/prim.h"
+#include "mimalloc/prim/prim-mte.h"  // mi_memtag_cpu_line_size, _mi_os_has_memtag, _mi_os_memtag_line_size
 #include "mimalloc/track.h"
 #include "mimalloc/prim/prim-tls.h"  // _mi_theap_default for random
 #include "mimalloc/util/libc.h"
@@ -19,6 +20,14 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if !defined(_WIN32) && MI_HAS_UNISTDH
 #include <unistd.h>   // issetugid, getuid, geteuid, getgid, getegid
+#endif
+#if defined(__linux__) && defined(__has_include) && (!defined(__ANDROID__) || __ANDROID_API__ >= 18)
+#if __has_include(<sys/auxv.h>)
+#include <sys/auxv.h> // getauxval, AT_SECURE
+#if defined(AT_SECURE)
+#define MI_HAS_AT_SECURE  1
+#endif
+#endif
 #endif
 
 /* -----------------------------------------------------------
@@ -104,9 +113,15 @@ size_t _mi_os_memtag_line_size(void) {
 static bool mi_os_detect_elevated(void) {
   #if defined(_WIN32)
   return false;  // no direct setuid/setgid equivalent; a UAC elevation does not inherit the parent's environment
+  #elif defined(__wasi__)
+  return false;  // no users or setuid/setgid in WASI
   #elif MI_HAS_UNISTDH && (defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__))
   return (issetugid() != 0);
   #elif MI_HAS_UNISTDH
+  #if MI_HAS_AT_SECURE
+  // also covers file capabilities and LSM transitions where the uid/gid do not change
+  if (getauxval(AT_SECURE) != 0) return true;
+  #endif
   return (getuid() != geteuid() || getgid() != getegid());
   #else
   return false;  // no portable way to check without `unistd.h`; assume not elevated
@@ -146,10 +161,7 @@ size_t _mi_os_minimal_purge_size(void) {
     return mi_align_up(minsize, _mi_os_page_size());
   }
   else if (mi_os_mem_config()->has_transparent_huge_pages && mi_option_get(mi_option_allow_thp) == 2) {
-    // don't break up THP pages;
-    // we don't do this by default as that can lead to increased memory usage (see issue #1282).
-    // on the other hand, breaking up THP pages can lead to performance degradation and perhaps
-    // allow_thp should be 2 by default (and the user can set the OS THP setting to [never]).
+    // avoid splitting THP pages during purging; this can improve performance but increase memory usage.
     return _mi_os_large_page_size();
   }
   else {
@@ -175,6 +187,14 @@ bool _mi_os_canuse_large_page(size_t size, size_t alignment) {
   const size_t lpsize = mi_os_mem_config()->large_page_size;
   if (lpsize == 0) return false;
   return ((size % lpsize) == 0 && (alignment % lpsize) == 0);
+}
+
+// Does the mapping contain at least one complete, aligned large page?
+bool _mi_os_canuse_thp(const void* p, size_t size) {
+  const size_t lpsize = mi_os_mem_config()->large_page_size;
+  if (lpsize == 0 || size < lpsize) return false;
+  const size_t offset = mi_addr(p) % lpsize;
+  return (offset == 0 || lpsize - offset <= size - lpsize);
 }
 
 // round to a good OS allocation size (bounded by max 12.5% waste)
@@ -476,7 +496,7 @@ static void* mi_os_prim_alloc_at(mi_subproc_t* subproc, void* hint_addr, size_t 
     if (commit) {
       mi_os_stat_increase(subproc, committed, size);
       // seems needed for asan (or `mimalloc-test-api` fails)
-      #ifdef MI_TRACK_ASAN
+      #if MI_TRACK_ASAN
       if (*is_zero) { mi_track_mem_defined(p,size); }
                else { mi_track_mem_undefined(p,size); }
       #endif
@@ -755,7 +775,7 @@ bool _mi_os_commit_ex(mi_subproc_t* subproc, void* addr, size_t size, bool* is_z
     mi_assert_expensive(mi_mem_is_zero(start, csize));
   }
   // note: the following seems required for asan (otherwise `mimalloc-test-stress` fails)
-  #ifdef MI_TRACK_ASAN
+  #if MI_TRACK_ASAN
   if (os_is_zero) { mi_track_mem_defined(start,csize); }
              else { mi_track_mem_undefined(start,csize); }
   #endif
@@ -798,7 +818,8 @@ bool _mi_os_decommit(mi_subproc_t* subproc, void* addr, size_t size) {
 // but may be used later again. This will release physical memory
 // pages and reduce swapping while keeping the memory committed.
 // We page align to a conservative area inside the range to reset.
-bool _mi_os_reset(mi_subproc_t* subproc, void* addr, size_t size) {
+// If `eager`, the memory is released immediately (e.g. `MADV_DONTNEED` instead of `MADV_FREE`).
+bool _mi_os_reset(mi_subproc_t* subproc, void* addr, size_t size, bool eager) {
   // page align conservatively within the range
   size_t csize;
   void* start = mi_os_page_align_area_conservative(addr, size, &csize);
@@ -810,7 +831,7 @@ bool _mi_os_reset(mi_subproc_t* subproc, void* addr, size_t size) {
   memset(start, 0, csize); // pretend it is eagerly reset
   #endif
 
-  int err = _mi_prim_reset(start, csize);
+  int err = _mi_prim_reset(start, csize, eager);
   if (err != 0) {
     _mi_warning_message("cannot reset OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
   }
@@ -851,7 +872,7 @@ bool _mi_os_purge_ex(mi_subproc_t* subproc, void* p, size_t size, bool allow_res
   }
   else {
     if (allow_reset) {  // this can sometimes be not allowed if the range is not fully committed (on Windows, we cannot reset uncommitted memory)
-      _mi_os_reset(subproc, p, size);
+      _mi_os_reset(subproc, p, size, false);
     }
     return false;  // needs no recommit
   }
@@ -1009,7 +1030,7 @@ void* _mi_os_alloc_huge_os_pages(mi_subproc_t* subproc, size_t pages, int numa_n
     *memid = _mi_memid_create_os(start, allocated, allocated, all_zero, true /* is_large */);
     memid->memkind = MI_MEM_OS_HUGE;
     mi_assert(memid->is_pinned);
-    #ifdef MI_TRACK_ASAN
+    #if MI_TRACK_ASAN
     if (all_zero) { mi_track_mem_defined(start,allocated); }
     #endif
   }

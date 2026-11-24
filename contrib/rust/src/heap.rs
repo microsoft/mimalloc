@@ -4,7 +4,7 @@ This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
 -----------------------------------------------------------------------------*/
-use crate::{free_sized, is_malloc_aligned, sys, Arena, MiString};
+use crate::{free_sized, malloc_aligned_size, sys, Arena, MiString};
 use core::alloc::Layout;
 use core::ptr::{self, NonNull};
 
@@ -50,14 +50,14 @@ impl Heap {
     /// Allocate a block for `layout`; returns null when out of memory.
     #[inline]
     pub fn alloc(&self, layout: Layout) -> *mut u8 {
-        let (heap, size) = (self.as_ptr(), layout.size());
+        let heap = self.as_ptr();
         unsafe {
-            if !is_malloc_aligned(size, layout.align()) {
-                sys::mi_heap_malloc_aligned(heap, size, layout.align())
-            } else if size <= sys::MI_SMALL_SIZE_MAX {
-                sys::mi_heap_malloc_small(heap, size)
-            } else {
-                sys::mi_heap_malloc(heap, size)
+            match malloc_aligned_size(layout.size(), layout.align()) {
+                Some(size) if size <= sys::MI_SMALL_SIZE_MAX => {
+                    sys::mi_heap_malloc_small(heap, size)
+                }
+                Some(size) => sys::mi_heap_malloc(heap, size),
+                None => sys::mi_heap_malloc_aligned(heap, layout.size(), layout.align()),
             }
         }
         .cast()
@@ -66,14 +66,14 @@ impl Heap {
     /// Allocate a zero-initialized block for `layout`; returns null when out of memory.
     #[inline]
     pub fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        let (heap, size) = (self.as_ptr(), layout.size());
+        let heap = self.as_ptr();
         unsafe {
-            if !is_malloc_aligned(size, layout.align()) {
-                sys::mi_heap_zalloc_aligned(heap, size, layout.align())
-            } else if size <= sys::MI_SMALL_SIZE_MAX {
-                sys::mi_heap_zalloc_small(heap, size)
-            } else {
-                sys::mi_heap_zalloc(heap, size)
+            match malloc_aligned_size(layout.size(), layout.align()) {
+                Some(size) if size <= sys::MI_SMALL_SIZE_MAX => {
+                    sys::mi_heap_zalloc_small(heap, size)
+                }
+                Some(size) => sys::mi_heap_zalloc(heap, size),
+                None => sys::mi_heap_zalloc_aligned(heap, layout.size(), layout.align()),
             }
         }
         .cast()
@@ -137,10 +137,9 @@ pub(crate) unsafe fn realloc_in(
     new_size: usize,
 ) -> *mut u8 {
     unsafe {
-        if is_malloc_aligned(new_size, align) {
-            sys::mi_heap_realloc(heap, ptr.cast(), new_size)
-        } else {
-            sys::mi_heap_realloc_aligned(heap, ptr.cast(), new_size, align)
+        match malloc_aligned_size(new_size, align) {
+            Some(size) => sys::mi_heap_realloc(heap, ptr.cast(), size),
+            None => sys::mi_heap_realloc_aligned(heap, ptr.cast(), new_size, align),
         }
     }
     .cast()

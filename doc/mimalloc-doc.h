@@ -291,7 +291,20 @@ char* mi_realpath(const char* fname, char* resolved_name);
 /// @see [_msize](https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/msize?view=vs-2017) (Windows)
 /// @see [malloc_usable_size](http://man7.org/linux/man-pages/man3/malloc_usable_size.3.html) (Linux)
 /// @see mi_good_size()
+/// @see mi_allocated_size()
 size_t mi_usable_size(void* p);
+
+/// __v3__: Return the full size of the memory block containing \a p.
+/// @param p Pointer to previously allocated memory (or \a NULL)
+/// @returns Returns the size in bytes of the block that holds \a p, or
+/// 0 if \a p was \a NULL.
+///
+/// This is the size the allocator reserved for \a p, which can be larger
+/// than mi_usable_size() (for example due to padding, alignment, or guard pages).
+/// Only use mi_usable_size() to determine how many bytes can be written.
+///
+/// @see mi_usable_size()
+size_t mi_allocated_size(const void* p);
 
 /// **experimental**: Return the current owner thread-id of the page containing a live allocation.
 /// @param p A mimalloc allocation, or \a NULL.
@@ -305,64 +318,76 @@ size_t mi_usable_size(void* p);
 /// thread. This is mimalloc's internal thread identity scheme, not necessarily the native OS thread-id.
 size_t mi_thread_id_of(const void* p);
 
-/// Return the probable allocation block size for a given required size.
+/// Return the full usable size of the block that an allocation of a given size would use.
 /// @param size The minimal required size in bytes.
-/// @returns the size `n` that will be allocated, where `n >= size`.
+/// @returns The size `n >= size` that fits in the same block as an allocation of \a size bytes.
 ///
-/// Generally, `mi_usable_size(mi_malloc(size)) == mi_good_size(size)`.
-/// This function can be used to reduce internal wasted space when
-/// allocating buffers for example.
+/// Allocating `n = mi_good_size(size)` bytes instead of \a size uses no more memory,
+/// and then `mi_usable_size(mi_malloc(n)) == n`. This can be used to avoid wasted space,
+/// for example by growing a buffer to the good size of its new capacity.
+///
+/// The result is exact for regular allocations, but aligned allocations and guarded
+/// allocations can use a larger block.
 ///
 /// @see mi_usable_size()
+/// @see mi_umalloc()
 size_t mi_good_size(size_t size);
 
 /// \}
 
 
 // ------------------------------------------------------
-// Allocation with block sizes
+// Allocation with usable sizes
 // ------------------------------------------------------
 
-/// \defgroup sized Allocation with Block Sizes
-/// __v3__: Allocate or free memory while reporting the allocator's block size in bytes.
-/// Reported sizes may include padding or alignment overhead and are not a guarantee
-/// of writable capacity. Size output pointers may be \a NULL.
+/// \defgroup sized Allocation with Usable Sizes
+/// __v3__: Allocate or free memory while reporting the usable size in bytes.
+/// The reported size always equals mi_usable_size() of the returned (or freed) pointer,
+/// and can be used as the writable capacity. Size output pointers may be \a NULL.
 /// Allocation size outputs are only valid on success; they need not be cleared on failure.
 /// \{
 
-/// Allocate \a size bytes and report the block size through \a block_size.
+/// Allocate \a size bytes and report the usable size through \a pusable_size.
 /// @return The allocation, or \a NULL on failure.
 /// @see mi_malloc()
-void* mi_umalloc(size_t size, size_t* block_size);
+void* mi_umalloc(size_t size, size_t* pusable_size);
 
-/// Allocate \a count zero-initialized elements of \a size bytes and report the block size.
+/// Allocate \a size zero-initialized bytes and report the usable size through \a pusable_size.
+/// @return The allocation, or \a NULL on failure.
+/// @see mi_zalloc()
+void* mi_uzalloc(size_t size, size_t* pusable_size);
+
+/// Allocate \a count zero-initialized elements of \a size bytes and report the usable size.
 /// @return The allocation, or \a NULL on failure or multiplication overflow.
 /// @see mi_calloc()
-void* mi_ucalloc(size_t count, size_t size, size_t* block_size);
+void* mi_ucalloc(size_t count, size_t size, size_t* pusable_size);
 
-/// Reallocate \a p to \a newsize bytes and report the old and new block sizes.
-/// \a block_size_pre is 0 for \a NULL input; \a block_size_post is valid on success.
+/// Reallocate \a p to \a newsize bytes and report the old and new usable sizes.
+/// \a pusable_size_pre is 0 for \a NULL input; \a pusable_size_post is valid on success.
 /// @return The reallocated block, or \a NULL on failure without freeing \a p.
 /// @see mi_realloc()
-void* mi_urealloc(void* p, size_t newsize, size_t* block_size_pre, size_t* block_size_post);
+void* mi_urealloc(void* p, size_t newsize, size_t* pusable_size_pre, size_t* pusable_size_post);
 
-/// Free \a p and report its block size, or 0 if \a p is \a NULL.
+/// Free \a p and report its usable size, or 0 if \a p is \a NULL.
 /// @see mi_free()
-void mi_ufree(void* p, size_t* block_size);
+void mi_ufree(void* p, size_t* pusable_size);
 
-/// As mi_malloc_aligned(), additionally reporting the block size on success.
-void* mi_umalloc_aligned(size_t size, size_t alignment, size_t* block_size);
+/// As mi_malloc_aligned(), additionally reporting the usable size on success.
+void* mi_umalloc_aligned(size_t size, size_t alignment, size_t* pusable_size);
 
-/// As mi_zalloc_aligned(), additionally reporting the block size on success.
-void* mi_uzalloc_aligned(size_t size, size_t alignment, size_t* block_size);
+/// As mi_zalloc_aligned(), additionally reporting the usable size on success.
+void* mi_uzalloc_aligned(size_t size, size_t alignment, size_t* pusable_size);
 
-/// As mi_malloc_small(), additionally reporting the block size on success.
+/// As mi_realloc_aligned(), additionally reporting the old and new usable sizes (as mi_urealloc()).
+void* mi_urealloc_aligned(void* p, size_t newsize, size_t alignment, size_t* pusable_size_pre, size_t* pusable_size_post);
+
+/// As mi_malloc_small(), additionally reporting the usable size on success.
 /// \a size must not exceed #MI_SMALL_SIZE_MAX.
-void* mi_umalloc_small(size_t size, size_t* block_size);
+void* mi_umalloc_small(size_t size, size_t* pusable_size);
 
-/// As mi_zalloc_small(), additionally reporting the block size on success.
+/// As mi_zalloc_small(), additionally reporting the usable size on success.
 /// \a size must not exceed #MI_SMALL_SIZE_MAX.
-void* mi_uzalloc_small(size_t size, size_t* block_size);
+void* mi_uzalloc_small(size_t size, size_t* pusable_size);
 
 /// \}
 
@@ -1701,7 +1726,7 @@ typedef enum mi_option_e {
   mi_option_os_tag,                   ///< tag used for OS logging (macOS only for now) (=100)
   mi_option_retry_on_oom,             ///< retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries. (only on windows)
   mi_option_generic_collect,          ///< collect heaps every N (=10000) generic allocation calls
-  mi_option_allow_thp,                ///< allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
+  mi_option_allow_thp,                ///< Transparent huge pages: 0 disable for the process, 1 allow, 2 allow and avoid splitting on purge. Default: 2 on Linux, 0 on Android; an explicit mi_option_minimal_purge_size overrides the purge behavior.
 
   // guard pages
   mi_option_guarded_min,              ///< only used when building with MI_GUARDED: minimal rounded object size for guarded objects (=0)
@@ -2499,8 +2524,8 @@ There are various build options to make mimalloc more secure.
 
 ## Environment Options
 
-With `-DMI_SECURE_ENV=ON`, only `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, and
-`MIMALLOC_ALLOW_THP` are accepted from the environment -- all other options are ignored.
+With `-DMI_SECURE_ENV=ON`, only `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, `MIMALLOC_SHOW_ERRORS`,
+and `MIMALLOC_ALLOW_THP` are accepted from the environment -- all other options are ignored.
 
 This is by default enabled for \ref secure_mode "secure mode", \ref memory_tagging "MTE", and \ref pointer_authentication "PAC".
 This can be overridden by explicitly building
@@ -2514,31 +2539,36 @@ You can still set options programmatically for trusted programs.
 
 ## Secure Mode
 
-_mimalloc_ can be built in secure mode using `-DMI_SECURE=OFF|MINIMAL|CHECKED|ON|FULL`
+_mimalloc_ can be built in secure mode using `-DMI_SECURE=OFF|BASIC|CHECKED|ON|FULL`
 with CMake. These modes enable software mitigations to make mimalloc more robust
 against exploits.
 
-With `MINIMAL`, only mitigations with a small performance impact are added
-(usually 1-3%):
+With `BASIC`, only mitigations with a small performance impact are added
+(usually less than 5%):
 
 - Internal metadata, including the page map and static data, is surrounded by guard
   pages so that a buffer overflow or underflow cannot reach allocator metadata.
   Static pointers into metadata are kept in a sealed read-only area.
-  Free list entries are not encoded at this level and can still be corrupted through
-  a heap block buffer overflow.
+- Free list pointers are encoded with per-page keys so that free list corruption,
+  through a heap block overflow or a use-after-free write, is detected with high probability.
+- Double frees are detected: immediately when a block is freed twice in a row, and
+  otherwise (with high probability) when the block would be allocated a second time,
+  or when its page is freed. Heap block overflows into a free block are detected the same way.
 - OS allocation addresses are randomized where possible, and detected metadata
   corruption aborts the process.
 - Large blocks (over 512 KiB) are followed by a guard page.
 - Pinned memory, including large and huge OS pages, is neither allocated nor accepted
   as arena memory on platforms with guard pages.
 - `MI_SECURE_ENV` is enabled by default.
+- Addresses in error and warning messages are redacted to their low 16 bits
+  (for example `0x...13c0`) so the output does not reveal the address space layout.
+  Elevated processes always redact addresses.
 
 With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance and
 memory impact is still relatively small (usually less than 10%, but can be 2x slower):
 
-- Free list pointers are encoded with per-page keys to prevent overwrites with a
-  known pointer and detect corruption. With \ref pointer_authentication "PAC",
-  hardware keys can be used.
+- Free list pointers use a slightly stronger encoding. With
+  \ref pointer_authentication "PAC", the encoding uses hardware keys.
 - Pointers passed to mi_free() and related functions are validated. Pointers that do
   not originate from mimalloc are ignored, and interior pointers are adjusted to
   the start of their block.

@@ -12,6 +12,7 @@ and meta data of a fresh arena or OS page and initialize it. Also frees pages ag
 
 #include "mimalloc.h"
 #include "mimalloc/prim/prim-tls.h"
+#include "mimalloc/prim/prim-mte.h"
 #include "mimalloc/util/stats.h"
 #include "mimalloc/util/memid.h"
 #include "mimalloc/alloc/page.h"
@@ -767,7 +768,7 @@ void _mi_arenas_page_free_prim(mi_page_t* page) {
       size_t bin = _mi_bin(mi_page_block_size(page));
       mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));
       mi_assert_internal(mi_page_slice_committed(page) > 0 || mi_bitmap_is_setN(arena->slices_committed, slice_index, slice_count));
-      mi_assert_internal(bin >= MI_ARENA_BIN_COUNT || mi_bitmap_is_clearN(arena_pages->pages_abandoned[bin], slice_index, 1));
+      mi_assert_internal(bin >= MI_ARENA_BIN_COUNT || mi_bitmap_chunk_count(arena_pages->pages_abandoned[bin]) == 0 || mi_bitmap_is_clearN(arena_pages->pages_abandoned[bin], slice_index, 1));
       // note: we cannot check for `!mi_page_is_abandoned_and_mapped` since that may
       // be (temporarily) not true if the free happens while trying to reclaim
       // see `mi_arena_try_claim_abandoned`
@@ -783,7 +784,7 @@ void _mi_arenas_page_free_prim(mi_page_t* page) {
 
   // reset the memory tags of the blocks so free memory is untagged again
   if (mi_page_is_memtag(page)) {
-    mi_memtag_clear(mi_page_start(page), page->capacity * mi_page_block_size(page));
+    mi_memtag_clear(mi_page_start(page), mi_page_capacity_size(page));
   }
 
   // reset the guard pages
@@ -854,6 +855,7 @@ bool _mi_arenas_page_free(mi_page_t* page, mi_theap_t* current_theapx) {
   mi_assert_internal(mi_page_is_owned(page) && mi_page_all_free(page));
   mi_assert_internal(mi_page_is_abandoned(page) && !mi_page_is_abandoned_mapped(page));
   mi_assert_internal(page->next == NULL && page->prev == NULL);
+  _mi_page_check_free_lists(page);
   if (_mi_page_qsbr_should_delay(page)) {
     #if MI_QSBR
     if (mi_page_is_singleton(page)) {

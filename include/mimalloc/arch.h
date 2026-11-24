@@ -18,6 +18,18 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stdbool.h>  // bool
 #include <limits.h>   // LONG_MAX
 
+// Header availability for builds that do not use CMake.
+#if !defined(MI_HAS_UNISTDH) && !defined(_WIN32)
+#if defined(__has_include)
+#if __has_include(<unistd.h>)
+#define MI_HAS_UNISTDH  1
+#endif
+#elif defined(__unix__) || defined(__APPLE__) || defined(__HAIKU__)
+#define MI_HAS_UNISTDH  1
+#endif
+#endif
+
+// C++ versus C
 #if defined(__cplusplus)
 #define mi_decl_externc         extern "C"
 #define mi_init_struct_zero     { }
@@ -106,8 +118,7 @@ typedef uintptr_t             mi_addr_t;
 #define MI_ADDR(x)            ((mi_addr_t)(x))
 
 // With memory tagging (MTE), pointers carry a 4-bit tag starting at bit `MI_PTR_MEMTAG_SHIFT` (see `prim/prim-mte.h`).
-// The address mask removes all top bits ignored by the hardware, not just the logical memory tag:
-// on ARM it is the full top byte as this gives better codegen (e.g. `p & 0x00FFFFFFF0000000`).
+// The address mask removes all top bits ignored by the hardware, not just the logical memory tag (for ARM the full top byte).
 // (For a future x86 ChkTag the tag would use bits 57-60, with LAM ignoring bits 57-62, but bit 56 is part of the address.)
 #define MI_MEMTAG_UNIT_SIZE        (16)               // memory is tagged per unit
 #define mi_decl_memtag_unit_align  mi_decl_align(16)  // align to a memory tag unit
@@ -169,6 +180,139 @@ static inline void* mi_ptr_unpack(const void* auth, mi_addr_tagged_t addrt) {
   return (void*)(uintptr_t)addrt;
   #endif
 }
+
+
+/* --------------------------------------------------------------------------------
+  CPU Architecture
+-------------------------------------------------------------------------------- */
+
+#if defined(__aarch64__) || defined(_M_ARM64) || defined(_M_HYBRID_X86_ARM64) || defined(_M_ARM64EC)  // consider arm64ec as arm64
+#define MI_ARCH_ARM64     1
+#elif defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64) || defined(_M_X64) || defined(_M_AMD64)
+#define MI_ARCH_X64       1
+#elif defined(__i386__) || defined(__i386) || defined(_M_IX86) || defined(_X86_) || defined(__X86__)
+#define MI_ARCH_X86       1
+#elif defined(__arm__) || defined(_ARM) || defined(_M_ARM)  || defined(_M_ARMT) || defined(__arm)
+#define MI_ARCH_ARM32     1
+#elif defined(__riscv) || defined(_M_RISCV)
+#define MI_ARCH_RISCV     1
+#if (LONG_MAX == INT32_MAX)
+#define MI_ARCH_RISCV32   1
+#else
+#define MI_ARCH_RISCV64   1
+#endif
+#endif
+
+#if MI_MTE && !MI_ARCH_ARM64
+#error "memory tagging (MI_MTE) is only supported on arm64"
+#endif
+
+#if MI_ARCH_X64 && defined(__AVX2__)
+#include <immintrin.h>
+#elif MI_ARCH_ARM64 && MI_OPT_SIMD
+#include <arm_neon.h>
+#endif
+#if defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
+#include <intrin.h>
+#endif
+
+#if MI_ARCH_X64 && defined(__AVX2__) && !defined(__BMI2__) // avx2 implies bmi2
+#define __BMI2__  1
+#endif
+#if MI_ARCH_X64 && (defined(__AVX2__) || defined(__BMI2__) || defined(__BMI__)) && !defined(__BMI1__) // bmi2 implies bmi1
+#define __BMI1__  1
+#endif
+#if MI_ARCH_X64 && defined(__AVX2__) && !defined(__LZCNT__) // avx2 implies lzcnt
+#define __LZCNT__  1
+#endif
+
+// maximum virtual address bits in a user-space pointer
+#if MI_DEFAULT_VIRTUAL_ADDRESS_BITS > 0
+#define MI_MAX_VABITS     MI_DEFAULT_VIRTUAL_ADDRESS_BITS
+#elif MI_ARCH_X64 && (MI_INTPTR_SIZE > 4)   // not on x32
+#define MI_MAX_VABITS     (47)
+#elif MI_INTPTR_SIZE > 4
+#define MI_MAX_VABITS     (48)
+#else
+#define MI_MAX_VABITS     (32)
+#endif
+
+// the MI_MIN_VABITS determine how many bits of the address space are always committed in the page_map
+#if MI_MAX_VABITS <= 32
+#define MI_MIN_VABITS     (32)
+#elif MI_MAX_VABITS <= 42
+#define MI_MIN_VABITS     MI_MAX_VABITS
+#else
+#define MI_MIN_VABITS     (43)    /* 8 TiB */
+#endif
+
+// Always use the page map in `mi_free` on CHERI as we cannot derive the page meta-data from a (bounded) user pointer,
+// and on WebAssembly as it cannot do large aligned allocations well (needed for aligned page meta-data).
+#if (MI_CHERI || defined(__wasi__) || defined(__EMSCRIPTEN__)) && !defined(MI_FREE_USE_PAGEMAP)
+#define MI_FREE_USE_PAGEMAP  1
+#endif
+
+// Probable OS page size (as statically known; the actual page size is determined at runtime with `_mi_os_page_size()`).
+// Can be set explicitly, e.g. `-DMI_OS_PROBABLE_PAGE_SIZE=65536` for arm64 Linux kernels with 64 KiB pages.
+#if !defined(MI_OS_PROBABLE_PAGE_SIZE)
+#if defined(__APPLE__)                        // check first as `PAGE_SIZE` may be the runtime `vm_page_size` there
+#if MI_ARCH_ARM64
+#define MI_OS_PROBABLE_PAGE_SIZE  (16*MI_KiB) // macOS, iOS, etc. on Apple silicon
+#else
+#define MI_OS_PROBABLE_PAGE_SIZE  (4*MI_KiB)
+#endif
+#elif defined(__wasm__) || defined(__EMSCRIPTEN__) || defined(__wasi__)
+#define MI_OS_PROBABLE_PAGE_SIZE  (64*MI_KiB) // fixed WebAssembly page size
+#elif defined(PAGE_SIZE)                      // only defined if constant (FreeBSD, musl on x86, bionic without flexible page sizes, ...)
+#define MI_OS_PROBABLE_PAGE_SIZE  PAGE_SIZE
+#elif defined(__linux__) && (defined(__powerpc64__) || defined(__ppc64__) || defined(__PPC64__))
+#define MI_OS_PROBABLE_PAGE_SIZE  (64*MI_KiB) // default for ppc64(le) distributions
+#elif defined(__linux__) && defined(__loongarch__)
+#define MI_OS_PROBABLE_PAGE_SIZE  (16*MI_KiB) // default for LoongArch kernels
+#elif defined(__ANDROID__) && defined(__BIONIC_NO_PAGE_SIZE_MACRO)
+#define MI_OS_PROBABLE_PAGE_SIZE  (16*MI_KiB) // built with flexible page size support (NDK r27+), so it can run with 16 KiB pages
+#else
+#define MI_OS_PROBABLE_PAGE_SIZE  (4*MI_KiB)
+#endif
+#endif
+
+// Does the OS have guard pages?
+#if !defined(MI_OS_HAS_GUARD_PAGES)
+#if defined(__wasm__) || defined(__EMSCRIPTEN__) || defined(__wasi__)
+#define MI_OS_HAS_GUARD_PAGES  0
+#elif defined(__uClinux__)                 // no MMU
+#define MI_OS_HAS_GUARD_PAGES  0
+#else
+#define MI_OS_HAS_GUARD_PAGES  1
+#endif
+#endif
+
+
+// ------------------------------------------------------
+// Signed pointers (see `prim/prim-pac.h`): with `MI_PAC` some internal pointers are stored signed
+// (using ARM pointer authentication or a software keyed encoding); this is a `uintptr_t` so it can be atomic.
+// ------------------------------------------------------
+
+typedef uintptr_t           mi_ptr_signed_t;
+#define mi_ptr_signed(tp)   mi_ptr_signed_t     // a signed `tp*` (only documents the pointer type)
+
+// Pointer signing (see `prim/prim-pac.h`): 0=off, 1=weak (using a software process key), 2=required (using the
+// arm64 generic pointer authentication key (`pacga`), which must be supported at runtime).
+// Only on 64-bit systems (and not on CHERI); `required` only on arm64 with GCC or clang.
+// Defaults to `required` with `MI_MTE=2` as all MTE hardware supports PAC.
+#if (MI_MTE >= 2) && !defined(MI_PAC)
+#define MI_PAC  2
+#endif
+#if (MI_PAC >= 2) && !(MI_ARCH_ARM64 && defined(__GNUC__))
+#error "pointer authentication (MI_PAC=ON) is only supported on arm64 with GCC or clang"
+#elif (MI_PAC > 0) && (MI_CHERI || (MI_INTPTR_SIZE != 8))
+#warning "pointer authentication (MI_PAC=ON) is not supported on CHERI or non-64-bit systems"
+#undef MI_PAC
+#define MI_PAC  0
+#elif !defined(MI_PAC)
+#define MI_PAC  0
+#endif
+
 
 // ------------------------------------------------------
 // Capability bounds, permissions, and pointer provenance (only on CHERI at this point).
@@ -271,142 +415,6 @@ static inline size_t mi_ptr_bounds_limit(const void* p, size_t size) {
   return size;
   #endif
 }
-
-
-/* --------------------------------------------------------------------------------
-  CPU Architecture
--------------------------------------------------------------------------------- */
-
-#if defined(__aarch64__) || defined(_M_ARM64) || defined(_M_HYBRID_X86_ARM64) || defined(_M_ARM64EC)  // consider arm64ec as arm64
-#define MI_ARCH_ARM64     1
-#elif defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64) || defined(_M_X64) || defined(_M_AMD64)
-#define MI_ARCH_X64       1
-#elif defined(__i386__) || defined(__i386) || defined(_M_IX86) || defined(_X86_) || defined(__X86__)
-#define MI_ARCH_X86       1
-#elif defined(__arm__) || defined(_ARM) || defined(_M_ARM)  || defined(_M_ARMT) || defined(__arm)
-#define MI_ARCH_ARM32     1
-#elif defined(__riscv) || defined(_M_RISCV)
-#define MI_ARCH_RISCV     1
-#if (LONG_MAX == INT32_MAX)
-#define MI_ARCH_RISCV32   1
-#else
-#define MI_ARCH_RISCV64   1
-#endif
-#endif
-
-#if MI_MTE && !MI_ARCH_ARM64
-#error "memory tagging (MI_MTE) is only supported on arm64"
-#endif
-
-#if MI_ARCH_X64 && defined(__AVX2__)
-#include <immintrin.h>
-#elif MI_ARCH_ARM64 && MI_OPT_SIMD
-#include <arm_neon.h>
-#endif
-#if defined(_MSC_VER) && (MI_ARCH_X64 || MI_ARCH_X86 || MI_ARCH_ARM64 || MI_ARCH_ARM32)
-#include <intrin.h>
-#endif
-
-#if MI_ARCH_X64 && defined(__AVX2__) && !defined(__BMI2__) // avx2 implies bmi2
-#define __BMI2__  1
-#endif
-#if MI_ARCH_X64 && (defined(__AVX2__) || defined(__BMI2__) || defined(__BMI__)) && !defined(__BMI1__) // bmi2 implies bmi1
-#define __BMI1__  1
-#endif
-#if MI_ARCH_X64 && defined(__AVX2__) && !defined(__LZCNT__) // avx2 implies lzcnt
-#define __LZCNT__  1
-#endif
-
-// Define big endian if needed
-// #define MI_BIG_ENDIAN  1
-
-// maximum virtual address bits in a user-space pointer
-#if MI_DEFAULT_VIRTUAL_ADDRESS_BITS > 0
-#define MI_MAX_VABITS     MI_DEFAULT_VIRTUAL_ADDRESS_BITS
-#elif MI_ARCH_X64 && (MI_INTPTR_SIZE > 4)   // not on x32
-#define MI_MAX_VABITS     (47)
-#elif MI_INTPTR_SIZE > 4
-#define MI_MAX_VABITS     (48)
-#else
-#define MI_MAX_VABITS     (32)
-#endif
-
-// the MI_MIN_VABITS determine how many bits of the address space are always committed in the page_map
-#if MI_MAX_VABITS <= 32
-#define MI_MIN_VABITS     (32)
-#elif MI_MAX_VABITS <= 42
-#define MI_MIN_VABITS     MI_MAX_VABITS
-#else
-#define MI_MIN_VABITS     (43)    /* 8 TiB */
-#endif
-
-// Always use the page map in `mi_free` on CHERI as we cannot derive the page meta-data from a (bounded) user pointer,
-// and on WebAssembly as it cannot do large aligned allocations well (needed for aligned page meta-data).
-#if (MI_CHERI || defined(__wasi__) || defined(__EMSCRIPTEN__)) && !defined(MI_FREE_USE_PAGEMAP)
-#define MI_FREE_USE_PAGEMAP  1
-#endif
-
-// Probable OS page size (as statically known; the actual page size is determined at runtime with `_mi_os_page_size()`).
-// Can be set explicitly, e.g. `-DMI_OS_PROBABLE_PAGE_SIZE=65536` for arm64 Linux kernels with 64 KiB pages.
-#if !defined(MI_OS_PROBABLE_PAGE_SIZE)
-#if defined(__APPLE__)                        // check first as `PAGE_SIZE` may be the runtime `vm_page_size` there
-#if MI_ARCH_ARM64
-#define MI_OS_PROBABLE_PAGE_SIZE  (16*MI_KiB) // macOS, iOS, etc. on Apple silicon
-#else
-#define MI_OS_PROBABLE_PAGE_SIZE  (4*MI_KiB)
-#endif
-#elif defined(__wasm__) || defined(__EMSCRIPTEN__) || defined(__wasi__)
-#define MI_OS_PROBABLE_PAGE_SIZE  (64*MI_KiB) // fixed WebAssembly page size
-#elif defined(PAGE_SIZE)                      // only defined if constant (FreeBSD, musl on x86, bionic without flexible page sizes, ...)
-#define MI_OS_PROBABLE_PAGE_SIZE  PAGE_SIZE
-#elif defined(__linux__) && (defined(__powerpc64__) || defined(__ppc64__) || defined(__PPC64__))
-#define MI_OS_PROBABLE_PAGE_SIZE  (64*MI_KiB) // default for ppc64(le) distributions
-#elif defined(__linux__) && defined(__loongarch__)
-#define MI_OS_PROBABLE_PAGE_SIZE  (16*MI_KiB) // default for LoongArch kernels
-#elif defined(__ANDROID__) && defined(__BIONIC_NO_PAGE_SIZE_MACRO)
-#define MI_OS_PROBABLE_PAGE_SIZE  (16*MI_KiB) // built with flexible page size support (NDK r27+), so it can run with 16 KiB pages
-#else
-#define MI_OS_PROBABLE_PAGE_SIZE  (4*MI_KiB)
-#endif
-#endif
-
-// Does the OS have guard pages?
-#if !defined(MI_OS_HAS_GUARD_PAGES)
-#if defined(__wasm__) || defined(__EMSCRIPTEN__) || defined(__wasi__)
-#define MI_OS_HAS_GUARD_PAGES  0
-#elif defined(__uClinux__)                 // no MMU
-#define MI_OS_HAS_GUARD_PAGES  0
-#else
-#define MI_OS_HAS_GUARD_PAGES  1
-#endif
-#endif
-
-
-// ------------------------------------------------------
-// Signed pointers (see `prim/prim-pac.h`): with `MI_PAC` some internal pointers are stored signed
-// (using ARM pointer authentication or a software keyed encoding); this is a `uintptr_t` so it can be atomic.
-// ------------------------------------------------------
-
-typedef uintptr_t           mi_ptr_signed_t;
-#define mi_ptr_signed(tp)   mi_ptr_signed_t     // a signed `tp*` (only documents the pointer type)
-
-// Pointer signing (see `prim/prim-pac.h`): 0=off, 1=weak (using a software process key), 2=required (using the
-// arm64 generic pointer authentication key (`pacga`), which must be supported at runtime).
-// Only on 64-bit systems (and not on CHERI); `required` only on arm64 with GCC or clang.
-// Defaults to `required` with `MI_MTE=2` as all MTE hardware supports PAC.
-#if (MI_MTE >= 2) && !defined(MI_PAC)
-#define MI_PAC  2
-#endif
-#if (MI_PAC >= 2) && !(MI_ARCH_ARM64 && defined(__GNUC__))
-#error "pointer authentication (MI_PAC=ON) is only supported on arm64 with GCC or clang"
-#elif (MI_PAC > 0) && (MI_CHERI || (MI_INTPTR_SIZE != 8))
-#warning "pointer authentication (MI_PAC=ON) is not supported on CHERI or non-64-bit systems"
-#undef MI_PAC
-#define MI_PAC  0
-#elif !defined(MI_PAC)
-#define MI_PAC  0
-#endif
-
 
 
 /* --------------------------------------------------------------------------------

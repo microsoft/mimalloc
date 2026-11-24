@@ -6,6 +6,7 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 #include "mimalloc.h"
 #include "mimalloc/prim/prim.h"  // mi_prim_out_stderr
+#include "mimalloc/prim/prim-mte.h"  // mi_memtag_is_enabled, MI_MEMTAG_MODE_*
 #include "mimalloc/prim/prim-tls.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/util/options.h"
@@ -125,7 +126,7 @@ int mi_version(void) {
 static const mi_option_desc_t mi_option_descs[_mi_option_last] =
 {
   // stable options
-#if MI_DEBUG || defined(MI_SHOW_ERRORS)
+#if MI_DEBUG || MI_SHOW_ERRORS
   { 1, MI_OPTION(show_errors) },
 #else
   { 0, MI_OPTION(show_errors) },
@@ -174,7 +175,7 @@ static const mi_option_desc_t mi_option_descs[_mi_option_last] =
   { 0, MI_OPTION(page_commit_on_demand) },    // commit pages on-demand (2 disables this only on overcommit systems (like Linux))
   { MI_DEFAULT_PAGE_MAX_RECLAIM, MI_OPTION(page_max_reclaim) },         // don't reclaim (small) pages of the same originating theap if we already own N pages in that size class
   { MI_DEFAULT_PAGE_CROSS_THREAD_MAX_RECLAIM, MI_OPTION(page_cross_thread_max_reclaim) }, // don't reclaim (small) pages across threads if we already own N pages in that size class
-  { MI_DEFAULT_ALLOW_THP, MI_OPTION(allow_thp) },                // allow transparent huge pages? (=1) (on Android =0 by default). Set to 0 to disable THP for the process.
+  { MI_DEFAULT_ALLOW_THP, MI_OPTION(allow_thp) },                // transparent huge pages: 0 disable for the process, 1 allow, 2 allow and avoid splitting on purge.
   { 0, MI_OPTION_LEGACY(arena_purge_min_size, minimal_purge_size) },       // set minimal purge size (in KiB) (=0). Using 0 resolves to either 64 (or 2048 if THP is enabled).
   { MI_DEFAULT_ARENA_MAX_OBJECT_SIZE, MI_OPTION(arena_max_object_size) },    // set maximal object size that can be allocated in an arena (in KiB) (=2GiB on 64-bit).
   { 0, MI_OPTION(arena_is_numa_local) },      // associate local numa node with an initial arena allocation
@@ -305,7 +306,7 @@ mi_decl_export void mi_options_print_out(mi_output_fun* out, void* arg) mi_attr_
   _mi_fprintf(out, arg, "free mode   : pagemap, page size: %zu\n", sizeof(mi_page_t));
   #endif
   #if MI_ENCODE_FREELIST
-  _mi_fprintf(out, arg, "free lists  : encoded (%s)\n", (MI_SIZE_BITS>=64 ? "tagged offsets" : "xor-shift"));
+  _mi_fprintf(out, arg, "free lists  : encoded (%s)\n", (MI_SIZE_BITS>=64 ? (MI_ENCODE_FREELIST==1 && MI_PAC<2 ? "tagged offsets, low mul" : "tagged offsets") : "xor-shift"));
   #endif
   #if MI_GUARDED
   _mi_fprintf(out, arg, "guarded mode: %s, rate=%ld\n",  MI_SAMPLE==2 ? "fine-grained" : "enabled", mi_option_get(mi_option_guarded_sample_rate));
@@ -507,14 +508,14 @@ static mi_decl_noinline void mi_recurse_exit_prim(void) {
 }
 
 static bool mi_recurse_enter(void) {
-  #if defined(__APPLE__) || defined(__ANDROID__) || defined(MI_TLS_RECURSE_GUARD)
+  #if defined(__APPLE__) || defined(__ANDROID__) || MI_TLS_RECURSE_GUARD
   if (_mi_preloading()) return false;
   #endif
   return mi_recurse_enter_prim();
 }
 
 static void mi_recurse_exit(void) {
-  #if defined(__APPLE__) || defined(__ANDROID__) || defined(MI_TLS_RECURSE_GUARD)
+  #if defined(__APPLE__) || defined(__ANDROID__) || MI_TLS_RECURSE_GUARD
   if (_mi_preloading()) return;
   #endif
   mi_recurse_exit_prim();
@@ -555,7 +556,7 @@ void _mi_fprintf( mi_output_fun* out, void* arg, const char* fmt, ... ) {
 static void mi_vfprintf_thread(mi_output_fun* out, void* arg, const char* prefix, const char* fmt, va_list args) {
   if (prefix != NULL && _mi_strnlen(prefix,33) <= 32) { // && !_mi_is_main_thread()) {
     char tprefix[64];
-    _mi_snprintf(tprefix, sizeof(tprefix), "%sthread 0x%tx: ", prefix, (size_t)_mi_thread_id());
+    _mi_snprintf(tprefix, sizeof(tprefix), "%sthread %p: ", prefix, (void*)_mi_thread_id());
     mi_vfprintf(out, arg, tprefix, fmt, args);
   }
   else {
@@ -636,7 +637,7 @@ static void mi_error_default(int err) {
       abort();
     }
   #endif
-  #if defined(MI_XMALLOC)
+  #if MI_XMALLOC
     if (err==ENOMEM || err==EOVERFLOW || err==EINVAL) { // abort on memory allocation fails in xmalloc mode
       abort();
     }
@@ -692,13 +693,17 @@ mi_decl_noreturn mi_decl_cold void _mi_fatal_error(const char* fmt, ...) {
 }
 
 mi_decl_noinline mi_block_t* _mi_error_block_next_is_corrupted(const mi_page_t* page, const mi_block_t* block, mi_encoded_t x) {
-  _mi_error_message(EFAULT, "corrupted free list entry of size %zub at %p: value 0x%zx\n", mi_page_block_size(page), block, (size_t)x);
+  _mi_error_message(EFAULT, "corrupted free list entry at %p in page %p with block size %zu: value %p\n", block, page, mi_page_block_size(page), (void*)x);
   return NULL;
+}
+
+mi_decl_noinline void _mi_error_block_next_is_invalid(const mi_page_t* page, const mi_block_t* block, const mi_block_t* next) {
+  _mi_error_message(EFAULT, "corrupted free list entry at %p in page %p with block size %zu: invalid link %p\n", block, page, mi_page_block_size(page), next);
 }
 
 mi_decl_noinline void* _mi_error_ptr_auth_failed(mi_ptr_signed_t x, mi_addr_t salt) {
   if (x != 0) {
-    _mi_error_message(EFAULT, "pointer authentication failed at 0x%zx: value 0x%zx\n", (size_t)salt, (size_t)x);
+    _mi_error_message(EFAULT, "pointer authentication failed at %p: value %p\n", (void*)salt, (void*)x);
   }
   return NULL;
 }
@@ -789,6 +794,7 @@ static void mi_option_env_apply(mi_option_t option, mi_option_state_t* state, mi
   switch (option) {
     case mi_option_show_stats:
     case mi_option_verbose:
+    case mi_option_show_errors:
     case mi_option_allow_thp:
       break;
     default:

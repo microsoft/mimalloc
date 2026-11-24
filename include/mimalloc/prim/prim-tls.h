@@ -272,6 +272,7 @@ We have 4 models:
 
 - MI_TLS_MODEL_PTHREADS: use `pthread_getspecific`. (default on macOS and OpenBSD, maybe good for Android as well?)
     Use pthread local storage. Can be as fast as thread locals on many platforms (like recent macOS).
+    Always use this on macOS (and avoid MI_TLS_MODEL_LOCAL for macOS).
 
 - MI_TLS_MODEL_FIXED: use a fixed slot in the TLS block.
     This reserves an unused and fixed TLS slot. This is fast and avoids the problem
@@ -321,6 +322,10 @@ static inline void* mi_prim_theap_cached_raw(void) {
 }
 
 #elif MI_TLS_MODEL_PTHREADS
+#if !MI_USE_PTHREADS
+#error MI_TLS_MODEL_PTHREADS requires MI_USE_PTHREADS
+#endif
+
 // Dynamic pthread slots. This can be fast depending on the platform (default for macOS and OpenBSD)
 // On some platforms (like macOS), the loader might allocate on thread local declarations which
 // can be avoided with pthreads.
@@ -461,7 +466,7 @@ static inline mi_theap_t* mi_theap_tls_auth(void* x, size_t tag) {
 }
 
 static inline mi_theap_t* _mi_theap_default(void) {
-  #if defined(MI_TLS_RECURSE_GUARD)
+  #if MI_TLS_RECURSE_GUARD
   if mi_unlikely(!_mi_process.process_is_initialized) return _mi_theap_empty_get();
   #endif
   return mi_theap_tls_auth(mi_prim_theap_default_raw(), MI_TLS_TAG_THEAP_DEFAULT);

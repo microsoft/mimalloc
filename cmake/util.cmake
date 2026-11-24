@@ -2,6 +2,7 @@
 # Utility functions for CMakeLists.txt
 # ----------------------------------------------------------------------------
 include(CheckCCompilerFlag)
+include(CheckCSourceRuns)
 include(CheckCSourceCompiles)
 include(CheckIncludeFiles)
 include(CheckSymbolExists)
@@ -54,6 +55,49 @@ function(check_symbol_exists_with_libs symbol headers libs outvar)
   cmake_push_check_state()
   list(APPEND CMAKE_REQUIRED_LIBRARIES ${libs})
   check_symbol_exists(${symbol} "${headers}" ${outvar})
+  cmake_pop_check_state()
+endfunction()
+
+function(check_big_endian outvar)
+  check_c_source_runs("int main(void) { const unsigned int n = 1; return *(const unsigned char*)&n; }" ${outvar})
+endfunction()
+
+# determine if `libatomic` is needed for 64-bit and pointer-sized atomics (on some 32-bit platforms);
+# sets `outvar` to the library to link with (or empty if not needed or not found) (issue #634)
+function(find_libatomic_if_needed cflags outvar)
+  set(${outvar} "" PARENT_SCOPE)
+  set(src "
+    #include <stdatomic.h>
+    #include <stdint.h>
+    static _Atomic(int64_t) x64;
+    static _Atomic(uintptr_t) xp;
+    int main(void) {
+      volatile int64_t v64 = 1;  volatile uintptr_t vp = 1;
+      int64_t e64 = atomic_load_explicit(&x64, memory_order_acquire);
+      uintptr_t ep = atomic_load_explicit(&xp, memory_order_acquire);
+      atomic_store_explicit(&x64, v64, memory_order_release);
+      atomic_fetch_add_explicit(&x64, v64, memory_order_relaxed);
+      atomic_compare_exchange_strong(&x64, &e64, v64);
+      atomic_exchange(&xp, vp);
+      atomic_compare_exchange_weak(&xp, &ep, vp);
+      return (int)atomic_fetch_add_explicit(&xp, vp, memory_order_acq_rel);
+    }")
+  cmake_push_check_state(RESET)
+  string(REPLACE ";" " " CMAKE_REQUIRED_FLAGS "${cflags}")
+  check_c_source_compiles("${src}" mi_has_builtin_atomics)
+  if(NOT mi_has_builtin_atomics)
+    find_link_library("atomic" libatomic)
+    if(libatomic)
+      set(CMAKE_REQUIRED_LIBRARIES ${libatomic})
+      check_c_source_compiles("${src}" mi_has_libatomic_atomics)
+      if(mi_has_libatomic_atomics)
+        set(${outvar} ${libatomic} PARENT_SCOPE)
+      endif()
+    endif()
+    if(NOT mi_has_libatomic_atomics)
+      message(WARNING "Unable to link 64-bit atomic operations (with or without libatomic)")
+    endif()
+  endif()
   cmake_pop_check_state()
 endfunction()
 

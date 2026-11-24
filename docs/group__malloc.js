@@ -1,5 +1,6 @@
 var group__malloc =
 [
+    [ "mi_allocated_size", "group__malloc.html#ga877ee9c313d73ec0fb8c433707440b2c", null ],
     [ "mi_calloc", "group__malloc.html#ga6686568014b54d1e6c7ac64a076e4f56", null ],
     [ "mi_cfree", "group__malloc.html#ga705dc7a64bffacfeeb0141501a5c35d7", null ],
     [ "mi_expand", "group__malloc.html#ga19299856216cfbb08e2628593654dfb0", null ],

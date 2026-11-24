@@ -14,7 +14,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 use core::ffi::{c_char, c_int, c_long, c_ulonglong, c_void};
 
-pub const MI_MALLOC_VERSION: c_int = 30700;
+pub const MI_MALLOC_VERSION: c_int = 30701;
 pub const MI_SMALL_WSIZE_MAX: usize = 128;
 pub const MI_SMALL_SIZE_MAX: usize = MI_SMALL_WSIZE_MAX * core::mem::size_of::<usize>();
 
@@ -197,22 +197,36 @@ extern "C" {
     pub fn mi_thread_done();
     pub fn mi_thread_set_in_threadpool();
 
-    // allocation that also returns the allocated block size
-    pub fn mi_umalloc(size: usize, block_size: *mut usize) -> *mut c_void;
-    pub fn mi_ucalloc(count: usize, size: usize, block_size: *mut usize) -> *mut c_void;
+    // allocation that also returns the usable size (as `mi_usable_size`)
+    pub fn mi_umalloc(size: usize, usable_size: *mut usize) -> *mut c_void;
+    pub fn mi_uzalloc(size: usize, usable_size: *mut usize) -> *mut c_void;
+    pub fn mi_ucalloc(count: usize, size: usize, usable_size: *mut usize) -> *mut c_void;
     pub fn mi_urealloc(
         p: *mut c_void,
         newsize: usize,
-        block_size_pre: *mut usize,
-        block_size_post: *mut usize,
+        usable_size_pre: *mut usize,
+        usable_size_post: *mut usize,
     ) -> *mut c_void;
-    pub fn mi_ufree(p: *mut c_void, block_size: *mut usize);
-    pub fn mi_umalloc_aligned(size: usize, alignment: usize, block_size: *mut usize)
-        -> *mut c_void;
-    pub fn mi_uzalloc_aligned(size: usize, alignment: usize, block_size: *mut usize)
-        -> *mut c_void;
-    pub fn mi_umalloc_small(size: usize, block_size: *mut usize) -> *mut c_void;
-    pub fn mi_uzalloc_small(size: usize, block_size: *mut usize) -> *mut c_void;
+    pub fn mi_ufree(p: *mut c_void, usable_size: *mut usize);
+    pub fn mi_umalloc_aligned(
+        size: usize,
+        alignment: usize,
+        usable_size: *mut usize,
+    ) -> *mut c_void;
+    pub fn mi_uzalloc_aligned(
+        size: usize,
+        alignment: usize,
+        usable_size: *mut usize,
+    ) -> *mut c_void;
+    pub fn mi_urealloc_aligned(
+        p: *mut c_void,
+        newsize: usize,
+        alignment: usize,
+        usable_size_pre: *mut usize,
+        usable_size_post: *mut usize,
+    ) -> *mut c_void;
+    pub fn mi_umalloc_small(size: usize, usable_size: *mut usize) -> *mut c_void;
+    pub fn mi_uzalloc_small(size: usize, usable_size: *mut usize) -> *mut c_void;
 
     // first-class heaps
     pub fn mi_heap_new() -> *mut mi_heap_t;

@@ -21,6 +21,7 @@ The arena allocation needs to be thread safe and we use an atomic bitmap to allo
 
 #include "mimalloc.h"
 #include "mimalloc/util/stats.h"
+#include "mimalloc/prim/prim-mte.h"  // mi_memtag_use_for_meta, mi_memtag_meta_init_adjacent
 #include "mimalloc/util/memid.h"
 #include "mimalloc/alloc/page.h"
 #include "mimalloc/heap/subproc.h"
@@ -462,7 +463,7 @@ static size_t mi_arena_info_slices_needed(size_t slice_count, size_t* bitmap_bas
   const size_t bitmaps_count = 4 + MI_ARENA_BIN_COUNT; // commit, dirty, purge, pages, and abandoned
   const size_t bitmaps_size = bitmaps_count * mi_bitmap_size(slice_count, NULL) + mi_bbitmap_size(slice_count, NULL); // + free
   #if MI_PAGE_META_IS_SEPARATED && !MI_PAGE_META_IS_ALIGNED
-  const size_t pages_size = slice_count * sizeof(mi_page_t);
+  const size_t pages_size = 64 + slice_count * sizeof(mi_page_t);  // (including room to align)
   #else
   const size_t pages_size = 0;
   #endif
@@ -593,9 +594,10 @@ static mi_arena_t* mi_arena_initialize(mi_subproc_t* subproc, void* start,
   arena->slices_purge = mi_arena_bitmap_init(slice_count, &base);
   arena->pages_main.pages = mi_arena_bitmap_init(slice_count, &base);
   for (size_t i = 0; i < MI_ARENA_BIN_COUNT; i++) {
-    arena->pages_main.pages_abandoned[i] = mi_arena_bitmap_init(slice_count, &base);
+    arena->pages_main.pages_abandoned[i] = mi_arena_bitmap_init_lazy(slice_count, &base);  // initialized on first abandonment
   }
   #if MI_PAGE_META_IS_SEPARATED && !MI_PAGE_META_IS_ALIGNED
+  base = (uint8_t*)mi_align_up_ptr(base, 64);  // align page infos (with memory tagging the gap keeps the meta data tag)
   arena->pages_meta = (mi_page_t*)mi_ptr_bounded_data(base, slice_count * sizeof(mi_page_t));
   base += (slice_count * sizeof(mi_page_t));
   #else

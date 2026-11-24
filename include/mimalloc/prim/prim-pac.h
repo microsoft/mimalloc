@@ -64,6 +64,9 @@ static inline mi_addr_t mi_addr_auth(mi_ptr_signed_t x, mi_addr_t salt);
 // hardware key (`pacga`) or the process key. Only the high 32 bits are used (and with memory tagging also bits 24 to 31).
 static inline mi_addr_t mi_keyed_mac(mi_addr_t value, mi_addr_t salt);
 
+// Faster but weaker keyed MAC (using only the low 64 bits of the product), used for free list links with `MI_SECURE=1`.
+static inline mi_addr_t mi_keyed_mac_fast(mi_addr_t value, mi_addr_t salt);
+
 
 #if MI_PAC
 
@@ -158,6 +161,14 @@ static inline mi_addr_t mi_keyed_mac(mi_addr_t value, mi_addr_t salt) {
   #endif
 }
 
+static inline mi_addr_t mi_keyed_mac_fast(mi_addr_t value, mi_addr_t salt) {
+  #if MI_PAC >= 2
+  return mi_keyed_mac(value, salt);
+  #else
+  return (value * (salt ^ mi_pac_process_key()));
+  #endif
+}
+
 #else // !MI_PAC
 
 static inline mi_ptr_signed_t mi_addr_sign(mi_addr_t q, mi_addr_t salt) {
@@ -184,6 +195,10 @@ static inline void* mi_ptr_auth_valid(mi_ptr_signed_t x, mi_addr_t salt, bool* v
 
 static inline mi_addr_t mi_keyed_mac(mi_addr_t value, mi_addr_t salt) {
   return (mi_addr_t)mi_mul_xor64(value, salt);
+}
+
+static inline mi_addr_t mi_keyed_mac_fast(mi_addr_t value, mi_addr_t salt) {
+  return (value * salt);
 }
 
 #endif // MI_PAC/!MI_PAC

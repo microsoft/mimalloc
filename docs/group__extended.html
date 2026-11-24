@@ -27,7 +27,7 @@
  <tr id="projectrow">
   <td id="projectlogo"><img alt="Logo" src="mimalloc-logo.svg"/></td>
   <td id="projectalign">
-   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.6/2.5/1.15</span>
+   <div id="projectname">mi-malloc<span id="projectnumber">&#160;3.7/2.5/1.15</span>
    </div>
   </td>
     <td>        <div id="MSearchBox" class="MSearchBoxInactive">
@@ -537,7 +537,7 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<p>Some runtime systems use deferred free-ing, for example when using reference counting to limit the worst case free time. Such systems can register (re-entrant) deferred free function to free more memory on demand. When the <em class="arg">force</em> parameter is <em class="arg">true</em> all possible memory should be freed. The per-thread <em class="arg">heartbeat</em> parameter is monotonically increasing and guaranteed to be deterministic if the program allocates deterministically. The <em class="arg">deferred_free</em> function is guaranteed to be called deterministically after some number of allocations (regardless of freeing or available free memory). At most one <em class="arg">deferred_free</em> function can be active. </p>
+<p>Some runtime systems use deferred free-ing, for example when using reference counting to limit the worst case free time. Such systems can register (re-entrant) deferred free function to free more memory on demand. When the <em class="arg">force</em> parameter is <em class="arg">true</em> all possible memory should be freed. The per-thread <em class="arg">heartbeat</em> parameter is monotonically increasing and guaranteed to be deterministic if the program allocates deterministically. The <em class="arg">deferred_free</em> function is guaranteed to be called deterministically after some number of allocations (regardless of freeing or available free memory). At most one <em class="arg">deferred_free</em> function can be active. The function is always called with the argument it was registered with, but after re-registration other threads may still call the previous function for a short while. </p>
 
 </div>
 </div>
@@ -575,7 +575,8 @@ Functions</h2></td></tr>
 <li><em class="arg">EOVERFLOW:</em> Too large a request, for example in <a class="el" href="group__malloc.html#ga6686568014b54d1e6c7ac64a076e4f56" title="Allocate zero-initialized count elements of size bytes.">mi_calloc()</a>, the <em class="arg">count</em> and <em class="arg">size</em> parameters are too large.</li>
 <li><em class="arg">EINVAL:</em> Trying to free or re-allocate an invalid pointer.</li>
 </ul>
-<p>Independent of the error code passed to <em class="arg">errfun</em>, allocation functions that return <em class="arg">NULL</em> set <em class="arg">errno</em> as required by POSIX: <em class="arg">ENOMEM</em>, or <em class="arg">EINVAL</em> for an invalid alignment. Other errors (like freeing an invalid pointer) do not modify <em class="arg">errno</em>. </p>
+<p>Independent of the error code passed to <em class="arg">errfun</em>, allocation functions that return <em class="arg">NULL</em> set <em class="arg">errno</em> as required by POSIX: <em class="arg">ENOMEM</em>, or <em class="arg">EINVAL</em> for an invalid alignment. Other errors (like freeing an invalid pointer) do not modify <em class="arg">errno</em>.</p>
+<p>The function is always called with the argument it was registered with, but after re-registration other threads may still call the previous function for a short while. </p>
 
 </div>
 </div>
@@ -606,7 +607,7 @@ Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
-<p>The <span class="tt">out</span> function is called to output any information from mimalloc, like verbose or warning messages. </p>
+<p>The <span class="tt">out</span> function is called to output any information from mimalloc, like verbose or warning messages. The function is always called with the argument it was registered with, but after re-registration other threads may still call the previous function for a short while. </p>
 
 </div>
 </div>

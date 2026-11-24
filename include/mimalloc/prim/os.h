@@ -28,7 +28,7 @@ bool          _mi_os_is_elevated(void);                                     // s
 size_t        _mi_os_virtual_address_bits(void);
 size_t        _mi_os_minimal_purge_size(void);
 
-bool          _mi_os_reset(mi_subproc_t* subproc, void* addr, size_t size);
+bool          _mi_os_reset(mi_subproc_t* subproc, void* addr, size_t size, bool eager);
 bool          _mi_os_decommit(mi_subproc_t* subproc, void* addr, size_t size);
 void          _mi_os_reuse(mi_subproc_t* subproc, void* p, size_t size);
 mi_decl_nodiscard bool _mi_os_commit(mi_subproc_t* subproc, void* p, size_t size, bool* is_zero);
@@ -56,6 +56,7 @@ void*         _mi_os_alloc_aligned_at_offset(mi_subproc_t* subproc, size_t size,
 
 void*         _mi_os_get_aligned_hint(size_t try_alignment, size_t size);
 bool          _mi_os_canuse_large_page(size_t size, size_t alignment);
+bool          _mi_os_canuse_thp(const void* p, size_t size);
 
 size_t        _mi_os_large_page_size(void);
 void*         _mi_os_alloc_huge_os_pages(mi_subproc_t* subproc, size_t pages, int numa_node, mi_msecs_t max_secs, size_t* pages_reserved, size_t* psize, mi_memid_t* memid);

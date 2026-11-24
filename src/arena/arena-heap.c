@@ -33,13 +33,23 @@ typedef struct mi_heap_visit_info_s {
   bool                abandoned_only;
 } mi_heap_visit_info_t;
 
+// Collect a claimed abandoned page for a visit and unown it again. Returns `true` if the page was freed.
+// Unlike `_mi_abandoned_page_unown`, the collect is forced so the `local_free` list is appended as well
+// (`_mi_theap_area_visit_blocks` only treats blocks in the `free` list as free).
+static bool mi_heap_visit_page_collect_claimed(mi_page_t* page) {
+  if (_mi_page_free_collect(page, true) && mi_page_all_free(page)) {
+    _mi_arenas_page_unabandon(page, NULL);
+    return _mi_arenas_page_free(page, NULL);
+  }
+  return _mi_abandoned_page_unown(page, NULL);  // still frees an empty singleton (and any later cross-thread frees)
+}
+
 static bool mi_heap_visit_page(mi_page_t* page, const mi_heap_visit_info_t* vinfo) {
   mi_heap_area_t area;
   // abandoned pages can only be collected if we can claim them
   const bool abandoned = mi_page_is_abandoned(page);
-  const bool claimed = (abandoned && mi_page_claim_ownership(page));
-  if (!abandoned) { _mi_page_free_collect(page, true); }               // collect cross-thread free'd blocks so `area.used` is precise.
-  if (claimed && _mi_abandoned_page_unown(page, NULL)) return true;    // collects cross-thread frees as well; returns true if the page was freed
+  if (!abandoned) { _mi_page_free_collect(page, true); }  // collect cross-thread free'd blocks so `area.used` is precise.
+  else if (mi_page_claim_ownership(page) && mi_heap_visit_page_collect_claimed(page)) return true;  // the page was freed
   _mi_heap_area_init(&area, page);
   mi_assert_internal(vinfo->heap == mi_page_heap(page));
   if (!vinfo->visitor(vinfo->heap, &area, NULL, area.block_size, vinfo->arg)) {
@@ -189,6 +199,7 @@ static void mi_heap_move_page(const mi_heap_move_info_t* info, mi_page_t* page) 
 
   if (mi_page_used(page)==0) {
     // free the page
+    _mi_page_check_free_lists(page);
     _mi_arenas_page_free_direct(page, NULL);
   }
   else if (heap_target==NULL) {

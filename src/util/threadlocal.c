@@ -13,6 +13,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc.h"
 #include "mimalloc/prim/prim-tls.h"
+#include "mimalloc/prim/prim-mte.h"  // mi_ptr_memtag_meta
 #include "mimalloc/util/libc.h"
 #include "mimalloc/util/options.h"
 #include "mimalloc/util/memid.h"
@@ -47,7 +48,7 @@ static const mi_thread_locals_t mi_thread_locals_empty = mi_init_struct_zero;
   initially `NULL` (where `name_get` returns the `initval` instead).
 ----------------------------------------------------------- */
 
-#if MI_TLS_MODEL_PTHREADS || defined(__APPLE__)   // macOS has fast pthreads
+#if MI_USE_PTHREADS && (MI_TLS_MODEL_PTHREADS || defined(__APPLE__))   // macOS has fast pthreads
 // Use pthreads
 #define mi_define_thread_local(tp,name,initval,tag) \
   static pthread_key_t __##name##_key = MI_PTHREAD_KEY_INVALID; \

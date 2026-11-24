@@ -255,7 +255,12 @@ bool test_pprof_snapshot_format(void) {
       result = (contents != NULL &&
                 strncmp(contents, "heap profile:", 13) == 0 &&
                 strstr(contents, "@ heap_v2/") != NULL &&
-                strstr(contents, "MAPPED_LIBRARIES:") != NULL);
+                strstr(contents, "MAPPED_LIBRARIES:") != NULL &&
+                count_location_entries(contents) > 0);
+      for (const char* p = contents; result && (p = strstr(p, " 0x")) != NULL; p += 3) {
+        const size_t n = strspn(p + 3, "0123456789abcdef");
+        result = (n > 0 && (p[3 + n] == ' ' || p[3 + n] == '\n'));
+      }
       mi_free(contents);
 
       mi_profile(NULL);

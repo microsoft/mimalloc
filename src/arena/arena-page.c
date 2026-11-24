@@ -83,7 +83,7 @@ static mi_arena_pages_t* mi_arena_pages_alloc(mi_arena_t* arena) {
   mi_assert_internal(mi_is_aligned(base, MI_BCHUNK_SIZE));
   arena_pages->pages = mi_arena_bitmap_init(slice_count, &base);
   for (size_t i = 0; i < MI_ARENA_BIN_COUNT; i++) {
-    arena_pages->pages_abandoned[i] = mi_arena_bitmap_init(slice_count, &base);
+    arena_pages->pages_abandoned[i] = mi_arena_bitmap_init_lazy(slice_count, &base);  // initialized on first abandonment
   }
   return arena_pages;
 }
@@ -320,6 +320,7 @@ void _mi_arenas_page_abandon(mi_page_t* page, mi_theap_t* current_theapx) {
       mi_assert_internal(mi_bitmap_is_setN(arena->slices_dirty, slice_index, slice_count));
 
       mi_page_set_abandoned_mapped(page);
+      mi_bitmap_ensure_init(arena_pages->pages_abandoned[bin], arena->slice_count);
       const bool was_clear = mi_bitmap_set(arena_pages->pages_abandoned[bin], slice_index);
       MI_UNUSED(was_clear); mi_assert_internal(was_clear);
       mi_atomic_increment_relaxed(&heap->abandoned_count[bin]);
