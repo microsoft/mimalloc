@@ -77,7 +77,7 @@ static inline mi_block_t* mi_block_free_clear(const mi_page_t* page, mi_block_t*
   return block;
 }
 
-#if MI_SECURE>=2
+#if MI_SECURE>=1
 static mi_decl_noinline mi_decl_cold void mi_free_double_immediate(const mi_page_t* page, const mi_block_t* block) {
   _mi_error_message(EAGAIN, "double free detected of block %p with size %zu\n", block, mi_page_block_size(page));
 }
@@ -88,7 +88,7 @@ static inline void mi_free_block_local(mi_page_t* page, mi_block_t* block, bool 
   // checks
   size_t usable_size;
   if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return;
-  #if MI_SECURE>=2
+  #if MI_SECURE>=1
   // cheap check for an immediate double free (other double frees are detected on allocation or when the page is freed)
   if mi_unlikely(block == page->local_free) { mi_free_double_immediate(page, block); return; }
   #endif
@@ -151,8 +151,9 @@ void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool
   // mi_theap_t* theap = _mi_page_associated_theap_peek(page);
   mi_thread_free_t tf_new;
   mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);
+  const mi_page_codec_t codec = mi_page_codec(page);  // load before the loop as the CAS prevents hoisting the loads
   do {
-    mi_block_set_next(page, block, mi_tf_block(tf_old));
+    mi_block_set_next_ex(&codec, block, mi_tf_block(tf_old));
     tf_new = mi_tf_create(block, true);
   } while(!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new));
 
@@ -380,7 +381,7 @@ static mi_decl_forceinline bool mi_ptr_page_is_valid_ex(const void* p, const cha
   // the page map maps all slices of a page, so `p` may still point below the page start (into the page meta data,
   // guard page, or alignment padding), or beyond the blocks handed out (`capacity`); freeing such pointer would
   // corrupt the free list. The unsigned difference checks both cases at once (as `p < page_start` wraps around).
-  if mi_unlikely((size_t)(mi_addr(p) - mi_addr(mi_page_start(page))) >= mi_atomic_load_relaxed(&page->capacity_size)) {
+  if mi_unlikely((size_t)(mi_addr(p) - mi_addr(mi_page_start(page))) >= mi_page_capacity_size(page)) {
     #if MI_DEBUG
     return mi_ptr_invalid(msg, p, "");
     #else
@@ -412,12 +413,9 @@ static mi_decl_forceinline mi_page_t* mi_ptr_page_validate(const void* p, const 
 }
 
 #if MI_SECURE>=2
-// Is `p` at the start of a block? `diff` is a multiple of `block_size` iff `diff * ceil(2^64/block_size) mod 2^64 < ceil(2^64/block_size)`
-// (for `diff < 2^32`) (Lemire, Kaser, and Kurz, "Faster remainder by direct computation", 2019).
-// With a single block in the page, `block_recip == 1` and this checks `diff == 0`.
+// Is `p` at the start of a block?
 static inline bool mi_page_is_block_start(const mi_page_t* page, const void* p) {
-  const uint64_t diff = mi_addr(p) - mi_addr(mi_page_start(page));
-  return (diff * page->block_recip < page->block_recip);
+  return mi_page_is_block_offset(page, mi_addr(p) - mi_addr(mi_page_start(page)));
 }
 
 // Free a pointer that is not at the start of a block: either an interior pointer
@@ -880,7 +878,7 @@ static bool mi_list_contains(const mi_page_t* page, const mi_block_t* list, cons
     count++;
   }
   if mi_unlikely(count > max_count) {
-    _mi_error_message(EFAULT, "corrupted %s list (possibly due to a double free)\n", list_kind);
+    _mi_error_message(EFAULT, "corrupted %s list in page %p with block size %zu (possibly due to a double free)\n", list_kind, page, mi_page_block_size(page));
   }
   return false;
 }

@@ -1000,14 +1000,18 @@ static bool test_free_list_cycle(bool collect, bool self_cycle) {
       _mi_heap_area_init(&area, page);
       mi_register_error(&record_free_list_error, &errors);
       if (collect) {
+        // the cycle is cut and the local free list is appended in front of the free list
         _mi_page_free_collect(page, true);
-        result = (page->local_free == head && page->free == saved_free);
+        result = (page->local_free == NULL && page->free == head);
+        mi_block_t* const second = (self_cycle ? saved_next : link);
+        mi_block_set_next(page, head, second);
+        mi_block_set_next(page, second, saved_free);
       }
       else {
         result = (_mi_theap_area_visit_blocks(&area, page, &record_free_list_block, &visited) &&
                   visited == (size_t)page->capacity - (self_cycle ? 1 : 2));
+        mi_block_set_next(page, link, saved_next);
       }
-      mi_block_set_next(page, link, saved_next);
       mi_register_error(NULL, NULL);
       result = (errors == (collect ? 1 : 0) && result);
       _mi_page_free_collect(page, true);

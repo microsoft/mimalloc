@@ -669,7 +669,7 @@ void _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page) {
   const size_t bsize = mi_page_block_size(page);
   const size_t ubsize = mi_page_usable_block_size(page);
   area->reserved = page->reserved * bsize;
-  area->committed = page->capacity * bsize;
+  area->committed = mi_page_capacity_size(page);
   area->blocks = mi_ptr_bounded_data(mi_page_start(page), area->reserved);
   area->used = mi_page_used(page);   // number of blocks in use (#553)
   area->block_size = ubsize;

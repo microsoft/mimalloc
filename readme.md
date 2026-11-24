@@ -574,8 +574,8 @@ There are various build options to make mimalloc more secure.
 
 ## Environment Options
 
-With `-DMI_SECURE_ENV=ON`, only `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, and
-`MIMALLOC_ALLOW_THP` are accepted from the environment -- all other options are ignored.
+With `-DMI_SECURE_ENV=ON`, only `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, `MIMALLOC_SHOW_ERRORS`,
+and `MIMALLOC_ALLOW_THP` are accepted from the environment -- all other options are ignored.
 
 This is by default enabled for [secure mode](#secure-mode), [MTE](#memory-tagging-mte),
 and [PAC](#pointer-authentication-pac). This can be overridden by explicitly building
@@ -586,34 +586,34 @@ You can still set options programmatically for trusted programs.
 
 ## Secure Mode
 
-_mimalloc_ can be build in secure mode by using the `-DMI_SECURE=OFF|MINIMAL|CHECKED|ON|FULL` flags in `cmake`. This build mode
+_mimalloc_ can be build in secure mode by using the `-DMI_SECURE=OFF|BASIC|CHECKED|ON|FULL` flags in `cmake`. This build mode
 enables various software mitigations to make mimalloc more robust against exploits.
-With `MINIMAL` only security mitigations are added that have minimal impact on performance (usually 1-3%):
+With `BASIC` only security mitigations are added that have a small impact on performance (usually less than 5%):
 
 - All internal mimalloc meta data (including the page map and static data) is surrounded by guard pages
   (so a buffer overflow/underflow exploit cannot reach into the allocator's meta data).
   All static pointers into metadata are put in a sealed read-only area (like the page map).
-  (However, free list entries are not encoded and can be
-  corrupted through a heap block buffer overflow).
+- All free list pointers are [encoded](include/mimalloc/alloc/page.h#L644) with per-page keys
+  such that free list corruption (through a heap block overflow or use-after-free write) is detected (with high probability).
+- Double frees are detected: either immediately when a block is freed twice in a row, or otherwise (with high probability)
+  when the block would be allocated a second time, or when its page is freed.
+  Heap block overflows that overflow into a free block are also detected with the same mechanism.
 - The start address of OS allocated memory is randomized
   (if possible), and mimalloc aborts on corrupted meta data detection.
 - Larger blocks (> 80 KiB) are followed by a guard page.
 - Does not allocate or reserve large OS pages as pinned memory cannot hold a guard page.
 - Enables `MI_SECURE_ENV=ON`
+- Addresses in error and warning messages are redacted to their low 16 bits (e.g. `0x...13c0`) so the output
+  does not reveal the address space layout (this is also done for elevated processes in any build mode).
 
 With `CHECKED` (the default with `-DMI_MTE` and `-DMI_PAC`), the performance and memory impact
-is still relatively small (usually less than 10%, but can be 2x slower on synthetic benchmarks):
+is still relatively small (usually less than 10%, but can be 50% slower on synthetic benchmarks):
 
-- All free list pointers are
-  [encoded](include/mimalloc/alloc/page.h#L582)
-  with per-page keys which is used to prevent overwrites with a known pointer, as well as to detect heap corruption (and with [PAC](#pointer-authentication-pac),
-  the encoding uses hardware keys).
 - All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
   are ignored. Interior pointers are adjusted to the start of their block.
+- Uses slightly stronger list encoding (and with [PAC](#pointer-authentication-pac), the encoding uses hardware keys).
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
   mitigate against attacks that rely on a predictable allocation order.
-- Double frees are always detected: either immediately when a block is freed twice in a row, or otherwise on allocation
-  or when the page is freed. Heap block overflows that overflow into a free block are also detected with the same mechanism.
 - Reuse of freed blocks is delayed (until 1/8th of a page is free) and a random number of the most recently
   freed blocks is held back, making it harder to reclaim a just-freed block (to exploit a use-after-free).
 

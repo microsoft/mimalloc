@@ -437,7 +437,11 @@ static void mi_out_num(uintmax_t x, size_t base, char prefix, char** out, char* 
 // Hide (randomized) addresses in `%p` output in secure release builds or in a privileged process
 // (as the output can reveal the address space layout to an attacker)
 static bool mi_redact_addresses(void) {
-  return ((MI_SECURE>=1 && MI_DEBUG==0) || _mi_os_is_elevated());
+  #if (MI_SECURE>=1 && MI_DEBUG==0)
+  return true;
+  #else
+  return _mi_os_is_elevated();
+  #endif
 }
 
 #define MI_NEXTC()  c = *in; if (c==0) break; in++;
@@ -525,10 +529,10 @@ int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
           x = mi_addr(p);
           mi_outs("0x", &out, end);
           if (mi_redact_addresses()) {
-            // only show the offset within a 4 KiB page as that is not randomized
+            // only show the low 16 bits (enough to distinguish blocks, while the higher randomized bits stay hidden)
             mi_outs("...", &out, end);
-            x = (x & 0xFFF);
-            width = 3; fill = '0'; alignright = true;
+            x = (x & 0xFFFF);
+            width = 4; fill = '0'; alignright = true;
           }
           else {
             width = (width >= 2 ? width - 2 : 0);
