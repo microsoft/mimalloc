@@ -126,8 +126,13 @@ fn main() {
         }
         define("MI_PAC", "2"); // ON
     }
+    // the highest enabled secure level is used (as features are additive)
     if feature("secure") {
         define("MI_SECURE", "4"); // ON
+    } else if feature("secure_checked") {
+        define("MI_SECURE", "2"); // CHECKED
+    } else if feature("secure_basic") {
+        define("MI_SECURE", "1"); // BASIC
     } // (otherwise the default level in `types.h` is used: 2 with `mte` or `pac`, 3 on CHERI, and 0 otherwise;
       //  opt out explicitly with `MIMALLOC_DEFINES="MI_SECURE=0"`)
     let is_override = feature("override") && !is_windows;
@@ -146,9 +151,6 @@ fn main() {
     }
     // Rust never uses the C++ `new` API, so don't define or reference `std::get_new_handler`
     define("MI_NO_CXX_NEW_HANDLER", "1");
-    if feature("win_direct_tls") && is_windows {
-        define("MI_WIN_DIRECT_TLS", "1");
-    }
     for (name, value) in &user {
         build.define(name, value.as_deref());
     }

@@ -29,6 +29,10 @@ fn expect_pinned_arena(arena: Option<Arena>) -> Option<Arena> {
     // Match the C defaults and explicit overrides, not just the Cargo `secure` feature.
     let default_secure = if cfg!(feature = "secure") {
         4
+    } else if cfg!(feature = "secure_checked") {
+        2
+    } else if cfg!(feature = "secure_basic") {
+        1
     } else if build_define("MI_MTE", 2 * usize::from(cfg!(feature = "mte"))) != 0
         || build_define("MI_PAC", 2 * usize::from(cfg!(feature = "pac"))) != 0
     {
