@@ -607,7 +607,7 @@ With `BASIC` only security mitigations are added that have a small impact on per
   does not reveal the address space layout (this is also done for elevated processes in any build mode).
 
 With `CHECKED` (the default with `-DMI_MTE` and `-DMI_PAC`), the performance and memory impact
-is still relatively small (usually less than 10%, but can be 50% slower on synthetic benchmarks):
+is still relatively small (usually less than 10%, but can be 60% slower on synthetic benchmarks):
 
 - All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
   are ignored. Interior pointers are adjusted to the start of their block.

@@ -612,7 +612,9 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
       theap->tld = NULL;
       theap->tnext = NULL;
       theap->tprev = NULL;
-      mi_assert_internal(mi_atomic_load_relaxed(&theap->refcount) == 1); // as the cached entry is set to empty
+      // the cached entry is set to empty, but the platform may have reset its TLS slot before us (macOS dyld, issue #1518)
+      if (mi_atomic_load_relaxed(&theap->refcount) > 1) { _mi_theap_decref(theap); }  // safe as it is detached and there are no concurrent references anymore
+      mi_assert_internal(mi_atomic_load_relaxed(&theap->refcount) == 1);
       _mi_theap_decref(theap);
       theap = next;
     }
