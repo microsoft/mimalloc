@@ -16,7 +16,6 @@ vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
   FEATURES
     c           MI_NO_USE_CXX
     guarded     MI_GUARDED
-    secure      MI_SECURE
     override    MI_OVERRIDE
     optarch     MI_OPT_ARCH
     nooptarch   MI_NO_OPT_ARCH
@@ -24,6 +23,16 @@ vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
     xmalloc     MI_XMALLOC
     asm         MI_SEE_ASM
 )
+# use the highest enabled security level (as features are additive)
+if("secure" IN_LIST FEATURES)
+  set(MI_SECURE ON)
+elseif("secure-checked" IN_LIST FEATURES)
+  set(MI_SECURE CHECKED)
+elseif("secure-basic" IN_LIST FEATURES)
+  set(MI_SECURE BASIC)
+else()
+  set(MI_SECURE OFF)
+endif()
 string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "static" MI_BUILD_STATIC)
 string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" MI_BUILD_SHARED)
 
@@ -36,6 +45,7 @@ vcpkg_cmake_configure(
     -DMI_BUILD_STATIC=${MI_BUILD_STATIC}
     -DMI_BUILD_SHARED=${MI_BUILD_SHARED}
     -DMI_INSTALL_TOPLEVEL=ON
+    -DMI_SECURE=${MI_SECURE}
     ${FEATURE_OPTIONS}
 )
 
