@@ -134,6 +134,7 @@ static mi_decl_cache_align const mi_tld_t mi_tld_empty = {
   NULL,                   // subproc
   NULL,                   // theaps list
   MI_LOCK_INITIALIZER,    // theaps lock
+  NULL,                   // theap_cached
   false,                  // recurse
   false,                  // in_profiler
   false,                  // is_in_threadpool
@@ -428,6 +429,7 @@ mi_theap_t* _mi_theap_main(void) {
 static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc) {
   tld->subproc = subproc;
   tld->theaps = NULL;
+  tld->theap_cached = NULL;
   mi_lock_init(&tld->theaps_lock);
   if (tld->thread_id == MI_THREAD_ID_DETACHED) {
     tld->numa_node = -1;
@@ -594,7 +596,7 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
   // note: do this after abandon as page->heap may be NULL and mi_heap_main should return the heap
   // belonging to the right subprocess
   _mi_theap_default_set(_mi_theap_unavailable());
-  _mi_theap_cached_set((mi_theap_t*)&_mi_theap_empty);
+  _mi_theap_cached_set_ex(tld, (mi_theap_t*)&_mi_theap_empty);  // release the cached reference through the tld (the TLS slot may have been reset)
   _mi_prim_thread_associate_default_theap(NULL);  // so the thread-done hook does not use the freed theap
 
   // We might run concurrently with a `mi_heap_free_theaps` and we need to ensure we free theaps atomically.
@@ -814,8 +816,9 @@ static void mi_process_unwind_once(void)
   // stop the profiler
   _mi_pprof_profiler_done();
 
-  // decref any cached theap
-  _mi_theap_cached_set(_mi_theap_empty_get());
+  // decref any cached theap (through the backing theap, as the default theap can be uninitialized or deleted)
+  mi_theap_t* const theap_main = _mi_theap_main();
+  if (theap_main!=NULL && theap_main->tld!=NULL) { _mi_theap_cached_set_ex(theap_main->tld, _mi_theap_empty_get()); }
 
   // release any thread specific resources and ensure _mi_thread_done is called on all but the main thread
   _mi_prim_thread_done_auto_done();

@@ -19,7 +19,7 @@ terms of the MIT license. A copy of the license can be found in the file
 void _mi_tls_slots_init(void);
 void _mi_tls_slots_done(void);
 void _mi_theap_default_set(mi_theap_t* theap);
-void _mi_theap_cached_set(mi_theap_t* theap);
+void _mi_theap_cached_set_ex(mi_tld_t* tld, mi_theap_t* theap);
 void _mi_theap_tls_check(void);
 
 
@@ -161,19 +161,12 @@ static void mi_win_tls_slot_set(size_t slot, size_t extended_slot, void* value) 
 mi_decl_hidden _Atomic(pthread_key_t) _mi_theap_default_key = MI_ATOMIC_VAR_INIT(MI_PTHREAD_KEY_INVALID);
 mi_decl_hidden _Atomic(pthread_key_t) _mi_theap_cached_key  = MI_ATOMIC_VAR_INIT(MI_PTHREAD_KEY_INVALID);
 
-static void mi_theap_cached_key_destroy(void* theapv) {
-  mi_theap_t* theap = (mi_theap_t*)mi_tls_auth(theapv, MI_TLS_TAG_THEAP_CACHED);
-  if (theap!=NULL) {
-    _mi_theap_decref(theap);
-  }
-}
-
 void _mi_tls_slots_init(void) {
   mi_atomic_do_once {
     pthread_key_t key = MI_PTHREAD_KEY_INVALID;
     if (_mi_pthread_key_create(&key,NULL,NULL)) { mi_atomic_store_release(&_mi_theap_default_key,key); }
     key = MI_PTHREAD_KEY_INVALID;
-    if (_mi_pthread_key_create(&key,&mi_theap_cached_key_destroy,NULL)) { mi_atomic_store_release(&_mi_theap_cached_key,key); }
+    if (_mi_pthread_key_create(&key,NULL,NULL)) { mi_atomic_store_release(&_mi_theap_cached_key,key); }
   }
 }
 
@@ -216,10 +209,7 @@ void _mi_tls_slots_done(void) {
 
 #endif
 
-void _mi_theap_cached_set(mi_theap_t* theap) {
-  mi_theap_t* prev = _mi_theap_cached();
-  if (prev==theap) return;
-  // set
+static void mi_theap_cached_tls_set(mi_theap_t* theap) {
   _mi_tls_slots_init();
   void* const x = mi_tls_sign(theap, MI_TLS_TAG_THEAP_CACHED);
   #if MI_TLS_MODEL_LOCAL
@@ -232,6 +222,18 @@ void _mi_theap_cached_set(mi_theap_t* theap) {
     pthread_key_t key = mi_atomic_load_relaxed(&_mi_theap_cached_key);
     if (key!=MI_PTHREAD_KEY_INVALID) { pthread_setspecific(key, x); }
   #endif
+}
+
+// Set the cached theap of the calling thread. The reference is owned by `tld->theap_cached`, not by
+// the TLS slot, so `_mi_thread_done` can release it even if the platform has reset the slot
+// (on macOS with `MI_TLS_MODEL_LOCAL`, dyld frees `__thread` storage in a pthread key destructor
+// that runs before ours). Only the thread that owns `tld` accesses `tld->theap_cached` (no lock needed).
+void _mi_theap_cached_set_ex(mi_tld_t* tld, mi_theap_t* theap) {
+  mi_assert_internal(tld!=NULL && tld->thread_id==_mi_prim_thread_id());
+  mi_theap_cached_tls_set(theap);  // always write: the slot may have been reset by the platform
+  mi_theap_t* const prev = tld->theap_cached;
+  if (prev==theap) return;
+  tld->theap_cached = theap;
   // update refcounts (so cached theap memory keeps available until no longer cached)
   _mi_theap_incref(theap);
   _mi_theap_decref(prev);

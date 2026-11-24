@@ -566,8 +566,8 @@ void _mi_theap_release(mi_theap_t* theap, mi_theap_t* slot_theap) {
       }
     }
   }
-  if (_mi_theap_cached() == theap) {
-    _mi_theap_cached_set(_mi_theap_empty_get());
+  if (tld->theap_cached == theap) {
+    _mi_theap_cached_set_ex(tld, _mi_theap_empty_get());
   }
   if (release) { _mi_theap_decref(theap); }
   if (!found) { _mi_verbose_message("theap %p is no longer owned by this thread\n", theap); }

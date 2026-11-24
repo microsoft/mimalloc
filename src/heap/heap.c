@@ -126,7 +126,10 @@ mi_decl_cold mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
   else if mi_unlikely(_mi_theap_is_unavailable(theap)) {
     return mi_theap_failed();  // released by this thread (see `mi_thread_heap_release`)
   }
-  _mi_theap_cached_set(theap);
+  // `theap->tld` is the tld of the calling thread, or NULL if the theap is detached
+  // (see `mi_theap_detach_from_tld`); then we do not cache the theap.
+  mi_tld_t* const tld = theap->tld;
+  if (tld!=NULL) { _mi_theap_cached_set_ex(tld, theap); }
   return theap;
 }
 
