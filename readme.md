@@ -15,9 +15,9 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.7.0`  (2026-11-16) recommended -- now with [MTE](#memory-tagging-mte) support.\
-Latest v2 release: `v2.5.3`  (2026-11-16) stable, legacy.\
-Latest v1 release: `v1.15.3` (2026-11-16) legacy.
+Latest release   : `v3.7.1`  (2026-11-24) recommended -- now with [MTE](#memory-tagging-mte) support.\
+Latest v2 release: `v2.5.4`  (2026-11-24) stable, legacy.\
+Latest v1 release: `v1.15.4` (2026-11-24) legacy.
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -90,6 +90,17 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 
 ### Releases
 
+* 2026-11-24, `v3.7.1`, `v2.5.4`, `v1.15.4`: (v3) fix THP usage regression (#1502), initialize arena bitmaps lazily,
+  make configuration defines consistent (#1506), detect big-endian platforms, more CPython integration fixes (python/cpython#158718),
+  fix legacy pprof output with lower case hexadecimal output (#1509), improved purge delay,
+  remove dependency on msvcp140.dll in Rust (#1511), better detect elevated processes on Linux (with AT_SECURE),
+  the `mi_umalloc` api's return the usable size, fix `mi_good_size` to take padding into account,
+  introduce [secure mode](#security) `BASIC` that includes free-list encoding and double-free detection with modest overhead,
+  Faster Rust crate, add `MiMallocExcess` as well for better buffer allocation (#1513), fix WASI compilation,
+  collect correctly from threads that never allocate.\
+  (v1,v2,v3): use MADV_DONTNEED for cross-thread huge page resets (#1510), ignore environment options in
+  elevated processes and secure builds, redact addresses in output, limit real_path buffer, prevent infinite loops
+  on corrupted free-lists in release builds,
 * 2026-11-16, `v3.7.0`, `v2.5.3`, `v1.15.3`:
   (v3) Initial memory tagging support (on an M5 for example), see [MTE](#memory-tagging-mte) and [PAC](#pointer-authentication-pac).
   Generally improved [security](#security) with sealed data after initialization and secure environments.
