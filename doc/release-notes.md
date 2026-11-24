@@ -10,11 +10,11 @@ Notes:
 - Generally it is recommended to download sources (or use `vcpkg` etc.) and build mimalloc as
   part of your project.
 - Source releases can also be downloaded directly from github by the tag.\
-  For example <https://github.com/microsoft/mimalloc/archive/v3.7.1.tar.gz>.
+  For example <https://github.com/microsoft/mimalloc/archive/v3.7.2.tar.gz>.
 - Binary releases include a release-, debug-, and secure build.
 - Linux binaries are built on Ubuntu 22.
 
 - You can use a release from [Rust](https://github.com/microsoft/mimalloc/tree/dev3/contrib/rust) directly as:
   ```toml
   [dependencies]
-  mimalloc = { git = "https://github.com/microsoft/mimalloc", tag = "v3.7.1", features = [] }
+  mimalloc = { git = "https://github.com/microsoft/mimalloc", tag = "v3.7.2", features = [] }

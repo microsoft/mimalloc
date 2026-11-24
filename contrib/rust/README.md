@@ -9,7 +9,7 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mimalloc = { git = "https://github.com/microsoft/mimalloc", tag = "v3.7.1" }
+mimalloc = { git = "https://github.com/microsoft/mimalloc", tag = "v3.7.2" }
 ```
 
 and use it as the global allocator:
@@ -26,7 +26,7 @@ To use the basic security mitigations as well, enable a feature:
 
 ```toml
 [dependencies]
-mimalloc = { git = "https://github.com/microsoft/mimalloc", tag = "v3.7.1", features = ["secure_basic"] }
+mimalloc = { git = "https://github.com/microsoft/mimalloc", tag = "v3.7.2", features = ["secure_basic"] }
 ```
 
 ## Performance tips
@@ -77,7 +77,7 @@ Features can be enabled per target, e.g. to only override `malloc` on Linux:
 
 ```toml
 [target.'cfg(target_os = "linux")'.dependencies]
-mimalloc = { git = "https://github.com/microsoft/mimalloc", tag = "v3.7.1", features = ["override"] }
+mimalloc = { git = "https://github.com/microsoft/mimalloc", tag = "v3.7.2", features = ["override"] }
 ```
 
 Other build options can be passed as C defines in the `MIMALLOC_DEFINES` environment
