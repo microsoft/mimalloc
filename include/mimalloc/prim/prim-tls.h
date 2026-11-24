@@ -272,6 +272,7 @@ We have 4 models:
 
 - MI_TLS_MODEL_PTHREADS: use `pthread_getspecific`. (default on macOS and OpenBSD, maybe good for Android as well?)
     Use pthread local storage. Can be as fast as thread locals on many platforms (like recent macOS).
+    Always use this on macOS (and avoid MI_TLS_MODEL_LOCAL for macOS).
 
 - MI_TLS_MODEL_FIXED: use a fixed slot in the TLS block.
     This reserves an unused and fixed TLS slot. This is fast and avoids the problem
