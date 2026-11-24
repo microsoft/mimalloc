@@ -259,8 +259,9 @@ void _mi_theap_default_set(mi_theap_t* theap)  {
   #endif
 
   // set theap main if needed
-  if (mi_theap_is_initialized(theap)) {
-    // ensure the default theap is passed to `_mi_thread_done` as on some platforms we cannot access TLS at thread termination (as it would allocate again)
+  if (mi_theap_is_initialized(theap) && mi_is_heap_main(mi_theap_heap(theap))) {
+    // ensure the main theap is passed to `_mi_thread_done` as on some platforms we cannot access TLS at thread termination (as it would allocate again)
+    // (not the theap of another heap: another thread can delete that heap and free its theaps before this thread exits)
     _mi_prim_thread_associate_default_theap((mi_theap_t*)mi_theap_thread_done_sign(theap));
   }
 }
