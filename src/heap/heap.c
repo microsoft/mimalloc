@@ -346,14 +346,14 @@ void mi_thread_heap_release(mi_heap_t* heap) mi_attr_noexcept {
 }
 
 #if MI_DEBUG
-// Warn if some threads still own a theap of a heap that is deleted (see `mi_thread_heap_release`)
+// Report (verbose) if some threads still own a theap of a heap that is deleted (see `mi_thread_heap_release`)
 static void mi_heap_check_released(mi_heap_t* heap) {
   size_t count = 0;
   mi_lock(&heap->theaps_lock) {
     for (mi_theap_t* theap = heap->theaps; theap != NULL; theap = theap->hnext) { count++; }
   }
   if (count > 0) {
-    _mi_warning_message("deleting heap %p while %zu thread(s) did not release it first (see mi_thread_heap_release)\n", heap, count);
+    _mi_verbose_message("deleting heap %p while %zu thread(s) did not release it first (see mi_thread_heap_release)\n", heap, count);
   }
 }
 #endif
