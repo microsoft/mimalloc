@@ -72,12 +72,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
-// Environment options are named `mimalloc_<option>`, or `<MI_ENV_PREFIX>_mimalloc_<option>` if
+// Environment options are named `MIMALLOC_<option>`, or `<MI_ENV_PREFIX>_MIMALLOC_<option>` if
 // `MI_ENV_PREFIX` is defined as a string literal (`cmake -DMI_ENV_PREFIX=MYAPP`)
 #if defined(MI_ENV_PREFIX)
-#define MI_ENV_OPTION_PREFIX  MI_ENV_PREFIX "_mimalloc_"
+#define MI_ENV_OPTION_PREFIX  MI_ENV_PREFIX "_MIMALLOC_"
 #else
-#define MI_ENV_OPTION_PREFIX  "mimalloc_"
+#define MI_ENV_OPTION_PREFIX  "MIMALLOC_"
 #endif
 
 // Define MI_DEBUG for assertion and invariant checking
