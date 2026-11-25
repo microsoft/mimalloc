@@ -162,20 +162,20 @@ mi_decl_hidden _Atomic(pthread_key_t) _mi_theap_default_key = MI_ATOMIC_VAR_INIT
 mi_decl_hidden _Atomic(pthread_key_t) _mi_theap_cached_key  = MI_ATOMIC_VAR_INIT(MI_PTHREAD_KEY_INVALID);
 
 // no destructors as the keys may outlive an unloaded library; `mi_thread_theaps_done` releases the cached theap
-static void mi_tls_key_create(_Atomic(pthread_key_t)* pkey) {
-  pthread_key_t key = MI_PTHREAD_KEY_INVALID;
-  if (!_mi_pthread_key_create(&key,NULL,NULL)) { _mi_fatal_error("unable to allocate the thread local keys\n"); }
-  mi_atomic_store_release(pkey,key);
+// keys are (re)created lazily as threads may still initialize after `_mi_tls_slots_done` at process exit (issue #1518)
+// (no lock as `pthread_key_create` may allocate and recurse on some platforms)
+static void mi_tls_key_ensure(_Atomic(pthread_key_t)* pkey) {
+  if mi_likely(mi_atomic_load_acquire(pkey)!=MI_PTHREAD_KEY_INVALID) return;
+  pthread_key_t key;
+  if (pthread_key_create(&key,NULL)!=0) { _mi_fatal_error("unable to allocate the thread local keys\n"); return; }
+  pthread_key_t expected = MI_PTHREAD_KEY_INVALID;
+  if (!mi_atomic_cas_strong_acq_rel(pkey,&expected,key)) { pthread_key_delete(key); }  // lost the race
 }
 
 // without the keys each allocation would re-initialize the thread
-static void mi_tls_slots_init_once(void) {
-  mi_tls_key_create(&_mi_theap_default_key);
-  mi_tls_key_create(&_mi_theap_cached_key);
-}
-
 void _mi_tls_slots_init(void) {
-  mi_atomic_do_once { mi_tls_slots_init_once(); }
+  mi_tls_key_ensure(&_mi_theap_default_key);
+  mi_tls_key_ensure(&_mi_theap_cached_key);
 }
 
 void _mi_tls_slots_done(void) {

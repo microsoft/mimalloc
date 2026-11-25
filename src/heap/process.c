@@ -840,7 +840,7 @@ static void mi_process_unwind_once(void)
   // or C-runtime termination code.
   mi_subproc_t* subproc_main = _mi_subproc_main();
   // other threads may still allocate after `exit` (until the OS terminates them) so we keep the process TLS keys (issue #1518)
-  const bool other_threads = (mi_atomic_load_acquire(&subproc_main->thread_count) > 1);
+  const bool other_threads = (mi_atomic_load_acquire(&subproc_main->thread_count) > (_mi_thread_is_initialized() ? 1 : 0));
   if (mi_option_is_enabled(mi_option_destroy_on_exit)) {
     _mi_subprocs_unsafe_destroy_all(); // destroys all mi_subprocs, arenas, thread locals, and the page_map!
   }
