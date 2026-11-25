@@ -72,6 +72,14 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #endif
 
+// Environment options are named `mimalloc_<option>`, or `<MI_ENV_PREFIX>_mimalloc_<option>` if
+// `MI_ENV_PREFIX` is defined as a string literal (`cmake -DMI_ENV_PREFIX=MYAPP`)
+#if defined(MI_ENV_PREFIX)
+#define MI_ENV_OPTION_PREFIX  MI_ENV_PREFIX "_mimalloc_"
+#else
+#define MI_ENV_OPTION_PREFIX  "mimalloc_"
+#endif
+
 // Define MI_DEBUG for assertion and invariant checking
 // #define MI_DEBUG 1  // basic assertion checks and statistics, check double free, corrupted free list, and invalid pointer free. (cmake -DMI_DEBUG=ON)
 // #define MI_DEBUG 2  // + internal assertion checks (cmake -DMI_DEBUG_INTERNAL=ON)
