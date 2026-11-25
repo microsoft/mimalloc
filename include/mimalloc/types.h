@@ -365,7 +365,7 @@ struct mi_theap_s {
   bool                  allow_page_reclaim;                  // `true` if this theap can reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this theap can abandon pages to reduce memory footprint
   bool                  is_detached;                         // `true` if `tld->thread_id == MI_THREAD_ID_DETACHED`
-  bool                  profile_never;                       // if `true`, this theap is never profiled (only the empty and meta theaps)
+  bool                  profile_never;                       // if `true`, this theap is never profiled (only the empty, meta, and detached theaps)
   bool                  guard_front;                         // `true` if fresh pages get a guard page in front of the blocks (in secure mode, for meta theaps)
   bool                  guard_end;                           // `true` if fresh pages get a guard page after the blocks (in secure mode, for meta theaps or always at level 5)
 
