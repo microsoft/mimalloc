@@ -330,7 +330,7 @@ bool mi_abandoned_visit_blocks(mi_subproc_id_t subproc_id, int heap_tag, bool vi
   // (unfortunately) the visit_abandoned option must be enabled from the start.
   // This is to avoid taking locks if abandoned list visiting is not required (as for most programs)
   if (!mi_option_is_enabled(mi_option_visit_abandoned)) {
-    _mi_error_message(EFAULT, "internal error: can only visit abandoned blocks when MIMALLOC_VISIT_ABANDONED=ON");
+    _mi_error_message(EFAULT, "internal error: can only visit abandoned blocks when " MI_ENV_OPTION_PREFIX "visit_abandoned=ON");
     return false;
   }
   mi_arena_field_cursor_t current;

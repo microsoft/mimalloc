@@ -611,7 +611,7 @@ void _mi_error_message(int err, const char* fmt, ...) {
 // Return the reason to ignore an environment option, or NULL if it can be used.
 static const char* mi_option_env_ignore_reason(mi_option_t option) {
   #if MI_SECURE_ENV
-  if (option != mi_option_show_stats && option != mi_option_verbose && option != mi_option_allow_thp) {
+  if (option != mi_option_show_stats && option != mi_option_verbose && option != mi_option_show_errors && option != mi_option_allow_thp) {
     return "secure environment mode";
   }
   #else
@@ -625,12 +625,14 @@ static void mi_option_init(mi_option_desc_t* desc) {
   // Read option value from the environment
   char s[64 + 1];
   char buf[64+1];
-  _mi_strlcpy(buf, "mimalloc_", sizeof(buf));
+  mi_assert(_mi_strlen(MI_ENV_OPTION_PREFIX) + _mi_strlen(desc->name) < sizeof(buf));  // full name must fit in 64 bytes
+  _mi_strlcpy(buf, MI_ENV_OPTION_PREFIX, sizeof(buf));
   _mi_strlcat(buf, desc->name, sizeof(buf));
   int err = _mi_getenv(buf, s, sizeof(s));
   bool legacy = false;
   if (err==ENOENT && desc->legacy_name != NULL) {
-    _mi_strlcpy(buf, "mimalloc_", sizeof(buf));
+    mi_assert(_mi_strlen(MI_ENV_OPTION_PREFIX) + _mi_strlen(desc->legacy_name) < sizeof(buf));
+    _mi_strlcpy(buf, MI_ENV_OPTION_PREFIX, sizeof(buf));
     _mi_strlcat(buf, desc->legacy_name, sizeof(buf));
     err = _mi_getenv(buf, s, sizeof(s));
     legacy = (err==0);
@@ -645,7 +647,7 @@ static void mi_option_init(mi_option_desc_t* desc) {
       return;
     }
     if (legacy) {
-      _mi_warning_message("environment option \"mimalloc_%s\" is deprecated -- use \"mimalloc_%s\" instead.\n", desc->legacy_name, desc->name);
+      _mi_warning_message("environment option \"" MI_ENV_OPTION_PREFIX "%s\" is deprecated -- use \"" MI_ENV_OPTION_PREFIX "%s\" instead.\n", desc->legacy_name, desc->name);
     }
   }
 
@@ -692,11 +694,11 @@ static void mi_option_init(mi_option_desc_t* desc) {
           // if the 'mimalloc_verbose' env var has a bogus value we'd never know
           // (since the value defaults to 'off') so in that case briefly enable verbose
           desc->value = 1;
-          _mi_warning_message("environment option mimalloc_%s has an invalid value.\n", desc->name);
+          _mi_warning_message("environment option " MI_ENV_OPTION_PREFIX "%s has an invalid value.\n", desc->name);
           desc->value = 0;
         }
         else {
-          _mi_warning_message("environment option mimalloc_%s has an invalid value.\n", desc->name);
+          _mi_warning_message("environment option " MI_ENV_OPTION_PREFIX "%s has an invalid value.\n", desc->name);
         }
       }
     }

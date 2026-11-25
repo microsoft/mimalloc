@@ -15,8 +15,10 @@ option(MI_GUARDED           "Build with guard pages behind certain object alloca
 set(MI_USE_CXX "DEFAULT" CACHE STRING "Use the C++ compiler to compile the library (instead of the C compiler)")
 set_property(CACHE MI_USE_CXX PROPERTY STRINGS "OFF" "ON" "DEFAULT")
 
-set(MI_SECURE_ENV "DEFAULT" CACHE STRING "Restrict environment options to show_stats, verbose, and allow_thp (DEFAULT enables this with MI_SECURE)")
+set(MI_SECURE_ENV "DEFAULT" CACHE STRING "Restrict environment options to show_stats, verbose, show_errors, and allow_thp (DEFAULT enables this with MI_SECURE)")
 set_property(CACHE MI_SECURE_ENV PROPERTY STRINGS "OFF" "ON" "DEFAULT")
+
+set(MI_ENV_PREFIX "" CACHE STRING "Read environment options as <MI_ENV_PREFIX>_MIMALLOC_<option> instead of MIMALLOC_<option> (to isolate multiple mimalloc instances)")
 
 option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for arm64: '-march=armv8.1-a' (2016))" OFF)
 option(MI_SEE_ASM           "Generate assembly files" OFF)
@@ -247,6 +249,15 @@ if(MI_SECURE_ENV STREQUAL "ON")
   list(APPEND mi_defines MI_SECURE_ENV=1)
 elseif(MI_SECURE_ENV STREQUAL "OFF")
   list(APPEND mi_defines MI_SECURE_ENV=0)
+endif()
+
+if(NOT MI_ENV_PREFIX STREQUAL "")
+  string(LENGTH "${MI_ENV_PREFIX}" mi_env_prefix_len)
+  if(NOT MI_ENV_PREFIX MATCHES "^[A-Za-z][A-Za-z0-9_]*$" OR mi_env_prefix_len GREATER 16)
+    message(FATAL_ERROR "MI_ENV_PREFIX must be an identifier of at most 16 characters (found \"${MI_ENV_PREFIX}\")")
+  endif()
+  message(STATUS "Environment options use the ${MI_ENV_PREFIX}_MIMALLOC_ prefix (MI_ENV_PREFIX=${MI_ENV_PREFIX})")
+  list(APPEND mi_defines "MI_ENV_PREFIX=\"${MI_ENV_PREFIX}\"")
 endif()
 
 if(MI_TRACK_VALGRIND)

@@ -64,13 +64,21 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SECURE 0
 #endif
 
-// Restrict environment options to `show_stats`, `verbose`, and `allow_thp` (by default in secure builds)
+// Restrict environment options to `show_stats`, `verbose`, `show_errors`, and `allow_thp` (by default in secure builds)
 #if !defined(MI_SECURE_ENV)
 #if MI_SECURE >= 1
 #define MI_SECURE_ENV 1
 #else
 #define MI_SECURE_ENV 0
 #endif
+#endif
+
+// Environment options are named `mimalloc_<option>`, or `<MI_ENV_PREFIX>_mimalloc_<option>` if
+// `MI_ENV_PREFIX` is defined as a string literal (`cmake -DMI_ENV_PREFIX=MYAPP`)
+#if defined(MI_ENV_PREFIX)
+#define MI_ENV_OPTION_PREFIX  MI_ENV_PREFIX "_mimalloc_"
+#else
+#define MI_ENV_OPTION_PREFIX  "mimalloc_"
 #endif
 
 // Define MI_DEBUG for assertion and invariant checking
