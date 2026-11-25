@@ -345,6 +345,13 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "mimalloc internal: the small object max size is too small"
 #endif
 
+// Environment options are named `MIMALLOC_<option>`, or `<MI_ENV_PREFIX>_MIMALLOC_<option>` if
+// `MI_ENV_PREFIX` is defined as a string literal (`cmake -DMI_ENV_PREFIX=MYAPP`)
+#if defined(MI_ENV_PREFIX)
+#define MI_ENV_OPTION_PREFIX  MI_ENV_PREFIX "_MIMALLOC_"
+#else
+#define MI_ENV_OPTION_PREFIX  "MIMALLOC_"
+#endif
 
 /* -----------------------------------------------------------
   Secure mode defaults

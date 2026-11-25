@@ -399,6 +399,10 @@ Common options:
 - `MIMALLOC_VERBOSE=1`: show verbose messages (including statistics).
 - `MIMALLOC_SHOW_ERRORS=1`: show error and warning messages.
 
+When building with `cmake -DMI_ENV_PREFIX=<PREFIX>`, the environment options are read as `<PREFIX>_MIMALLOC_<option>`
+instead (and plain `MIMALLOC_<option>` variables are ignored). For example, `-DMI_ENV_PREFIX=MYAPP` reads `MYAPP_MIMALLOC_SHOW_STATS`.
+This is useful to isolate the options when multiple instances of mimalloc are loaded in the same process.
+
 Advanced options:
 
 - `MIMALLOC_ARENA_EAGER_COMMIT=2`: turns on eager commit for the large arenas (usually 1GiB) from which mimalloc

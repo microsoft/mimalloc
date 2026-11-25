@@ -15,6 +15,7 @@ option(MI_OVERRIDE            "Override the standard malloc interface (i.e. defi
 option(MI_XMALLOC             "Enable abort() call on memory allocation failure by default" OFF)
 option(MI_SHOW_ERRORS         "Show error and warning messages by default (only enabled by default in DEBUG mode)" OFF)
 option_list(MI_USE_CXX        "DEFAULT;OFF;ON" "Use the C++ compiler to compile the library (instead of the C compiler)")
+set(MI_ENV_PREFIX "" CACHE STRING "Read environment options as <MI_ENV_PREFIX>_MIMALLOC_<option> instead of MIMALLOC_<option> (to isolate multiple mimalloc instances)")
 
 set(MI_OPT_ARCH "DEFAULT" CACHE STRING "Only for optimized builds: turn on architecture specific optimizations (for x64: '-march=haswell;-mavx2' (2013), for arm64: '-march=armv8.1-a' (2016), for riscV: '-march=rv64gcb_zacas' (2023))")
 set_property(CACHE MI_OPT_ARCH PROPERTY STRINGS "OFF" "ON" "avx2" "armv8.1" "armv8.3" "rva22" "rva23" "rv64gcb_zacas" "rv64gcb_zacas_zalasr" "DEFAULT")
@@ -338,6 +339,15 @@ elseif(MI_SECURE_ENV STREQUAL "ON")
   list(APPEND mi_defines MI_SECURE_ENV=1)
 elseif(MI_SECURE_ENV STREQUAL "OFF")
   list(APPEND mi_defines MI_SECURE_ENV=0)
+endif()
+
+if(NOT MI_ENV_PREFIX STREQUAL "")
+  string(LENGTH "${MI_ENV_PREFIX}" mi_env_prefix_len)
+  if(NOT MI_ENV_PREFIX MATCHES "^[A-Za-z][A-Za-z0-9_]*$" OR mi_env_prefix_len GREATER 16)
+    message(FATAL_ERROR "MI_ENV_PREFIX must be an identifier of at most 16 characters (found \"${MI_ENV_PREFIX}\")")
+  endif()
+  message(STATUS "Environment options use the ${MI_ENV_PREFIX}_MIMALLOC_ prefix (MI_ENV_PREFIX=${MI_ENV_PREFIX})")
+  list(APPEND mi_defines "MI_ENV_PREFIX=\"${MI_ENV_PREFIX}\"")
 endif()
 
 if(MI_SECURE_FULL)

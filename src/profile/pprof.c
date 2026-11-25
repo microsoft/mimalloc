@@ -58,9 +58,9 @@ static inline mi_pprof_profiler_t* downcast( mi_profiler_t* prof ) {
 void _mi_pprof_profiler_init(void) {
   #if MI_PROFILE
   char fname[1024];
-  if (_mi_getenv("mimalloc_profile", fname, sizeof(fname)) != 0 || fname[0] == 0) return;  // `MIMALLOC_PROFILE` not set
+  if (_mi_getenv(MI_ENV_OPTION_PREFIX "PROFILE", fname, sizeof(fname)) != 0 || fname[0] == 0) return;  // `MIMALLOC_PROFILE` not set
   if (MI_SECURE_ENV || MI_SECURE > 0 || _mi_os_is_elevated()) {
-    _mi_warning_message("MIMALLOC_PROFILE is ignored in %s\n",
+    _mi_warning_message(MI_ENV_OPTION_PREFIX "PROFILE is ignored in %s\n",
                         (MI_SECURE_ENV ? "secure environment mode" : (MI_SECURE > 0 ? "secure mode" : "an elevated process")));
     return;
   }
