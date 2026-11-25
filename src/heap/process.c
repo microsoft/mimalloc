@@ -521,7 +521,8 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
   #if MI_DEBUG || MI_TLS_RECURSE_GUARD
   theap = mi_heap_check_for_existing_theap(heap_main);  // recursion check
   #if !MI_TLS_RECURSE_GUARD
-  mi_assert_internal(theap==NULL);
+  // after process done, exited threads can leave a theap behind with a reused thread id
+  mi_assert_internal(theap==NULL || mi_atomic_load_relaxed(&_mi_process.process_done_is_called) != 0);
   #endif
   #else
   theap = NULL;
