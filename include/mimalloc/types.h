@@ -63,7 +63,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_SECURE 0
 #endif
 
-// Restrict environment options to `show_stats`, `verbose`, and `allow_thp` (by default in secure builds)
+// Restrict environment options to `show_stats`, `verbose`, `show_errors`, and `allow_thp` (by default in secure builds)
 #if !defined(MI_SECURE_ENV)
 #if MI_SECURE >= 1
 #define MI_SECURE_ENV 1

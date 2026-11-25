@@ -15,7 +15,7 @@ option(MI_GUARDED           "Build with guard pages behind certain object alloca
 set(MI_USE_CXX "DEFAULT" CACHE STRING "Use the C++ compiler to compile the library (instead of the C compiler)")
 set_property(CACHE MI_USE_CXX PROPERTY STRINGS "OFF" "ON" "DEFAULT")
 
-set(MI_SECURE_ENV "DEFAULT" CACHE STRING "Restrict environment options to show_stats, verbose, and allow_thp (DEFAULT enables this with MI_SECURE)")
+set(MI_SECURE_ENV "DEFAULT" CACHE STRING "Restrict environment options to show_stats, verbose, show_errors, and allow_thp (DEFAULT enables this with MI_SECURE)")
 set_property(CACHE MI_SECURE_ENV PROPERTY STRINGS "OFF" "ON" "DEFAULT")
 
 set(MI_ENV_PREFIX "" CACHE STRING "Read environment options as <MI_ENV_PREFIX>_MIMALLOC_<option> instead of MIMALLOC_<option> (to isolate multiple mimalloc instances)")

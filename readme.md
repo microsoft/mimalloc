@@ -433,7 +433,7 @@ to make mimalloc more robust against exploits. In particular:
   valid block data with inaccessible gaps). This setting is not recommended in general as it is more expensive and can lead to
   reaching the maximum VMA limit on Linux systems if the heap gets too large.
 
-In secure mode, only the `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, and `MIMALLOC_ALLOW_THP` environment options are accepted
+In secure mode, only the `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, `MIMALLOC_SHOW_ERRORS`, and `MIMALLOC_ALLOW_THP` environment options are accepted
 (and all others are ignored). This can be controlled explicitly with `-DMI_SECURE_ENV=ON|OFF`. Note: an elevated process
 always ignores all environment options. Also, addresses are not shown in messages in a secure release build.
 

@@ -611,7 +611,7 @@ void _mi_error_message(int err, const char* fmt, ...) {
 // Return the reason to ignore an environment option, or NULL if it can be used.
 static const char* mi_option_env_ignore_reason(mi_option_t option) {
   #if MI_SECURE_ENV
-  if (option != mi_option_show_stats && option != mi_option_verbose && option != mi_option_allow_thp) {
+  if (option != mi_option_show_stats && option != mi_option_verbose && option != mi_option_show_errors && option != mi_option_allow_thp) {
     return "secure environment mode";
   }
   #else
