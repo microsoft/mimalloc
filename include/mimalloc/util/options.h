@@ -42,7 +42,7 @@ typedef enum mi_option_init_e {
 typedef struct mi_option_desc_s {
   long              default_value; // the default value
   mi_option_t       option; // for debugging: the option index should match the option
-  const char*       name;   // option name without `mimalloc_` prefix
+  const char*       name;   // option name without the `MI_ENV_PREFIX` prefix
   const char*       legacy_name; // potential legacy option name
 } mi_option_desc_t;
 

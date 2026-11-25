@@ -837,10 +837,10 @@ static void mi_option_env_apply(mi_option_t option, mi_option_state_t* state, mi
 static void mi_option_env_warn(mi_option_t option, const mi_option_env_t* env) {
   const mi_option_desc_t* const desc = mi_option_desc(option);
   if (env->ignore_reason != NULL) {
-    _mi_warning_message("MIMALLOC_%s is ignored in %s\n", desc->name, env->ignore_reason);
+    _mi_warning_message(MI_ENV_PREFIX "%s is ignored in %s\n", desc->name, env->ignore_reason);
   }
   if (env->legacy && env->err != ENOENT) {
-    _mi_warning_message("environment option \"mimalloc_%s\" is deprecated -- use \"mimalloc_%s\" instead.\n", desc->legacy_name, desc->name);
+    _mi_warning_message("environment option \"" MI_ENV_PREFIX "%s\" is deprecated -- use \"" MI_ENV_PREFIX "%s\" instead.\n", desc->legacy_name, desc->name);
   }
   if (env->err == EINVAL || env->err == E2BIG) {
     // if the 'mimalloc_verbose' env var has a bogus value we'd never know
@@ -848,7 +848,7 @@ static void mi_option_env_warn(mi_option_t option, const mi_option_env_t* env) {
     mi_option_state_t* const state = &_mi_process.options[option];
     const bool force_verbose = (option == mi_option_verbose && mi_option_state_value(state) == 0);
     if (force_verbose) { mi_atomic_storess_relaxed(&state->value, 1); }
-    _mi_warning_message("environment option mimalloc_%s %s.\n", desc->name, (env->err == E2BIG ? "has a value that is too long" : "has an invalid value"));
+    _mi_warning_message("environment option " MI_ENV_PREFIX "%s %s.\n", desc->name, (env->err == E2BIG ? "has a value that is too long" : "has an invalid value"));
     if (force_verbose) { mi_atomic_storess_relaxed(&state->value, 0); }
   }
 }
@@ -860,7 +860,7 @@ static void mi_option_env_warn(mi_option_t option, const mi_option_env_t* env) {
 
 static int mi_option_getenv(const char* name, char* result, size_t result_size) {
   char buf[64+1];
-  _mi_strlcpy(buf, "mimalloc_", sizeof(buf));
+  _mi_strlcpy(buf, MI_ENV_PREFIX, sizeof(buf));
   _mi_strlcat(buf, name, sizeof(buf));
   return _mi_getenv(buf, result, result_size);
 }
@@ -897,7 +897,7 @@ static bool mi_env_name_eq(const char* name, size_t len, const char* s) {
   return (s != NULL && _mi_strnicmp(name, s, len) == 0 && s[len] == 0);
 }
 
-// Is `name` (without the `mimalloc_` prefix) a known environment variable that is not an option?
+// Is `name` (without the `MI_ENV_PREFIX` prefix) a known environment variable that is not an option?
 static bool mi_env_is_extra(const char* name, size_t len) {
   static const char* const extra_names[] = {
     "profile",    // pprof profiler output (src/profile/pprof.c)
@@ -924,11 +924,14 @@ static void mi_env_scan_unknown(mi_env_scan_t* scan, const char* name, size_t le
   }
 }
 
+// The length of the `MI_ENV_PREFIX` string literal.
+#define MI_ENV_PREFIX_LEN (sizeof(MI_ENV_PREFIX) - 1)
+
 // Visit an environment `entry` of the form `name=value`
 static void mi_env_scan_entry(const char* entry, void* arg) {
   mi_env_scan_t* const scan = (mi_env_scan_t*)arg;
-  const size_t plen = 9;  // `mimalloc_`
-  if (_mi_strnicmp(entry, "mimalloc_", plen) != 0) return;
+  const size_t plen = MI_ENV_PREFIX_LEN;  // the `MI_ENV_PREFIX` prefix
+  if (_mi_strnicmp(entry, MI_ENV_PREFIX, plen) != 0) return;
   const char* const name = entry + plen;
   size_t len = 0;
   while (name[len] != 0 && name[len] != '=') { len++; }
