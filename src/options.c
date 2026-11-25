@@ -625,11 +625,13 @@ static void mi_option_init(mi_option_desc_t* desc) {
   // Read option value from the environment
   char s[64 + 1];
   char buf[64+1];
+  mi_assert(_mi_strlen(MI_ENV_OPTION_PREFIX) + _mi_strlen(desc->name) < sizeof(buf));  // full name must fit in 64 bytes
   _mi_strlcpy(buf, MI_ENV_OPTION_PREFIX, sizeof(buf));
   _mi_strlcat(buf, desc->name, sizeof(buf));
   int err = _mi_getenv(buf, s, sizeof(s));
   bool legacy = false;
   if (err==ENOENT && desc->legacy_name != NULL) {
+    mi_assert(_mi_strlen(MI_ENV_OPTION_PREFIX) + _mi_strlen(desc->legacy_name) < sizeof(buf));
     _mi_strlcpy(buf, MI_ENV_OPTION_PREFIX, sizeof(buf));
     _mi_strlcat(buf, desc->legacy_name, sizeof(buf));
     err = _mi_getenv(buf, s, sizeof(s));
