@@ -45,6 +45,7 @@ static bool mi_heap_visit_page_collect_claimed(mi_page_t* page) {
 }
 
 static bool mi_heap_visit_page(mi_page_t* page, const mi_heap_visit_info_t* vinfo) {
+  if (_mi_meta_is_meta_page(vinfo->heap->subproc, page)) return true;  // skip meta-data pages (in the main heap)
   mi_heap_area_t area;
   // abandoned pages can only be collected if we can claim them
   const bool abandoned = mi_page_is_abandoned(page);

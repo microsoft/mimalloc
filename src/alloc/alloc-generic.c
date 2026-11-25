@@ -321,10 +321,11 @@ static mi_page_t* mi_find_page(mi_theap_t* theap, size_t size, size_t huge_align
 ----------------------------------------------------------- */
 
 // The handler and argument are stored in the sealed process data (see `heap/process.h`).
+// Never called for detached theaps as those allocate under a (non-recursive) lock.
 void _mi_deferred_free(mi_theap_t* theap, bool force) {
   theap->heartbeat++;
   const mi_process_sealed_t* const sealed = mi_process_get_sealed();
-  if (mi_atomic_load_ptr_relaxed(void,&sealed->deferred_free) != NULL && !theap->tld->recurse) {
+  if (mi_atomic_load_ptr_relaxed(void,&sealed->deferred_free) != NULL && !theap->tld->recurse && !theap->is_detached) {
     theap->tld->recurse = true;
     void* arg;
     mi_deferred_free_fun* const fun = (mi_deferred_free_fun*)_mi_process_get_callback(&sealed->deferred_free, &sealed->deferred_arg, &arg);
@@ -477,15 +478,11 @@ static mi_decl_noinline void* mi_malloc_generic_sample(mi_theap_t* theap, size_t
 }
 
 // Allocate on a thread after `mi_thread_done` (for example in thread-local destructors)
-// using meta-data allocation (instead of re-initializing the thread which could leak).
-// Note: `size` includes `MI_PADDING_SIZE` and the allocation is always zero'd.
-static mi_decl_noinline void* mi_malloc_generic_thread_done(size_t size, size_t huge_alignment, mi_page_t** ppage)
+// using the detached theap (instead of re-initializing the thread which could leak).
+// Note: `size` includes `MI_PADDING_SIZE`.
+static mi_decl_noinline void* mi_malloc_generic_thread_done(size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage)
 {
-  mi_subproc_t* const subproc = _mi_subproc();
-  const size_t req_size = size - MI_PADDING_SIZE;
-  void* const p = (huge_alignment==0 ? _mi_meta_zalloc(subproc, req_size, NULL) : _mi_meta_zalloc_aligned(subproc, req_size, huge_alignment, NULL));
-  if (p!=NULL && ppage!=NULL) { *ppage = mi_ptr_page(p); }
-  return p;
+  return _mi_detached_malloc(_mi_subproc(), size - MI_PADDING_SIZE, zero, huge_alignment, ppage);
 }
 
 // The unavailable theap is either the default theap of a done thread, or signifies that
@@ -497,7 +494,7 @@ static bool mi_theap_is_thread_done(const mi_theap_t* theap) {
 static inline void* mi_malloc_generic_fallback_ex(mi_theap_t* theap, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage)
 {
   if mi_unlikely(mi_theap_is_thread_done(theap)) {
-    return mi_malloc_generic_thread_done(size, huge_alignment, ppage);
+    return mi_malloc_generic_thread_done(size, zero, huge_alignment, ppage);
   }
 
   // initialize if necessary
@@ -575,7 +572,7 @@ mi_decl_func_align mi_decl_restrict void* _mi_malloc_generic(mi_theap_t* theap, 
 mi_decl_restrict void* _mi_malloc_generic_no_sample(mi_theap_t* theap, size_t size, bool zero, mi_page_t** ppage) mi_attr_noexcept
 {
   if mi_unlikely(mi_theap_is_thread_done(theap)) {
-    return mi_malloc_generic_thread_done(size, 0, ppage);
+    return mi_malloc_generic_thread_done(size, zero, 0, ppage);
   }
   // do the admin first as it can update the sample rate; we never call it (or the sampling path) recursively here
   theap = mi_malloc_generic_admin(theap);

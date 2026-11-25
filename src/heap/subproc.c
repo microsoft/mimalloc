@@ -17,6 +17,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc/heap/subproc.h"
 #include "mimalloc/heap/process.h"
 #include "mimalloc/alloc/page.h"
+#include "mimalloc/alloc/alloc.h"  // _mi_theap_malloc_zero
+#include "mimalloc/heap/theap.h"   // _mi_theap_create
 #include "mimalloc/util/threadlocal.h"
 
 // the list of sub-processes is in the sealed `subprocs` (and the main subprocess is allocated in the process meta data)
@@ -54,8 +56,7 @@ void* _mi_meta_zalloc_aligned( mi_subproc_t* subproc, size_t size, size_t aligne
 
 void* _mi_meta_rezalloc( mi_subproc_t* subproc, void* oldp, size_t newsize, mi_memid_t* memid ) {
   mi_assert_internal(subproc->theap_meta != NULL);
-  // note: since we take a meta lock we cannot use `mi_theap_rezalloc` as that could call `mi_free` which
-  // can call `mi_stat_free` which would try to take the meta lock again. See issue #1358.
+  // note: we only allocate under the meta lock; the copy and `mi_free` of the old block are done outside it.
   void* p = NULL;
   mi_lock(&subproc->theap_meta_lock) {
     p = mi_theap_zalloc(subproc->theap_meta, newsize);
@@ -91,6 +92,36 @@ bool _mi_meta_is_meta_page(const mi_subproc_t* subproc, const mi_page_t* page) {
   if (page==NULL) return false;
   mi_theap_t* theap = page->theap;
   return (theap != NULL && theap == subproc->theap_meta);
+}
+
+
+/* -----------------------------------------------------------
+  Detached allocation
+  User allocations without a live thread (for example after
+  `mi_thread_done`) use a dedicated detached theap
+  `subproc.theap_detached` so user data is never mixed with meta-data.
+  It is created on demand, uses the detached tld of `theap_meta`,
+  and needs a lock to allocate safely.
+----------------------------------------------------------- */
+
+// called with the `theap_detached_lock` held
+static mi_theap_t* mi_subproc_theap_detached_get_or_init(mi_subproc_t* subproc) {
+  if (subproc->theap_detached == NULL) {
+    mi_theap_t* const theap = _mi_theap_create(_mi_subproc_heap_main(subproc), subproc->theap_meta->tld);
+    if (theap != NULL) { mi_theap_profile_never(theap); }  // profiler callbacks could re-enter under the lock
+    subproc->theap_detached = theap;
+  }
+  return subproc->theap_detached;
+}
+
+void* _mi_detached_malloc(mi_subproc_t* subproc, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage) {
+  void* p = NULL;
+  mi_lock(&subproc->theap_detached_lock) {
+    mi_theap_t* const theap = mi_subproc_theap_detached_get_or_init(subproc);
+    if (theap != NULL) { p = _mi_theap_malloc_zero(theap, size, zero, huge_alignment, ppage); }
+  }
+  mi_assert_internal(p==NULL || !_mi_meta_is_meta_page(subproc, mi_ptr_page(p)));
+  return p;
 }
 
 
@@ -151,6 +182,7 @@ static mi_subproc_t* mi_subproc_init(mi_subproc_t* subproc) {
   mi_lock_init(&subproc->arena_reserve_lock);
   mi_lock_init(&subproc->heaps_lock);
   mi_lock_init(&subproc->theap_meta_lock);
+  mi_lock_init(&subproc->theap_detached_lock);
   mi_lock(&_mi_process.subprocs_lock) {
     // push on subproc list (the list head is sealed and stored without memory tag)
     mi_subproc_t* const head = (mi_subproc_t*)mi_meta_load_maybe(mi_process_get_sealed()->subprocs);
@@ -244,6 +276,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
   }
 
   subproc->theap_meta = NULL;     // theap meta stats are merged during heap_destroy of the main heap
+  subproc->theap_detached = NULL; // and so are the theap detached stats (and it is freed there as well)
 
   if (!_mi_subproc_is_main(subproc)) {
     // merge stats back into the main subproc
@@ -264,6 +297,7 @@ static void mi_subproc_unsafe_destroy(mi_subproc_t* subproc, bool acquire_subpro
   mi_lock_done(&subproc->arena_reserve_lock);
   mi_lock_done(&subproc->heaps_lock);
   mi_lock_done(&subproc->theap_meta_lock);
+  mi_lock_done(&subproc->theap_detached_lock);
   _mi_meta_free(_mi_subproc_main(), subproc, subproc->memid);
   if (_mi_subproc_is_main(subproc)) {
     // for the main subproc, also release the global page map

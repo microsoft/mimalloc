@@ -103,7 +103,7 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
 
 
 // a theap for which allocation returns NULL (see `alloc/alloc-generic.c:mi_theap_init`)
-// note: on a done thread the unavailable theap falls back to meta allocation so we return the empty theap instead
+// note: on a done thread the unavailable theap falls back to the detached theap so we return the empty theap instead
 static mi_theap_t* mi_theap_failed(void) {
   return (_mi_thread_is_done() ? _mi_theap_empty_get() : _mi_theap_unavailable());
 }
@@ -117,7 +117,7 @@ mi_decl_cold mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
   mi_theap_t* theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
   if mi_unlikely(theap==NULL) {
     if (_mi_thread_is_done()) {
-      // don't re-initialize; allocation in the main heap uses the meta-data theap while other heaps return NULL (see `alloc/alloc-generic.c`)
+      // don't re-initialize; allocation in the main heap uses the detached theap while other heaps return NULL (see `alloc/alloc-generic.c`)
       return (mi_addr(heap) == mi_addr(mi_heap_main()) ? _mi_theap_unavailable() : mi_theap_failed());
     }
     theap = mi_heap_init_theap(heap);

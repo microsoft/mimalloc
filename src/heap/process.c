@@ -851,8 +851,17 @@ static void mi_process_unwind_once(void)
     if (!other_threads) { _mi_thread_locals_done(); }
     if (subproc_main->heap_main != NULL) {
       if (mi_option_is_enabled(mi_option_show_stats) || mi_option_is_enabled(mi_option_verbose)) {
-        mi_theap_collect(subproc_main->theap_meta, false /* force */); // update stats of all pages in theap_meta
-        _mi_theap_merge_stats(subproc_main->theap_meta);
+        // update stats of all pages; use a try-lock as other threads may still allocate (or were killed holding the lock)
+        if (mi_lock_try_acquire(&subproc_main->theap_meta_lock)) {
+          mi_theap_collect(subproc_main->theap_meta, false /* force */);
+          _mi_theap_merge_stats(subproc_main->theap_meta);
+          mi_lock_release(&subproc_main->theap_meta_lock);
+        }
+        if (mi_lock_try_acquire(&subproc_main->theap_detached_lock)) {
+          mi_theap_collect(subproc_main->theap_detached, false /* force */);
+          mi_theap_stats_merge_to_heap(subproc_main->theap_detached);
+          mi_lock_release(&subproc_main->theap_detached_lock);
+        }
         mi_theap_stats_merge_to_heap(_mi_theap_default());  // _mi_thread_locals_done can free; NULL or empty if `exit` is called from a thread that never allocated
         mi_heap_stats_merge_to_subproc(subproc_main->heap_main);
         mi_subproc_stats_print_out(mi_subproc_main(), NULL, NULL); // note: can try to access (the now freed) thread_locals in mi_heap_theap_peek

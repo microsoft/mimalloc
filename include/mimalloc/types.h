@@ -498,6 +498,8 @@ struct mi_subproc_s {
 
   mi_theap_t*           theap_meta;                     // detached theap for allocating meta-data
   mi_lock_t             theap_meta_lock;                // all allocations in theap_meta need a lock
+  mi_theap_t*           theap_detached;                 // detached theap for user allocations without a live thread (created on demand)
+  mi_lock_t             theap_detached_lock;            // all allocations in theap_detached need a lock
 
   _Atomic(size_t)       thread_count;                   // current threads associated with this sub-process
   _Atomic(size_t)       thread_total_count;             // total created threads associated with this sub-process
