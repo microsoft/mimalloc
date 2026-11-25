@@ -204,3 +204,23 @@ cargo +nightly test --features nightly
 
 The tests also run as `test-rust` with `ctest` in a CMake build (if `cargo` is found),
 using features that match the CMake configuration.
+
+## Custom environment prefix
+
+When multiple instances of mimalloc are loaded in the same process, the runtime options of
+this instance can be isolated by building with a custom prefix: options are then read as
+`<PREFIX>_MIMALLOC_<option>` (and plain `MIMALLOC_<option>` variables are ignored).
+The `MI_ENV_PREFIX` define must be a C string literal, so the value needs inner quotes:
+
+```sh
+MIMALLOC_DEFINES='MI_ENV_PREFIX="MYAPP"' cargo build
+MYAPP_MIMALLOC_VERBOSE=1 cargo run
+```
+
+or, to use it for every build of a project, in `.cargo/config.toml`:
+
+```toml
+[env]
+MIMALLOC_DEFINES = 'MI_ENV_PREFIX="MYAPP"'
+```
+
