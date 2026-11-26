@@ -77,9 +77,6 @@ static PGetNumaHighestNodeNumber    pGetNumaHighestNodeNumber = NULL;
 typedef SIZE_T(__stdcall* PGetLargePageMinimum)(VOID);
 static PGetLargePageMinimum pGetLargePageMinimum = NULL;
 
-// Available after Windows XP
-typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalMemoryInKilobytes );
-
 // Load a library
 static HMODULE mi_win_loadlibrary(const TCHAR* library) {
   #if MI_WIN_DESKTOP
@@ -205,16 +202,6 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     pGetNumaNodeProcessorMask = (PGetNumaNodeProcessorMask)(void (*)(void))GetProcAddress(hDll, "GetNumaNodeProcessorMask");
     pGetNumaHighestNodeNumber = (PGetNumaHighestNodeNumber)(void (*)(void))GetProcAddress(hDll, "GetNumaHighestNodeNumber");
     pGetLargePageMinimum = (PGetLargePageMinimum)(void (*)(void))GetProcAddress(hDll, "GetLargePageMinimum");
-    // Get physical memory (not available on XP, so check dynamically)
-    PGetPhysicallyInstalledSystemMemory pGetPhysicallyInstalledSystemMemory = (PGetPhysicallyInstalledSystemMemory)(void (*)(void))GetProcAddress(hDll,"GetPhysicallyInstalledSystemMemory");
-    if (pGetPhysicallyInstalledSystemMemory != NULL) {
-      ULONGLONG memInKiB = 0;
-      if ((*pGetPhysicallyInstalledSystemMemory)(&memInKiB)) {
-        if (memInKiB > 0 && memInKiB <= SIZE_MAX) {
-          config->physical_memory_in_kib = (size_t)memInKiB;
-        }
-      }
-    }
     mi_win_freelibrary(hDll, hDllFree);
   }
   // Enable large/huge OS page support?
