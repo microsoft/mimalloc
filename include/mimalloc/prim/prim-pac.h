@@ -124,7 +124,7 @@ static inline mi_addr_t mi_pac_ga(mi_addr_t x, mi_addr_t modifier) {
 #endif
 
 static inline mi_ptr_signed_t mi_addr_sign(mi_addr_t q, mi_addr_t salt) {
-  if (q==0) return 0;
+  if (q==0) return mi_ptr_signed_null(void);
   #if MI_PAC >= 2
   return (mi_ptr_signed_t)(q | (mi_pac_ga(q, salt) & MI_PAC_HI_MASK));
   #else
@@ -184,13 +184,13 @@ static inline mi_addr_t mi_addr_auth_valid(mi_ptr_signed_t x, mi_addr_t salt, bo
 
 static inline mi_ptr_signed_t mi_ptr_sign(const void* p, mi_addr_t salt) {
   MI_UNUSED(salt);
-  return (mi_ptr_signed_t)p;
+  return mi_ptr_signed_from_ptr(const void,p);
 }
 
 static inline void* mi_ptr_auth_valid(mi_ptr_signed_t x, mi_addr_t salt, bool* valid) {
   MI_UNUSED(salt);
   *valid = true;
-  return (void*)x;
+  return mi_ptr_signed_as_ptr(void,x);
 }
 
 static inline mi_addr_t mi_keyed_mac(mi_addr_t value, mi_addr_t salt) {

@@ -702,7 +702,7 @@ mi_decl_noinline void _mi_error_block_next_is_invalid(const mi_page_t* page, con
 }
 
 mi_decl_noinline void* _mi_error_ptr_auth_failed(mi_ptr_signed_t x, mi_addr_t salt) {
-  if (x != 0) {
+  if (!mi_ptr_signed_is_null(x)) {
     _mi_error_message(EFAULT, "pointer authentication failed at %p: value %p\n", (void*)salt, (void*)x);
   }
   return NULL;

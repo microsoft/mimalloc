@@ -25,7 +25,7 @@ mi_decl_noreturn mi_decl_cold void _mi_fatal_error(const char* fmt, ...);  // al
 mi_block_t* _mi_error_block_next_is_corrupted(const mi_page_t* page, const mi_block_t* block, mi_encoded_t x);
 void  _mi_error_block_next_is_invalid(const mi_page_t* page, const mi_block_t* block, const mi_block_t* next);
 mi_decl_noreturn void _mi_error_list_corrupted(const void* node);
-void* _mi_error_ptr_auth_failed(mi_ptr_signed_t x, mi_addr_t salt);               // slow path: returns NULL for x==0, and reports EFAULT otherwise
+void* _mi_error_ptr_auth_failed(mi_ptr_signed_t x, mi_addr_t salt);               // slow path: returns NULL for a null `x`, and reports EFAULT otherwise
 void  _mi_error_ptr_pac_unaligned(const void* p);                                 // fatal error for an unaligned pointer with memory tagging
 
 /* -----------------------------------------------------------
