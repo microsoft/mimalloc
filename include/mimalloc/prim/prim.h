@@ -26,7 +26,6 @@ typedef struct mi_os_mem_config_s {
   size_t  page_size;              // default to 4KiB
   size_t  large_page_size;        // 0 if not supported, usually 2MiB
   size_t  alloc_granularity;      // smallest allocation size (usually 4KiB, on Windows 64KiB)
-  size_t  physical_memory_in_kib; // physical memory size in KiB
   size_t  virtual_address_bits;   // usually 48 or 56 bits on 64-bit systems. (used to determine secure randomization)
   size_t  memtag_mode;            // OS specific memory tag check mode (only used in the `prim` layer, see `unix/prim.c`)
   size_t  memtag_line_size;       // cache line size tagged at once by the CPU (`dc gva`); set in `_mi_os_init`
@@ -163,7 +162,7 @@ void _mi_prim_thread_done_auto_done(void);
 
 // Called when the default theap for a thread changes; the (opaque) `theap` value is passed
 // to `_mi_thread_done` at thread termination (and is signed with `MI_PAC`).
-void _mi_prim_thread_associate_default_theap(mi_theap_t* theap);
+void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap);
 
 // Called once on each thread initialization (before the first allocation in that thread)
 void _mi_prim_thread_init(void);

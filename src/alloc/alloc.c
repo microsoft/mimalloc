@@ -112,7 +112,7 @@ static mi_decl_forceinline mi_decl_restrict void* mi_page_malloc_zero(mi_theap_t
   }
   mi_track_mem_undefined(block,sizeof(*block));
 
-  #if MI_SECURE>=2
+  #if MI_SECURE>=1
   if (!zero) mi_atomic_store_relaxed(&block->next, 0);  // don't leak internal data
   #endif
 

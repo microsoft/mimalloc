@@ -82,7 +82,7 @@ static bool mi_page_is_valid_init(mi_page_t* page) {
   mi_assert_internal(mi_page_used(page) <= page->capacity);
   mi_assert_internal(page->capacity <= page->reserved);
   #if MI_FREE_IS_CHECKED
-  const size_t capacity_size = mi_atomic_load_relaxed(&page->capacity_size);
+  const size_t capacity_size = mi_page_capacity_size(page);
   mi_assert_internal(page->capacity == capacity_size / mi_page_block_size(page));
   mi_assert_internal(capacity_size % mi_page_block_size(page) == 0);
   MI_UNUSED(capacity_size);
@@ -218,7 +218,7 @@ static void mi_theap_page_merge_stats(mi_theap_t* theapx, const mi_page_t* page,
   if (alloc_count > 0) {
     mi_theapx_stat_counter_increase(heap, theapx, malloc_count, alloc_count);
     mi_theapx_stat_increase(heap, theapx, allocated, allocated);
-    mi_theapx_stat_increase(heap, theapx, malloc_bins[bin], alloc_count);
+    if (MI_STATS) { mi_theapx_stat_increase(heap, theapx, malloc_bins[bin], alloc_count); }
     if (bin==MI_BIN_HUGE) { mi_theapx_stat_increase(heap,theapx,malloc_huge,allocated); } // separate so we have a count and total
     #if MI_STATS==1
     // use coarse total requested bytes (the usable block size, which already excludes the padding)
@@ -237,7 +237,7 @@ static void mi_theap_page_merge_stats(mi_theap_t* theapx, const mi_page_t* page,
     mi_theapx_stat_counter_increase(heap, theapx, free_count, free_count);
     mi_theapx_stat_counter_increase(heap, theapx, freed, freed);
     mi_theapx_stat_decrease(heap, theapx, allocated, freed);
-    mi_theapx_stat_decrease(heap, theapx, malloc_bins[bin], free_count);
+    if (MI_STATS) { mi_theapx_stat_decrease(heap, theapx, malloc_bins[bin], free_count); }
     if (bin==MI_BIN_HUGE) { mi_theapx_stat_decrease(heap, theapx, malloc_huge, freed); }
     // deprecated
     if (bin!=MI_BIN_HUGE) { mi_theapx_stat_decrease(heap, theapx, malloc_normal, freed); }
@@ -338,23 +338,34 @@ static void mi_page_thread_collect_to_local(mi_page_t* page, mi_block_t* head)
   if (head == NULL) return;
 
   // find the last block in the list -- also to get a proper use count (without data races)
-  size_t max_count = page->capacity; // cannot collect more than capacity
-  size_t count = 1;
-  mi_block_t* last = head;
-  mi_block_t* next;
-  while ((next = mi_block_next(page, last)) != NULL && count <= max_count) {
+  // and check each link to detect use-after-free writes (with the bounds hoisted out of the loop)
+  const size_t max_count = page->capacity; // cannot collect more than capacity
+  #if !MI_ENCODE_FREELIST
+  const size_t capacity_size = mi_page_capacity_size(page);
+  #endif
+  size_t count = 0;
+  mi_block_t* last = NULL;
+  mi_block_t* next = head;
+  do {
+    #if !MI_ENCODE_FREELIST  // (otherwise links are already checked in `mi_block_next`)
+    if mi_unlikely(!mi_block_next_is_valid(page, next, capacity_size)) {
+      _mi_error_block_next_is_invalid(page, last, next);
+      return; // the thread-free items cannot be freed
+    }
+    #endif
     count++;
     last = next;
-  }
+    next = mi_block_next(page, last);
+  } while (next != NULL && count <= max_count);
 
   // if `count > max_count` there was a memory corruption (possibly infinite list due to double multi-threaded free)
   if mi_unlikely(count > max_count) {
-    _mi_error_message(EFAULT, "corrupted thread-free list (possibly due to a cross-thread double free)\n");
+    _mi_error_message(EFAULT, "corrupted thread-free list in page %p with block size %zu (possibly due to a cross-thread double free)\n", page, mi_page_block_size(page));
     return; // the thread-free items cannot be freed
   }
   // if `count > page->used` there was another kind memory corruption (either in the page meta-data or in the linked list)
   else if mi_unlikely(count > mi_page_used(page)) {
-    _mi_error_message(EFAULT, "corrupted meta-data in thread-free list\n");
+    _mi_error_message(EFAULT, "corrupted meta-data in thread-free list in page %p with block size %zu\n", page, mi_page_block_size(page));
     return; // the thread-free items cannot be freed
   }
 
@@ -459,20 +470,35 @@ bool _mi_page_free_collect(mi_page_t* page, bool force) {
     }
     if (force && page->local_free != NULL) {
       // append -- only on shutdown (force) as this is a linear operation
-      mi_block_t* tail = page->local_free;
-      mi_block_t* next;
-      size_t count = 1;
-      while ((next = mi_block_next(page, tail)) != NULL) {
-        if mi_unlikely(++count > page->capacity) {
-          _mi_error_message(EFAULT, "corrupted local-free list (possibly due to a double free)\n");
-          return collected_xfree;
+      const size_t max_count = page->capacity;
+      #if !MI_ENCODE_FREELIST
+      const size_t capacity_size = mi_page_capacity_size(page);
+      #endif
+      size_t count = 0;
+      mi_block_t* tail = NULL;
+      mi_block_t* next = page->local_free;
+      do {
+        #if !MI_ENCODE_FREELIST  // (otherwise links are already checked in `mi_block_next`)
+        if mi_unlikely(!mi_block_next_is_valid(page, next, capacity_size)) {
+          _mi_error_block_next_is_invalid(page, tail, next);
+          break;  // truncate the list at `tail` (or drop it if the head is invalid)
         }
+        #endif
+        count++;
         tail = next;
+        next = mi_block_next(page, tail);
+      } while (next != NULL && count <= max_count);
+
+      // if `count > max_count` there was a memory corruption (possibly infinite list due to a double free)
+      if mi_unlikely(count > max_count) {
+        _mi_error_message(EFAULT, "corrupted local-free list in page %p with block size %zu (possibly due to a double free)\n", page, mi_page_block_size(page));
       }
-      mi_block_set_next(page, tail, page->free);
-      page->free = page->local_free;
+      if mi_likely(tail != NULL) {
+        mi_block_set_next(page, tail, page->free);
+        page->free = page->local_free;
+        page->free_is_zero = false;
+      }
       page->local_free = NULL;
-      page->free_is_zero = false;
     }
     _mi_page_update_sample_countdown(page);
   }
@@ -659,13 +685,13 @@ void _mi_page_to_full(mi_page_t* page, mi_page_queue_t* pq) {
 // lowers the used count, so a page could otherwise be freed (and reused) while one of its blocks is still in use.
 // (a cycle makes the lists too long, and a block that was allocated again has a cleared link which fails to decode)
 void _mi_page_check_free_lists(const mi_page_t* page) {
-  #if MI_SECURE>=2
+  #if MI_SECURE>=1
   const size_t capacity = page->capacity;
   size_t count = 0;
   for (const mi_block_t* b = page->free; b != NULL && count <= capacity; b = mi_block_next(page, b)) { count++; }
   for (const mi_block_t* b = page->local_free; b != NULL && count <= capacity; b = mi_block_next(page, b)) { count++; }
   if mi_unlikely(count != capacity) {
-    _mi_error_message(EFAULT, "corrupted free list in an empty page with block size %zu (possibly due to a double free)\n", mi_page_block_size(page));
+    _mi_error_message(EFAULT, "corrupted free list in an empty page %p with block size %zu (possibly due to a double free)\n", page, mi_page_block_size(page));
   }
   #else
   MI_UNUSED(page);

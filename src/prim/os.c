@@ -33,20 +33,11 @@ terms of the MIT license. A copy of the license can be found in the file
 /* -----------------------------------------------------------
   Initialization.
 ----------------------------------------------------------- */
-#ifndef MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB
-#if MI_SIZE_SIZE < 8
-#define MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB   4*MI_MiB    // 4 GiB
-#else
-#define MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB   32*MI_MiB   // 32 GiB
-#endif
-#endif
-
 // Default OS memory configuration (used until `_mi_os_init`)
 static const mi_os_mem_config_t mi_os_mem_config_default = {
   4096,     // page size
   0,        // large page size (usually 2MiB)
   4096,     // allocation granularity
-  MI_DEFAULT_PHYSICAL_MEMORY_IN_KIB,
   MI_MAX_VABITS, // in `arch.h`
   0,        // memory tag check mode
   0,        // memory tag line size
@@ -139,7 +130,8 @@ bool _mi_os_is_elevated(void) {
 
 // OS (small) page size
 size_t _mi_os_page_size(void) {
-  return mi_os_mem_config()->page_size;
+  const size_t psize = mi_os_mem_config()->page_size;
+  return (psize != 0 ? psize : 4*MI_KiB);  // fallback to 4KiB if not initialized; never return 0
 }
 
 // OS allocation granularity (usually the page size, but 64KiB on Windows)

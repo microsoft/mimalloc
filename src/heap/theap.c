@@ -198,7 +198,7 @@ void mi_theap_collect(mi_theap_t* theap, bool force) mi_attr_noexcept {
 
 void mi_collect(bool force) mi_attr_noexcept {
   // cannot really collect process wide, just a theap..
-  mi_theap_t* const theap = _mi_theap_default();
+  mi_theap_t* const theap = _mi_theap_default_or_main();
   if (mi_theap_is_initialized(theap)) {
     mi_theap_collect(theap, force);
   }
@@ -234,8 +234,9 @@ mi_decl_cold bool _mi_theap_invalid(const mi_theap_t* theap) {
 
 mi_theap_t* mi_theap_set_default(mi_theap_t* theap) {
   mi_theap_t* const previous = mi_theap_get_default();
-  if (mi_theap_is_initialized(theap) && mi_theap_handle_is_valid(theap)) {
-    _mi_theap_default_set(theap);
+  if (theap==NULL) { theap = _mi_theap_main(); }  // restore the main theap
+  if (mi_theap_is_initialized(previous) && mi_theap_is_initialized(theap) && mi_theap_handle_is_valid(theap)) {
+    _mi_theap_default_set(theap, previous->tld);
   }
   return previous;
 }
@@ -282,7 +283,7 @@ bool _mi_theap_init(mi_theap_t* theap, mi_heap_t* heap, mi_tld_t* tld)
   theap->memid = memid;
   theap->cookie = mi_theap_cookie(theap);
   theap->tld   = tld;  // avoid reading the thread-local tld during initialization
-  theap->profile_never = false;  // only set for the empty and meta theaps (see `mi_theap_profile_never`)
+  theap->profile_never = false;  // only set for the empty, meta, and detached theaps (see `mi_theap_profile_never`)
   mi_atomic_store_release(&theap->refcount,1);
   mi_atomic_store_ptr_release(mi_subproc_t,&theap->subproc,heap->subproc);
   mi_assert_internal(theap->stats.size == sizeof(mi_stats_t));
@@ -544,7 +545,7 @@ void _mi_theap_release(mi_theap_t* theap, mi_theap_t* slot_theap) {
   }
   mi_tld_t* const tld = main_theap->tld;
   if (_mi_theap_default() == theap) {
-    _mi_theap_default_set(main_theap);
+    _mi_theap_default_set(main_theap, tld);
   }
 
   bool found = false;
@@ -574,8 +575,8 @@ void _mi_theap_release(mi_theap_t* theap, mi_theap_t* slot_theap) {
       }
     }
   }
-  if (_mi_theap_cached() == theap) {
-    _mi_theap_cached_set(_mi_theap_empty_get());
+  if (tld->theap_cached == theap) {
+    _mi_theap_cached_set(_mi_theap_empty_get(), tld);
   }
   if (release) { _mi_theap_decref(theap); }
   if (!found) { _mi_verbose_message("theap %p is no longer owned by this thread\n", theap); }
@@ -679,7 +680,7 @@ void _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page) {
   const size_t bsize = mi_page_block_size(page);
   const size_t ubsize = mi_page_usable_block_size(page);
   area->reserved = page->reserved * bsize;
-  area->committed = page->capacity * bsize;
+  area->committed = mi_page_capacity_size(page);
   area->blocks = mi_ptr_bounded_data(mi_page_start(page), area->reserved);
   area->used = mi_page_used(page);   // number of blocks in use (#553)
   area->block_size = ubsize;

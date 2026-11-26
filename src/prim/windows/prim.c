@@ -91,10 +91,6 @@ static void* pRtlReleasePebLock = NULL;
 typedef SIZE_T(__stdcall* PGetLargePageMinimum)(VOID);
 static void* pGetLargePageMinimum = NULL;  // encoded
 
-// Available after Windows XP
-typedef BOOL (__stdcall *PGetPhysicallyInstalledSystemMemory)( PULONGLONG TotalMemoryInKilobytes );
-
-
 // Load a library
 static HMODULE mi_win_loadlibrary(const wchar_t* library) {
   #if 1 // used to be `MI_WIN_DESKTOP`, see #1340 and #1467
@@ -254,16 +250,6 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
     pGetNumaNodeProcessorMask = mi_win_get_proc_encoded(hDll, "GetNumaNodeProcessorMask");
     pGetNumaHighestNodeNumber = mi_win_get_proc_encoded(hDll, "GetNumaHighestNodeNumber");
     pGetLargePageMinimum = mi_win_get_proc_encoded(hDll, "GetLargePageMinimum");
-    // Get physical memory (not available on XP, so check dynamically)
-    PGetPhysicallyInstalledSystemMemory pGetPhysicallyInstalledSystemMemory = (PGetPhysicallyInstalledSystemMemory)(void (*)(void))GetProcAddress(hDll,"GetPhysicallyInstalledSystemMemory");
-    if (pGetPhysicallyInstalledSystemMemory != NULL) {
-      ULONGLONG memInKiB = 0;
-      if ((*pGetPhysicallyInstalledSystemMemory)(&memInKiB)) {
-        if (memInKiB > 0 && memInKiB <= SIZE_MAX) {
-          config->physical_memory_in_kib = (size_t)memInKiB;
-        }
-      }
-    }
     mi_win_freelibrary(hDll, hDllFree);
   }
   // Enable large/huge OS page support? (only set the large page size if we have access as it influences alignment)
@@ -879,7 +865,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     _mi_auto_process_done();
   }
   else if (reason==DLL_THREAD_DETACH && !_mi_is_redirected()) {
-    _mi_thread_done(NULL);
+    _mi_thread_done(mi_ptr_signed_null(mi_theap_t));
   }
 }
 
@@ -903,7 +889,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) {}
   void _mi_prim_thread_done_auto_done(void) {}
-  void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+  void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
     MI_UNUSED(theap);
   }
 
@@ -1038,7 +1024,7 @@ extern "C" {
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) {}
   void _mi_prim_thread_done_auto_done(void) {}
-  void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+  void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
     MI_UNUSED(theap);
   }
 
@@ -1137,7 +1123,7 @@ extern "C" {
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) { }
   void _mi_prim_thread_done_auto_done(void) { }
-  void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+  void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
     MI_UNUSED(theap);
   }
 
@@ -1199,7 +1185,7 @@ extern "C" {
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) { }
   void _mi_prim_thread_done_auto_done(void) { }
-  void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+  void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
     MI_UNUSED(theap);
   }
 
@@ -1249,9 +1235,8 @@ extern "C" {
   static DWORD mi_fls_key = (DWORD)(-1);
 
   static void NTAPI mi_fls_done(PVOID value) {
-    mi_theap_t* theap = (mi_theap_t*)value;
-    if (theap != NULL) {
-      _mi_thread_done(theap);
+    if (value != NULL) {
+      _mi_thread_done(mi_ptr_signed_from_ptr(mi_theap_t,value));
       FlsSetValue(mi_fls_key, NULL);  // prevent recursion as _mi_thread_done may set it back to the main theap, issue #672
     }
   }
@@ -1266,9 +1251,9 @@ extern "C" {
     FlsFree(mi_fls_key);
   }
 
-  void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+  void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
     mi_assert_internal(mi_fls_key != (DWORD)(-1));
-    FlsSetValue(mi_fls_key, theap);
+    FlsSetValue(mi_fls_key, mi_ptr_signed_as_ptr(void,theap));
   }
 #else
 #error "define windows process and thread auto initialization"
@@ -1297,7 +1282,7 @@ extern "C" {
     }
     else if (reason == DLL_THREAD_DETACH) {
       // mi_debug_out("redirect thread detach\n");
-      _mi_thread_done(NULL);
+      _mi_thread_done(mi_ptr_signed_null(mi_theap_t));
     }
   }
   __declspec(dllimport) bool mi_cdecl mi_allocator_init(const char** message);

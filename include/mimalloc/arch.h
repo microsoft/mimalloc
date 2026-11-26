@@ -293,8 +293,14 @@ static inline void* mi_ptr_unpack(const void* auth, mi_addr_tagged_t addrt) {
 // (using ARM pointer authentication or a software keyed encoding); this is a `uintptr_t` so it can be atomic.
 // ------------------------------------------------------
 
-typedef uintptr_t           mi_ptr_signed_t;
-#define mi_ptr_signed(tp)   mi_ptr_signed_t     // a signed `tp*` (only documents the pointer type)
+typedef uintptr_t                     mi_ptr_signed_t;
+#define mi_ptr_signed(tp)             mi_ptr_signed_t    // a signed `tp*` (only documents the pointer type)
+
+#define mi_ptr_signed_from_ptr(tp,p)  ((mi_ptr_signed(tp))(p))
+#define mi_ptr_signed_as_ptr(tp,p)    ((tp*)(p))
+#define mi_ptr_signed_null(tp)        mi_ptr_signed_from_ptr(tp,NULL)
+#define mi_ptr_signed_is_null(p)      ((p) == mi_ptr_signed_null(void))
+
 
 // Pointer signing (see `prim/prim-pac.h`): 0=off, 1=weak (using a software process key), 2=required (using the
 // arm64 generic pointer authentication key (`pacga`), which must be supported at runtime).

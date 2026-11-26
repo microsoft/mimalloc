@@ -784,7 +784,7 @@ void _mi_arenas_page_free_prim(mi_page_t* page) {
 
   // reset the memory tags of the blocks so free memory is untagged again
   if (mi_page_is_memtag(page)) {
-    mi_memtag_clear(mi_page_start(page), page->capacity * mi_page_block_size(page));
+    mi_memtag_clear(mi_page_start(page), mi_page_capacity_size(page));
   }
 
   // reset the guard pages

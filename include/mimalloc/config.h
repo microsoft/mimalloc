@@ -36,10 +36,16 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Define MI_SECURE to enable security mitigations
 // #define MI_SECURE 0  // no security mitigations
-// #define MI_SECURE 1  // + guard pages around metadata (and separated metadata) and after singleton blocks, randomized arena/OS allocation addresses, abort on EFAULT (corrupted meta-data) (`-DMI_SECURE=MINIMAL`)
-// #define MI_SECURE 2  // + invalid-pointer check on free (checked lookup in page-map.h), encode free lists (and detect corrupted free lists), clear free list `next` on allocation (so double frees are detected on allocation, at an immediate double free, or when the page is freed), randomized free list initialization and allocation addresses within mimalloc pages (`-DMI_SECURE=CHECKED`)
-// #define MI_SECURE 3  // + zero blocks on free (up to the first 1KiB), check double free (slow, and only for thread-local frees; only at level 3 as padding is used at level 4)
-// #define MI_SECURE 4  // + check buffer overflow (with padding), fast double free check (with padding), more randomized free lists, decommit with mprotect (`-DMI_SECURE=ON`)
+// #define MI_SECURE 1  // + guard pages around metadata (and separated metadata) and after singleton blocks, randomized arena/OS allocation addresses,
+                        //   abort on EFAULT (corrupted meta-data), encode free lists with a fast MAC (64-bit multiply), clear free list `next` on allocation
+                        //   (so double frees are detected on allocation, at an immediate double free, or when the page is freed) (`-DMI_SECURE=BASIC`)
+// #define MI_SECURE 2  // + invalid-pointer check on free (checked lookup in page-map.h), encode free lists with a stronger MAC (128-bit multiply+xor),
+                        //   randomized free list (4-way) initialization and allocation addresses within mimalloc pages (`-DMI_SECURE=CHECKED`)
+// #define MI_SECURE 3  // + zero blocks on free (up to the first 1KiB), check double free (slow, and only for thread-local frees;
+                        //   only at level 3 as padding is used at level 4)
+// #define MI_SECURE 4  // + add padding to each block, check buffer overflow (using the padding), immediate double free check (using the padding),
+                        //   more randomized free lists (64-way), decommit with mprotect, reuse of freed blocks is delayed (until 1/8th of a page is free)
+                        //   and a random number of the most recently freed blocks is held back (`-DMI_SECURE=ON`)
 // #define MI_SECURE 5  // + guard page at the end of each mimalloc page (expensive!), and byte-precise buffer overflow checks (`-DMI_SECURE=FULL`)
 
 // The default is 2 with MTE or PAC, and 3 on CHERI (where capabilities already provide spatial safety)
@@ -116,8 +122,13 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Encoded free lists allow detection of corrupted free lists
 // and can detect buffer overflows, modify after free, and double `free`s.
+// Level 1 uses a faster but weaker keyed MAC on 64-bit (the low product only), while level 2 uses the full `mulxor64` MAC.
+#ifndef MI_ENCODE_FREELIST
 #if (MI_SECURE>=2 || MI_DEBUG>=1)
+#define MI_ENCODE_FREELIST          2
+#elif (MI_SECURE>=1)
 #define MI_ENCODE_FREELIST          1
+#endif
 #endif
 
 
@@ -334,6 +345,13 @@ terms of the MIT license. A copy of the license can be found in the file
 #error "mimalloc internal: the small object max size is too small"
 #endif
 
+// Environment options are named `MIMALLOC_<option>`, or `<MI_ENV_PREFIX>_MIMALLOC_<option>` if
+// `MI_ENV_PREFIX` is defined as a string literal (`cmake -DMI_ENV_PREFIX=MYAPP`)
+#if defined(MI_ENV_PREFIX)
+#define MI_ENV_OPTION_PREFIX  MI_ENV_PREFIX "_MIMALLOC_"
+#else
+#define MI_ENV_OPTION_PREFIX  "MIMALLOC_"
+#endif
 
 /* -----------------------------------------------------------
   Secure mode defaults

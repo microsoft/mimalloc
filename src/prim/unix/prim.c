@@ -38,7 +38,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #if defined(__linux__)
   #include <features.h>
   #include <sys/prctl.h>    // THP disable, PR_SET_VMA
-  #include <sys/sysinfo.h>  // sysinfo
   #if defined(__GLIBC__) && !defined(PR_SET_VMA)
   #include <linux/prctl.h>
   #endif
@@ -249,48 +248,6 @@ static size_t unix_detect_large_page_size(void) {
   return large_page_size;
 }
 
-// try to detect the physical memory dynamically (if possible)
-static void unix_detect_physical_memory( size_t page_size, size_t* physical_memory_in_kib ) {
-  #if defined(CTL_HW) && (defined(HW_PHYSMEM64) || defined(HW_MEMSIZE))  // freeBSD, macOS
-    MI_UNUSED(page_size);
-    int64_t physical_memory = 0;
-    size_t length = sizeof(int64_t);
-    #if defined(HW_PHYSMEM64)
-    int mib[2] = { CTL_HW, HW_PHYSMEM64 };
-    #else
-    int mib[2] = { CTL_HW, HW_MEMSIZE };
-    #endif
-    const int err = sysctl(mib, 2, &physical_memory, &length, NULL, 0);
-    if (err==0 && physical_memory > 0) {
-      const int64_t phys_in_kib = physical_memory / MI_KiB;
-      if (phys_in_kib > 0 && (uint64_t)phys_in_kib <= SIZE_MAX) {
-        *physical_memory_in_kib = (size_t)phys_in_kib;
-      }
-    }
-  #elif defined(__linux__)
-    MI_UNUSED(page_size);
-    struct sysinfo info; _mi_memzero_var(info);
-    const int err = sysinfo(&info);
-    if (err==0 && info.mem_unit > 0 && info.totalram <= SIZE_MAX) {
-      if (info.mem_unit==MI_KiB) {
-        *physical_memory_in_kib = (size_t)info.totalram;
-      }
-      else {
-        size_t total = 0;
-        if (!mi_mul_overflow((size_t)info.totalram, (size_t)info.mem_unit, &total)) {
-          *physical_memory_in_kib = (total / MI_KiB);
-        }
-      }
-    }
-  #elif defined(_SC_PHYS_PAGES)  // do not use by default as it might cause allocation (by using `fopen` to parse /proc/meminfo) (issue #1100)
-    const long pphys = sysconf(_SC_PHYS_PAGES);
-    const size_t psize_in_kib = page_size / MI_KiB;
-    if (psize_in_kib > 0 && pphys > 0 && (unsigned long)pphys <= SIZE_MAX && (size_t)pphys <= (SIZE_MAX/psize_in_kib)) {
-      *physical_memory_in_kib = (size_t)pphys * psize_in_kib;
-    }
-  #endif
-}
-
 // Detect the virtual address bits (currently Linux/RISC-V only)
 static size_t unix_detect_virtual_address_bits(void) {
   #if defined(__riscv) || defined(_M_RISCV)
@@ -439,7 +396,6 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   if (psize > 0 && (unsigned long)psize < SIZE_MAX) {
     config->page_size = (size_t)psize;
     config->alloc_granularity = (size_t)psize;
-    unix_detect_physical_memory(config->page_size, &config->physical_memory_in_kib);
   }
   config->has_partial_free = true;    // mmap can free in parts
   config->has_virtual_reserve = true; // todo: check if this true for NetBSD?  (for anonymous mmap with PROT_NONE)
@@ -1317,7 +1273,7 @@ static _Atomic(pthread_key_t) _mi_heap_default_key = MI_ATOMIC_VAR_INIT(MI_PTHRE
 
 static void mi_pthread_done(void* value) {
   if (value!=NULL) {
-    _mi_thread_done((mi_theap_t*)value);
+    _mi_thread_done(mi_ptr_signed_from_ptr(mi_theap_t,value));
   }
 }
 
@@ -1336,10 +1292,10 @@ void _mi_prim_thread_done_auto_done(void) {
   }
 }
 
-void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
   pthread_key_t key = mi_atomic_load_relaxed(&_mi_heap_default_key);
   if (key != MI_PTHREAD_KEY_INVALID) {  // can happen during recursive invocation on freeBSD
-    pthread_setspecific(key, theap);
+    pthread_setspecific(key, mi_ptr_signed_as_ptr(void,theap));
   }
 }
 
@@ -1354,7 +1310,7 @@ void _mi_prim_thread_done_auto_done(void) {
   // nothing
 }
 
-void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
   MI_UNUSED(theap);
 }
 

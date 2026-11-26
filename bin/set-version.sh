@@ -18,6 +18,7 @@ vcpkg=contrib/vcpkg/vcpkg.json
 cargo=contrib/rust/Cargo.toml
 cargo_sys=contrib/rust/sys/Cargo.toml
 rust_sys=contrib/rust/sys/src/lib.rs
+docs="doc/release-notes.md contrib/rust/README.md"  # contain release tags (in archive links and Cargo dependencies)
 
 # edit a file in place with `sed -E` (portable, as `sed -i` differs between GNU and BSD)
 edit() {
@@ -64,6 +65,10 @@ if [ $# -eq 1 ]; then
                     -e "s/^(mimalloc-sys = \{ version = )\"=[^\"]*\"/\1\"=$ver\"/"
   edit "$cargo_sys" -e "s/^version = \"[^\"]*\"/version = \"$ver\"/"
   edit "$rust_sys"  -e "s/^(pub const MI_MALLOC_VERSION: c_int = )[0-9]+;/\1$num;/"
+  for doc in $docs; do
+    edit "$doc"     -e "s/(archive\/v)[0-9]+\.[0-9]+\.[0-9]+(\.tar\.gz)/\1$ver\2/g" \
+                    -e "s/(tag = \"v)[0-9]+\.[0-9]+\.[0-9]+\"/\1$ver\"/g"
+  done
 fi
 
 # show and check the version in each file
@@ -80,6 +85,9 @@ show "$cargo" "$(get "$cargo" '^version = "([^"]*)".*')"
 show "$cargo (mimalloc-sys)" "$(get "$cargo" '^mimalloc-sys = \{ version = "=([^"]*)".*')"
 show "$cargo_sys" "$(get "$cargo_sys" '^version = "([^"]*)".*')"
 show "$rust_sys" "$(semver "$(get "$rust_sys" '^pub const MI_MALLOC_VERSION: c_int = ([0-9]+);.*')")"
+for doc in $docs; do
+  show "$doc" "$(sed -n -E 's/.*(archive\/v|tag = "v)([0-9]+\.[0-9]+\.[0-9]+).*/\2/p' "$doc" | sort -u | tr '\n' ' ' | sed 's/ $//')"
+done
 
 if [ "$(printf "%s" "$versions" | sort -u | wc -l)" -ne 1 ]; then
   echo "error: the versions differ" >&2

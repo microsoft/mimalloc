@@ -19,11 +19,12 @@ terms of the MIT license. A copy of the license can be found in the file
 
 mi_heap_t*    _mi_subproc_heap_main(mi_subproc_t* subproc);
 mi_theap_t*   _mi_theap_main(void);  // current thread's backing theap, without initialization
+mi_theap_t*   _mi_theap_default_or_main(void);  // default theap, or the main theap if the default is detached (as its heap was deleted)
 mi_page_t*    _mi_page_empty_get(void);
 void          _mi_auto_process_init(void);
 void mi_cdecl _mi_auto_process_done(void) mi_attr_noexcept;
 bool          _mi_preloading(void);           // true while the C runtime is not initialized yet
-void          _mi_thread_done(mi_theap_t* theap);
+void          _mi_thread_done(mi_ptr_signed(mi_theap_t) theap);
 mi_theap_t*   _mi_thread_init(void);
 mi_theap_t*   _mi_thread_init_with_heap(mi_heap_t* heap);
 bool          _mi_is_empty_theap(const mi_theap_t* theap);

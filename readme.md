@@ -15,9 +15,9 @@ is a general purpose allocator with excellent [performance](#performance) charac
 Initially developed by Daan Leijen for the runtime systems of the
 [Koka](https://koka-lang.github.io) and [Lean](https://github.com/leanprover/lean) languages.
 
-Latest release   : `v3.7.0`  (2026-11-16) recommended -- now with [MTE](#memory-tagging-mte) support.\
-Latest v2 release: `v2.5.3`  (2026-11-16) stable, legacy.\
-Latest v1 release: `v1.15.3` (2026-11-16) legacy.
+Latest release   : `v3.7.1`  (2026-11-24) recommended -- now with [MTE](#memory-tagging-mte) support.\
+Latest v2 release: `v2.5.4`  (2026-11-24) stable, legacy.\
+Latest v1 release: `v1.15.4` (2026-11-24) legacy.
 
 mimalloc is a drop-in replacement for `malloc` and can be used in other programs
 without code changes, for example, on dynamically linked ELF-based systems (Linux, BSD, etc.) you can use it as:
@@ -90,6 +90,17 @@ New development is mostly on v3, while v1 and v2 are maintained with security an
 
 ### Releases
 
+* 2026-11-24, `v3.7.1`, `v2.5.4`, `v1.15.4`: (v3) fix THP usage regression (#1502), initialize arena bitmaps lazily,
+  make configuration defines consistent (#1506), detect big-endian platforms, more CPython integration fixes (python/cpython#158718),
+  fix legacy pprof output with lower case hexadecimal output (#1509), improved purge delay,
+  remove dependency on msvcp140.dll in Rust (#1511), better detect elevated processes on Linux (with AT_SECURE),
+  the `mi_umalloc` api's return the usable size, fix `mi_good_size` to take padding into account,
+  introduce [secure mode](#security) `BASIC` that includes free-list encoding and double-free detection with modest overhead,
+  Faster Rust crate, add `MiMallocExcess` as well for better buffer allocation (#1513), fix WASI compilation,
+  collect correctly from threads that never allocate.\
+  (v1,v2,v3): use MADV_DONTNEED for cross-thread huge page resets (#1510), ignore environment options in
+  elevated processes and secure builds, redact addresses in output, limit real_path buffer, prevent infinite loops
+  on corrupted free-lists in release builds,
 * 2026-11-16, `v3.7.0`, `v2.5.3`, `v1.15.3`:
   (v3) Initial memory tagging support (on an M5 for example), see [MTE](#memory-tagging-mte) and [PAC](#pointer-authentication-pac).
   Generally improved [security](#security) with sealed data after initialization and secure environments.
@@ -388,6 +399,10 @@ Common options:
 - `MIMALLOC_VERBOSE=1`: show verbose messages (including statistics).
 - `MIMALLOC_SHOW_ERRORS=1`: show error and warning messages.
 
+When building with `cmake -DMI_ENV_PREFIX=<PREFIX>`, the environment options are read as `<PREFIX>_MIMALLOC_<option>`
+instead (and plain `MIMALLOC_<option>` variables are ignored). For example, `-DMI_ENV_PREFIX=MYAPP` reads `MYAPP_MIMALLOC_SHOW_STATS`.
+This is useful to isolate the options when multiple instances of mimalloc are loaded in the same process.
+
 Advanced options:
 
 - `MIMALLOC_ARENA_EAGER_COMMIT=2`: turns on eager commit for the large arenas (usually 1GiB) from which mimalloc
@@ -574,8 +589,8 @@ There are various build options to make mimalloc more secure.
 
 ## Environment Options
 
-With `-DMI_SECURE_ENV=ON`, only `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, and
-`MIMALLOC_ALLOW_THP` are accepted from the environment -- all other options are ignored.
+With `-DMI_SECURE_ENV=ON`, only `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, `MIMALLOC_SHOW_ERRORS`,
+and `MIMALLOC_ALLOW_THP` are accepted from the environment -- all other options are ignored.
 
 This is by default enabled for [secure mode](#secure-mode), [MTE](#memory-tagging-mte),
 and [PAC](#pointer-authentication-pac). This can be overridden by explicitly building
@@ -586,34 +601,34 @@ You can still set options programmatically for trusted programs.
 
 ## Secure Mode
 
-_mimalloc_ can be build in secure mode by using the `-DMI_SECURE=OFF|MINIMAL|CHECKED|ON|FULL` flags in `cmake`. This build mode
+_mimalloc_ can be build in secure mode by using the `-DMI_SECURE=OFF|BASIC|CHECKED|ON|FULL` flags in `cmake`. This build mode
 enables various software mitigations to make mimalloc more robust against exploits.
-With `MINIMAL` only security mitigations are added that have minimal impact on performance (usually 1-3%):
+With `BASIC` only security mitigations are added that have a small impact on performance (usually less than 5%):
 
 - All internal mimalloc meta data (including the page map and static data) is surrounded by guard pages
   (so a buffer overflow/underflow exploit cannot reach into the allocator's meta data).
   All static pointers into metadata are put in a sealed read-only area (like the page map).
-  (However, free list entries are not encoded and can be
-  corrupted through a heap block buffer overflow).
+- All free list pointers are [encoded](include/mimalloc/alloc/page.h#L644) with per-page keys
+  such that free list corruption (through a heap block overflow or use-after-free write) is detected (with high probability).
+- Double frees are detected: either immediately when a block is freed twice in a row, or otherwise (with high probability)
+  when the block would be allocated a second time, or when its page is freed.
+  Heap block overflows that overflow into a free block are also detected with the same mechanism.
 - The start address of OS allocated memory is randomized
   (if possible), and mimalloc aborts on corrupted meta data detection.
 - Larger blocks (> 80 KiB) are followed by a guard page.
 - Does not allocate or reserve large OS pages as pinned memory cannot hold a guard page.
 - Enables `MI_SECURE_ENV=ON`
+- Addresses in error and warning messages are redacted to their low 16 bits (e.g. `0x...13c0`) so the output
+  does not reveal the address space layout (this is also done for elevated processes in any build mode).
 
 With `CHECKED` (the default with `-DMI_MTE` and `-DMI_PAC`), the performance and memory impact
-is still relatively small (usually less than 10%, but can be 2x slower on synthetic benchmarks):
+is still relatively small (usually less than 10%, but can be 60% slower on synthetic benchmarks):
 
-- All free list pointers are
-  [encoded](include/mimalloc/alloc/page.h#L582)
-  with per-page keys which is used to prevent overwrites with a known pointer, as well as to detect heap corruption (and with [PAC](#pointer-authentication-pac),
-  the encoding uses hardware keys).
 - All pointers passed to `mi_free` (and others) are validated, and pointers not originating from a mimalloc allocation
   are ignored. Interior pointers are adjusted to the start of their block.
+- Uses slightly stronger list encoding (and with [PAC](#pointer-authentication-pac), the encoding uses hardware keys).
 - The free lists are initialized in a random order and allocation randomly chooses between extension and reuse within a page to
   mitigate against attacks that rely on a predictable allocation order.
-- Double frees are always detected: either immediately when a block is freed twice in a row, or otherwise on allocation
-  or when the page is freed. Heap block overflows that overflow into a free block are also detected with the same mechanism.
 - Reuse of freed blocks is delayed (until 1/8th of a page is free) and a random number of the most recently
   freed blocks is held back, making it harder to reclaim a just-freed block (to exploit a use-after-free).
 

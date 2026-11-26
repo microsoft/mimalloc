@@ -391,7 +391,7 @@ struct mi_theap_s {
   bool                  allow_page_reclaim;                  // `true` if this theap can reclaim abandoned pages
   bool                  allow_page_abandon;                  // `true` if this theap can abandon pages to reduce memory footprint
   bool                  is_detached;                         // `true` if `tld->thread_id == MI_THREAD_ID_DETACHED`
-  bool                  profile_never;                       // if `true`, this theap is never profiled (only the empty and meta theaps)
+  bool                  profile_never;                       // if `true`, this theap is never profiled (only the empty, meta, and detached theaps)
   bool                  guard_front;                         // `true` if fresh pages get a guard page in front of the blocks (in secure mode, for meta theaps)
   bool                  guard_end;                           // `true` if fresh pages get a guard page after the blocks (in secure mode, for meta theaps or always at level 5)
 
@@ -525,6 +525,8 @@ struct mi_subproc_s {
 
   mi_theap_t*           theap_meta;                     // detached theap for allocating meta-data
   mi_lock_t             theap_meta_lock;                // all allocations in theap_meta need a lock
+  mi_theap_t*           theap_detached;                 // detached theap for user allocations without a live thread (created on demand)
+  mi_lock_t             theap_detached_lock;            // all allocations in theap_detached need a lock
 
   _Atomic(size_t)       thread_count;                   // current threads associated with this sub-process
   _Atomic(size_t)       thread_total_count;             // total created threads associated with this sub-process
@@ -556,6 +558,8 @@ struct mi_tld_s {
   mi_subproc_t*         subproc;              // sub-process this thread belongs to.
   mi_theap_t*           theaps;               // list of theaps in this thread (so we can abandon all when the thread terminates)
   mi_lock_t             theaps_lock;          // lock as the theaps list is sometimes accessed from another thread (on `mi_heap_free`)
+  mi_theap_t*           theap_default;        // owns the reference of the default theap (so it stays valid if another thread deletes its heap)
+  mi_theap_t*           theap_cached;         // owns the reference of the cached theap (as the platform may reset the TLS slot before thread done)
   bool                  recurse;              // true if deferred was called; used to prevent infinite recursion.
   bool                  in_profiler;          // true while in a profiler `on_alloc` callback; nested allocations are not sampled
   bool                  is_in_threadpool;     // true if this thread is part of a threadpool (and can run arbitrary tasks)

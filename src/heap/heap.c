@@ -109,7 +109,7 @@ static mi_decl_noinline mi_theap_t* mi_heap_init_theap(const mi_heap_t* const_he
 
 
 // a theap for which allocation returns NULL (see `alloc/alloc-generic.c:mi_theap_init`)
-// note: on a done thread the unavailable theap falls back to meta allocation so we return the empty theap instead
+// note: on a done thread the unavailable theap falls back to the detached theap so we return the empty theap instead
 static mi_theap_t* mi_theap_failed(void) {
   return (_mi_thread_is_done() ? _mi_theap_empty_get() : _mi_theap_unavailable());
 }
@@ -123,7 +123,7 @@ mi_decl_cold mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
   mi_theap_t* theap = (mi_theap_t*)_mi_thread_local_get(heap->theap);
   if mi_unlikely(theap==NULL) {
     if (_mi_thread_is_done()) {
-      // don't re-initialize; allocation in the main heap uses the meta-data theap while other heaps return NULL (see `alloc/alloc-generic.c`)
+      // don't re-initialize; allocation in the main heap uses the detached theap while other heaps return NULL (see `alloc/alloc-generic.c`)
       return (mi_addr(heap) == mi_addr(mi_heap_main()) ? _mi_theap_unavailable() : mi_theap_failed());
     }
     theap = mi_heap_init_theap(heap);
@@ -132,7 +132,8 @@ mi_decl_cold mi_theap_t* _mi_heap_theap_get_or_init(const mi_heap_t* heap)
   else if mi_unlikely(_mi_theap_is_unavailable(theap)) {
     return mi_theap_failed();  // released by this thread (see `mi_thread_heap_release`)
   }
-  _mi_theap_cached_set(theap);
+  mi_tld_t* const tld = theap->tld;
+  if (tld!=NULL) { _mi_theap_cached_set(theap, tld); }  // don't cache if detached by a concurrent heap delete
   return theap;
 }
 
@@ -300,15 +301,15 @@ static void mi_heap_free(mi_heap_t* heap, bool acquire_heaps_lock) {
   }
 
   // remove the heap from the subproc
-  if (!is_main) {
-    mi_heap_stats_merge_to_main(heap);
-  }
-  else {
-    _mi_stats_merge_into(&heap->subproc->stats,&heap->stats);
-  }
   mi_atomic_decrement_relaxed(&heap->subproc->heap_count);
   mi_subproc_stat_decrease(heap->subproc, heaps, 1);
   mi_lock_maybe(&heap->subproc->heaps_lock, acquire_heaps_lock) {
+    if (!is_main) {
+      mi_heap_stats_merge_to_main(heap);
+    }
+    else {
+      _mi_stats_merge_into(&heap->subproc->stats,&heap->stats);
+    }
     mi_list_unlink_check(heap, prev, next, heap->subproc->heaps, NULL);
     if (heap->next!=NULL) { heap->next->prev = heap->prev; }
     if (heap->prev!=NULL) { heap->prev->next = heap->next; }
@@ -355,14 +356,14 @@ void mi_thread_heap_release(mi_heap_t* heap) mi_attr_noexcept {
 }
 
 #if MI_DEBUG
-// Warn if some threads still own a theap of a heap that is deleted (see `mi_thread_heap_release`)
+// Report (verbose) if some threads still own a theap of a heap that is deleted (see `mi_thread_heap_release`)
 static void mi_heap_check_released(mi_heap_t* heap) {
   size_t count = 0;
   mi_lock(&heap->theaps_lock) {
     for (mi_theap_t* theap = heap->theaps; theap != NULL; theap = theap->hnext) { count++; }
   }
   if (count > 0) {
-    _mi_warning_message("deleting heap %p while %zu thread(s) did not release it first (see mi_thread_heap_release)\n", heap, count);
+    _mi_verbose_message("deleting heap %p while %zu thread(s) did not release it first (see mi_thread_heap_release)\n", heap, count);
   }
 }
 #endif

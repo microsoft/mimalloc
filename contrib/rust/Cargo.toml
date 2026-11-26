@@ -6,7 +6,7 @@
 # -----------------------------------------------------------------------------
 [package]
 name = "mimalloc"
-version = "3.7.0"
+version = "3.7.2"
 edition = "2021"
 rust-version = "1.65"
 license = "MIT"
@@ -23,11 +23,12 @@ members = ["sys"]
 default = []
 # build options of the C library (see `sys/Cargo.toml`)
 secure = ["mimalloc-sys/secure"]
+secure_basic = ["mimalloc-sys/secure_basic"]
+secure_checked = ["mimalloc-sys/secure_checked"]
 override = ["mimalloc-sys/override"]
 debug = ["mimalloc-sys/debug"]
 debug_in_debug = ["mimalloc-sys/debug_in_debug"]
 local_dynamic_tls = ["mimalloc-sys/local_dynamic_tls"]
-win_direct_tls = ["mimalloc-sys/win_direct_tls"]
 no_thp = ["mimalloc-sys/no_thp"]
 opt_arch = ["mimalloc-sys/opt_arch"]
 mte = ["mimalloc-sys/mte"]
@@ -41,7 +42,7 @@ nightly_allocator_api = ["nightly"]
 
 [dependencies]
 # the exact version as the fast paths depend on `MI_SMALL_SIZE_MAX` and internal entry points
-mimalloc-sys = { version = "=3.7.0", path = "sys" }
+mimalloc-sys = { version = "=3.7.2", path = "sys" }
 
 [build-dependencies]
 rustversion = "1"

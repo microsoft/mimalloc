@@ -30,4 +30,6 @@ void*         _mi_meta_zalloc_aligned( mi_subproc_t* subproc, size_t size, size_
 void          _mi_meta_free(mi_subproc_t* subproc, void* p, mi_memid_t memid);
 bool          _mi_meta_is_meta_page(const mi_subproc_t* subproc, const mi_page_t* p);
 
+void*         _mi_detached_malloc(mi_subproc_t* subproc, size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage);
+
 #endif

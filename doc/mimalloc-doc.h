@@ -654,6 +654,10 @@ mi_heap_t* mi_heap_new();
 /// mi_thread_heap_release() (or no longer allocate or free in the heap at all).
 /// In debug mode, a warning is given for threads that did not release the heap.
 ///
+/// If a thread uses a theap of this heap as its default theap (see mi_theap_set_default()),
+/// its default theap reverts to the theap of its main heap after the delete (so mi_malloc() et al.
+/// allocate in the main heap again). The same holds for mi_heap_destroy().
+///
 /// This will release internal resources but not free
 /// still allocated blocks in this heap (and these should be
 /// `mi_free`'d later on as usual).
@@ -673,6 +677,8 @@ void mi_heap_delete(mi_heap_t* heap);
 /// calls mi_thread_heap_release(), it is safe to delete the heap even with concurrent freeing.
 /// Using mi_thread_heap_release() is not needed for mi_heap_destroy() (where all blocks are freed) but
 /// it is still good practice. Calling this multiple times is allowed.
+/// If the theap of \a heap is the default theap of the calling thread, the theap of the main heap
+/// becomes the default theap again.
 ///
 /// Note: trying to release the main heap of a subprocess is ignored.
 /// @see mi_heap_delete() for deleting a heap.
@@ -1827,9 +1833,12 @@ void mi_theap_delete(mi_theap_t* theap);
 void mi_theap_quiescent_abandon(mi_theap_t* theap);
 
 /// Set the default thread-local theap to use in the current thread for mi_malloc() et al.
-/// @param theap  The new default theap.
+/// @param theap  The new default theap, or NULL to restore the theap of the main heap (mi_heap_main()).
 /// @returns The previous default theap.
 /// By default it will point to the theap belonging to the main heap (mi_heap_main()).
+/// A theap handle is only valid as long as its heap is not deleted (see mi_heap_delete()), so
+/// do not keep the returned theap to restore it later if its heap can be deleted in the meantime;
+/// use NULL to restore the main theap instead.
 mi_theap_t* mi_theap_set_default(mi_theap_t* theap);
 
 /// Get the default theap that is used for mi_malloc() et al. for the current thread.
@@ -2524,8 +2533,8 @@ There are various build options to make mimalloc more secure.
 
 ## Environment Options
 
-With `-DMI_SECURE_ENV=ON`, only `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, and
-`MIMALLOC_ALLOW_THP` are accepted from the environment -- all other options are ignored.
+With `-DMI_SECURE_ENV=ON`, only `MIMALLOC_SHOW_STATS`, `MIMALLOC_VERBOSE`, `MIMALLOC_SHOW_ERRORS`,
+and `MIMALLOC_ALLOW_THP` are accepted from the environment -- all other options are ignored.
 
 This is by default enabled for \ref secure_mode "secure mode", \ref memory_tagging "MTE", and \ref pointer_authentication "PAC".
 This can be overridden by explicitly building
@@ -2539,31 +2548,36 @@ You can still set options programmatically for trusted programs.
 
 ## Secure Mode
 
-_mimalloc_ can be built in secure mode using `-DMI_SECURE=OFF|MINIMAL|CHECKED|ON|FULL`
+_mimalloc_ can be built in secure mode using `-DMI_SECURE=OFF|BASIC|CHECKED|ON|FULL`
 with CMake. These modes enable software mitigations to make mimalloc more robust
 against exploits.
 
-With `MINIMAL`, only mitigations with a small performance impact are added
-(usually 1-3%):
+With `BASIC`, only mitigations with a small performance impact are added
+(usually less than 5%):
 
 - Internal metadata, including the page map and static data, is surrounded by guard
   pages so that a buffer overflow or underflow cannot reach allocator metadata.
   Static pointers into metadata are kept in a sealed read-only area.
-  Free list entries are not encoded at this level and can still be corrupted through
-  a heap block buffer overflow.
+- Free list pointers are encoded with per-page keys so that free list corruption,
+  through a heap block overflow or a use-after-free write, is detected with high probability.
+- Double frees are detected: immediately when a block is freed twice in a row, and
+  otherwise (with high probability) when the block would be allocated a second time,
+  or when its page is freed. Heap block overflows into a free block are detected the same way.
 - OS allocation addresses are randomized where possible, and detected metadata
   corruption aborts the process.
 - Large blocks (over 512 KiB) are followed by a guard page.
 - Pinned memory, including large and huge OS pages, is neither allocated nor accepted
   as arena memory on platforms with guard pages.
 - `MI_SECURE_ENV` is enabled by default.
+- Addresses in error and warning messages are redacted to their low 16 bits
+  (for example `0x...13c0`) so the output does not reveal the address space layout.
+  Elevated processes always redact addresses.
 
 With `CHECKED` (the default with `-DMI_MTE` or `-DMI_PAC`), the performance and
 memory impact is still relatively small (usually less than 10%, but can be 2x slower):
 
-- Free list pointers are encoded with per-page keys to prevent overwrites with a
-  known pointer and detect corruption. With \ref pointer_authentication "PAC",
-  hardware keys can be used.
+- Free list pointers use a slightly stronger encoding. With
+  \ref pointer_authentication "PAC", the encoding uses hardware keys.
 - Pointers passed to mi_free() and related functions are validated. Pointers that do
   not originate from mimalloc are ignored, and interior pointers are adjusted to
   the start of their block.

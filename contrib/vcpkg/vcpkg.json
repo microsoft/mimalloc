@@ -1,6 +1,6 @@
 {
   "name": "mimalloc",
-  "version": "3.7.0",
+  "version": "3.7.2",
   "port-version": 0,
   "description": "Compact general purpose allocator with excellent performance",
   "homepage": "https://github.com/microsoft/mimalloc",
@@ -25,6 +25,12 @@
     },
     "secure": {
       "description": "Use full security mitigations (like guard pages and randomization)"
+    },
+    "secure-basic": {
+      "description": "Use cheap security mitigations: guard pages, randomization, encoded free lists, and double free detection"
+    },
+    "secure-checked": {
+      "description": "Use 'secure-basic' mitigations plus validated free pointers and randomized free lists"
     },
     "guarded": {
       "description": "Use build that support guard pages after objects controlled with MIMALLOC_GUARDED_SAMPLE_RATE"

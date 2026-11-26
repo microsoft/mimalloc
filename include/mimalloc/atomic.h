@@ -148,11 +148,8 @@ static inline mi_ssize_t mi_atomic_loads_relaxed(_Atomic(mi_ssize_t)* p);
 static inline int64_t mi_atomic_volatile_addi64_relaxed(volatile int64_t* p, int64_t add) {
   return mi_atomic(fetch_add_explicit)((_Atomic(int64_t)*)p, add, mi_memory_order(relaxed));
 }
-static inline void mi_atomic_volatile_void_addi64_relaxed(volatile int64_t* p, const volatile int64_t* padd) {
-  const int64_t add = mi_atomic_load_relaxed((_Atomic(int64_t)*)padd);
-  if (add != 0) {
-    mi_atomic(fetch_add_explicit)((_Atomic(int64_t)*)p, add, mi_memory_order(relaxed));
-  }
+static inline int64_t mi_atomic_volatile_exchangei64_relaxed(volatile int64_t* p, int64_t x) {
+  return mi_atomic(exchange_explicit)((_Atomic(int64_t)*)p, x, mi_memory_order(relaxed));
 }
 static inline void mi_atomic_volatile_maxi64_relaxed(volatile int64_t* p, int64_t x) {
   int64_t current = mi_atomic_load_relaxed((_Atomic(int64_t)*)p);
@@ -344,11 +341,17 @@ static inline int64_t mi_atomic_volatile_addi64_relaxed(volatile _Atomic(int64_t
   #endif
 }
 
-static inline void mi_atomic_volatile_void_addi64_relaxed(volatile int64_t* p, const volatile int64_t* padd) {
-  const int64_t add = *padd;
-  if (add != 0) {
-    mi_atomic_volatile_addi64_relaxed((volatile _Atomic(int64_t)*)p, add);
-  }
+static inline int64_t mi_atomic_volatile_exchangei64_relaxed(volatile int64_t* p, int64_t x) {
+  #if defined(_WIN64) || defined(_M_ARM)
+    return _InterlockedExchange64(p, x);
+  #else
+    // x86
+    int64_t current;
+    do {
+      current = __iso_volatile_load64((volatile const int64_t*)p);
+    } while (_InterlockedCompareExchange64(p, x, current) != current);
+    return current;
+  #endif
 }
 
 static inline void mi_atomic_volatile_maxi64_relaxed(volatile _Atomic(int64_t)* p, int64_t x) {
