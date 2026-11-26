@@ -130,7 +130,8 @@ bool _mi_os_is_elevated(void) {
 
 // OS (small) page size
 size_t _mi_os_page_size(void) {
-  return mi_os_mem_config()->page_size;
+  const size_t psize = mi_os_mem_config()->page_size;
+  return (psize != 0 ? psize : 4*MI_KiB);  // fallback to 4KiB if not initialized; never return 0
 }
 
 // OS allocation granularity (usually the page size, but 64KiB on Windows)

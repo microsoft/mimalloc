@@ -140,11 +140,16 @@ bool _mi_subproc_is_main(mi_subproc_t* subproc) {
 
 mi_subproc_t* _mi_subproc(void) {
   mi_theap_t* theap = _mi_theap_default();
-  if (theap == NULL || theap->tld == NULL || theap->tld->subproc == NULL) {  // see issue #1289 and #1391
+  if (theap == NULL) {
     return _mi_subproc_main();
   }
-  else {
+  else if (theap->tld != NULL && theap->tld->subproc != NULL) {  // see issue #1289 and #1391
     return theap->tld->subproc;
+  }
+  else {
+    // a detached default theap (as another thread deleted its heap) has no tld but keeps its subproc
+    mi_subproc_t* const subproc = mi_atomic_load_ptr_relaxed(mi_subproc_t,&theap->subproc);
+    return (subproc==NULL ? _mi_subproc_main() : subproc);
   }
 }
 
@@ -336,7 +341,7 @@ void mi_subproc_add_current_thread(mi_subproc_id_t subproc_id) {
   if (subproc==NULL) return;
   mi_assert_internal(subproc->heap_main!=NULL);
   if (subproc->heap_main==NULL) return;
-  mi_theap_t* theap = _mi_theap_default();
+  mi_theap_t* theap = _mi_theap_default_or_main();
   if (mi_theap_is_initialized(theap)) {
     if (theap->tld!=NULL && theap->tld->subproc != subproc) {
       _mi_warning_message("unable to add thread to the subprocess as it was already in another subprocess (at %p)\n", theap->tld->subproc);
@@ -467,7 +472,7 @@ void _mi_fork_child_try_collect(void) {
 // Called on macOS in the child from the malloc zone `reinit_lock`.
 void _mi_fork_child_zone(void) {
   _mi_process.fork.torn = true;
-  mi_theap_t* const theap_default = _mi_theap_default();
+  mi_theap_t* const theap_default = _mi_theap_default_or_main();
   if (!mi_theap_is_initialized(theap_default)) return;
 
   // suspend reclaiming abandoned pages (by allocation) of the default heap
@@ -508,7 +513,7 @@ void _mi_fork_child(void) {
   mi_fork_child_resume_reclaim();
   #endif
   _mi_process.fork.epoch++;
-  mi_theap_t* const theap = _mi_theap_default();
+  mi_theap_t* const theap = _mi_theap_default_or_main();  // the default theap may be detached
   if (mi_theap_is_initialized(theap)) { theap->tld->fork_epoch = _mi_process.fork.epoch; }  // the forking thread survives
   mi_atomic_store_release(&_mi_process.fork.pending, 1);
 }

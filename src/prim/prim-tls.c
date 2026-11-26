@@ -18,7 +18,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 void _mi_tls_slots_init(void);
 void _mi_tls_slots_done(void);
-void _mi_theap_default_set(mi_theap_t* theap);
+void _mi_theap_default_set(mi_theap_t* theap, mi_tld_t* tld);
 void _mi_theap_cached_set(mi_theap_t* theap, mi_tld_t* tld);
 void _mi_theap_tls_check(void);
 
@@ -217,6 +217,15 @@ void _mi_tls_slots_done(void) {
 
 #endif
 
+// Set a theap reference owned by the tld (`tld->theap_default` or `tld->theap_cached`)
+static void mi_tld_theap_ref_set(mi_theap_t** ref, mi_theap_t* theap) {
+  mi_theap_t* const prev = *ref;
+  if (prev==theap) return;
+  _mi_theap_incref(theap);
+  *ref = theap;
+  _mi_theap_decref(prev);
+}
+
 // The reference is owned by `tld->theap_cached` as the TLS slot can be reset by the platform
 // before thread done (by dyld with LOCAL, or pthread key cleanup on macOS, issue #1518)
 void _mi_theap_cached_set(mi_theap_t* theap, mi_tld_t* tld) {
@@ -234,17 +243,16 @@ void _mi_theap_cached_set(mi_theap_t* theap, mi_tld_t* tld) {
     if (key!=MI_PTHREAD_KEY_INVALID) { pthread_setspecific(key, x); }
   #endif
   // update refcounts (so cached theap memory keeps available until no longer cached)
-  mi_theap_t* const prev = tld->theap_cached;
-  if (prev==theap) return;
-  _mi_theap_incref(theap);
-  tld->theap_cached = theap;
-  _mi_theap_decref(prev);
+  mi_tld_theap_ref_set(&tld->theap_cached, theap);
 }
 
-void _mi_theap_default_set(mi_theap_t* theap)  {
+// The reference is owned by `tld->theap_default` so the default theap stays valid (but detached)
+// if another thread deletes its heap (see `heap/process.c:_mi_thread_init_with_heap`)
+void _mi_theap_default_set(mi_theap_t* theap, mi_tld_t* tld)  {
   mi_assert_internal(theap != NULL);
   mi_assert_internal(theap->tld != NULL);
   mi_assert_internal(mi_theap_matches_thread(theap));
+  mi_assert_internal(tld!=NULL && tld->thread_id==_mi_prim_thread_id());  // only the owning thread accesses `tld->theap_default`
   _mi_tls_slots_init();
   void* const x = mi_tls_sign(theap, MI_TLS_TAG_THEAP_DEFAULT);
   #if MI_TLS_MODEL_LOCAL
@@ -264,6 +272,9 @@ void _mi_theap_default_set(mi_theap_t* theap)  {
     // (not the theap of another heap: another thread can delete that heap and free its theaps before this thread exits)
     _mi_prim_thread_associate_default_theap((mi_theap_t*)mi_theap_thread_done_sign(theap));
   }
+
+  // update refcounts
+  mi_tld_theap_ref_set(&tld->theap_default, theap);
 }
 
 // Called on the slow path when the thread is not initialized: report an error if the

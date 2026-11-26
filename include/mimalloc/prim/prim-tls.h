@@ -41,7 +41,7 @@ static inline mi_theap_t*   _mi_page_associated_theap_peek(const mi_page_t* page
 void          _mi_tls_slots_init(void);
 void          _mi_tls_slots_done(void);
 mi_thread_id_t _mi_thread_id(void) mi_attr_noexcept;
-void          _mi_theap_default_set(mi_theap_t* theap);
+void          _mi_theap_default_set(mi_theap_t* theap, mi_tld_t* tld);
 void          _mi_theap_cached_set(mi_theap_t* theap, mi_tld_t* tld);
 void          _mi_theap_tls_check(void);                                    // report an error if a theap entry in thread local storage was not validly signed
 

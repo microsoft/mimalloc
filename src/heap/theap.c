@@ -192,7 +192,7 @@ void mi_theap_collect(mi_theap_t* theap, bool force) mi_attr_noexcept {
 
 void mi_collect(bool force) mi_attr_noexcept {
   // cannot really collect process wide, just a theap..
-  mi_theap_t* const theap = _mi_theap_default();
+  mi_theap_t* const theap = _mi_theap_default_or_main();
   if (mi_theap_is_initialized(theap)) {
     mi_theap_collect(theap, force);
   }
@@ -228,8 +228,9 @@ mi_decl_cold bool _mi_theap_invalid(const mi_theap_t* theap) {
 
 mi_theap_t* mi_theap_set_default(mi_theap_t* theap) {
   mi_theap_t* const previous = mi_theap_get_default();
-  if (mi_theap_is_initialized(theap) && mi_theap_handle_is_valid(theap)) {
-    _mi_theap_default_set(theap);
+  if (theap==NULL) { theap = _mi_theap_main(); }  // restore the main theap
+  if (mi_theap_is_initialized(previous) && mi_theap_is_initialized(theap) && mi_theap_handle_is_valid(theap)) {
+    _mi_theap_default_set(theap, previous->tld);
   }
   return previous;
 }
@@ -536,7 +537,7 @@ void _mi_theap_release(mi_theap_t* theap, mi_theap_t* slot_theap) {
   }
   mi_tld_t* const tld = main_theap->tld;
   if (_mi_theap_default() == theap) {
-    _mi_theap_default_set(main_theap);
+    _mi_theap_default_set(main_theap, tld);
   }
 
   bool found = false;

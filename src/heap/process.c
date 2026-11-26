@@ -134,6 +134,7 @@ static mi_decl_cache_align const mi_tld_t mi_tld_empty = {
   NULL,                   // subproc
   NULL,                   // theaps list
   MI_LOCK_INITIALIZER,    // theaps lock
+  NULL,                   // theap_default
   NULL,                   // theap_cached
   false,                  // recurse
   false,                  // in_profiler
@@ -261,14 +262,15 @@ static void mi_process_sealed_init(void) {
   #if MI_SECURE_STATIC_SEALED
   mi_assert_internal(sizeof(mi_process_sealed_once_t) <= MI_OS_PROBABLE_PAGE_SIZE);
   mi_assert_internal(sizeof(mi_process_sealed_t) <= MI_OS_PROBABLE_PAGE_SIZE);
-  if ((MI_OS_PROBABLE_PAGE_SIZE % _mi_os_page_size()) == 0) {
+  const size_t psize = _mi_os_page_size();
+  if (psize != 0 && (MI_OS_PROBABLE_PAGE_SIZE % psize) == 0) {
     protect = true;
   }
   else if (MI_SEALED_REQUIRED) {  // fail early as the sealed data (like the page map root and user callbacks) would be writable
-    _mi_fatal_error("unable to seal the process data as the OS page size (%zu KiB) is larger than the probable OS page size (%zu KiB); rebuild with `-DMI_OS_PROBABLE_PAGE_SIZE=%zu`\n", _mi_os_page_size() / MI_KiB, (size_t)(MI_OS_PROBABLE_PAGE_SIZE / MI_KiB), _mi_os_page_size());
+    _mi_fatal_error("unable to seal the process data as the OS page size (%zu KiB) is larger than the probable OS page size (%zu KiB); rebuild with `-DMI_OS_PROBABLE_PAGE_SIZE=%zu`\n", psize / MI_KiB, (size_t)(MI_OS_PROBABLE_PAGE_SIZE / MI_KiB), psize);
   }
   else {
-    _mi_warning_message("unable to seal the process data as the OS page size (%zu KiB) is too large (rebuild with `-DMI_OS_PROBABLE_PAGE_SIZE=%zu`?)\n", _mi_os_page_size() / MI_KiB, _mi_os_page_size());
+    _mi_warning_message("unable to seal the process data as the OS page size (%zu KiB) is too large (rebuild with `-DMI_OS_PROBABLE_PAGE_SIZE=%zu`?)\n", psize / MI_KiB, psize);
   }
   #endif
   mi_process_sealed_once_t* const once = _mi_process_unseal_once();
@@ -426,9 +428,19 @@ mi_theap_t* _mi_theap_main(void) {
   return (key==0 ? NULL : (mi_theap_t*)_mi_thread_local_get(key));
 }
 
+// Return the default theap, or the main theap if the default theap is detached as another thread deleted its heap
+// (the default theap stays valid through its reference in `tld->theap_default`, see `_mi_theap_default_set`).
+// Only reads the main theap thread-local for a detached default as thread-locals are not yet accessible on a fresh thread.
+mi_theap_t* _mi_theap_default_or_main(void) {
+  mi_theap_t* const theap = _mi_theap_default();
+  if (theap==NULL || _mi_is_empty_theap(theap) || mi_theap_is_initialized(theap)) return theap;
+  return _mi_theap_main();
+}
+
 static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc) {
   tld->subproc = subproc;
   tld->theaps = NULL;
+  tld->theap_default = NULL;
   tld->theap_cached = NULL;
   mi_lock_init(&tld->theaps_lock);
   if (tld->thread_id == MI_THREAD_ID_DETACHED) {
@@ -506,6 +518,14 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
   // if the theap_default is already set we have already initialized
   mi_theap_t* theap = _mi_theap_default();
   if (mi_theap_is_initialized(theap)) return theap;
+
+  // if the default theap is detached, restore the main theap (instead of initializing the thread again)
+  theap = _mi_theap_default_or_main();
+  if (mi_theap_is_initialized(theap)) {
+    _mi_theap_default_set(theap, theap->tld);
+    return theap;
+  }
+
   _mi_theap_tls_check();  // report if the thread local theap was overwritten
   _mi_prim_thread_init();
 
@@ -546,7 +566,7 @@ mi_theap_t* _mi_thread_init_with_heap(mi_heap_t* heap_main)
   }
 
   // now initialize the thread
-  _mi_theap_default_set(theap);
+  _mi_theap_default_set(theap, theap->tld);
   // and only then set the heap_theap field as that accesses thread locals
   _mi_heap_theap_set(heap_main, theap);  // todo: can fail!
 
@@ -596,7 +616,7 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
   // reset the thread local theaps and mark the thread as done
   // note: do this after abandon as page->heap may be NULL and mi_heap_main should return the heap
   // belonging to the right subprocess
-  _mi_theap_default_set(_mi_theap_unavailable());
+  _mi_theap_default_set(_mi_theap_unavailable(), tld);
   _mi_theap_cached_set((mi_theap_t*)&_mi_theap_empty, tld);
   _mi_prim_thread_associate_default_theap(NULL);  // so the thread-done callback does not use the freed theap
 
@@ -649,7 +669,7 @@ static void mi_process_setup_auto_thread_done(void) {
     mi_theap_t* theap = _mi_theap_default();
     mi_assert_internal(mi_theap_is_initialized(theap));
     if (mi_theap_is_initialized(theap)) {
-      _mi_theap_default_set(theap);
+      _mi_theap_default_set(theap, theap->tld);
     }
   }
 }
@@ -662,7 +682,7 @@ void mi_thread_done(void) mi_attr_noexcept {
 // default theap: another thread can delete the heap of the default theap, and the delete can free that theap.
 static void mi_theap_default_reset(mi_theap_t* theap_main) {
   if (mi_theap_is_initialized(theap_main) && _mi_theap_default()!=theap_main) {
-    _mi_theap_default_set(theap_main);
+    _mi_theap_default_set(theap_main, theap_main->tld);
   }
 }
 
@@ -674,19 +694,22 @@ void _mi_thread_done(mi_theap_t* _theap_main)
 {
   // NULL is passed by `mi_thread_done` and some platform callbacks, in which case we use the main theap of this thread
   if (_theap_main==NULL) {
-    _theap_main = _mi_theap_main();  // not the default theap: its heap can be deleted
+    _theap_main = _mi_theap_main();   // not the default theap: its heap can be deleted
   }
   else {
     _theap_main = mi_theap_thread_done_auth(_theap_main);
+    if (_theap_main == NULL) return;  // failed authentication
   }
 
-  // return if the thread is not initialized, already done (e.g. `mi_thread_done` followed by the thread-done callback, issue #699), or the parameter failed authentication
+  // return if the thread is not initialized, already done (e.g. `mi_thread_done` followed by the thread-done callback, issue #699).
   if (!mi_theap_is_initialized(_theap_main)) {
     return;
   }
 
   // get the tld of the theap (of the current thread, except with `FlsFree` on Windows process exit, see below)
   mi_tld_t* const tld = _theap_main->tld;
+  mi_assert_internal(tld != NULL);    // main theaps are never detached
+  if (tld == NULL) return;            // paranoia
 
   // adjust stats
   mi_subproc_stat_decrease(tld->subproc, threads, 1);  // todo: or `_theap_main->heap`?

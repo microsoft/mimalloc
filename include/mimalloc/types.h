@@ -531,6 +531,7 @@ struct mi_tld_s {
   mi_subproc_t*         subproc;              // sub-process this thread belongs to.
   mi_theap_t*           theaps;               // list of theaps in this thread (so we can abandon all when the thread terminates)
   mi_lock_t             theaps_lock;          // lock as the theaps list is sometimes accessed from another thread (on `mi_heap_free`)
+  mi_theap_t*           theap_default;        // owns the reference of the default theap (so it stays valid if another thread deletes its heap)
   mi_theap_t*           theap_cached;         // owns the reference of the cached theap (as the platform may reset the TLS slot before thread done)
   bool                  recurse;              // true if deferred was called; used to prevent infinite recursion.
   bool                  in_profiler;          // true while in a profiler `on_alloc` callback; nested allocations are not sampled
