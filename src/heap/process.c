@@ -348,7 +348,7 @@ bool _mi_is_empty_theap(const mi_theap_t* theap) {
 }
 
 // A thread is done once `mi_thread_done` set its default theap to the unavailable theap.
-// Implicit (lazy) initialization is then no longer done as that would leak if the thread-done hooks already ran
+// Implicit (lazy) initialization is then no longer done as that would leak if the thread-done callbacks already ran
 // (for example when thread-local destructors allocate). Only an explicit `mi_thread_init` re-initializes the thread.
 bool _mi_thread_is_done(void) {
   return _mi_theap_is_unavailable(_mi_theap_default());
@@ -598,7 +598,7 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
   // belonging to the right subprocess
   _mi_theap_default_set(_mi_theap_unavailable());
   _mi_theap_cached_set((mi_theap_t*)&_mi_theap_empty, tld);
-  _mi_prim_thread_associate_default_theap(NULL);  // so the thread-done hook does not use the freed theap
+  _mi_prim_thread_associate_default_theap(NULL);  // so the thread-done callback does not use the freed theap
 
   // We might run concurrently with a `mi_heap_free_theaps` and we need to ensure we free theaps atomically.
   // we first detach our theaps list from any heaps
@@ -642,7 +642,7 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
 // to set up the thread local keys.
 // --------------------------------------------------------
 
-// Set up hooks so `mi_thread_done` is called automatically
+// Set up callbacks so `mi_thread_done` is called automatically
 static void mi_process_setup_auto_thread_done(void) {
   mi_atomic_do_once {
     _mi_prim_thread_init_auto_done();
@@ -666,39 +666,40 @@ static void mi_theap_default_reset(mi_theap_t* theap_main) {
   }
 }
 
-// `_theap_main` is NULL or the (signed) main theap associated with the thread (see `_mi_prim_thread_associate_default_theap`)
+// `_theap_main` is NULL or the (signed) main theap associated with the thread (see `_mi_prim_thread_associate_default_theap`).
+// The thread-done callbacks pass it as a parameter since we cannot always access thread locals at that point:
+// in a pthread destructor the TLS may already be freed (with emulated TLS, or `__thread` on macOS).
+// Moreover, on Windows `FlsFree` at process exit invokes the FLS callback on the exiting thread for the theaps of _other_ threads.
 void _mi_thread_done(mi_theap_t* _theap_main)
 {
-  // NULL can be passed on some platforms
+  // NULL is passed by `mi_thread_done` and some platform callbacks, in which case we use the main theap of this thread
   if (_theap_main==NULL) {
     _theap_main = _mi_theap_main();  // not the default theap: its heap can be deleted
   }
   else {
     _theap_main = mi_theap_thread_done_auth(_theap_main);
-    if (_theap_main==NULL) return;
   }
 
-  // prevent re-entrancy through theap_done/theap_set_default_direct (issue #699)
+  // return if the thread is not initialized, already done (e.g. `mi_thread_done` followed by the thread-done callback, issue #699), or the parameter failed authentication
   if (!mi_theap_is_initialized(_theap_main)) {
     return;
   }
 
-  // get the current tld
+  // get the tld of the theap (of the current thread, except with `FlsFree` on Windows process exit, see below)
   mi_tld_t* const tld = _theap_main->tld;
-
-  // the code below reads the default theap (in `_mi_subproc()`), so reset it first
-  if (tld->thread_id == _mi_prim_thread_id()) {
-    mi_theap_default_reset(_theap_main);
-  }
-
-  // release dynamic thread_local's
-  _mi_thread_locals_thread_done();
 
   // adjust stats
   mi_subproc_stat_decrease(tld->subproc, threads, 1);  // todo: or `_theap_main->heap`?
 
-  // check thread-id as on Windows shutdown with FLS the main (exit) thread may call this on thread-local theaps...
+  // on Windows, `FlsFree` at process exit runs this on the exiting thread for the theaps of other threads;
+  // the TLS and theaps of those threads are not accessible from here, so stop
   if (tld->thread_id != _mi_prim_thread_id()) return;
+
+  // the code below reads the default theap (in `_mi_subproc()`), so reset it first
+  mi_theap_default_reset(_theap_main);
+
+  // release dynamic thread_local's
+  _mi_thread_locals_thread_done();
 
   // delete the thread local theaps
   mi_thread_theaps_done(tld);
