@@ -654,6 +654,10 @@ mi_heap_t* mi_heap_new();
 /// mi_thread_heap_release() (or no longer allocate or free in the heap at all).
 /// In debug mode, a warning is given for threads that did not release the heap.
 ///
+/// If another thread uses a theap of this heap as its default theap (see mi_theap_set_default()),
+/// that thread must not allocate through that theap (for example with mi_malloc()) after the delete.
+/// The thread can still exit or call mi_thread_done().
+///
 /// This will release internal resources but not free
 /// still allocated blocks in this heap (and these should be
 /// `mi_free`'d later on as usual).
@@ -673,6 +677,8 @@ void mi_heap_delete(mi_heap_t* heap);
 /// calls mi_thread_heap_release(), it is safe to delete the heap even with concurrent freeing.
 /// Using mi_thread_heap_release() is not needed for mi_heap_destroy() (where all blocks are freed) but
 /// it is still good practice. Calling this multiple times is allowed.
+/// If the theap of \a heap is the default theap of the calling thread, the theap of the main heap
+/// becomes the default theap again.
 ///
 /// Note: trying to release the main heap of a subprocess is ignored.
 /// @see mi_heap_delete() for deleting a heap.
@@ -1830,6 +1836,7 @@ void mi_theap_quiescent_abandon(mi_theap_t* theap);
 /// @param theap  The new default theap.
 /// @returns The previous default theap.
 /// By default it will point to the theap belonging to the main heap (mi_heap_main()).
+/// If another thread can delete the heap of \a theap, see mi_heap_delete().
 mi_theap_t* mi_theap_set_default(mi_theap_t* theap);
 
 /// Get the default theap that is used for mi_malloc() et al. for the current thread.

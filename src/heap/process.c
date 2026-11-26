@@ -658,12 +658,20 @@ void mi_thread_done(void) mi_attr_noexcept {
   _mi_thread_done(NULL);
 }
 
-// `_theap_main` is NULL or the (signed) theap associated with the thread (see `_mi_prim_thread_associate_default_theap`)
+// Reset the default theap to the main theap. Use this at thread and process exit before code that reads the
+// default theap: another thread can delete the heap of the default theap, and the delete can free that theap.
+static void mi_theap_default_reset(mi_theap_t* theap_main) {
+  if (mi_theap_is_initialized(theap_main) && _mi_theap_default()!=theap_main) {
+    _mi_theap_default_set(theap_main);
+  }
+}
+
+// `_theap_main` is NULL or the (signed) main theap associated with the thread (see `_mi_prim_thread_associate_default_theap`)
 void _mi_thread_done(mi_theap_t* _theap_main)
 {
   // NULL can be passed on some platforms
   if (_theap_main==NULL) {
-    _theap_main = _mi_theap_default();
+    _theap_main = _mi_theap_main();  // not the default theap: its heap can be deleted
   }
   else {
     _theap_main = mi_theap_thread_done_auth(_theap_main);
@@ -677,6 +685,11 @@ void _mi_thread_done(mi_theap_t* _theap_main)
 
   // get the current tld
   mi_tld_t* const tld = _theap_main->tld;
+
+  // the code below reads the default theap (in `_mi_subproc()`), so reset it first
+  if (tld->thread_id == _mi_prim_thread_id()) {
+    mi_theap_default_reset(_theap_main);
+  }
 
   // release dynamic thread_local's
   _mi_thread_locals_thread_done();
@@ -820,6 +833,9 @@ static void mi_process_unwind_once(void)
   // decref any cached theap (through the main theap as the default theap may be deleted)
   mi_theap_t* const theap_main = _mi_theap_main();
   if (theap_main!=NULL && theap_main->tld!=NULL) { _mi_theap_cached_set(_mi_theap_empty_get(), theap_main->tld); }
+
+  // reset the default theap first: the code below reads it, and the decref above can free it (if its heap was deleted)
+  mi_theap_default_reset(theap_main);
 
   // release any thread specific resources and ensure _mi_thread_done is called on all but the main thread
   _mi_prim_thread_done_auto_done();
