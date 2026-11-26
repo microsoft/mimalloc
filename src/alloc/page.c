@@ -218,7 +218,7 @@ static void mi_theap_page_merge_stats(mi_theap_t* theapx, const mi_page_t* page,
   if (alloc_count > 0) {
     mi_theapx_stat_counter_increase(heap, theapx, malloc_count, alloc_count);
     mi_theapx_stat_increase(heap, theapx, allocated, allocated);
-    mi_theapx_stat_increase(heap, theapx, malloc_bins[bin], alloc_count);
+    if (MI_STATS) { mi_theapx_stat_increase(heap, theapx, malloc_bins[bin], alloc_count); }
     if (bin==MI_BIN_HUGE) { mi_theapx_stat_increase(heap,theapx,malloc_huge,allocated); } // separate so we have a count and total
     #if MI_STATS==1
     // use coarse total requested bytes (the usable block size, which already excludes the padding)
@@ -237,7 +237,7 @@ static void mi_theap_page_merge_stats(mi_theap_t* theapx, const mi_page_t* page,
     mi_theapx_stat_counter_increase(heap, theapx, free_count, free_count);
     mi_theapx_stat_counter_increase(heap, theapx, freed, freed);
     mi_theapx_stat_decrease(heap, theapx, allocated, freed);
-    mi_theapx_stat_decrease(heap, theapx, malloc_bins[bin], free_count);
+    if (MI_STATS) { mi_theapx_stat_decrease(heap, theapx, malloc_bins[bin], free_count); }
     if (bin==MI_BIN_HUGE) { mi_theapx_stat_decrease(heap, theapx, malloc_huge, freed); }
     // deprecated
     if (bin!=MI_BIN_HUGE) { mi_theapx_stat_decrease(heap, theapx, malloc_normal, freed); }

@@ -93,12 +93,20 @@ void __mi_stat_adjust_decrease(mi_stat_count_t* stat, uint64_t amount) {
 }
 
 
+// Load `*src` and atomically zero it if `take` is set (avoiding the atomic operation if it is 0).
+// Taking moves the value so a concurrent reader can undercount but never count it twice.
+static int64_t mi_stat_load_take(volatile int64_t* src, bool take) {
+  const int64_t x = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)src);
+  return (take && x != 0 ? mi_atomic_volatile_exchangei64_relaxed(src, 0) : x);
+}
+
 // must be thread safe as it is called from stats_merge
-static void mi_stat_count_add_mt(mi_stat_count_t* stat, const mi_stat_count_t* src) {
+static void mi_stat_count_add_mt(mi_stat_count_t* stat, mi_stat_count_t* src, bool take) {
   if (stat==src) return;
-  mi_atomic_volatile_void_addi64_relaxed(&stat->total, &src->total);
-  const int64_t src_peak = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&src->peak);
-  const int64_t src_current = mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&src->current);
+  const int64_t src_total = mi_stat_load_take(&src->total, take);
+  if (src_total != 0) { mi_atomic_volatile_addi64_relaxed(&stat->total, src_total); }
+  const int64_t src_peak = mi_stat_load_take(&src->peak, take);
+  const int64_t src_current = mi_stat_load_take(&src->current, take);
   // avoid atomic operations for common cases
   if (src_current == 0 && src_peak == 0) return;
   const int64_t prev_current = (src_current == 0 ? mi_atomic_loadi64_relaxed((_Atomic(int64_t)*)&stat->current)
@@ -113,34 +121,42 @@ static void mi_stat_count_add_mt(mi_stat_count_t* stat, const mi_stat_count_t* s
   mi_atomic_volatile_maxi64_relaxed(&stat->peak, prev_current + src_peak);
 }
 
-static void mi_stat_counter_add_mt(mi_stat_counter_t* stat, const mi_stat_counter_t* src) {
+static void mi_stat_counter_add_mt(mi_stat_counter_t* stat, mi_stat_counter_t* src, bool take) {
   if (stat==src) return;
-  mi_atomic_volatile_void_addi64_relaxed(&stat->total, &src->total);
+  const int64_t src_total = mi_stat_load_take(&src->total, take);
+  if (src_total != 0) { mi_atomic_volatile_addi64_relaxed(&stat->total, src_total); }
 }
 
-#define MI_STAT_COUNT(stat)    mi_stat_count_add_mt(&stats->stat, &src->stat);
-#define MI_STAT_COUNTER(stat)  mi_stat_counter_add_mt(&stats->stat, &src->stat);
+#define MI_STAT_COUNT(stat)    mi_stat_count_add_mt(&stats->stat, &src->stat, take);
+#define MI_STAT_COUNTER(stat)  mi_stat_counter_add_mt(&stats->stat, &src->stat, take);
+
+// add all stats of `src` into `stats` (and zero them in `src` if `take` is set)
+#define MI_STATS_ADD_ALL() \
+  MI_STAT_FIELDS() \
+  for (size_t i = 0; i <= MI_BIN_HUGE; i++) { \
+    if (MI_STATS) { MI_STAT_COUNT(malloc_bins[i]) } \
+    MI_STAT_COUNT(page_bins[i]) \
+  } \
+  for (size_t i = 0; i < MI_CBIN_COUNT; i++) { \
+    MI_STAT_COUNT(chunk_bins[i]) \
+  }
 
 // must be thread safe as it is called from stats_merge
-static void mi_stats_add(mi_stats_t* stats, const mi_stats_t* src) {
+static void mi_stats_add_into(mi_stats_t* stats, mi_stats_t* src) {
+  mi_assert_internal(stats != NULL && src != NULL);
   if (stats==NULL || src==NULL || stats==src) return;
-
-  // copy all fields
-  MI_STAT_FIELDS()
-
-  #if MI_STATS
-  for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
-    mi_stat_count_add_mt(&stats->malloc_bins[i], &src->malloc_bins[i]);
-  }
-  #endif
-  for (size_t i = 0; i <= MI_BIN_HUGE; i++) {
-    mi_stat_count_add_mt(&stats->page_bins[i], &src->page_bins[i]);
-  }
-  for (size_t i = 0; i < MI_CBIN_COUNT; i++) {
-    mi_stat_count_add_mt(&stats->chunk_bins[i], &src->chunk_bins[i]);
-  }
+  const bool take = false;
+  MI_STATS_ADD_ALL()
 }
 
+static void mi_stats_add_clear(mi_stats_t* stats, mi_stats_t* src) {
+  mi_assert_internal(stats != NULL && src != NULL);
+  if (stats==NULL || src==NULL || stats==src) return;
+  const bool take = true;
+  MI_STATS_ADD_ALL()
+}
+
+#undef MI_STATS_ADD_ALL
 #undef MI_STAT_COUNT
 #undef MI_STAT_COUNTER
 
@@ -447,27 +463,19 @@ void _mi_stats_init(void) {
   _mi_process_seal_once();
 }
 
-static void mi_stats_add_into(mi_stats_t* to, const mi_stats_t* from) {
-  mi_assert_internal(to != NULL && from != NULL);
-  if (to == from) return;
-  mi_stats_add(to, from);
-}
-
+// move the stats `from` into `to` (zeroing `from`)
 void _mi_stats_merge_into(mi_stats_t* to, mi_stats_t* from) {
-  mi_assert_internal(to != NULL && from != NULL);
-  if (to == from) return;
-  mi_stats_add(to, from);
-  mi_stats_init(from); // zero field and keep the header
+  mi_stats_add_clear(to, from);
 }
 
-static const mi_stats_t* mi_stats_merge_theap_to_heap(mi_theap_t* theap) mi_attr_noexcept {
+static mi_stats_t* mi_stats_merge_theap_to_heap(mi_theap_t* theap) mi_attr_noexcept {
   mi_stats_t* stats = &theap->stats;
   mi_stats_t* heap_stats = &mi_theap_heap(theap)->stats;
   _mi_stats_merge_into( heap_stats, stats );
   return heap_stats;
 }
 
-static const mi_stats_t* mi_heap_get_stats(mi_heap_t* heap) {
+static mi_stats_t* mi_heap_get_stats(mi_heap_t* heap) {
   // if (heap==NULL) { heap = mi_heap_main(); }
   if (!mi_heap_handle_is_valid(heap)) return NULL;
   mi_theap_t* theap = _mi_heap_theap_peek(heap);
