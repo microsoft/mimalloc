@@ -904,6 +904,7 @@ static bool mi_env_is_extra(const char* name, size_t len) {
     "profile",    // pprof profiler output (src/profile/pprof.c)
     "defines",    // C defines for the Rust build script (contrib/rust/sys/build.rs)
     "src_dir",    // mimalloc source directory for the Rust build script (contrib/rust/sys/build.rs)
+    "env_prefix", // environment option prefix for the Rust build script (contrib/rust/sys/build.rs)
     "disable_redirect", "disable_override", "enable_redirect", "prioritize_load_order",  // used by mimalloc-redirect.dll
     "patch_imports", "force_redirect", "patch_ntheap",
   };

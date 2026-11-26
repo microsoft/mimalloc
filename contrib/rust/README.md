@@ -84,6 +84,7 @@ Other build options can be passed as C defines in the `MIMALLOC_DEFINES` environ
 variable (separated by spaces or commas); these take precedence over the defines set by features.
 For example: `MIMALLOC_DEFINES="MI_DEBUG=3 MI_SKIP_COLLECT_ON_EXIT=1" cargo build`.
 
+
 ### Runtime options
 
 mimalloc reads its runtime options from `MIMALLOC_*` environment variables (see the
@@ -210,10 +211,11 @@ using features that match the CMake configuration.
 When multiple instances of mimalloc are loaded in the same process, the runtime options of
 this instance can be isolated by building with a custom prefix: options are then read as
 `<PREFIX>_MIMALLOC_<option>` (and plain `MIMALLOC_<option>` variables are ignored).
-The `MI_ENV_PREFIX` define must be a C string literal, so the value needs inner quotes:
+Set the prefix with the `MIMALLOC_ENV_PREFIX` environment variable when building
+(an identifier of at most 16 characters):
 
 ```sh
-MIMALLOC_DEFINES='MI_ENV_PREFIX="MYAPP"' cargo build
+MIMALLOC_ENV_PREFIX=MYAPP cargo build
 MYAPP_MIMALLOC_VERBOSE=1 cargo run
 ```
 
@@ -221,6 +223,6 @@ or, to use it for every build of a project, in `.cargo/config.toml`:
 
 ```toml
 [env]
-MIMALLOC_DEFINES = 'MI_ENV_PREFIX="MYAPP"'
+MIMALLOC_ENV_PREFIX = "MYAPP"
 ```
 

@@ -64,6 +64,23 @@ fn user_defines() -> Vec<(String, Option<String>)> {
         .collect()
 }
 
+// Custom environment option prefix from `MIMALLOC_ENV_PREFIX` (as cmake `-DMI_ENV_PREFIX=MYAPP`)
+fn env_prefix() -> Option<String> {
+    println!("cargo:rerun-if-env-changed=MIMALLOC_ENV_PREFIX");
+    let prefix = env::var("MIMALLOC_ENV_PREFIX").unwrap_or_default();
+    if prefix.is_empty() {
+        return None;
+    }
+    let mut chars = prefix.chars();
+    let valid = matches!(chars.next(), Some(c) if c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && prefix.len() <= 16;
+    if !valid {
+        panic!("MIMALLOC_ENV_PREFIX must be an identifier of at most 16 characters (found \"{prefix}\")");
+    }
+    Some(format!("\"{prefix}\""))
+}
+
 fn main() {
     let dir = mimalloc_dir();
     let include = dir.join("include");
@@ -151,6 +168,9 @@ fn main() {
     }
     // Rust never uses the C++ `new` API, so don't define or reference `std::get_new_handler`
     define("MI_NO_CXX_NEW_HANDLER", "1");
+    if let Some(prefix) = env_prefix() {
+        define("MI_ENV_PREFIX", &prefix);
+    }
     for (name, value) in &user {
         build.define(name, value.as_deref());
     }
