@@ -1273,7 +1273,7 @@ static _Atomic(pthread_key_t) _mi_heap_default_key = MI_ATOMIC_VAR_INIT(MI_PTHRE
 
 static void mi_pthread_done(void* value) {
   if (value!=NULL) {
-    _mi_thread_done((mi_theap_t*)value);
+    _mi_thread_done((mi_ptr_signed(mi_theap_t))value);
   }
 }
 
@@ -1292,10 +1292,10 @@ void _mi_prim_thread_done_auto_done(void) {
   }
 }
 
-void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
   pthread_key_t key = mi_atomic_load_relaxed(&_mi_heap_default_key);
   if (key != MI_PTHREAD_KEY_INVALID) {  // can happen during recursive invocation on freeBSD
-    pthread_setspecific(key, theap);
+    pthread_setspecific(key, (void*)theap);
   }
 }
 
@@ -1310,7 +1310,7 @@ void _mi_prim_thread_done_auto_done(void) {
   // nothing
 }
 
-void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
   MI_UNUSED(theap);
 }
 

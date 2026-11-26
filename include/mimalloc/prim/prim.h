@@ -162,7 +162,7 @@ void _mi_prim_thread_done_auto_done(void);
 
 // Called when the default theap for a thread changes; the (opaque) `theap` value is passed
 // to `_mi_thread_done` at thread termination (and is signed with `MI_PAC`).
-void _mi_prim_thread_associate_default_theap(mi_theap_t* theap);
+void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap);
 
 // Called once on each thread initialization (before the first allocation in that thread)
 void _mi_prim_thread_init(void);

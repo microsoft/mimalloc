@@ -52,15 +52,15 @@ static const mi_thread_locals_t mi_thread_locals_empty = mi_init_struct_zero;
 // Use pthreads
 #define mi_define_thread_local(tp,name,initval,tag) \
   static pthread_key_t __##name##_key = MI_PTHREAD_KEY_INVALID; \
-  static inline tp   name##_peek(void)    { return (tp)mi_tls_auth(mi_pthread_key_get(__##name##_key),tag); } \
+  static inline tp   name##_peek(void)    { return (tp)mi_tls_auth((mi_ptr_signed_t)mi_pthread_key_get(__##name##_key),tag); } \
   static inline tp   name##_get(void)     { tp result = name##_peek(); return (result!=NULL ? result : initval); } \
-  static inline bool name##_set(tp val)   { return mi_pthread_key_set(&__##name##_key,mi_tls_sign(val,tag)); } \
+  static inline bool name##_set(tp val)   { return mi_pthread_key_set(&__##name##_key,(void*)mi_tls_sign(val,tag)); } \
   static inline void name##_delete(void)  { mi_pthread_key_delete(&__##name##_key); }
 
 #else
 // Direct thread locals
 #define mi_define_thread_local(tp,name,initval,tag) \
-  static mi_decl_thread void* __##name = NULL; \
+  static mi_decl_thread mi_ptr_signed_t __##name = 0; \
   static inline tp   name##_peek(void)    { return (tp)mi_tls_auth(__##name,tag); } \
   static inline tp   name##_get(void)     { tp result = name##_peek(); return (result!=NULL ? result : initval); } \
   static inline bool name##_set(tp val)   { __##name = mi_tls_sign(val,tag); return true; } \

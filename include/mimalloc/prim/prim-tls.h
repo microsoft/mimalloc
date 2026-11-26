@@ -222,34 +222,34 @@ static inline mi_thread_id_t _mi_prim_thread_id(void) {
 #define MI_TLS_TAG_SLOT_FAST        (3)   // at most 3 as the bottom 2 bits of a thread id are clear
 
 static inline mi_addr_t mi_tls_salt(size_t tag) {
-  if (!MI_PAC) return 0;
   mi_assert_internal(tag <= MI_PAGE_FLAG_MASK);
+  #if MI_PAC
   return mi_salt_of((size_t)_mi_prim_thread_id() ^ tag);
+  #else
+  return 0;
+  #endif
 }
 
 // Sign a pointer `p` that is stored in thread local storage
-static inline void* mi_tls_sign(const void* p, size_t tag) {
-  if (!MI_PAC || p==NULL) return (void*)p;
-  return (void*)mi_ptr_sign(p, mi_tls_salt(tag));
+static inline mi_ptr_signed(const void) mi_tls_sign(const void* p, size_t tag) {
+  return mi_ptr_sign(p, mi_tls_salt(tag));
 }
 
 // Authenticate a signed thread local pointer; returns `NULL` (and reports `EFAULT`) if it is not validly signed.
-static inline void* mi_tls_auth(void* x, size_t tag) {
-  if (!MI_PAC || x==NULL) return x;
-  return mi_ptr_auth((mi_ptr_signed_t)x, mi_tls_salt(tag));
+static inline void* mi_tls_auth(mi_ptr_signed(void) x, size_t tag) {
+  if (x==0) return NULL;  // unset entries are 0 (and would otherwise take the slow path in `mi_ptr_auth`)
+  return mi_ptr_auth(x, mi_tls_salt(tag));
 }
 
 // Sign and authenticate the theap that is associated with a thread for `_mi_thread_done`
 #define MI_TLS_SALT_THREAD_DONE     mi_salt_of(0x7D0E)
 
-static inline void* mi_theap_thread_done_sign(mi_theap_t* theap) {
-  if (!MI_PAC || theap==NULL) return theap;
-  return (void*)mi_ptr_sign(theap, MI_TLS_SALT_THREAD_DONE);
+static inline mi_ptr_signed(mi_theap_t) mi_theap_thread_done_sign(mi_theap_t* theap) {
+  return mi_ptr_sign(theap, MI_TLS_SALT_THREAD_DONE);
 }
 
-static inline mi_theap_t* mi_theap_thread_done_auth(void* x) {
-  if (!MI_PAC || x==NULL) return (mi_theap_t*)x;
-  return (mi_theap_t*)mi_ptr_auth((mi_ptr_signed_t)x, MI_TLS_SALT_THREAD_DONE);
+static inline mi_theap_t* mi_theap_thread_done_auth(mi_ptr_signed(mi_theap_t) x) {
+  return (mi_theap_t*)mi_ptr_auth(x, MI_TLS_SALT_THREAD_DONE);
 }
 
 
@@ -313,12 +313,12 @@ static inline mi_theap_t* __mi_theap_empty(void) {
 extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_default;  // default theap to allocate from
 extern mi_decl_hidden mi_decl_thread mi_theap_t* __mi_theap_cached;   // theap from the last used heap
 
-static inline void* mi_prim_theap_default_raw(void) {
-  return __mi_theap_default;
+static inline mi_ptr_signed(mi_theap_t) mi_prim_theap_default_raw(void) {
+  return (mi_ptr_signed_t)__mi_theap_default;
 }
 
-static inline void* mi_prim_theap_cached_raw(void) {
-  return __mi_theap_cached;
+static inline mi_ptr_signed(mi_theap_t) mi_prim_theap_cached_raw(void) {
+  return (mi_ptr_signed_t)__mi_theap_cached;
 }
 
 #elif MI_TLS_MODEL_PTHREADS
@@ -334,25 +334,25 @@ static inline void* mi_prim_theap_cached_raw(void) {
 extern mi_decl_hidden _Atomic(pthread_key_t) _mi_theap_default_key;
 extern mi_decl_hidden _Atomic(pthread_key_t) _mi_theap_cached_key;
 
-static inline void* mi_prim_theap_default_raw(void) {
+static inline mi_ptr_signed(mi_theap_t) mi_prim_theap_default_raw(void) {
   pthread_key_t key = mi_atomic_load_relaxed(&_mi_theap_default_key);
   #if defined(__APPLE__) && defined(__aarch64__) && MI_HAS_TLS_SLOT
   // on apple arm64, the pthread specific slots are direct slots; inline it to avoid a stack frame setup in `mi_malloc`
   // todo: this is probably also the case on x64 and power pc?
-  if (key == MI_PTHREAD_KEY_INVALID) return NULL;
-  return mi_prim_tls_slot(key);
+  if (key == MI_PTHREAD_KEY_INVALID) return 0;
+  return (mi_ptr_signed_t)mi_prim_tls_slot(key);
   #else
-  return mi_pthread_key_get(key);
+  return (mi_ptr_signed_t)mi_pthread_key_get(key);
   #endif
 }
 
-static inline void* mi_prim_theap_cached_raw(void) {
+static inline mi_ptr_signed(mi_theap_t) mi_prim_theap_cached_raw(void) {
   pthread_key_t key = mi_atomic_load_relaxed(&_mi_theap_cached_key);
   #if defined(__APPLE__) && defined(__aarch64__) && MI_HAS_TLS_SLOT
-  if (key == MI_PTHREAD_KEY_INVALID) return NULL;
-  return mi_prim_tls_slot(key);
+  if (key == MI_PTHREAD_KEY_INVALID) return 0;
+  return (mi_ptr_signed_t)mi_prim_tls_slot(key);
   #else
-  return mi_pthread_key_get(key);
+  return (mi_ptr_signed_t)mi_pthread_key_get(key);
   #endif
 }
 
@@ -373,7 +373,7 @@ extern mi_decl_hidden _Atomic(size_t) _mi_theap_cached_slot;
 extern mi_decl_hidden _Atomic(size_t) _mi_theap_default_expansion_slot;
 extern mi_decl_hidden _Atomic(size_t) _mi_theap_cached_expansion_slot;
 
-static inline void* mi_prim_theap_default_raw(void) {
+static inline mi_ptr_signed(mi_theap_t) mi_prim_theap_default_raw(void) {
   const size_t slot = mi_atomic_load_relaxed(&_mi_theap_default_slot);
   void* theap = mi_prim_tls_slot(slot);
   #if !MI_WIN_DIRECT_TLS
@@ -384,10 +384,10 @@ static inline void* mi_prim_theap_default_raw(void) {
     }
   }
   #endif
-  return theap;
+  return (mi_ptr_signed_t)theap;
 }
 
-static inline void* mi_prim_theap_cached_raw(void) {
+static inline mi_ptr_signed(mi_theap_t) mi_prim_theap_cached_raw(void) {
   const size_t slot = mi_atomic_load_relaxed(&_mi_theap_cached_slot);
   void* theap = mi_prim_tls_slot(slot);
   #if !MI_WIN_DIRECT_TLS
@@ -398,7 +398,7 @@ static inline void* mi_prim_theap_cached_raw(void) {
     }
   }
   #endif
-  return theap;
+  return (mi_ptr_signed_t)theap;
 }
 
 #elif MI_TLS_MODEL_FIXED
@@ -428,12 +428,12 @@ static inline void* mi_prim_theap_cached_raw(void) {
   #endif
 #endif
 
-static inline void* mi_prim_theap_default_raw(void) {
-  return mi_prim_tls_slot(MI_TLS_MODEL_FIXED_DEFAULT);
+static inline mi_ptr_signed(mi_theap_t) mi_prim_theap_default_raw(void) {
+  return (mi_ptr_signed_t)mi_prim_tls_slot(MI_TLS_MODEL_FIXED_DEFAULT);
 }
 
-static inline void* mi_prim_theap_cached_raw(void) {
-  return mi_prim_tls_slot(MI_TLS_MODEL_FIXED_CACHED);
+static inline mi_ptr_signed(mi_theap_t) mi_prim_theap_cached_raw(void) {
+  return (mi_ptr_signed_t)mi_prim_tls_slot(MI_TLS_MODEL_FIXED_CACHED);
 }
 
 #else
@@ -445,18 +445,18 @@ static inline void* mi_prim_theap_cached_raw(void) {
 // On the fast path, an invalid entry returns `NULL` (or the empty theap) without reporting
 // an error (to avoid a stack frame in `mi_malloc`); the allocation then takes the slow path
 // that calls `_mi_theap_tls_check` (in `_mi_thread_init`) which reports the error.
-static inline mi_theap_t* mi_theap_tls_auth(void* x, size_t tag) {
+static inline mi_theap_t* mi_theap_tls_auth(mi_ptr_signed(mi_theap_t) x, size_t tag) {
   if (!MI_PAC) return (mi_theap_t*)x;
   // note: with `MI_PAC` the initial value is always `NULL` (also in `MI_TLS_MODEL_LOCAL`, see `prim-tls.c`) as
   // we cannot statically sign the empty theap. Checking for `NULL` first also ensures we never authenticate
   // before the process is initialized (and with `MI_PAC=2` a `NULL` can otherwise authenticate validly).
   #if MI_THEAP_INITASNULL
-  if mi_unlikely(x==NULL) return NULL;
+  if mi_unlikely(x==0) return NULL;
   #else
-  if mi_unlikely(x==NULL) return __mi_theap_empty();
+  if mi_unlikely(x==0) return __mi_theap_empty();
   #endif
   bool valid;
-  mi_theap_t* const theap = (mi_theap_t*)mi_ptr_auth_valid((mi_ptr_signed_t)x, mi_tls_salt(tag), &valid);
+  mi_theap_t* const theap = (mi_theap_t*)mi_ptr_auth_valid(x, mi_tls_salt(tag), &valid);
   if mi_likely(valid) return theap;
   #if MI_THEAP_INITASNULL
   return NULL;

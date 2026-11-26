@@ -312,7 +312,7 @@ void _mi_prim_thread_done_auto_done(void) {
   // nothing
 }
 
-void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
   MI_UNUSED(theap);
 }
 

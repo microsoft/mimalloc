@@ -865,7 +865,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
     _mi_auto_process_done();
   }
   else if (reason==DLL_THREAD_DETACH && !_mi_is_redirected()) {
-    _mi_thread_done(NULL);
+    _mi_thread_done(0);
   }
 }
 
@@ -889,7 +889,7 @@ static void NTAPI mi_win_main(PVOID module, DWORD reason, LPVOID reserved) {
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) {}
   void _mi_prim_thread_done_auto_done(void) {}
-  void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+  void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
     MI_UNUSED(theap);
   }
 
@@ -1024,7 +1024,7 @@ extern "C" {
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) {}
   void _mi_prim_thread_done_auto_done(void) {}
-  void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+  void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
     MI_UNUSED(theap);
   }
 
@@ -1123,7 +1123,7 @@ extern "C" {
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) { }
   void _mi_prim_thread_done_auto_done(void) { }
-  void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+  void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
     MI_UNUSED(theap);
   }
 
@@ -1185,7 +1185,7 @@ extern "C" {
   // nothing to do since `_mi_thread_done` is handled through the DLL_THREAD_DETACH event.
   void _mi_prim_thread_init_auto_done(void) { }
   void _mi_prim_thread_done_auto_done(void) { }
-  void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+  void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
     MI_UNUSED(theap);
   }
 
@@ -1235,9 +1235,8 @@ extern "C" {
   static DWORD mi_fls_key = (DWORD)(-1);
 
   static void NTAPI mi_fls_done(PVOID value) {
-    mi_theap_t* theap = (mi_theap_t*)value;
-    if (theap != NULL) {
-      _mi_thread_done(theap);
+    if (value != NULL) {
+      _mi_thread_done((mi_ptr_signed(mi_theap_t))value);
       FlsSetValue(mi_fls_key, NULL);  // prevent recursion as _mi_thread_done may set it back to the main theap, issue #672
     }
   }
@@ -1252,9 +1251,9 @@ extern "C" {
     FlsFree(mi_fls_key);
   }
 
-  void _mi_prim_thread_associate_default_theap(mi_theap_t* theap) {
+  void _mi_prim_thread_associate_default_theap(mi_ptr_signed(mi_theap_t) theap) {
     mi_assert_internal(mi_fls_key != (DWORD)(-1));
-    FlsSetValue(mi_fls_key, theap);
+    FlsSetValue(mi_fls_key, (PVOID)theap);
   }
 #else
 #error "define windows process and thread auto initialization"
@@ -1283,7 +1282,7 @@ extern "C" {
     }
     else if (reason == DLL_THREAD_DETACH) {
       // mi_debug_out("redirect thread detach\n");
-      _mi_thread_done(NULL);
+      _mi_thread_done(0);
     }
   }
   __declspec(dllimport) bool mi_cdecl mi_allocator_init(const char** message);
