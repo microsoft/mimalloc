@@ -695,6 +695,97 @@ static inline void* mi_visit_block_ptr(uint8_t* block, size_t ubsize, bool memta
   return mi_ptr_bounded_data((memtag ? mi_memtag_load(block) : block), ubsize);
 }
 
+// A bitmap of the free blocks in a page that is visited. The visitor may allocate or free blocks in the page
+// (or even free the page), so the map is updated after each visit to never visit freed blocks.
+#define MI_MAX_BLOCKS   (MI_SMALL_PAGE_SIZE / sizeof(void*))
+
+typedef struct mi_visit_free_map_s {
+  mi_page_t*    page;
+  mi_page_ref_t ref;            // to check if the page is still live
+  mi_heap_t*    heap;
+  uint8_t*      pstart;
+  size_t        bsize;
+  size_t        capacity;       // at the start of the visit (later blocks are not visited)
+  uint64_t      div_mul;        // multiplier and shift for fast division by `bsize`
+  size_t        div_shift;
+  size_t        used;           // the page state at the last update
+  mi_block_t*   free;
+  mi_block_t*   local_free;
+  mi_block_t*   thread_free;
+  size_t        map[MI_MAX_BLOCKS / MI_SIZE_BITS];
+} mi_visit_free_map_t;
+
+// Mark the blocks in a free list as free up to `upto`. Returns the number of marked blocks, or `SIZE_MAX` if
+// `upto` is not reached or a block is marked twice (and `warn` to warn about a corrupted free list).
+static size_t mi_visit_mark_free(mi_visit_free_map_t* vf, mi_block_t* block, mi_block_t* upto, bool warn) {
+  size_t count = 0;
+  for (; block != upto; block = mi_block_next(vf->page, block), count++) {
+    if (block == NULL || count >= vf->page->reserved) return SIZE_MAX;
+    mi_assert_internal(mi_addr(block) >= mi_addr(vf->pstart));
+    const size_t offset = mi_addr(block) - mi_addr(vf->pstart);
+    mi_assert_internal(offset % vf->bsize == 0);
+    mi_assert_internal(offset <= UINT32_MAX);
+    const size_t blockidx = mi_fast_divide(offset, vf->div_mul, vf->div_shift);
+    mi_assert_internal(blockidx == offset / vf->bsize);
+    if (blockidx >= vf->capacity) continue;  // in an extension of the page
+    const size_t mask = (size_t)1 << (blockidx % MI_SIZE_BITS);
+    size_t* const field = &vf->map[blockidx / MI_SIZE_BITS];
+    if mi_unlikely((*field & mask) != 0) {
+      if (warn) { _mi_warning_message("corrupted free list (possibly due to a double free)\n"); }
+      return SIZE_MAX;
+    }
+    *field |= mask;
+  }
+  return count;
+}
+
+static void mi_visit_free_map_save(mi_visit_free_map_t* vf) {
+  vf->used        = mi_page_used(vf->page);
+  vf->free        = vf->page->free;
+  vf->local_free  = vf->page->local_free;
+  vf->thread_free = mi_page_thread_free(vf->page);
+}
+
+static void mi_visit_free_map_build(mi_visit_free_map_t* vf) {
+  // blocks beyond the capacity are free (where a page that was freed and reused may have less capacity)
+  const size_t capacity = (vf->page->capacity < vf->capacity ? vf->page->capacity : vf->capacity);
+  const size_t bmapsize = mi_divide_up(vf->capacity, MI_SIZE_BITS);
+  for (size_t i = 0; i < bmapsize; i++) {
+    const size_t start = i * MI_SIZE_BITS;
+    vf->map[i] = (capacity <= start ? SIZE_MAX : (capacity - start >= MI_SIZE_BITS ? 0 : SIZE_MAX << (capacity - start)));
+  }
+  mi_visit_free_map_save(vf);
+  // on a corrupted free list, we visit blocks not yet marked free as potentially live
+  const size_t free_count = mi_visit_mark_free(vf, vf->free, NULL, true);
+  if (free_count != SIZE_MAX) {
+    const size_t local_count = mi_visit_mark_free(vf, vf->local_free, NULL, true);
+    if (local_count != SIZE_MAX) {
+      mi_visit_mark_free(vf, vf->thread_free, NULL, true);
+      mi_assert_internal(vf->capacity != vf->page->capacity || vf->capacity == free_count + local_count + vf->used);
+    }
+  }
+}
+
+// Update the free map after a visit; returns `false` if the page was freed (or reused for another heap or size).
+static bool mi_visit_free_map_update(mi_visit_free_map_t* vf) {
+  mi_page_t* const page = vf->page;
+  if (!mi_page_ref_is_live(vf->ref) || mi_page_heap(page) != vf->heap || mi_page_block_size(page) != vf->bsize) return false;
+  if (page->free == vf->free && page->local_free == vf->local_free && mi_page_thread_free(page) == vf->thread_free &&
+      mi_page_used(page) == vf->used) {
+    return true;
+  }
+  // usually the visitor only freed blocks which are pushed on the local or thread free list; otherwise we rebuild
+  const size_t local_count = (page->free != vf->free ? SIZE_MAX : mi_visit_mark_free(vf, page->local_free, vf->local_free, false));
+  if (local_count == SIZE_MAX || vf->used != mi_page_used(page) + local_count ||
+      mi_visit_mark_free(vf, mi_page_thread_free(page), vf->thread_free, false) == SIZE_MAX) {
+    mi_visit_free_map_build(vf);
+  }
+  else {
+    mi_visit_free_map_save(vf);
+  }
+  return true;
+}
+
 bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg) {
   mi_assert(area != NULL);
   if (area==NULL) return true;
@@ -705,112 +796,44 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
     _mi_page_free_collect(page,true);            // collect both thread_delayed and local_free
     mi_assert_internal(page->local_free == NULL);
   }
-  // the visitor may allocate or free (and even free the page), so we do not access the page after the first visit
-  const size_t used     = mi_page_used(page);
-  const size_t capacity = page->capacity;
-  if (used == 0) return true;
+  if (mi_page_used(page) == 0) return true;
 
-  size_t psize;
-  uint8_t* const pstart = mi_page_area(page, &psize);
+  uint8_t* const pstart = mi_page_start(page);
   mi_heap_t* const heap = mi_page_heap(page);
   const size_t bsize    = mi_page_block_size(page);
   const size_t ubsize   = mi_page_usable_block_size(page); // without padding
   const bool   memtag   = mi_page_is_memtag(page);
 
   // optimize page with one block
-  if (capacity == 1) {
-    mi_assert_internal(used == 1 && page->free == NULL);
+  if (page->capacity == 1) {
+    mi_assert_internal(mi_page_used(page) == 1 && page->free == NULL);
     return visitor(heap, area, mi_visit_block_ptr(pstart, ubsize, memtag), ubsize, arg);
   }
   mi_assert(bsize <= UINT32_MAX);
+  mi_assert_internal(page->capacity <= MI_MAX_BLOCKS);
 
-  // optimize full pages
-  if (used == capacity) {
-    uint8_t* block = pstart;
-    for (size_t i = 0; i < capacity; i++) {
-      if (!visitor(heap, area, mi_visit_block_ptr(block, ubsize, memtag), ubsize, arg)) return false;
-      block += bsize;
-    }
-    return true;
-  }
-
-  // create a bitmap of free blocks.
-  #define MI_MAX_BLOCKS   (MI_SMALL_PAGE_SIZE / sizeof(void*))
-  size_t free_map[MI_MAX_BLOCKS / MI_SIZE_BITS];
-  const size_t bmapsize = mi_divide_up(capacity, MI_SIZE_BITS);
-  memset(free_map, 0, bmapsize * sizeof(size_t));
-  if (capacity % MI_SIZE_BITS != 0) {
-    // mark left-over bits at the end as free
-    size_t shift   = (capacity % MI_SIZE_BITS);
-    size_t mask    = (SIZE_MAX << shift);
-    free_map[bmapsize - 1] = mask;
-  }
-
-  // fast repeated division by the block size
-  uint64_t magic;
-  size_t   shift;
-  mi_get_fast_divisor(bsize, &magic, &shift);
-
-  #if MI_DEBUG>1
-  size_t free_count = 0;
-  bool free_list_corrupted = false;
-  #endif
-  for (mi_block_t* block = page->free; block != NULL; block = mi_block_next(page, block)) {
-    #if MI_DEBUG>1
-    free_count++;
-    #endif
-    mi_assert_internal(mi_addr(block) >= mi_addr(pstart) && mi_addr(block) < mi_addr(pstart + psize));
-    size_t offset = mi_addr(block) - mi_addr(pstart);
-    mi_assert_internal(offset % bsize == 0);
-    mi_assert_internal(offset <= UINT32_MAX);
-    size_t blockidx = mi_fast_divide(offset, magic, shift);
-    mi_assert_internal(blockidx == offset / bsize);
-    mi_assert_internal(blockidx < MI_MAX_BLOCKS);
-    size_t bitidx = (blockidx / MI_SIZE_BITS);
-    size_t bit = blockidx - (bitidx * MI_SIZE_BITS);
-    const size_t mask = (size_t)1 << bit;
-    if mi_unlikely((free_map[bitidx] & mask) != 0) {
-      _mi_warning_message("corrupted free list (possibly due to a double free)\n");
-      #if MI_DEBUG>1
-      free_list_corrupted = true;
-      #endif
-      break;  // visit blocks not yet marked free as potentially live
-    }
-    free_map[bitidx] |= mask;
-  }
-  mi_assert_internal(free_list_corrupted || capacity == (free_count + used));
+  mi_visit_free_map_t vf;
+  vf.page     = page;
+  vf.ref      = mi_page_ref(page);
+  vf.heap     = heap;
+  vf.pstart   = pstart;
+  vf.bsize    = bsize;
+  vf.capacity = page->capacity;
+  mi_get_fast_divisor(bsize, &vf.div_mul, &vf.div_shift);
+  mi_visit_free_map_build(&vf);
 
   // walk through all blocks skipping the free ones
-  #if MI_DEBUG>1
-  size_t used_count = 0;
-  #endif
-  uint8_t* block = pstart;
+  const size_t bmapsize = mi_divide_up(vf.capacity, MI_SIZE_BITS);
   for (size_t i = 0; i < bmapsize; i++) {
-    if (free_map[i] == 0) {
-      // every block is in use
-      for (size_t j = 0; j < MI_SIZE_BITS; j++) {
-        #if MI_DEBUG>1
-        used_count++;
-        #endif
-        if (!visitor(heap, area, mi_visit_block_ptr(block, ubsize, memtag), ubsize, arg)) return false;
-        block += bsize;
-      }
-    }
-    else {
-      // visit the used blocks in the mask
-      size_t m = ~free_map[i];
-      while (m != 0) {
-        #if MI_DEBUG>1
-        used_count++;
-        #endif
-        size_t bitidx = mi_ctz(m);
-        if (!visitor(heap, area, mi_visit_block_ptr(block + (bitidx * bsize), ubsize, memtag), ubsize, arg)) return false;
-        m &= m - 1;  // clear least significant bit
-      }
-      block += bsize * MI_SIZE_BITS;
+    size_t m = ~vf.map[i];
+    while (m != 0) {
+      const size_t bitidx = mi_ctz(m);
+      uint8_t* const block = pstart + (((i * MI_SIZE_BITS) + bitidx) * bsize);
+      if (!visitor(heap, area, mi_visit_block_ptr(block, ubsize, memtag), ubsize, arg)) return false;
+      if (!mi_visit_free_map_update(&vf)) return true;  // the page was freed
+      m = ~vf.map[i] & ~(((size_t)2 << bitidx) - 1);   // continue after `bitidx` (with the updated map)
     }
   }
-  mi_assert_internal(free_list_corrupted || used == used_count);
   return true;
 }
 

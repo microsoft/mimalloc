@@ -336,7 +336,8 @@ typedef struct mi_heap_area_s {
 typedef bool (mi_cdecl mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg);
 
 // Heap visitors assume no concurrent heap access (except thread exit): no other thread may allocate in the heap,
-// or free blocks that belong to it, during the visit.
+// or free blocks that belong to it, during the visit. The visitor itself may allocate and free (but not delete the heap):
+// freed blocks are never visited, and blocks allocated during the visit may or may not be visited.
 mi_decl_export bool   mi_heap_visit_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 mi_decl_export bool   mi_heap_visit_abandoned_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 

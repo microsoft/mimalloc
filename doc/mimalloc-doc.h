@@ -883,8 +883,16 @@ typedef bool (mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* a
 ///
 /// Visits all areas and blocks in the heap.
 /// Other threads must not access this heap during the visit: they may not allocate in it,
-/// nor free blocks that belong to it (but thread termination is synchronized internally). The visitor runs under the heap's
-/// lock and must not re-enter the heap (through allocating or free-ing).
+/// nor free blocks that belong to it (but thread termination is synchronized internally).
+/// The visitor itself may allocate and free:
+/// - Allocating and freeing in other heaps does not affect the visit: all blocks are visited exactly once.
+/// - Allocating in \a heap: all existing blocks are still visited, but blocks allocated during the visit may or may not be visited.
+/// - Freeing existing blocks in \a heap: these may or may not have been visited already, but a block is never visited after it is freed.
+///   All other blocks are still visited.
+/// - The visitor cannot delete or destroy \a heap during the visit (these fail with `EINVAL`).
+///
+/// When small pages are allocated directly from the OS (with `MIMALLOC_DISALLOW_ARENA_ALLOC`, or when reserving arena memory fails),
+/// allocating or freeing in \a heap during the visit may cause blocks to be missed or visited twice.
 bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
 /// __v3__: Visit only abandoned pages of \a heap, optionally visiting their allocated blocks.
@@ -1138,6 +1146,7 @@ typedef bool (mi_heap_visit_fun)(mi_heap_t* heap, void* arg);
 /// @param visitor The visitor function is called with each heap in `subproc`
 /// @param arg A user argument that is passed to each visitor function call.
 /// Return `true` if all heaps are visited (and false otherwise).
+/// The visitor may create or delete heaps; heaps created during the visit may or may not be visited.
 bool mi_subproc_visit_heaps(mi_subproc_id_t subproc, mi_heap_visit_fun* visitor, void* arg);
 
 /// \}
@@ -1900,6 +1909,7 @@ void mi_theap_guarded_set_size_bound(mi_theap_t* theap, size_t min, size_t max);
 
 /// @deprecated Visit areas and optionally allocated blocks in a thread-local heap.
 /// Prevent concurrent mutation during the visit; prefer mi_heap_visit_blocks().
+/// The visitor may allocate and free as with mi_heap_visit_blocks(), and may also delete \a theap (which ends the visit).
 /// @return \a true if the visit completed.
 bool mi_theap_visit_blocks(const mi_theap_t* theap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg);
 
