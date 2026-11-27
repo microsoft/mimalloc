@@ -482,6 +482,7 @@ static mi_decl_noinline void* mi_malloc_generic_sample(mi_theap_t* theap, size_t
 // Note: `size` includes `MI_PADDING_SIZE`.
 static mi_decl_noinline void* mi_malloc_generic_thread_done(size_t size, bool zero, size_t huge_alignment, mi_page_t** ppage)
 {
+  if (!mi_malloc_generic_check_size(size)) return NULL;
   return _mi_detached_malloc(_mi_subproc(), size - MI_PADDING_SIZE, zero, huge_alignment, ppage);
 }
 
