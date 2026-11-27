@@ -588,3 +588,49 @@ jobs:
       - name: Release
         if: matrix.target == 'ucrt64'
         run: sh .github/ci/cmake-test.sh release Release -DMI_OPT_ARCH=ON
+
+  swift:
+    name: swift, ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            container: swift:6.4.3-noble
+          - os: ubuntu-22.04-arm
+            container: swift:6.4.3-noble
+          - os: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Debug
+        run: swift test
+
+      - name: Release
+        run: swift test -c release
+
+      - name: Secure, Debug
+        run: swift test --traits Override,Secure,Debug
+
+      - name: DebugInDebug
+        run: |
+          swift test --traits Override,DebugInDebug
+          swift test -c release --traits Override,DebugInDebug
+
+      - name: Release, NoTHP, LocalDynamicTLS
+        run: swift test -c release --traits Override,NoTHP,LocalDynamicTLS
+
+      - name: No override
+        run: swift test --disable-default-traits
+
+      # --disable-xctest: on Linux, LeakSanitizer reports leaks inside libXCTest's empty run
+      - name: ASan
+        run: swift test --sanitize=address --disable-xctest
+
+      - name: TSan
+        run: swift test --sanitize=thread --disable-xctest

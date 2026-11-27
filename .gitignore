@@ -11,3 +11,5 @@ docs/
 *.gz
 .vscode
 .DS_STore
+.build
+.swiftpm
