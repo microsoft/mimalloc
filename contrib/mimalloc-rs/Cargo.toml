@@ -1,0 +1,20 @@
+[package]
+name = "translate_new"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lazy_static = "1.4.0"
+libc = "0.2"
+
+[[bin]]
+name="test-stress"
+path="src/test_stress_main.rs"
+
+[[bin]]
+name="test-api-fill"
+path="src/test_api_fill_main.rs"
+
+[[bin]]
+name="test-api"
+path="src/test_api_main.rs"
