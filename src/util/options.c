@@ -499,12 +499,26 @@ static void mi_add_stderr_output(void) {
 // --------------------------------------------------------
 // Messages, all end up calling `_mi_fputs`.
 // --------------------------------------------------------
+// Bound the nesting of user callbacks per thread (not counted if the thread is not yet initialized or done).
+static mi_tld_t* mi_recurse_tld(void) {
+  mi_theap_t* const theap = _mi_theap_default();
+  if (!mi_theap_is_initialized(theap)) return NULL;
+  mi_assert_internal(theap->tld != NULL);
+  return theap->tld;
+}
+
 static mi_decl_noinline bool mi_recurse_enter_prim(void) {
+  mi_tld_t* const tld = mi_recurse_tld();
+  if (tld != NULL && ++tld->recurse > MI_MAX_REENTRY) {
+    _mi_reentry_fatal("too many nested callbacks (recursion through a callback?)");
+    return false;
+  }
   return true;
 }
 
 static mi_decl_noinline void mi_recurse_exit_prim(void) {
-  /* nothing */
+  mi_tld_t* const tld = mi_recurse_tld();  // reload as the callback may have (de)initialized the thread
+  if (tld != NULL && tld->recurse > 0) { tld->recurse--; }
 }
 
 static bool mi_recurse_enter(void) {
@@ -663,8 +677,9 @@ static void mi_error_message_va(int err, const char* prefix, const char* fmt, va
   const mi_process_sealed_t* const sealed = mi_process_get_sealed();
   void* arg;
   mi_error_fun* const handler = (mi_error_fun*)_mi_process_get_callback(&sealed->error_handler, &sealed->error_arg, &arg);
-  if (handler != NULL) {
+  if (handler != NULL && mi_recurse_enter_prim()) {
     handler(err, arg);
+    mi_recurse_exit_prim();
   }
   else {
     mi_error_default(err);
@@ -683,8 +698,8 @@ void _mi_error_message(int err, const char* fmt, ...) {
   va_end(args);
 }
 
-// Unrecoverable lock error: no formatting, user output, or error handler (as these may recurse).
-mi_decl_noreturn mi_decl_cold void _mi_lock_fatal(const char* msg) {
+// Unrecoverable re-entry error: no formatting, user output, or error handler (as these may recurse).
+mi_decl_noreturn mi_decl_cold void _mi_reentry_fatal(const char* msg) {
   _mi_prim_out_stderr("mimalloc: fatal error: ");
   _mi_prim_out_stderr(msg);
   _mi_prim_out_stderr("\n");

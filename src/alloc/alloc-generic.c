@@ -321,16 +321,16 @@ static mi_page_t* mi_find_page(mi_theap_t* theap, size_t size, size_t huge_align
 ----------------------------------------------------------- */
 
 // The handler and argument are stored in the sealed process data (see `heap/process.h`).
-// Never called for detached theaps as those allocate under a (non-recursive) lock.
+// Not called from within another user callback, nor for detached theaps (as those share a tld and allocate under a lock).
 void _mi_deferred_free(mi_theap_t* theap, bool force) {
   theap->heartbeat++;
   const mi_process_sealed_t* const sealed = mi_process_get_sealed();
-  if (mi_atomic_load_ptr_relaxed(void,&sealed->deferred_free) != NULL && !theap->tld->recurse && !theap->is_detached) {
-    theap->tld->recurse = true;
+  if (mi_atomic_load_ptr_relaxed(void,&sealed->deferred_free) != NULL && theap->tld->recurse==0 && !theap->is_detached) {
+    theap->tld->recurse++;
     void* arg;
     mi_deferred_free_fun* const fun = (mi_deferred_free_fun*)_mi_process_get_callback(&sealed->deferred_free, &sealed->deferred_arg, &arg);
     if (fun != NULL) { fun(force, theap->heartbeat, arg); }
-    theap->tld->recurse = false;
+    theap->tld->recurse--;
   }
 }
 

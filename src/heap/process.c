@@ -136,7 +136,7 @@ static mi_decl_cache_align const mi_tld_t mi_tld_empty = {
   MI_LOCK_INITIALIZER,    // theaps lock
   NULL,                   // theap_default
   NULL,                   // theap_cached
-  false,                  // recurse
+  0,                      // recurse
   false,                  // in_profiler
   false,                  // is_in_threadpool
   MI_MEMID_STATIC         // memid
