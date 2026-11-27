@@ -645,6 +645,9 @@ static inline void mi_lock_release(mi_lock_t* lock) {
 static inline bool mi_lock_is_reentered(const mi_lock_t* lock) {
   return (lock->count > 1);
 }
+static inline bool mi_lock_is_owned(mi_lock_t* lock) {  // by the current thread
+  return (mi_atomic_load_relaxed(&lock->owner) == _mi_thread_id());
+}
 static inline void mi_lock_init(mi_lock_t* lock) {
   if (lock==NULL) return;
   mi_mutex_init(&lock->mutex);

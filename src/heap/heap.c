@@ -138,7 +138,6 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
   heap->cookie = mi_heap_cookie(heap);
   heap->theap = theap_slot;
   heap->subproc = subproc;
-  heap->heap_seq = mi_atomic_increment_relaxed(&subproc->heap_total_count);
   heap->exclusive_arena = _mi_arena_from_id(exclusive_arena_id);
   heap->reclaim_on_free = mi_option_get(mi_option_page_reclaim_on_free);
   heap->numa_node = -1; // no initial affinity
@@ -162,8 +161,9 @@ void _mi_heap_init(mi_heap_t* heap, mi_thread_local_t theap_slot, mi_subproc_t* 
   mi_lock_init(&heap->os_abandoned_pages_lock);
   mi_lock_init(&heap->arena_pages_lock);
 
-  // push onto the subproc heaps
+  // push onto the subproc heaps (so the list is ordered by decreasing `heap_seq`, see `mi_subproc_visit_heaps`)
   mi_lock(&heap->subproc->heaps_lock) {
+    heap->heap_seq = mi_atomic_increment_relaxed(&subproc->heap_total_count);
     // inherit the profiler under the lock so a concurrent `mi_subproc_profile` either sees this heap or we see its profiler
     mi_atomic_store_ptr_relaxed(mi_profiler_t, &heap->profiler, mi_atomic_load_ptr_acquire(mi_profiler_t,&subproc->profiler));
     mi_heap_t* head = heap->subproc->heaps;
@@ -359,9 +359,19 @@ static void mi_heap_check_released(mi_heap_t* heap) {
 }
 #endif
 
+// A heap cannot be deleted while this thread holds its theaps lock (for example from within a block visitor of the heap)
+static bool mi_heap_can_delete(mi_heap_t* heap) {
+  if mi_unlikely(mi_lock_is_owned(&heap->theaps_lock)) {
+    _mi_error_message(EINVAL, "cannot delete or destroy a heap while it is being visited (heap %p)\n", heap);
+    return false;
+  }
+  return true;
+}
+
 void mi_heap_delete(mi_heap_t* heap) {
   // if (heap==NULL) { heap = mi_heap_main(); }
   if (!mi_heap_handle_is_valid(heap)) return;
+  if (!mi_heap_can_delete(heap)) return;
   mi_heap_t* heap_main = mi_heap_get_heap_main(heap);
   if (heap == heap_main) {
     _mi_warning_message("cannot delete the main heap\n");
@@ -401,6 +411,7 @@ void mi_heap_destroy(mi_heap_t* heap) {
     _mi_warning_message("cannot destroy the main heap\n");
     return;
   }
+  if (!mi_heap_can_delete(heap)) return;
   _mi_heap_force_destroy(heap,true /* acquire subproc->heaps_lock */);
 }
 

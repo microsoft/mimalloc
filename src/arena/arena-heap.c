@@ -31,7 +31,13 @@ typedef struct mi_heap_visit_info_s {
   void*               arg;
   bool                visit_blocks;
   bool                abandoned_only;
+  mi_bitmap_t*        pages;          // the arena pages of the heap (or NULL for OS pages)
 } mi_heap_visit_info_t;
+
+// The visitor may free pages, so check an arena page is still live before accessing it.
+static bool mi_heap_visit_page_is_live(const mi_heap_visit_info_t* vinfo, size_t slice_index) {
+  return (vinfo->pages == NULL || mi_bitmap_is_set(vinfo->pages, slice_index));
+}
 
 // Collect a claimed abandoned page for a visit and unown it again. Returns `true` if the page was freed.
 // Unlike `_mi_abandoned_page_unown`, the collect is forced so the `local_free` list is appended as well
@@ -44,7 +50,7 @@ static bool mi_heap_visit_page_collect_claimed(mi_page_t* page) {
   return _mi_abandoned_page_unown(page, NULL);  // still frees an empty singleton (and any later cross-thread frees)
 }
 
-static bool mi_heap_visit_page(mi_page_t* page, const mi_heap_visit_info_t* vinfo) {
+static bool mi_heap_visit_page(mi_page_t* page, size_t slice_index, const mi_heap_visit_info_t* vinfo) {
   if (_mi_meta_is_meta_page(vinfo->heap->subproc, page)) return true;  // skip meta-data pages (in the main heap)
   mi_heap_area_t area;
   // abandoned pages can only be collected if we can claim them
@@ -56,7 +62,7 @@ static bool mi_heap_visit_page(mi_page_t* page, const mi_heap_visit_info_t* vinf
   if (!vinfo->visitor(vinfo->heap, &area, NULL, area.block_size, vinfo->arg)) {
     return false; // break
   }
-  if (vinfo->visit_blocks) {
+  if (vinfo->visit_blocks && mi_heap_visit_page_is_live(vinfo, slice_index)) {
     return _mi_theap_area_visit_blocks(&area, page, vinfo->visitor, vinfo->arg); // continue or break
   }
   else {
@@ -67,8 +73,9 @@ static bool mi_heap_visit_page(mi_page_t* page, const mi_heap_visit_info_t* vinf
 static bool mi_heap_visit_page_at(size_t slice_index, size_t slice_count, mi_arena_t* arena, void* arg) {
   MI_UNUSED(slice_count);
   const mi_heap_visit_info_t* vinfo = (const mi_heap_visit_info_t*)arg;
+  if (!mi_heap_visit_page_is_live(vinfo, slice_index)) return true;  // freed by the visitor
   mi_page_t* page = mi_arena_page_at_slice(arena, slice_index);
-  return mi_heap_visit_page(page, vinfo); // continue or break
+  return mi_heap_visit_page(page, slice_index, vinfo); // continue or break
 }
 
 static bool mi_heap_visit_arena(mi_arena_t* arena, const void* arg, void** result) {
@@ -78,6 +85,7 @@ static bool mi_heap_visit_arena(mi_arena_t* arena, const void* arg, void** resul
   mi_heap_t* const heap = vinfo->heap;
   mi_arena_pages_t* arena_pages = mi_heap_arena_pages(heap, arena);
   if (arena_pages == NULL) return true; // continue
+  visit_info.pages = arena_pages->pages;
   if (vinfo->abandoned_only) {
     for (size_t bin = 0; bin < MI_ARENA_BIN_COUNT; bin++) {
       // TODO: if we had a single abandoned page map as well, this can be faster. Maybe for CPython?
@@ -94,14 +102,14 @@ static bool mi_heap_visit_arena(mi_arena_t* arena, const void* arg, void** resul
 
 // The caller holds heap->theaps_lock to prevent thread-exit abandonment and theap removal.
 static bool mi_heap_visit_owned_os_blocks(mi_heap_t* heap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
-  const mi_heap_visit_info_t visit_info = { heap, visitor, arg, visit_blocks, false };
+  const mi_heap_visit_info_t visit_info = { heap, visitor, arg, visit_blocks, false, NULL };
   for (mi_theap_t* theap = heap->theaps; theap != NULL; theap = theap->hnext) {
     if (theap->page_count_os == 0) continue;
     for (size_t bin = 0; bin <= MI_BIN_FULL; bin++) {
       mi_page_t* page = theap->pages[bin].first;
       while (page != NULL) {
         mi_page_t* const next = page->next;
-        if (page->memid.memkind != MI_MEM_ARENA && !mi_heap_visit_page(page, &visit_info)) return false;
+        if (page->memid.memkind != MI_MEM_ARENA && !mi_heap_visit_page(page, 0, &visit_info)) return false;
         page = next;
       }
     }
@@ -112,7 +120,7 @@ static bool mi_heap_visit_owned_os_blocks(mi_heap_t* heap, bool visit_blocks, mi
 static bool mi_heap_visit_blocks_locked(mi_heap_t* heap, bool abandoned_only, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
   // visit all pages in a heap
   // Other threads must not allocate in or free into this heap; thread-exit abandonment is blocked by the heap lock.
-  const mi_heap_visit_info_t visit_info = { heap, visitor, arg, visit_blocks, abandoned_only };
+  const mi_heap_visit_info_t visit_info = { heap, visitor, arg, visit_blocks, abandoned_only, NULL };
   bool ok = mi_forall_arenas(heap, NULL, 0, &mi_heap_visit_arena, &visit_info, NULL);
   if (!ok) return false;
 
@@ -124,7 +132,7 @@ static bool mi_heap_visit_blocks_locked(mi_heap_t* heap, bool abandoned_only, bo
     page = mi_atomic_load_ptr_relaxed(mi_page_t, &heap->qsbr_delayed);
     while (ok && page != NULL) {
       mi_page_t* next = page->next;
-      if (page->memid.memkind != MI_MEM_ARENA) { ok = mi_heap_visit_page(page, &visit_info); }
+      if (page->memid.memkind != MI_MEM_ARENA) { ok = mi_heap_visit_page(page, 0, &visit_info); }
       page = next;
     }
   }
@@ -136,7 +144,7 @@ static bool mi_heap_visit_blocks_locked(mi_heap_t* heap, bool abandoned_only, bo
   }
   while (ok && page != NULL) {
     mi_page_t* next = page->next;  // read upfront in case the visitor frees the page
-    ok = mi_heap_visit_page(page, &visit_info);
+    ok = mi_heap_visit_page(page, 0, &visit_info);
     page = next;
   }
 

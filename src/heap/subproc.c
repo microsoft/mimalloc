@@ -359,8 +359,20 @@ bool mi_subproc_visit_heaps(mi_subproc_id_t subproc_id, mi_heap_visit_fun* visit
   if (subproc==NULL) return false;
   bool ok = true;
   mi_lock(&subproc->heaps_lock) {
-    for (mi_heap_t* heap = subproc->heaps; heap!=NULL && ok; heap = heap->next) {
+    mi_heap_t* heap = subproc->heaps;
+    while (heap!=NULL && ok) {
+      const size_t seq   = heap->heap_seq;
+      const size_t count = mi_atomic_load_relaxed(&subproc->heap_count);
+      const size_t total = mi_atomic_load_relaxed(&subproc->heap_total_count);
       ok = (*visitor)(heap, arg);
+      if (count == mi_atomic_load_relaxed(&subproc->heap_count) && total == mi_atomic_load_relaxed(&subproc->heap_total_count)) {
+        heap = heap->next;
+      }
+      else {
+        // the visitor created or deleted heaps (maybe this one); continue at the next heap in the `heap_seq` order
+        heap = subproc->heaps;
+        while (heap!=NULL && heap->heap_seq >= seq) { heap = heap->next; }
+      }
     }
   }
   return ok;
