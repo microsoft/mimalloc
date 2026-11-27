@@ -602,7 +602,9 @@ static inline void mi_mutex_done(mi_mutex_t* lock) {
 // Locks are re-entrant for the owning thread so user callbacks (like an error handler or output
 // function) that are invoked while holding a lock can call back into the allocator.
 // `mi_lock_try_acquire` is not re-entrant though.
+#define MI_LOCK_MAX_REENTRY  (32)   // re-entry beyond this is runaway recursion through callbacks
 size_t _mi_thread_id(void) mi_attr_noexcept;
+mi_decl_noreturn mi_decl_cold void _mi_lock_fatal(const char* msg);
 
 typedef struct mi_lock_s {
   mi_mutex_t       mutex;
@@ -626,11 +628,16 @@ static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
 }
 static inline void mi_lock_acquire(mi_lock_t* lock) {
   const size_t tid = _mi_thread_id();
-  if (mi_atomic_load_relaxed(&lock->owner) == tid) { lock->count++; return; }
+  if (mi_atomic_load_relaxed(&lock->owner) == tid) {
+    if mi_unlikely(++lock->count > MI_LOCK_MAX_REENTRY) { _mi_lock_fatal("too many re-entrant lock acquisitions (recursion through a callback?)"); }
+    return;
+  }
   mi_mutex_acquire(&lock->mutex);
   mi_lock_set_owner(lock, tid);
 }
 static inline void mi_lock_release(mi_lock_t* lock) {
+  if mi_unlikely(lock->count == 0) { _mi_lock_fatal("lock released without being acquired"); }
+  mi_assert_internal(mi_atomic_load_relaxed(&lock->owner) == _mi_thread_id());
   if (--lock->count > 0) return;
   mi_atomic_store_relaxed(&lock->owner, (size_t)0);
   mi_mutex_release(&lock->mutex);

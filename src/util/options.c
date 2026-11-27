@@ -683,6 +683,14 @@ void _mi_error_message(int err, const char* fmt, ...) {
   va_end(args);
 }
 
+// Unrecoverable lock error: no formatting, user output, or error handler (as these may recurse).
+mi_decl_noreturn mi_decl_cold void _mi_lock_fatal(const char* msg) {
+  _mi_prim_out_stderr("mimalloc: fatal error: ");
+  _mi_prim_out_stderr(msg);
+  _mi_prim_out_stderr("\n");
+  abort();
+}
+
 // Unrecoverable error: report as `EFAULT` and always abort.
 mi_decl_noreturn mi_decl_cold void _mi_fatal_error(const char* fmt, ...) {
   va_list args;
