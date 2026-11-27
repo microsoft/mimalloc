@@ -286,6 +286,11 @@ static bool mi_thread_local_create_expand(void) {
   mi_bitmap_t* newslots = (mi_bitmap_t*)_mi_meta_zalloc_aligned(_mi_subproc_main(), newsize, MI_BCHUNK_SIZE, &memid); // always allocate thread locals in the main subprocess
   mi_assert_internal(mi_is_aligned(newslots,MI_BCHUNK_SIZE));
   if (newslots==NULL) { return false; }
+  if (slots != mi_thread_locals_free()) {
+    // already expanded by a re-entrant call (from a user callback during the allocation)
+    _mi_meta_free(_mi_subproc_main(), newslots, memid);
+    return true;
+  }
   if (slots!=NULL) {
     // copy over the previous bitmap
     const size_t oldsize = mi_bitmap_size(oldcount,NULL);

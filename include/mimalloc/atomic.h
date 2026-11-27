@@ -474,25 +474,25 @@ typedef _Atomic(size_t) mi_atomic_guard_t;
 
 #if defined(_WIN32) || defined(__CYGWIN__)
 
-typedef struct mi_lock_s {
+typedef struct mi_mutex_s {
   SRWLOCK mutex;    // slim reader-writer lock
-} mi_lock_t;
+} mi_mutex_t;
 
-#define MI_LOCK_INITIALIZER   { SRWLOCK_INIT }
+#define MI_MUTEX_INITIALIZER  { SRWLOCK_INIT }
 
-static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
+static inline bool mi_mutex_try_acquire(mi_mutex_t* lock) {
   return TryAcquireSRWLockExclusive(&lock->mutex);
 }
-static inline void mi_lock_acquire(mi_lock_t* lock) {
+static inline void mi_mutex_acquire(mi_mutex_t* lock) {
   AcquireSRWLockExclusive(&lock->mutex);
 }
-static inline void mi_lock_release(mi_lock_t* lock) {
+static inline void mi_mutex_release(mi_mutex_t* lock) {
   ReleaseSRWLockExclusive(&lock->mutex);
 }
-static inline void mi_lock_init(mi_lock_t* lock) {
+static inline void mi_mutex_init(mi_mutex_t* lock) {
   InitializeSRWLock(&lock->mutex);
 }
-static inline void mi_lock_done(mi_lock_t* lock) {
+static inline void mi_mutex_done(mi_mutex_t* lock) {
   (void)(lock);
 }
 
@@ -501,31 +501,31 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 #include <string.h> // memcpy
 void _mi_error_message(int err, const char* fmt, ...);
 
-typedef struct mi_lock_s {
+typedef struct mi_mutex_s {
   pthread_mutex_t mutex;
-} mi_lock_t;
+} mi_mutex_t;
 
-#define MI_LOCK_INITIALIZER { PTHREAD_MUTEX_INITIALIZER }
+#define MI_MUTEX_INITIALIZER { PTHREAD_MUTEX_INITIALIZER }
 
-static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
+static inline bool mi_mutex_try_acquire(mi_mutex_t* lock) {
   return (pthread_mutex_trylock(&lock->mutex) == 0);
 }
-static inline void mi_lock_acquire(mi_lock_t* lock) {
+static inline void mi_mutex_acquire(mi_mutex_t* lock) {
   const int err = pthread_mutex_lock(&lock->mutex);
   if (err != 0) {
     _mi_error_message(err, "internal error: lock cannot be acquired (err %i)\n", err);
   }
 }
-static inline void mi_lock_release(mi_lock_t* lock) {
+static inline void mi_mutex_release(mi_mutex_t* lock) {
   pthread_mutex_unlock(&lock->mutex);
 }
-static inline void mi_lock_init(mi_lock_t* lock) {
+static inline void mi_mutex_init(mi_mutex_t* lock) {
   if(lock==NULL) return;
   // use this instead of pthread_mutex_init since that can cause allocation on some platforms (and recursively initialize)
   const pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   memcpy(&lock->mutex,&mutex,sizeof(mutex));
 }
-static inline void mi_lock_done(mi_lock_t* lock) {
+static inline void mi_mutex_done(mi_mutex_t* lock) {
   pthread_mutex_destroy(&lock->mutex);
 }
 
@@ -535,25 +535,25 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 #include <mutex>
 #include <new>
 
-typedef struct mi_lock_s {
+typedef struct mi_mutex_s {
   std::mutex mutex;
-} mi_lock_t;
+} mi_mutex_t;
 
-#define MI_LOCK_INITIALIZER   { }
+#define MI_MUTEX_INITIALIZER  { }
 
-static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
+static inline bool mi_mutex_try_acquire(mi_mutex_t* lock) {
   return lock->mutex.try_lock();
 }
-static inline void mi_lock_acquire(mi_lock_t* lock) {
+static inline void mi_mutex_acquire(mi_mutex_t* lock) {
   lock->mutex.lock();
 }
-static inline void mi_lock_release(mi_lock_t* lock) {
+static inline void mi_mutex_release(mi_mutex_t* lock) {
   lock->mutex.unlock();
 }
-static inline void mi_lock_init(mi_lock_t* lock) {
+static inline void mi_mutex_init(mi_mutex_t* lock) {
   new(&lock->mutex) std::mutex();  // in-place constructor
 }
-static inline void mi_lock_done(mi_lock_t* lock) {
+static inline void mi_mutex_done(mi_mutex_t* lock) {
   lock->mutex.~mutex(); // in-place destructor
 }
 
@@ -568,35 +568,85 @@ static inline void mi_lock_done(mi_lock_t* lock) {
 void _mi_error_message(int err, const char* fmt, ...);
 void _mi_prim_thread_yield(void);
 
-typedef struct mi_lock_s {
+typedef struct mi_mutex_s {
   _Atomic(size_t) mutex;
-} mi_lock_t;
+} mi_mutex_t;
 
-#define MI_LOCK_INITIALIZER  { MI_ATOMIC_VAR_INIT(0) }
+#define MI_MUTEX_INITIALIZER { MI_ATOMIC_VAR_INIT(0) }
 
-static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
+static inline bool mi_mutex_try_acquire(mi_mutex_t* lock) {
   size_t expected = 0;
   return mi_atomic_cas_strong_acquire(&lock->mutex, &expected, (size_t)1);
 }
-static inline void mi_lock_acquire(mi_lock_t* lock) {
+static inline void mi_mutex_acquire(mi_mutex_t* lock) {
   for (int i = 0; i < 10000; i++) {  // for at most 10000 tries?
-    if (mi_lock_try_acquire(lock)) return;
+    if (mi_mutex_try_acquire(lock)) return;
     _mi_prim_thread_yield();
   }
   _mi_error_message(EFAULT, "internal error: lock cannot be acquired (due to lack of native lock primitives)\n");
 }
-static inline void mi_lock_release(mi_lock_t* lock) {
+static inline void mi_mutex_release(mi_mutex_t* lock) {
   mi_atomic_store_release(&lock->mutex, (size_t)0);
 }
-static inline void mi_lock_init(mi_lock_t* lock) {
-  mi_lock_release(lock);
+static inline void mi_mutex_init(mi_mutex_t* lock) {
+  mi_mutex_release(lock);
 }
-static inline void mi_lock_done(mi_lock_t* lock) {
+static inline void mi_mutex_done(mi_mutex_t* lock) {
   (void)(lock);
 }
 
 #endif
 
+
+
+// Locks are re-entrant for the owning thread so user callbacks (like an error handler or output
+// function) that are invoked while holding a lock can call back into the allocator.
+// `mi_lock_try_acquire` is not re-entrant though.
+size_t _mi_thread_id(void) mi_attr_noexcept;
+
+typedef struct mi_lock_s {
+  mi_mutex_t       mutex;
+  _Atomic(size_t)  owner;   // thread id of the owner (or 0)
+  size_t           count;   // recursive acquisitions by the owner
+} mi_lock_t;
+
+#define MI_LOCK_INITIALIZER  { MI_MUTEX_INITIALIZER, MI_ATOMIC_VAR_INIT(0), 0 }
+
+static inline void mi_lock_set_owner(mi_lock_t* lock, size_t tid) {
+  mi_atomic_store_relaxed(&lock->owner, tid);
+  lock->count = 1;
+}
+
+static inline bool mi_lock_try_acquire(mi_lock_t* lock) {
+  const size_t tid = _mi_thread_id();
+  if (mi_atomic_load_relaxed(&lock->owner) == tid) return false;
+  if (!mi_mutex_try_acquire(&lock->mutex)) return false;
+  mi_lock_set_owner(lock, tid);
+  return true;
+}
+static inline void mi_lock_acquire(mi_lock_t* lock) {
+  const size_t tid = _mi_thread_id();
+  if (mi_atomic_load_relaxed(&lock->owner) == tid) { lock->count++; return; }
+  mi_mutex_acquire(&lock->mutex);
+  mi_lock_set_owner(lock, tid);
+}
+static inline void mi_lock_release(mi_lock_t* lock) {
+  if (--lock->count > 0) return;
+  mi_atomic_store_relaxed(&lock->owner, (size_t)0);
+  mi_mutex_release(&lock->mutex);
+}
+static inline bool mi_lock_is_reentered(const mi_lock_t* lock) {
+  return (lock->count > 1);
+}
+static inline void mi_lock_init(mi_lock_t* lock) {
+  if (lock==NULL) return;
+  mi_mutex_init(&lock->mutex);
+  mi_atomic_store_relaxed(&lock->owner, (size_t)0);
+  lock->count = 0;
+}
+static inline void mi_lock_done(mi_lock_t* lock) {
+  mi_mutex_done(&lock->mutex);
+}
 
 typedef struct mi_atomic_once_s {
   _Atomic(size_t)    tid;

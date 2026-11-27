@@ -83,7 +83,9 @@ mi_decl_nodiscard static mi_decl_noinline bool mi_page_map_commit_entries(mi_pag
     const size_t tag_start = mi_align_down(mi_page_map_size_of_count(prev_count), MI_MEMTAG_UNIT_SIZE);
     mi_memtag_store((uint8_t*)pmap + tag_start, commit_size - tag_start);
   }
-  mi_page_map_store_committed(commit_count);
+  if (commit_count > mi_page_map_committed()) {  // (a re-entrant call may have committed more already)
+    mi_page_map_store_committed(commit_count);
+  }
   return true;
 }
 
@@ -260,6 +262,11 @@ mi_decl_nodiscard static mi_decl_noinline mi_page_submap_t* mi_page_map_alloc_su
       sub = mi_page_map_alloc_submap(subproc, &memid);
       if (sub==NULL) {
         _mi_warning_message("internal error: unable to extend the page map\n");
+      }
+      else if (mi_page_map_at(pmap, idx) != NULL) {
+        // allocated by a re-entrant call (from a user callback during the allocation)
+        _mi_os_free_with_guards(subproc, memid);
+        sub = mi_page_map_at(pmap, idx);
       }
       else {
         mi_page_map_set_at(pmap, idx, sub);  // ok, since we hold the lock
