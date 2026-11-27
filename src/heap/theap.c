@@ -821,52 +821,37 @@ bool _mi_theap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi
 // }
 
 
-// Separate struct to keep `mi_page_t` out of the public interface
-typedef struct mi_theap_area_ex_s {
-  mi_heap_area_t area;
-  mi_page_t* page;
-} mi_theap_area_ex_t;
+typedef struct mi_theap_visit_info_s {
+  mi_theap_t*         theap;
+  mi_block_visit_fun* visitor;
+  void*               arg;
+  bool                visit_blocks;
+} mi_theap_visit_info_t;
 
-typedef bool (mi_theap_area_visit_fun)(const mi_theap_t* theap, const mi_theap_area_ex_t* area, void* arg);
-
-static bool mi_theap_visit_areas_page(mi_theap_t* theap, mi_page_queue_t* pq, mi_page_t* page, void* vfun, void* arg) {
-  MI_UNUSED(theap);
-  MI_UNUSED(pq);
-  mi_theap_area_visit_fun* fun = (mi_theap_area_visit_fun*)vfun;
-  mi_theap_area_ex_t xarea;
-  xarea.page = page;
+static bool mi_theap_visit_page(mi_page_t* page, void* arg) {
+  const mi_theap_visit_info_t* vinfo = (const mi_theap_visit_info_t*)arg;
+  if (mi_page_is_abandoned(page) || page->theap != vinfo->theap) return true;  // moved by the visitor
   _mi_page_free_collect(page, true);  // collect cross-thread free'd blocks so `area.used` is precise
-  _mi_heap_area_init(&xarea.area, page);
-  return fun(theap, &xarea, arg);
+  mi_heap_area_t area;
+  _mi_heap_area_init(&area, page);
+  const mi_page_ref_t ref = mi_page_ref(page);
+  if (!vinfo->visitor(mi_page_heap(page), &area, NULL, area.block_size, vinfo->arg)) return false;
+  if (vinfo->visit_blocks && mi_page_ref_is_live(ref)) {
+    return _mi_theap_area_visit_blocks(&area, page, vinfo->visitor, vinfo->arg);
+  }
+  return true;
 }
 
-// Visit all theap pages as areas
-static bool mi_theap_visit_areas(const mi_theap_t* theap, mi_theap_area_visit_fun* visitor, void* arg) {
+// Visit all blocks in a theap; the visitor may free or move pages, or even delete the theap
+bool mi_theap_visit_blocks(const mi_theap_t* theap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
   if (visitor == NULL) return false;
   if (theap==NULL || !mi_theap_is_initialized(theap) || !mi_theap_handle_is_valid(theap)) return false;
-  return mi_theap_visit_pages((mi_theap_t*)theap, &mi_theap_visit_areas_page, true, (void*)(visitor), arg); // note: function pointer to void* :-{
-}
-
-// Just to pass arguments
-typedef struct mi_visit_blocks_args_s {
-  bool  visit_blocks;
-  mi_block_visit_fun* visitor;
-  void* arg;
-} mi_visit_blocks_args_t;
-
-static bool mi_theap_area_visitor(const mi_theap_t* theap, const mi_theap_area_ex_t* xarea, void* arg) {
-  mi_visit_blocks_args_t* args = (mi_visit_blocks_args_t*)arg;
-  if (!args->visitor(mi_theap_heap(theap), &xarea->area, NULL, xarea->area.block_size, args->arg)) return false;
-  if (args->visit_blocks) {
-    return _mi_theap_area_visit_blocks(&xarea->area, xarea->page, args->visitor, args->arg);
+  mi_theap_visit_info_t vinfo = { (mi_theap_t*)theap, visitor, arg, visit_blocks };
+  bool ok = true;
+  _mi_theap_incref(vinfo.theap);
+  for (size_t bin = 0; ok && bin <= MI_BIN_FULL; bin++) {
+    ok = mi_page_list_visit(vinfo.theap->pages[bin].first, &mi_theap_visit_page, &vinfo);
   }
-  else {
-    return true;
-  }
-}
-
-// Visit all blocks in a theap
-bool mi_theap_visit_blocks(const mi_theap_t* theap, bool visit_blocks, mi_block_visit_fun* visitor, void* arg) {
-  mi_visit_blocks_args_t args = { visit_blocks, visitor, arg };
-  return mi_theap_visit_areas(theap, &mi_theap_area_visitor, &args);
+  _mi_theap_decref(vinfo.theap);
+  return ok;
 }

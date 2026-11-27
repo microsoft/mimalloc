@@ -512,6 +512,41 @@ static inline mi_heap_t* mi_page_heap(const mi_page_t* page) {
   return heap;
 }
 
+// A page visitor may free or move pages, so we remember the page map entry of a live page
+// to check later if it is still live (without accessing the page itself).
+typedef struct mi_page_ref_s {
+  const void* start;
+  mi_page_t*  entry;
+} mi_page_ref_t;
+
+static inline mi_page_ref_t mi_page_ref(const mi_page_t* page) {
+  mi_page_ref_t ref = { NULL, NULL };
+  if (page != NULL) {
+    ref.start = mi_page_start(page);
+    ref.entry = _mi_safe_ptr_page(ref.start);
+  }
+  return ref;
+}
+
+static inline bool mi_page_ref_is_live(mi_page_ref_t ref) {
+  return (ref.start == NULL || _mi_safe_ptr_page(ref.start) == ref.entry);
+}
+
+// Visit a page list where `fun` may free or move pages: we only continue at the next page if it
+// is still live (and may miss pages that are freed or moved). Returns `false` if `fun` did.
+typedef bool (mi_page_list_visit_fun)(mi_page_t* page, void* arg);
+
+static inline bool mi_page_list_visit(mi_page_t* page, mi_page_list_visit_fun* fun, void* arg) {
+  while (page != NULL) {
+    mi_page_t* const next = page->next;
+    const mi_page_ref_t next_ref = mi_page_ref(next);
+    if (!fun(page, arg)) return false;
+    if (!mi_page_ref_is_live(next_ref)) break;
+    page = next;
+  }
+  return true;
+}
+
 static inline mi_subproc_t* mi_page_subproc(const mi_page_t* page) {
   mi_heap_t* const heap = mi_page_heap(page);
   return heap->subproc;

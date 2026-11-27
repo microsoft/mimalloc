@@ -34,26 +34,6 @@ typedef struct mi_heap_visit_info_s {
   mi_bitmap_t*        pages;          // the pages of the current arena
 } mi_heap_visit_info_t;
 
-// The visitor may free pages, so we remember the page map entry of a live page to check
-// later if it is still live (without accessing the page itself).
-typedef struct mi_page_ref_s {
-  const void* start;
-  mi_page_t*  entry;
-} mi_page_ref_t;
-
-static mi_page_ref_t mi_page_ref(const mi_page_t* page) {
-  mi_page_ref_t ref = { NULL, NULL };
-  if (page != NULL) {
-    ref.start = mi_page_start(page);
-    ref.entry = _mi_safe_ptr_page(ref.start);
-  }
-  return ref;
-}
-
-static bool mi_page_ref_is_live(mi_page_ref_t ref) {
-  return (ref.start == NULL || _mi_safe_ptr_page(ref.start) == ref.entry);
-}
-
 // Collect a claimed abandoned page for a visit and unown it again. Returns `true` if the page was freed.
 // Unlike `_mi_abandoned_page_unown`, the collect is forced so the `local_free` list is appended as well
 // (`_mi_theap_area_visit_blocks` only treats blocks in the `free` list as free).
@@ -116,17 +96,13 @@ static bool mi_heap_visit_arena(mi_arena_t* arena, const void* arg, void** resul
   }
 }
 
-// Visit the OS pages in a page list. The visitor may free or move pages, so we only continue
-// at the next page if it is still live (and may miss pages that the visitor frees or moves).
+// Visit the OS pages in a page list (see `mi_page_list_visit`)
+static bool mi_heap_visit_os_page(mi_page_t* page, void* arg) {
+  return (page->memid.memkind == MI_MEM_ARENA || mi_heap_visit_page(page, (const mi_heap_visit_info_t*)arg));
+}
+
 static bool mi_heap_visit_os_page_list(mi_page_t* page, const mi_heap_visit_info_t* vinfo) {
-  while (page != NULL) {
-    mi_page_t* const next = page->next;
-    const mi_page_ref_t next_ref = mi_page_ref(next);
-    if (page->memid.memkind != MI_MEM_ARENA && !mi_heap_visit_page(page, vinfo)) return false;
-    if (!mi_page_ref_is_live(next_ref)) break;
-    page = next;
-  }
-  return true;
+  return mi_page_list_visit(page, &mi_heap_visit_os_page, (void*)vinfo);
 }
 
 // The caller holds heap->theaps_lock to prevent concurrent thread-exit abandonment and theap removal.
