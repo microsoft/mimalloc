@@ -365,6 +365,10 @@ static bool mi_heap_can_delete(mi_heap_t* heap) {
     _mi_error_message(EINVAL, "cannot delete or destroy a heap while it is being visited (heap %p)\n", heap);
     return false;
   }
+  if mi_unlikely(_mi_thread_in_callback() && mi_theap_is_initialized(_mi_heap_theap_peek(heap))) {
+    _mi_error_message(EINVAL, "cannot delete or destroy a heap used by this thread from within a callback (heap %p)\n", heap);
+    return false;
+  }
   return true;
 }
 

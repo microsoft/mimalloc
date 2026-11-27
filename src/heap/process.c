@@ -439,6 +439,16 @@ mi_theap_t* _mi_theap_default_or_main(void) {
   return _mi_theap_main();
 }
 
+// The default theap may be (transiently) detached from its tld by a concurrent heap delete; main theaps are never detached.
+mi_tld_t* _mi_thread_tld(void) {
+  mi_theap_t* const theap = _mi_theap_default();
+  if (theap==NULL || _mi_is_empty_theap(theap)) return NULL;
+  mi_tld_t* const tld = (mi_theap_is_initialized(theap) ? theap->tld : NULL);
+  if (tld!=NULL) return tld;
+  mi_theap_t* const theap_main = _mi_theap_main();
+  return (mi_theap_is_initialized(theap_main) ? theap_main->tld : NULL);
+}
+
 static mi_tld_t* mi_tld_init(mi_tld_t* tld, size_t tseq, mi_subproc_t* subproc) {
   tld->subproc = subproc;
   tld->theaps = NULL;
@@ -637,7 +647,7 @@ static void mi_thread_theaps_done(mi_tld_t* tld)
       theap->tld = NULL;
       theap->tnext = NULL;
       theap->tprev = NULL;
-      mi_assert_internal(mi_atomic_load_relaxed(&theap->refcount) == 1);
+      mi_assert_internal(mi_atomic_load_relaxed(&theap->refcount) >= 1);  // a theap visit may hold a reference
       _mi_theap_decref(theap);
       theap = next;
     }
@@ -676,7 +686,23 @@ static void mi_process_setup_auto_thread_done(void) {
   }
 }
 
+// The theaps of a thread may still be in use by an operation interrupted by a callback, or by a heap visit
+static bool mi_thread_can_call_done(void) {
+  mi_tld_t* const tld = _mi_thread_tld();
+  if (tld==NULL) return true;
+  bool in_use = _mi_thread_in_callback();
+  mi_lock(&tld->theaps_lock) {
+    for (mi_theap_t* t = tld->theaps; t != NULL && !in_use; t = t->tnext) {
+      mi_heap_t* const heap = mi_theap_heap_peek(t);
+      in_use = (heap != NULL && mi_lock_is_owned(&heap->theaps_lock));
+    }
+  }
+  if (in_use) { _mi_error_message(EINVAL, "cannot call mi_thread_done from within a callback or heap visit\n"); }
+  return !in_use;
+}
+
 void mi_thread_done(void) mi_attr_noexcept {
+  if (!mi_thread_can_call_done()) return;
   _mi_thread_done(mi_ptr_signed_null(mi_theap_t));
 }
 

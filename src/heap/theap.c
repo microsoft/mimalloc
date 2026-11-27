@@ -471,6 +471,9 @@ void _mi_heap_detach_theaps( mi_heap_t* heap ) {
             mi_theap_detach_from_tld(theap);
             mi_lock_release(&tld->theaps_lock);
           }
+          else if mi_unlikely(mi_lock_is_owned(&tld->theaps_lock)) {
+            _mi_reentry_fatal("cannot delete a heap while its theaps are in use by this thread (from within a callback?)");
+          }
           else {
             all_detached = false;
           }
@@ -503,6 +506,9 @@ void _mi_tld_detach_theaps( mi_tld_t* tld ) {
             mi_theap_detach_from_heap(theap);
             mi_lock_release(&heap->theaps_lock);
           }
+          else if mi_unlikely(mi_lock_is_owned(&heap->theaps_lock)) {
+            _mi_reentry_fatal("cannot finish a thread while one of its heaps is in use by this thread (from within a heap visit?)");
+          }
           else {
             all_detached = false;
           }
@@ -529,6 +535,10 @@ void _mi_tld_detach_theaps( mi_tld_t* tld ) {
 // The main theap of the thread is only abandoned (and stays alive).
 void _mi_theap_release(mi_theap_t* theap, mi_theap_t* slot_theap) {
   if (theap==NULL) return;
+  if mi_unlikely(_mi_thread_in_callback()) {  // the theap may be in use by the operation that invoked the callback
+    _mi_error_message(EINVAL, "cannot release a theap from within a callback (theap %p)\n", theap);
+    return;
+  }
   // The main theap stays alive even if a concurrent heap delete invalidates our default.
   mi_theap_t* const main_theap = _mi_theap_main();
   if (main_theap==NULL) {

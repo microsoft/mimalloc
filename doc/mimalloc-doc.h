@@ -1220,6 +1220,8 @@ void mi_thread_init(void);
 /// Afterwards, the thread is not implicitly re-initialized: allocations
 /// (for example in thread-local destructors) use a shared fallback heap
 /// until mi_thread_init() is called explicitly.
+/// Cannot be called from within a deferred free, output, or error function, or from
+/// within a mi_heap_visit_blocks() visitor (in which case an \a EINVAL error is raised).
 void mi_thread_done(void);
 
 /// Type of deferred free functions.
@@ -1247,6 +1249,11 @@ typedef void (mi_deferred_free_fun)(bool force, unsigned long long heartbeat, vo
 /// At most one \a deferred_free function can be active.
 /// The function is always called with the argument it was registered with, but after
 /// re-registration other threads may still call the previous function for a short while.
+///
+/// The deferred free, output, and error functions can allocate and free, but nested callbacks are
+/// limited (to 8) and exceeding this is a fatal error. These functions cannot call mi_thread_done(),
+/// or delete, destroy, or release a heap or theap in use by the current thread (in which case an \a EINVAL
+/// error is raised), as the operation that invoked the callback may still be using it.
 void   mi_register_deferred_free(mi_deferred_free_fun* deferred_free, void* arg);
 
 /// Type of output functions.
@@ -1264,6 +1271,7 @@ typedef void (mi_output_fun)(const char* msg, void* arg);
 /// like verbose or warning messages.
 /// The function is always called with the argument it was registered with, but after
 /// re-registration other threads may still call the previous function for a short while.
+/// See mi_register_deferred_free() for the restrictions on callbacks.
 void mi_register_output(mi_output_fun* out, void* arg);
 
 /// Type of error callback functions.
@@ -1296,6 +1304,7 @@ typedef void (mi_error_fun)(int err, void* arg);
 ///
 /// The function is always called with the argument it was registered with, but after
 /// re-registration other threads may still call the previous function for a short while.
+/// See mi_register_deferred_free() for the restrictions on callbacks.
 void mi_register_error(mi_error_fun* errfun, void* arg);
 
 /// Allocate a small object.

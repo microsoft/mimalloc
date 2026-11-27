@@ -500,15 +500,8 @@ static void mi_add_stderr_output(void) {
 // Messages, all end up calling `_mi_fputs`.
 // --------------------------------------------------------
 // Bound the nesting of user callbacks per thread (not counted if the thread is not yet initialized or done).
-static mi_tld_t* mi_recurse_tld(void) {
-  mi_theap_t* const theap = _mi_theap_default();
-  if (!mi_theap_is_initialized(theap)) return NULL;
-  mi_assert_internal(theap->tld != NULL);
-  return theap->tld;
-}
-
 static mi_decl_noinline bool mi_recurse_enter_prim(void) {
-  mi_tld_t* const tld = mi_recurse_tld();
+  mi_tld_t* const tld = _mi_thread_tld();
   if (tld != NULL && ++tld->recurse > MI_MAX_REENTRY) {
     _mi_reentry_fatal("too many nested callbacks (recursion through a callback?)");
     return false;
@@ -517,8 +510,13 @@ static mi_decl_noinline bool mi_recurse_enter_prim(void) {
 }
 
 static mi_decl_noinline void mi_recurse_exit_prim(void) {
-  mi_tld_t* const tld = mi_recurse_tld();  // reload as the callback may have (de)initialized the thread
+  mi_tld_t* const tld = _mi_thread_tld();  // reload as the callback may have (de)initialized the thread
   if (tld != NULL && tld->recurse > 0) { tld->recurse--; }
+}
+
+bool _mi_thread_in_callback(void) {
+  const mi_tld_t* const tld = _mi_thread_tld();
+  return (tld != NULL && tld->recurse > 0);
 }
 
 static bool mi_recurse_enter(void) {

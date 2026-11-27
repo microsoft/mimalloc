@@ -21,6 +21,7 @@ void  _mi_options_post_init(void);
 long  _mi_option_get_fast(mi_option_t option);
 void  _mi_error_message(int err, const char* fmt, ...);
 mi_decl_noreturn mi_decl_cold void _mi_fatal_error(const char* fmt, ...);  // always shown, then aborts
+bool  _mi_thread_in_callback(void);   // true while the current thread runs an error, output, or deferred free callback
 
 mi_block_t* _mi_error_block_next_is_corrupted(const mi_page_t* page, const mi_block_t* block, mi_encoded_t x);
 void  _mi_error_block_next_is_invalid(const mi_page_t* page, const mi_block_t* block, const mi_block_t* next);
