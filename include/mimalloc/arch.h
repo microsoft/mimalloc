@@ -299,7 +299,10 @@ typedef uintptr_t                     mi_ptr_signed_t;
 #define mi_ptr_signed_from_ptr(tp,p)  ((mi_ptr_signed(tp))(p))
 #define mi_ptr_signed_as_ptr(tp,p)    ((tp*)(p))
 #define mi_ptr_signed_null(tp)        mi_ptr_signed_from_ptr(tp,NULL)
-#define mi_ptr_signed_is_null(p)      ((p) == mi_ptr_signed_null(void))
+
+static inline bool mi_ptr_signed_is_null(mi_ptr_signed_t p) {
+  return (p == mi_ptr_signed_null(void));
+}
 
 
 // Pointer signing (see `prim/prim-pac.h`): 0=off, 1=weak (using a software process key), 2=required (using the
