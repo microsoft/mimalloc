@@ -460,7 +460,7 @@ typedef _Atomic(size_t) mi_atomic_guard_t;
 // These should be light-weight in-process only locks.
 // Only used for reserving arena's and to maintain the abandoned list.
 // ----------------------------------------------------------------------
-#if _MSC_VER
+#if defined(_MSC_VER)
 #pragma warning(disable:26110)  // unlock with holding lock
 #endif
 
