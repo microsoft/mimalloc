@@ -151,7 +151,9 @@ static bool mi_page_map_init_once(void) {
   size_t commit_count;
   if (memid.initially_committed) {
     if (!memid.initially_zero) {
-      _mi_warning_message("internal: the page map was committed but not zero initialized!\n");
+      if (_mi_os_has_virtual_reserve()) {  // otherwise (e.g. emscripten) memory is not necessarily zero
+        _mi_warning_message("internal: the page map was committed but not zero initialized!\n");
+      }
       mi_memzero_aligned(pmap, extra_reserve_size);
       memid.initially_zero = true;
     }
