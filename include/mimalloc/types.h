@@ -25,6 +25,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <stddef.h>   // ptrdiff_t
 #include <stdint.h>   // uintptr_t, uint16_t, etc
 #include <stdbool.h>  // bool
+#include <limits.h>   // LONG_MAX
 #include "atomic.h"   // _Atomic
 
 #ifdef _MSC_VER
@@ -99,8 +100,11 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // Reserve extra padding at the end of each block to be more resilient against heap block overflows.
 // The padding can detect buffer overflow on free.
-#if !defined(MI_PADDING) && (MI_SECURE>=3 || MI_DEBUG>=1 || (MI_TRACK_VALGRIND || MI_TRACK_ASAN || MI_TRACK_ETW))
+#if !defined(MI_PADDING) && (MI_SECURE>=3 || MI_DEBUG>=1 || (defined(MI_TRACK_VALGRIND) && MI_TRACK_VALGRIND) || (defined(MI_TRACK_ASAN) && MI_TRACK_ASAN) || (defined(MI_TRACK_ETW) && MI_TRACK_ETW))
 #define MI_PADDING  1
+#endif
+#if !defined(MI_PADDING)
+#define MI_PADDING  0
 #endif
 
 // Check padding bytes; allows byte-precise buffer overflow detection
@@ -115,7 +119,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define MI_ENCODE_FREELIST  1
 #endif
 
-#if (MI_ENCODE_FREELIST && (MI_SECURE>=4 || MI_DEBUG!=0))
+#if defined(MI_ENCODE_FREELIST) && (MI_SECURE>=4 || MI_DEBUG!=0)
 #define MI_CHECK_DOUBLE_FREE  1
 #endif
 
@@ -275,7 +279,7 @@ typedef enum mi_delayed_e {
 
 // The `in_full` and `has_aligned` page flags are put in a union to efficiently
 // test if both are false (`full_aligned == 0`) in the `mi_free` routine.
-#if !MI_TSAN
+#if !(defined(MI_TSAN) && MI_TSAN)
 typedef union mi_page_flags_s {
   uint8_t full_aligned;
   struct {
@@ -350,7 +354,7 @@ typedef struct mi_page_s {
   size_t                block_size;        // size available in each block (always `>0`)
   uint8_t*              page_start;        // start of the page area containing the blocks
 
-  #if (MI_ENCODE_FREELIST || MI_PADDING)
+  #if (defined(MI_ENCODE_FREELIST) || MI_PADDING)
   uintptr_t             keys[2];           // two random keys to encode the free lists (see `_mi_block_next`) or padding canary
   #endif
 

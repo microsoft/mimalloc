@@ -237,7 +237,7 @@ void        _mi_segment_page_free(mi_page_t* page, bool force, mi_segments_tld_t
 void        _mi_segment_page_abandon(mi_page_t* page, mi_segments_tld_t* tld);
 uint8_t*    _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* page, size_t* page_size);
 
-#if MI_HUGE_PAGE_ABANDON
+#if defined(MI_HUGE_PAGE_ABANDON) && MI_HUGE_PAGE_ABANDON
 void        _mi_segment_huge_page_free(mi_segment_t* segment, mi_page_t* page, mi_block_t* block);
 #else
 void        _mi_segment_huge_page_reset(mi_segment_t* segment, mi_page_t* page, mi_block_t* block);
