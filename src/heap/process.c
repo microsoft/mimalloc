@@ -493,9 +493,9 @@ static mi_tld_t* mi_tld_create(mi_subproc_t* subproc) {
 
 mi_decl_noinline static void mi_tld_free(mi_tld_t* tld) {
   if (tld==NULL) return;
-  mi_atomic_decrement_relaxed(&tld->subproc->thread_count);
   tld->thread_id = (mi_thread_id_t)(~0);          // it is best to set an invalid tid for tld_main as sometimes the same thread-id
                                                  // is reused by the OS after a thread has terminated. (see issue #1287)
+  mi_atomic_decrement_acq_rel(&tld->subproc->thread_count);  // release: pairs with the acquire load in mi_process_done_once
   mi_lock_done(&tld->theaps_lock);
   _mi_meta_free(tld->subproc, tld, tld->memid);  // note: safe for static tld
 }
